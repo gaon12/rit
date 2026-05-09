@@ -29,6 +29,8 @@ The current codebase implements an early local Git subset:
   `diff --cached --name-only`, `diff --cached --name-status`,
   `diff --cached --numstat`, `diff --cached --stat`, `log`, `add`, `commit`,
   `branch`, `tag`, `restore`, `reset`, `checkout`, and `switch`.
+- Small text patch output is supported for default `diff`, `diff -p`, and
+  `diff --cached`.
 - Ordinary literal file and directory pathspec filtering is supported for
   `status --porcelain=v1` and the supported `diff` summary modes.
 - Ordinary literal file and directory pathspec filtering is supported for
@@ -88,6 +90,8 @@ default, `--name-only`, and `--object-only` output.
 
 `log` compatibility tests cover `--oneline -- <pathspec>` on simple
 first-parent histories.
+
+Patch compatibility tests cover default and cached text patches for small files.
 
 Local write compatibility tests currently cover directory pathspec behavior for
 `add`, `restore`, and `reset` by comparing the resulting porcelain status and

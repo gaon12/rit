@@ -33,4 +33,4 @@ pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 pub use commit::{Commit, Signature, parse_commit};
-pub use diff::{DiffFileStat, DiffSummary};
+pub use diff::{DiffFileStat, DiffPatch, DiffPatchFile, DiffSummary};

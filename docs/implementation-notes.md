@@ -9,6 +9,7 @@
 - 2026-05-09 diff cached milestone checked: `git diff -h`.
 - 2026-05-09 diff numstat milestone checked: `git diff -h`.
 - 2026-05-09 pathspec filter milestone checked: `git status -h`, `git diff -h`, `git add -h`, `git restore -h`, and `git reset -h`.
+- 2026-05-09 diff patch milestone checked: `git diff -h`.
 
 ## Milestone Notes
 
@@ -55,6 +56,8 @@
   including `--name-only` and `--object-only`.
 - Added ordinary literal path filtering for first-parent `log`, including
   `--oneline`.
+- Added patch output for small text files in default and cached diff scopes,
+  with Git comparison coverage for default patch, `-p`, and `--cached`.
 - Added local write compatibility coverage that compares Git and rit porcelain
   state after directory pathspec `add`, `restore`, and `reset`.
 - Still unsupported: pathspec magic, glob pathspec matching, pathspec files,
@@ -139,11 +142,13 @@
 ### `rit diff`
 
 - Baseline command checked: `git diff -h`
-- Supported options: `--name-only`, `--name-status`, `--numstat`, `--stat`,
-  plus `--cached`/`--staged` with those output modes, and ordinary literal file
-  and directory pathspec filters.
-- Unsupported options: patch output, commit/tree/blob arguments, pathspec
-  magic/globs, rename/copy detection, binary stat details.
+- Supported options: default patch output for small text files, `-p`, `-u`,
+  `--name-only`, `--name-status`, `--numstat`, `--stat`, plus
+  `--cached`/`--staged` with those output modes, and ordinary literal file and
+  directory pathspec filters.
+- Unsupported options: commit/tree/blob arguments, pathspec magic/globs,
+  rename/copy detection, binary stat details, multi-hunk context splitting, and
+  no-newline patch markers.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files.
 - Git-compatible behavior: cached diff scope compares the index against `HEAD`.
 - Intentional differences: binary `--stat` reports a clear unsupported error until binary diff accounting is implemented.

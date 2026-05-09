@@ -48,6 +48,8 @@ rit show
 rit status --porcelain=v1
 rit status --porcelain=v1 -- <pathspec>
 rit diff --name-only
+rit diff
+rit diff -p
 rit diff --name-status
 rit diff --numstat
 rit diff --stat

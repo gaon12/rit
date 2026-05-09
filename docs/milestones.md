@@ -81,7 +81,10 @@ Completion criteria:
 - [x] `rit diff --name-status`
 - [x] `rit diff --stat`
 - [x] `rit diff --numstat`
-- [ ] `rit diff` patch output.
+- [~] `rit diff` patch output.
+  - [x] Small text patch output for default and cached diff scopes.
+  - [ ] Binary patch accounting, no-newline markers, and multi-hunk context
+    splitting.
 - [~] Pathspec support for read-only commands.
   - [x] Ordinary literal pathspec filters for `status --porcelain=v1` and
     `diff` summary modes.
@@ -267,4 +270,4 @@ Completion criteria:
 3. Continue pathspec support for remaining read-only commands and advanced
    pathspec forms.
 4. Add index stat refresh or document and test the remaining difference.
-5. Start patch output for `rit diff`.
+5. Expand `rit diff` patch output beyond small text files.

@@ -43,6 +43,28 @@ fn diff_cached_outputs_match_git() {
 }
 
 #[test]
+fn diff_patch_outputs_match_git_for_small_text_files() {
+    let fixture = DiffFixture::new("patch-diff");
+
+    for args in [vec!["diff"], vec!["diff", "--cached"], vec!["diff", "-p"]] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "patch diff {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_pathspec_outputs_match_git() {
     let fixture = DiffFixture::new("pathspec-diff");
 

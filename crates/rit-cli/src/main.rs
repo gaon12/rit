@@ -75,7 +75,7 @@ Show a conservative porcelain v1 status.
 ";
 
 const DIFF_HELP: &str = "\
-rit diff [--cached|--staged] (--name-only|--name-status|--numstat|--stat)
+rit diff [--cached|--staged] [--name-only|--name-status|--numstat|--stat] [--] [<pathspec>...]
 
 Show working tree changes compared with the index, or staged changes compared with HEAD.
 ";
@@ -592,6 +592,12 @@ fn diff_command(
         match arg.as_str() {
             "--" if !after_separator => after_separator = true,
             "--cached" | "--staged" if !after_separator => cached = true,
+            "-p" | "-u" if !after_separator => {
+                if output_mode.replace("--patch").is_some() {
+                    writeln!(stderr, "rit: diff accepts one output option")?;
+                    return Ok(ExitCode::from(129));
+                }
+            }
             "--name-only" | "--name-status" | "--numstat" | "--stat" if !after_separator => {
                 if output_mode.replace(arg.as_str()).is_some() {
                     writeln!(stderr, "rit: diff accepts one output option")?;
@@ -606,13 +612,7 @@ fn diff_command(
         }
     }
 
-    let Some(output_mode) = output_mode else {
-        writeln!(
-            stderr,
-            "rit: diff currently supports --name-only, --name-status, --numstat, and --stat"
-        )?;
-        return Ok(ExitCode::from(129));
-    };
+    let output_mode = output_mode.unwrap_or("--patch");
     let pathspecs = match rit_core::PathspecSet::from_args(&pathspec_args) {
         Ok(pathspecs) => pathspecs,
         Err(error) => {
@@ -625,6 +625,24 @@ fn diff_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
+    if output_mode == "--patch" {
+        let patch_result = if cached {
+            repository.diff_index_to_head_patch_with_pathspecs(&pathspecs)
+        } else {
+            repository.diff_worktree_to_index_patch_with_pathspecs(&pathspecs)
+        };
+        match patch_result.and_then(|patch| patch.to_patch_text()) {
+            Ok(text) => {
+                stdout.write_all(text.as_bytes())?;
+                return Ok(ExitCode::SUCCESS);
+            }
+            Err(error) => {
+                writeln!(stderr, "rit: {error}")?;
+                return Ok(ExitCode::from(1));
+            }
+        }
+    }
+
     let diff_result = if cached {
         repository.diff_index_to_head_with_pathspecs(&pathspecs)
     } else {
