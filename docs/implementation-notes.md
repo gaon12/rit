@@ -67,3 +67,13 @@
 - Intentional differences: only loose tree object IDs are accepted.
 - Repository mutation: no
 - Risk: none
+
+### `rit status`
+
+- Baseline command checked: `git status -h`
+- Supported options: `--porcelain`, `--porcelain=v1`, `-s`.
+- Unsupported options: long output, branch header, ignored display modes, pathspecs, rename detection, submodules, sparse checkout.
+- Git-compatible behavior: porcelain v1 entries for staged add/modify/delete, working tree modify/delete, and untracked files.
+- Intentional differences: ignore handling supports simple literal and directory patterns first; advanced gitignore glob semantics are not complete yet.
+- Repository mutation: no
+- Risk: no repository writes.

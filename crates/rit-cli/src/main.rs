@@ -15,6 +15,7 @@ Core commands:
   rev-parse     Inspect the current repository paths
   cat-file      Inspect loose objects
   ls-tree       List entries in a tree object
+  status        Show porcelain working tree status
 
 Run 'rit help <command>' for command-specific notes.
 ";
@@ -55,6 +56,12 @@ rit ls-tree [--name-only|--object-only] <tree>
 List entries in a loose tree object.
 ";
 
+const STATUS_HELP: &str = "\
+rit status --porcelain[=v1]
+
+Show a conservative porcelain v1 status.
+";
+
 fn main() -> ExitCode {
     match run(env::args().skip(1), &mut io::stdout(), &mut io::stderr()) {
         Ok(code) => code,
@@ -87,6 +94,7 @@ fn run(
         [command, rest @ ..] if command == "rev-parse" => rev_parse_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "cat-file" => cat_file_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ls-tree" => ls_tree_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "status" => status_command(rest, stdout, stderr),
         [command] if command == "help" => {
             stdout.write_all(GENERAL_HELP.as_bytes())?;
             Ok(ExitCode::SUCCESS)
@@ -117,6 +125,7 @@ fn print_command_help(
         "rev-parse" => stdout.write_all(REV_PARSE_HELP.as_bytes())?,
         "cat-file" => stdout.write_all(CAT_FILE_HELP.as_bytes())?,
         "ls-tree" => stdout.write_all(LS_TREE_HELP.as_bytes())?,
+        "status" => stdout.write_all(STATUS_HELP.as_bytes())?,
         unknown => {
             writeln!(stderr, "rit: no help for unknown command '{unknown}'")?;
             return Ok(ExitCode::from(129));
@@ -345,6 +354,33 @@ fn ls_tree_command(
     Ok(ExitCode::SUCCESS)
 }
 
+fn status_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    if !matches!(args, [flag] if flag == "--porcelain" || flag == "--porcelain=v1" || flag == "-s")
+    {
+        writeln!(stderr, "rit: status currently supports only --porcelain=v1")?;
+        return Ok(ExitCode::from(129));
+    }
+
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    match repository.status_porcelain_v1() {
+        Ok(status) => {
+            stdout.write_all(status.to_porcelain_v1().as_bytes())?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            Ok(ExitCode::from(1))
+        }
+    }
+}
+
 fn discover_repository(stderr: &mut dyn Write) -> io::Result<Option<rit_core::Repository>> {
     match rit_core::Repository::discover(".") {
         Ok(repository) => Ok(Some(repository)),
@@ -462,5 +498,14 @@ mod tests {
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit cat-file"));
         assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn status_rejects_long_output_for_now() {
+        let (code, stdout, stderr) = run_with(&["status"]);
+
+        assert_eq!(code, ExitCode::from(129));
+        assert_eq!(stdout, "");
+        assert!(stderr.contains("--porcelain=v1"));
     }
 }
