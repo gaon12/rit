@@ -171,12 +171,12 @@ impl Repository {
         let trimmed = contents.trim();
         if let Some(reference_name) = trimmed.strip_prefix("ref: ") {
             let reference_path = self.common_dir.join(reference_name);
-            if !reference_path.exists() {
-                return Ok(None);
+            if reference_path.exists() {
+                let object_id = fs::read_to_string(&reference_path)
+                    .map_err(|source| RitError::io(&reference_path, source))?;
+                return Ok(Some(ObjectId::from_hex(object_id.trim())?));
             }
-            let object_id = fs::read_to_string(&reference_path)
-                .map_err(|source| RitError::io(&reference_path, source))?;
-            return Ok(Some(ObjectId::from_hex(object_id.trim())?));
+            return self.packed_ref(reference_name);
         }
 
         Ok(Some(ObjectId::from_hex(trimmed)?))
@@ -205,6 +205,9 @@ impl Repository {
                 let target =
                     fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
                 return ObjectId::from_hex(target.trim());
+            }
+            if let Some(target) = self.packed_ref(&format!("refs/{namespace}/{revision}"))? {
+                return Ok(target);
             }
         }
 

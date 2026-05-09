@@ -1,4 +1,5 @@
 use crate::{ObjectId, Repository, Result, RitError};
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
 
@@ -39,14 +40,24 @@ impl Repository {
     /// Lists local branches under `refs/heads`.
     pub fn list_branches(&self) -> Result<Vec<Branch>> {
         let current = self.current_branch_name()?;
-        let mut branches = Vec::new();
+        let mut targets = self
+            .packed_refs_with_prefix("refs/heads/")?
+            .into_iter()
+            .map(|(name, target)| (name.trim_start_matches("refs/heads/").to_owned(), target))
+            .collect::<BTreeMap<_, _>>();
         let heads_dir = self.common_dir().join("refs").join("heads");
-        if !heads_dir.exists() {
-            return Ok(branches);
+        if heads_dir.exists() {
+            collect_branch_refs(&heads_dir, "", &mut targets)?;
         }
-        collect_branch_refs(&heads_dir, "", current.as_deref(), &mut branches)?;
-        branches.sort_by(|left, right| left.name.cmp(&right.name));
-        Ok(branches)
+
+        Ok(targets
+            .into_iter()
+            .map(|(name, target)| Branch {
+                current: current.as_deref() == Some(name.as_str()),
+                name,
+                target,
+            })
+            .collect())
     }
 
     /// Creates a local branch at `HEAD`.
@@ -69,11 +80,12 @@ impl Repository {
     pub fn branch_target(&self, name: &str) -> Result<ObjectId> {
         validate_ref_short_name(name)?;
         let path = self.common_dir().join("refs").join("heads").join(name);
-        if !path.exists() {
-            return Err(RitError::invalid_input(format!("branch not found: {name}")));
+        if path.exists() {
+            let target = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
+            return ObjectId::from_hex(target.trim());
         }
-        let target = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
-        ObjectId::from_hex(target.trim())
+        self.packed_ref(&format!("refs/heads/{name}"))?
+            .ok_or_else(|| RitError::invalid_input(format!("branch not found: {name}")))
     }
 
     /// Deletes a local branch ref.
@@ -86,6 +98,11 @@ impl Repository {
         }
         let path = self.common_dir().join("refs").join("heads").join(name);
         if !path.exists() {
+            if self.packed_ref(&format!("refs/heads/{name}"))?.is_some() {
+                return Err(RitError::invalid_input(format!(
+                    "deleting packed branch is not implemented: {name}"
+                )));
+            }
             return Err(RitError::invalid_input(format!("branch not found: {name}")));
         }
         let target = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
@@ -96,14 +113,19 @@ impl Repository {
 
     /// Lists lightweight tags under `refs/tags`.
     pub fn list_tags(&self) -> Result<Vec<Tag>> {
+        let mut targets = self
+            .packed_refs_with_prefix("refs/tags/")?
+            .into_iter()
+            .map(|(name, target)| (name.trim_start_matches("refs/tags/").to_owned(), target))
+            .collect::<BTreeMap<_, _>>();
         let tags_dir = self.common_dir().join("refs").join("tags");
-        let mut tags = Vec::new();
-        if !tags_dir.exists() {
-            return Ok(tags);
+        if tags_dir.exists() {
+            collect_tag_refs(&tags_dir, "", &mut targets)?;
         }
-        collect_tag_refs(&tags_dir, "", &mut tags)?;
-        tags.sort_by(|left, right| left.name.cmp(&right.name));
-        Ok(tags)
+        Ok(targets
+            .into_iter()
+            .map(|(name, target)| Tag { name, target })
+            .collect())
     }
 
     /// Creates a lightweight tag at `HEAD`.
@@ -127,6 +149,11 @@ impl Repository {
         validate_ref_short_name(name)?;
         let path = self.common_dir().join("refs").join("tags").join(name);
         if !path.exists() {
+            if self.packed_ref(&format!("refs/tags/{name}"))?.is_some() {
+                return Err(RitError::invalid_input(format!(
+                    "deleting packed tag is not implemented: {name}"
+                )));
+            }
             return Err(RitError::invalid_input(format!("tag not found: {name}")));
         }
         let target = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
@@ -134,13 +161,47 @@ impl Repository {
         fs::remove_file(&path).map_err(|source| RitError::io(&path, source))?;
         Ok(target)
     }
+
+    /// Reads one ref from `.git/packed-refs`.
+    pub fn packed_ref(&self, full_name: &str) -> Result<Option<ObjectId>> {
+        Ok(self.packed_refs()?.remove(full_name))
+    }
+
+    fn packed_refs_with_prefix(&self, prefix: &str) -> Result<BTreeMap<String, ObjectId>> {
+        Ok(self
+            .packed_refs()?
+            .into_iter()
+            .filter(|(name, _)| name.starts_with(prefix))
+            .collect())
+    }
+
+    fn packed_refs(&self) -> Result<BTreeMap<String, ObjectId>> {
+        let path = self.common_dir().join("packed-refs");
+        if !path.exists() {
+            return Ok(BTreeMap::new());
+        }
+        let contents = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
+        let mut refs = BTreeMap::new();
+        for line in contents.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('^') {
+                continue;
+            }
+            let Some((object_id, name)) = trimmed.split_once(' ') else {
+                return Err(RitError::invalid_input(format!(
+                    "malformed packed-refs line: {trimmed}"
+                )));
+            };
+            refs.insert(name.to_owned(), ObjectId::from_hex(object_id)?);
+        }
+        Ok(refs)
+    }
 }
 
 fn collect_branch_refs(
     directory: &std::path::Path,
     prefix: &str,
-    current: Option<&str>,
-    output: &mut Vec<Branch>,
+    output: &mut BTreeMap<String, ObjectId>,
 ) -> Result<()> {
     for entry in fs::read_dir(directory).map_err(|source| RitError::io(directory, source))? {
         let entry = entry.map_err(|source| RitError::io(directory, source))?;
@@ -155,14 +216,10 @@ fn collect_branch_refs(
             .file_type()
             .map_err(|source| RitError::io(&path, source))?;
         if file_type.is_dir() {
-            collect_branch_refs(&path, &full_name, current, output)?;
+            collect_branch_refs(&path, &full_name, output)?;
         } else if file_type.is_file() {
             let target = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
-            output.push(Branch {
-                current: current == Some(full_name.as_str()),
-                name: full_name,
-                target: ObjectId::from_hex(target.trim())?,
-            });
+            output.insert(full_name, ObjectId::from_hex(target.trim())?);
         }
     }
     Ok(())
@@ -171,7 +228,7 @@ fn collect_branch_refs(
 fn collect_tag_refs(
     directory: &std::path::Path,
     prefix: &str,
-    output: &mut Vec<Tag>,
+    output: &mut BTreeMap<String, ObjectId>,
 ) -> Result<()> {
     for entry in fs::read_dir(directory).map_err(|source| RitError::io(directory, source))? {
         let entry = entry.map_err(|source| RitError::io(directory, source))?;
@@ -189,10 +246,7 @@ fn collect_tag_refs(
             collect_tag_refs(&path, &full_name, output)?;
         } else if file_type.is_file() {
             let target = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
-            output.push(Tag {
-                name: full_name,
-                target: ObjectId::from_hex(target.trim())?,
-            });
+            output.insert(full_name, ObjectId::from_hex(target.trim())?);
         }
     }
     Ok(())
