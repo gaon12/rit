@@ -1,4 +1,5 @@
 use crate::index::{Index, IndexEntry, join_slash_path, relative_slash_path};
+use crate::object::{hash_object, parse_tree_entries};
 use crate::{ObjectId, ObjectKind, Repository, Result, RitError, Signature, parse_commit};
 use std::collections::BTreeMap;
 use std::fs;
@@ -108,6 +109,101 @@ impl Repository {
         })
     }
 
+    /// Restores working tree files from the index.
+    pub fn restore_worktree_paths(&self, paths: &[String]) -> Result<()> {
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "restore must be run in a repository with a working tree",
+            ));
+        };
+        if paths.is_empty() {
+            return Err(RitError::invalid_input(
+                "restore requires at least one path",
+            ));
+        }
+        let index = Index::read(&self.git_dir().join("index"))?;
+        let entries = index
+            .entries
+            .iter()
+            .map(|entry| (entry.path.as_str(), entry))
+            .collect::<BTreeMap<_, _>>();
+
+        for path in paths {
+            let normalized = path.replace('\\', "/");
+            let entry = entries.get(normalized.as_str()).ok_or_else(|| {
+                RitError::invalid_input(format!("pathspec did not match any indexed file: {path}"))
+            })?;
+            let object = self.read_object(entry.object_id)?;
+            if object.kind != ObjectKind::Blob {
+                return Err(RitError::invalid_input(format!(
+                    "object {} is {}, not blob",
+                    entry.object_id, object.kind
+                )));
+            }
+            write_worktree_file_atomically(&join_slash_path(worktree, &normalized), &object.data)?;
+        }
+
+        Ok(())
+    }
+
+    /// Restores index entries from `HEAD`, returning paths still modified in the worktree.
+    pub fn restore_staged_paths_from_head(&self, paths: &[String]) -> Result<Vec<String>> {
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "reset must be run in a repository with a working tree",
+            ));
+        };
+        if paths.is_empty() {
+            return Err(RitError::invalid_input("reset requires at least one path"));
+        }
+
+        let index_path = self.git_dir().join("index");
+        let index = Index::read(&index_path)?;
+        let mut index_entries = index
+            .entries
+            .into_iter()
+            .map(|entry| (entry.path.clone(), entry))
+            .collect::<BTreeMap<_, _>>();
+        let head_entries = self.head_blob_entries()?;
+        let mut unstaged = Vec::new();
+
+        for path in paths {
+            let normalized = path.replace('\\', "/");
+            match head_entries.get(normalized.as_str()) {
+                Some(head_entry) => {
+                    index_entries.insert(
+                        normalized.clone(),
+                        IndexEntry {
+                            mode: head_entry.mode,
+                            object_id: head_entry.object_id,
+                            file_size: head_entry.file_size,
+                            path: normalized.clone(),
+                        },
+                    );
+                    let full_path = join_slash_path(worktree, &normalized);
+                    if !full_path.exists() {
+                        unstaged.push(format!("D\t{normalized}"));
+                    } else {
+                        let data = fs::read(&full_path)
+                            .map_err(|source| RitError::io(&full_path, source))?;
+                        if hash_object(ObjectKind::Blob, &data) != head_entry.object_id {
+                            unstaged.push(format!("M\t{normalized}"));
+                        }
+                    }
+                }
+                None => {
+                    index_entries.remove(&normalized);
+                }
+            }
+        }
+
+        Index {
+            entries: index_entries.into_values().collect(),
+        }
+        .write(&index_path)?;
+        Ok(unstaged)
+    }
+
     fn write_tree_from_index(&self, index: &Index) -> Result<ObjectId> {
         let mut root = TreeNode::default();
         for entry in &index.entries {
@@ -149,6 +245,66 @@ impl Repository {
             write_text_atomically(&head_path, &format!("{commit_id}\n"))
         }
     }
+
+    fn head_blob_entries(&self) -> Result<BTreeMap<String, HeadBlobEntry>> {
+        let Some(head_id) = self.resolve_head()? else {
+            return Ok(BTreeMap::new());
+        };
+        let object = self.read_object(head_id)?;
+        if object.kind != ObjectKind::Commit {
+            return Err(RitError::invalid_input(format!(
+                "HEAD points to {}, not commit",
+                object.kind
+            )));
+        }
+        let commit = parse_commit(&object.data)?;
+        let mut entries = BTreeMap::new();
+        self.collect_head_blob_entries("", commit.tree, &mut entries)?;
+        Ok(entries)
+    }
+
+    fn collect_head_blob_entries(
+        &self,
+        prefix: &str,
+        tree_id: ObjectId,
+        output: &mut BTreeMap<String, HeadBlobEntry>,
+    ) -> Result<()> {
+        let tree = self.read_object(tree_id)?;
+        if tree.kind != ObjectKind::Tree {
+            return Err(RitError::invalid_input(format!(
+                "object {tree_id} is {}, not tree",
+                tree.kind
+            )));
+        }
+        for entry in parse_tree_entries(&tree.data)? {
+            let path = if prefix.is_empty() {
+                entry.name_lossy()
+            } else {
+                format!("{prefix}/{}", entry.name_lossy())
+            };
+            if entry.kind == ObjectKind::Tree {
+                self.collect_head_blob_entries(&path, entry.object_id, output)?;
+            } else {
+                let object = self.read_object(entry.object_id)?;
+                output.insert(
+                    path,
+                    HeadBlobEntry {
+                        mode: 0o100644,
+                        object_id: entry.object_id,
+                        file_size: object.size().min(u32::MAX as usize) as u32,
+                    },
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy)]
+struct HeadBlobEntry {
+    mode: u32,
+    object_id: ObjectId,
+    file_size: u32,
 }
 
 #[derive(Default)]
@@ -262,6 +418,29 @@ fn write_text_atomically(path: &Path, contents: &str) -> Result<()> {
             .map_err(|source| RitError::io(&lock_path, source))?;
     }
     fs::rename(&lock_path, path).map_err(|source| RitError::io(path, source))?;
+    Ok(())
+}
+
+fn write_worktree_file_atomically(path: &Path, contents: &[u8]) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| RitError::io(parent, source))?;
+    }
+    let temp_path = path.with_extension(format!("rit-tmp-{}", std::process::id()));
+    {
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)
+            .map_err(|source| RitError::io(&temp_path, source))?;
+        file.write_all(contents)
+            .map_err(|source| RitError::io(&temp_path, source))?;
+        file.sync_all()
+            .map_err(|source| RitError::io(&temp_path, source))?;
+    }
+    if path.exists() {
+        fs::remove_file(path).map_err(|source| RitError::io(path, source))?;
+    }
+    fs::rename(&temp_path, path).map_err(|source| RitError::io(path, source))?;
     Ok(())
 }
 

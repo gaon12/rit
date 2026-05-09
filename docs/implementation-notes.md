@@ -137,3 +137,23 @@
 - Intentional differences: only `HEAD` can be tagged for now.
 - Repository mutation: tag create/delete writes or removes refs.
 - Risk: low for explicit lightweight refs; create uses lock/rename.
+
+### `rit restore`
+
+- Baseline command checked: `git restore -h`
+- Supported options: default worktree restore from index, `--staged`/`-S` restore index from `HEAD`.
+- Unsupported options: source revisions, patch mode, merge conflict modes, sparse controls, pathspec files.
+- Git-compatible behavior: explicit tracked file restore for regular files.
+- Intentional differences: pathspec expansion and conflict handling are not implemented.
+- Repository mutation: worktree restore writes files; staged restore writes `.git/index`.
+- Risk: moderate; worktree writes use temp file then replace destination.
+
+### `rit reset`
+
+- Baseline command checked: `git reset -h`
+- Supported options: explicit file paths, equivalent to unstaging from `HEAD`.
+- Unsupported options: commit-moving resets, soft/mixed/hard/merge/keep modes, patch mode, pathspec files.
+- Git-compatible behavior: unstages explicit paths and reports remaining unstaged modifications.
+- Intentional differences: no index refresh metadata beyond object ID/size/mode.
+- Repository mutation: writes `.git/index`.
+- Risk: low for explicit paths; index writes use lock/rename.

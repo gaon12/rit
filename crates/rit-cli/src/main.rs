@@ -22,6 +22,8 @@ Core commands:
   commit        Record staged changes
   branch        List, create, or delete branches
   tag           List, create, or delete lightweight tags
+  restore       Restore working tree or staged files
+  reset         Reset staged file entries
 
 Run 'rit help <command>' for command-specific notes.
 ";
@@ -109,6 +111,18 @@ rit tag -d <tag-name>
 List, create, or delete lightweight tags.
 ";
 
+const RESTORE_HELP: &str = "\
+rit restore [--staged] <file>...
+
+Restore working tree files from the index, or staged files from HEAD.
+";
+
+const RESET_HELP: &str = "\
+rit reset <file>...
+
+Reset staged file entries from HEAD.
+";
+
 fn main() -> ExitCode {
     match run(env::args().skip(1), &mut io::stdout(), &mut io::stderr()) {
         Ok(code) => code,
@@ -148,6 +162,8 @@ fn run(
         [command, rest @ ..] if command == "commit" => commit_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "branch" => branch_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "tag" => tag_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "restore" => restore_command(rest, stderr),
+        [command, rest @ ..] if command == "reset" => reset_command(rest, stdout, stderr),
         [command] if command == "help" => {
             stdout.write_all(GENERAL_HELP.as_bytes())?;
             Ok(ExitCode::SUCCESS)
@@ -185,6 +201,8 @@ fn print_command_help(
         "commit" => stdout.write_all(COMMIT_HELP.as_bytes())?,
         "branch" => stdout.write_all(BRANCH_HELP.as_bytes())?,
         "tag" => stdout.write_all(TAG_HELP.as_bytes())?,
+        "restore" => stdout.write_all(RESTORE_HELP.as_bytes())?,
+        "reset" => stdout.write_all(RESET_HELP.as_bytes())?,
         unknown => {
             writeln!(stderr, "rit: no help for unknown command '{unknown}'")?;
             return Ok(ExitCode::from(129));
@@ -692,6 +710,70 @@ fn tag_command(
     }
 }
 
+fn restore_command(args: &[String], stderr: &mut dyn Write) -> io::Result<ExitCode> {
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    let (staged, paths) = parse_restore_args(args);
+    if paths.is_empty() {
+        writeln!(stderr, "rit: restore requires at least one file")?;
+        return Ok(ExitCode::from(129));
+    }
+
+    let result = if staged {
+        repository
+            .restore_staged_paths_from_head(&paths)
+            .map(|_| ())
+    } else {
+        repository.restore_worktree_paths(&paths)
+    };
+    match result {
+        Ok(()) => Ok(ExitCode::SUCCESS),
+        Err(error) => write_command_error(stderr, error),
+    }
+}
+
+fn parse_restore_args(args: &[String]) -> (bool, Vec<String>) {
+    let mut staged = false;
+    let mut paths = Vec::new();
+    for arg in args {
+        if arg == "--staged" || arg == "-S" {
+            staged = true;
+        } else {
+            paths.push(arg.clone());
+        }
+    }
+    (staged, paths)
+}
+
+fn reset_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    if args.is_empty() || args.iter().any(|arg| arg.starts_with('-')) {
+        writeln!(stderr, "rit: reset currently supports only file paths")?;
+        return Ok(ExitCode::from(129));
+    }
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    match repository.restore_staged_paths_from_head(args) {
+        Ok(unstaged) => {
+            if !unstaged.is_empty() {
+                writeln!(stdout, "Unstaged changes after reset:")?;
+                for line in unstaged {
+                    writeln!(stdout, "{line}")?;
+                }
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(error) => write_command_error(stderr, error),
+    }
+}
+
 fn write_command_error(stderr: &mut dyn Write, error: rit_core::RitError) -> io::Result<ExitCode> {
     writeln!(stderr, "rit: {error}")?;
     Ok(ExitCode::from(1))
@@ -965,6 +1047,15 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit tag"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn restore_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "restore"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit restore"));
         assert_eq!(stderr, "");
     }
 
