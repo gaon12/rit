@@ -118,6 +118,31 @@ fn ls_files_pathspec_outputs_match_git() {
     }
 }
 
+#[test]
+fn ls_tree_pathspec_outputs_match_git() {
+    let fixture = DiffFixture::new("pathspec-ls-tree");
+
+    for args in [
+        vec!["ls-tree", "HEAD", "nested"],
+        vec!["ls-tree", "--name-only", "HEAD", "nested/base.txt"],
+        vec!["ls-tree", "--object-only", "HEAD", "nested/base.txt"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "pathspec ls-tree {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
 struct DiffFixture {
     path: PathBuf,
 }

@@ -86,7 +86,8 @@ Completion criteria:
   - [x] Ordinary literal pathspec filters for `status --porcelain=v1` and
     `diff` summary modes.
   - [x] Ordinary literal pathspec filters for `ls-files`.
-  - [ ] Pathspec filters for `log`, `show`, and `ls-tree`.
+  - [x] Ordinary literal path lookup for `ls-tree`.
+  - [ ] Pathspec filters for `log` and `show`.
 - [ ] Rename detection.
 - [ ] Binary diff accounting.
 

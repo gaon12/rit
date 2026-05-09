@@ -33,6 +33,7 @@ The current codebase implements an early local Git subset:
   `status --porcelain=v1` and the supported `diff` summary modes.
 - Ordinary literal file and directory pathspec filtering is supported for
   `ls-files`, including `--stage`.
+- Ordinary literal path lookup is supported for `ls-tree`.
 - Ordinary literal file, directory, and `.` pathspec expansion is supported for
   `add`, `restore`, and `reset`.
 
@@ -80,6 +81,9 @@ Pathspec compatibility tests currently cover ordinary literal file and
 directory filters for `status --porcelain=v1` and supported `diff` summary
 outputs, plus `ls-files` cached and staged output. Git pathspec magic, glob
 matching, and pathspec-file input remain unsupported.
+
+`ls-tree` compatibility tests cover literal directory and file path lookup with
+default, `--name-only`, and `--object-only` output.
 
 Local write compatibility tests currently cover directory pathspec behavior for
 `add`, `restore`, and `reset` by comparing the resulting porcelain status and

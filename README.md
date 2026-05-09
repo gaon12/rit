@@ -42,7 +42,7 @@ rit help
 rit init
 rit rev-parse
 rit cat-file
-rit ls-tree
+rit ls-tree [--name-only|--object-only] <tree-ish> [--] [<pathspec>...]
 rit ls-files [--stage] [--] [<pathspec>...]
 rit show
 rit status --porcelain=v1

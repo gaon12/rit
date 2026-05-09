@@ -51,10 +51,12 @@
   `add`, `restore`, and `reset`.
 - Added ordinary literal pathspec filtering for `ls-files`, including
   `--stage`.
+- Added ordinary literal path lookup for `ls-tree <tree-ish> <path>`,
+  including `--name-only` and `--object-only`.
 - Added local write compatibility coverage that compares Git and rit porcelain
   state after directory pathspec `add`, `restore`, and `reset`.
 - Still unsupported: pathspec magic, glob pathspec matching, pathspec files,
-  and pathspec filtering for `log`, `show`, and `ls-tree`.
+  and pathspec filtering for `log` and `show`.
 
 ## Implemented Commands
 
@@ -111,10 +113,12 @@
 ### `rit ls-tree`
 
 - Baseline command checked: `git ls-tree -h`
-- Supported options: default output, `--name-only`, `--object-only` for full 40-character loose tree IDs.
-- Unsupported options: recursion, path filtering, long output, custom format, abbreviation, revision syntax.
+- Supported options: default output, `--name-only`, `--object-only`, commit or
+  tree revisions, and ordinary literal path lookup.
+- Unsupported options: recursion, long output, custom format, abbreviation,
+  pathspec magic/globs.
 - Git-compatible behavior: tree entry parsing and default `<mode> <type> <object>\t<path>` output.
-- Intentional differences: only loose tree object IDs are accepted.
+- Intentional differences: advanced pathspec forms are not implemented yet.
 - Repository mutation: no
 - Risk: none
 

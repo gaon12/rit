@@ -63,7 +63,7 @@ Read a loose object and print its type, size, pretty contents, or raw contents.
 ";
 
 const LS_TREE_HELP: &str = "\
-rit ls-tree [--name-only|--object-only] <tree>
+rit ls-tree [--name-only|--object-only] <tree> [--] [<pathspec>...]
 
 List entries in a loose tree object.
 ";
@@ -423,19 +423,23 @@ fn ls_tree_command(
     let mut name_only = false;
     let mut object_only = false;
     let mut tree_id = None;
+    let mut pathspec_args = Vec::new();
+    let mut after_separator = false;
 
     for arg in args {
         match arg.as_str() {
-            "--name-only" => name_only = true,
-            "--object-only" => object_only = true,
-            unsupported if unsupported.starts_with('-') => {
+            "--" if !after_separator => after_separator = true,
+            "--name-only" if !after_separator => name_only = true,
+            "--object-only" if !after_separator => object_only = true,
+            unsupported if unsupported.starts_with('-') && !after_separator => {
                 writeln!(stderr, "rit: unsupported ls-tree option '{unsupported}'")?;
                 return Ok(ExitCode::from(129));
             }
             object => {
-                if tree_id.replace(object.to_owned()).is_some() {
-                    writeln!(stderr, "rit: ls-tree expects one tree object")?;
-                    return Ok(ExitCode::from(129));
+                if tree_id.is_none() {
+                    tree_id = Some(object.to_owned());
+                } else {
+                    pathspec_args.push(object.to_owned());
                 }
             }
         }
@@ -490,7 +494,27 @@ fn ls_tree_command(
         return Ok(ExitCode::from(1));
     }
 
-    print_tree_entries(&object.data, name_only, object_only, stdout)?;
+    let pathspecs = match rit_core::PathspecSet::from_args(&pathspec_args) {
+        Ok(pathspecs) => pathspecs,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(129));
+        }
+    };
+    if pathspecs.is_all() {
+        print_tree_entries(&object.data, name_only, object_only, stdout)?;
+    } else {
+        for pathspec in pathspecs.patterns() {
+            match find_tree_entry_by_path(&repository, object_id, pathspec) {
+                Ok(Some(entry)) => print_tree_entry(&entry, name_only, object_only, stdout)?,
+                Ok(None) => {}
+                Err(error) => {
+                    writeln!(stderr, "rit: {error}")?;
+                    return Ok(ExitCode::from(1));
+                }
+            }
+        }
+    }
     Ok(ExitCode::SUCCESS)
 }
 
@@ -1306,6 +1330,79 @@ fn print_tree_entries(
     }
 
     Ok(())
+}
+
+struct PrintableTreeEntry {
+    mode: String,
+    kind: rit_core::ObjectKind,
+    object_id: rit_core::ObjectId,
+    path: String,
+}
+
+fn find_tree_entry_by_path(
+    repository: &rit_core::Repository,
+    tree_id: rit_core::ObjectId,
+    path: &str,
+) -> rit_core::Result<Option<PrintableTreeEntry>> {
+    let mut current_tree_id = tree_id;
+    let mut traversed = Vec::new();
+    let components = path
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+
+    for (index, component) in components.iter().enumerate() {
+        let tree = repository.read_object(current_tree_id)?;
+        if tree.kind != rit_core::ObjectKind::Tree {
+            return Ok(None);
+        }
+        let Some(entry) = rit_core::object::parse_tree_entries(&tree.data)?
+            .into_iter()
+            .find(|entry| entry.name_lossy() == *component)
+        else {
+            return Ok(None);
+        };
+        traversed.push(entry.name_lossy());
+
+        if index + 1 == components.len() {
+            return Ok(Some(PrintableTreeEntry {
+                mode: entry.mode,
+                kind: entry.kind,
+                object_id: entry.object_id,
+                path: traversed.join("/"),
+            }));
+        }
+        if entry.kind != rit_core::ObjectKind::Tree {
+            return Ok(None);
+        }
+        current_tree_id = entry.object_id;
+    }
+
+    Ok(None)
+}
+
+fn print_tree_entry(
+    entry: &PrintableTreeEntry,
+    name_only: bool,
+    object_only: bool,
+    stdout: &mut dyn Write,
+) -> io::Result<()> {
+    if name_only {
+        writeln!(stdout, "{}", entry.path)
+    } else if object_only {
+        writeln!(stdout, "{}", entry.object_id)
+    } else {
+        let printed_mode = if entry.kind == rit_core::ObjectKind::Tree {
+            "040000".to_owned()
+        } else {
+            entry.mode.clone()
+        };
+        writeln!(
+            stdout,
+            "{} {} {}\t{}",
+            printed_mode, entry.kind, entry.object_id, entry.path
+        )
+    }
 }
 
 #[cfg(test)]
