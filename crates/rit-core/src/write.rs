@@ -1,10 +1,10 @@
 use crate::index::{Index, IndexEntry, join_slash_path, relative_slash_path};
 use crate::object::{hash_object, parse_tree_entries};
 use crate::{
-    ObjectId, ObjectKind, Repository, Result, RitError, Signature, parse_commit,
+    ObjectId, ObjectKind, PathspecSet, Repository, Result, RitError, Signature, parse_commit,
     refs::validate_ref_short_name,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -20,7 +20,7 @@ pub struct CommitResult {
 }
 
 impl Repository {
-    /// Adds explicit files to the index and writes their blob objects.
+    /// Adds files matching ordinary literal pathspecs to the index.
     pub fn add_paths(&self, paths: &[String]) -> Result<usize> {
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
@@ -30,6 +30,7 @@ impl Repository {
         if paths.is_empty() {
             return Err(RitError::invalid_input("add requires at least one path"));
         }
+        let pathspecs = PathspecSet::from_args(paths)?;
 
         let index_path = self.git_dir().join("index");
         let mut index = Index::read(&index_path)?;
@@ -38,21 +39,10 @@ impl Repository {
             .into_iter()
             .map(|entry| (entry.path.clone(), entry))
             .collect::<BTreeMap<_, _>>();
+        let files_to_add = expand_add_pathspecs(worktree, &pathspecs, entries.keys())?;
 
-        for path_text in paths {
-            let full_path = join_slash_path(worktree, &path_text.replace('\\', "/"));
-            let relative_path = relative_slash_path(worktree, &full_path)?;
-            if !full_path.exists() {
-                entries.remove(&relative_path);
-                continue;
-            }
-            if !full_path.is_file() {
-                return Err(RitError::invalid_input(format!(
-                    "only regular files can be added for now: {}",
-                    full_path.display()
-                )));
-            }
-
+        for relative_path in files_to_add {
+            let full_path = join_slash_path(worktree, &relative_path);
             let data = fs::read(&full_path).map_err(|source| RitError::io(&full_path, source))?;
             let object_id = self.loose_objects().write_object(ObjectKind::Blob, &data)?;
             entries.insert(
@@ -64,6 +54,12 @@ impl Repository {
                     path: relative_path,
                 },
             );
+        }
+
+        for path in entries.keys().cloned().collect::<Vec<_>>() {
+            if pathspecs.matches(&path) && !join_slash_path(worktree, &path).exists() {
+                entries.remove(&path);
+            }
         }
 
         index = Index {
@@ -125,17 +121,20 @@ impl Repository {
             ));
         }
         let index = Index::read(&self.git_dir().join("index"))?;
+        let pathspecs = PathspecSet::from_args(paths)?;
         let entries = index
             .entries
             .iter()
-            .map(|entry| (entry.path.as_str(), entry))
-            .collect::<BTreeMap<_, _>>();
+            .filter(|entry| pathspecs.matches(&entry.path))
+            .collect::<Vec<_>>();
+        if entries.is_empty() {
+            return Err(RitError::invalid_input(format!(
+                "pathspec did not match any indexed file: {}",
+                paths.join(" ")
+            )));
+        }
 
-        for path in paths {
-            let normalized = path.replace('\\', "/");
-            let entry = entries.get(normalized.as_str()).ok_or_else(|| {
-                RitError::invalid_input(format!("pathspec did not match any indexed file: {path}"))
-            })?;
+        for entry in entries {
             let object = self.read_object(entry.object_id)?;
             if object.kind != ObjectKind::Blob {
                 return Err(RitError::invalid_input(format!(
@@ -143,7 +142,7 @@ impl Repository {
                     entry.object_id, object.kind
                 )));
             }
-            write_worktree_file_atomically(&join_slash_path(worktree, &normalized), &object.data)?;
+            write_worktree_file_atomically(&join_slash_path(worktree, &entry.path), &object.data)?;
         }
 
         Ok(())
@@ -159,6 +158,7 @@ impl Repository {
         if paths.is_empty() {
             return Err(RitError::invalid_input("reset requires at least one path"));
         }
+        let pathspecs = PathspecSet::from_args(paths)?;
 
         let index_path = self.git_dir().join("index");
         let index = Index::read(&index_path)?;
@@ -168,11 +168,22 @@ impl Repository {
             .map(|entry| (entry.path.clone(), entry))
             .collect::<BTreeMap<_, _>>();
         let head_entries = self.head_blob_entries()?;
+        let target_paths = index_entries
+            .keys()
+            .chain(head_entries.keys())
+            .filter(|path| pathspecs.matches(path))
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        if target_paths.is_empty() {
+            return Err(RitError::invalid_input(format!(
+                "pathspec did not match any file known to git: {}",
+                paths.join(" ")
+            )));
+        }
         let mut unstaged = Vec::new();
 
-        for path in paths {
-            let normalized = path.replace('\\', "/");
-            match head_entries.get(normalized.as_str()) {
+        for normalized in target_paths {
+            match head_entries.get(&normalized) {
                 Some(head_entry) => {
                     index_entries.insert(
                         normalized.clone(),
@@ -402,6 +413,66 @@ impl Repository {
     }
 }
 
+fn expand_add_pathspecs<'a>(
+    worktree: &Path,
+    pathspecs: &PathspecSet,
+    indexed_paths: impl Iterator<Item = &'a String>,
+) -> Result<BTreeSet<String>> {
+    let mut files = BTreeSet::new();
+
+    if pathspecs.is_all() {
+        collect_regular_files(worktree, worktree, &mut files)?;
+        return Ok(files);
+    }
+
+    let indexed_paths = indexed_paths.cloned().collect::<Vec<_>>();
+    for pattern in pathspecs.patterns() {
+        let full_path = join_slash_path(worktree, pattern);
+        if full_path.is_file() {
+            files.insert(relative_slash_path(worktree, &full_path)?);
+        } else if full_path.is_dir() {
+            collect_regular_files(worktree, &full_path, &mut files)?;
+        } else if indexed_paths
+            .iter()
+            .any(|path| path == pattern || path.starts_with(&format!("{pattern}/")))
+        {
+            continue;
+        } else {
+            return Err(RitError::invalid_input(format!(
+                "pathspec did not match any files: {pattern}"
+            )));
+        }
+    }
+
+    Ok(files)
+}
+
+fn collect_regular_files(
+    root: &Path,
+    directory: &Path,
+    output: &mut BTreeSet<String>,
+) -> Result<()> {
+    for entry in fs::read_dir(directory).map_err(|source| RitError::io(directory, source))? {
+        let entry = entry.map_err(|source| RitError::io(directory, source))?;
+        let path = entry.path();
+        let relative = relative_slash_path(root, &path)?;
+        if relative == ".git" || relative.starts_with(".git/") {
+            continue;
+        }
+
+        let file_type = entry
+            .file_type()
+            .map_err(|source| RitError::io(&path, source))?;
+        if file_type.is_dir() {
+            collect_regular_files(root, &path, output)?;
+        } else if file_type.is_file() {
+            output.insert(relative);
+        }
+    }
+
+    Ok(())
+}
+
 fn ensure_clean_for_checkout(repository: &Repository) -> Result<()> {
     let status = repository.status_porcelain_v1()?;
     if status
@@ -563,7 +634,9 @@ fn write_worktree_file_atomically(path: &Path, contents: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::read_config_value;
+    use crate::{Index, InitOptions, Repository};
     use std::fs;
+    use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -591,5 +664,101 @@ mod tests {
         );
 
         fs::remove_file(path).expect("config should be removed");
+    }
+
+    #[test]
+    fn add_directory_pathspec_adds_nested_files() {
+        let temp = temp_path("add-directory");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        fs::create_dir_all(temp.join("nested").join("deeper"))
+            .expect("nested directory should be written");
+        fs::write(temp.join("nested").join("a.txt"), "one\n").expect("file should be written");
+        fs::write(temp.join("nested").join("deeper").join("b.txt"), "two\n")
+            .expect("deep file should be written");
+
+        repository
+            .add_paths(&["nested".to_owned()])
+            .expect("directory add should work");
+
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        let paths = index
+            .entries
+            .iter()
+            .map(|entry| entry.path.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(paths, vec!["nested/a.txt", "nested/deeper/b.txt"]);
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn restore_directory_pathspec_restores_matching_worktree_files() {
+        let temp = temp_path("restore-directory");
+        let repository = committed_nested_repository(&temp);
+        fs::write(temp.join("nested").join("a.txt"), "changed\n").expect("file should be modified");
+
+        repository
+            .restore_worktree_paths(&["nested".to_owned()])
+            .expect("directory restore should work");
+
+        let contents =
+            fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read");
+        assert_eq!(contents, "base\n");
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn reset_directory_pathspec_restores_matching_index_entries() {
+        let temp = temp_path("reset-directory");
+        let repository = committed_nested_repository(&temp);
+        fs::write(temp.join("nested").join("a.txt"), "changed\n").expect("file should be modified");
+        repository
+            .add_paths(&["nested".to_owned()])
+            .expect("modified file should be staged");
+
+        repository
+            .restore_staged_paths_from_head(&["nested".to_owned()])
+            .expect("directory reset should work");
+
+        let diff = repository
+            .diff_index_to_head()
+            .expect("cached diff should be readable");
+        assert!(diff.files.is_empty());
+        let status = repository
+            .status_porcelain_v1()
+            .expect("status should be readable");
+        assert_eq!(status.to_porcelain_v1(), " M nested/a.txt\n");
+        remove_dir_all(&temp);
+    }
+
+    fn committed_nested_repository(path: &Path) -> Repository {
+        let repository = Repository::init(&InitOptions::new(path)).expect("init should work");
+        fs::create_dir_all(path.join("nested")).expect("nested directory should be written");
+        fs::write(path.join("nested").join("a.txt"), "base\n").expect("file should be written");
+        fs::write(
+            repository.git_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n[user]\n\tname = Rit Test\n\temail = rit@example.test\n",
+        )
+        .expect("config should be written");
+        repository
+            .add_paths(&["nested".to_owned()])
+            .expect("file should be added");
+        repository
+            .commit_index("base")
+            .expect("base commit should be created");
+        repository
+    }
+
+    fn temp_path(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time should be valid")
+            .as_nanos();
+        std::env::temp_dir().join(format!("rit-write-{name}-{unique}"))
+    }
+
+    fn remove_dir_all(path: &Path) {
+        if path.exists() {
+            fs::remove_dir_all(path).expect("temporary directory should be removed");
+        }
     }
 }

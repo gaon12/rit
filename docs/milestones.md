@@ -42,7 +42,10 @@ Completion criteria:
 - [x] Compare stdout, stderr, and exit code.
 - [x] Compare repository snapshots.
 - [x] Add reusable checked-in fixtures for common read-only commands.
-- [ ] Add fixtures for local write commands.
+- [~] Add fixtures for local write commands.
+  - [x] Generated Git-vs-rit compatibility scenarios for directory pathspec
+    `add`, `restore`, and `reset`.
+  - [ ] Reusable checked-in local write fixtures.
 - [x] Add focused reports for first differing stdout/stderr line.
 
 Completion criteria:
@@ -100,7 +103,10 @@ Completion criteria:
 - [x] `rit reset` explicit path unstaging.
 - [x] `rit checkout` local branch basics.
 - [x] `rit switch` local branch basics.
-- [ ] Pathspec expansion for write commands.
+- [~] Pathspec expansion for write commands.
+  - [x] Ordinary literal file, directory, and `.` pathspec expansion for
+    `add`, `restore`, and `reset`.
+  - [ ] Pathspec magic, pathspec files, and glob parity.
 - [ ] Hook execution for commit.
 - [ ] Commit author/date override.
 - [ ] Safer branch delete merge checks.
@@ -253,9 +259,9 @@ Completion criteria:
 
 ## Active Queue
 
-1. Add fixtures for local write commands.
+1. Add reusable checked-in fixtures for local write commands.
 2. Expand `status --porcelain=v1` with stronger Git compatibility.
-3. Continue pathspec support for add/restore/reset and remaining read-only
-   commands.
+3. Continue pathspec support for remaining read-only commands and advanced
+   pathspec forms.
 4. Add index stat refresh or document and test the remaining difference.
 5. Start patch output for `rit diff`.

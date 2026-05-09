@@ -781,10 +781,13 @@ fn add_command(
     _stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    if args.is_empty() || args.iter().any(|arg| arg.starts_with('-')) {
+    let Some(paths) = parse_plain_path_args(args, "add", stderr)? else {
+        return Ok(ExitCode::from(129));
+    };
+    if paths.is_empty() {
         writeln!(
             stderr,
-            "rit: add currently supports only explicit file paths"
+            "rit: add currently supports only ordinary file or directory pathspecs"
         )?;
         return Ok(ExitCode::from(129));
     }
@@ -793,7 +796,7 @@ fn add_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    match repository.add_paths(args) {
+    match repository.add_paths(&paths) {
         Ok(_) => Ok(ExitCode::SUCCESS),
         Err(error) => {
             writeln!(stderr, "rit: {error}")?;
@@ -942,7 +945,9 @@ fn restore_command(args: &[String], stderr: &mut dyn Write) -> io::Result<ExitCo
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    let (staged, paths) = parse_restore_args(args);
+    let Some((staged, paths)) = parse_restore_args(args, stderr)? else {
+        return Ok(ExitCode::from(129));
+    };
     if paths.is_empty() {
         writeln!(stderr, "rit: restore requires at least one file")?;
         return Ok(ExitCode::from(129));
@@ -961,17 +966,26 @@ fn restore_command(args: &[String], stderr: &mut dyn Write) -> io::Result<ExitCo
     }
 }
 
-fn parse_restore_args(args: &[String]) -> (bool, Vec<String>) {
+fn parse_restore_args(
+    args: &[String],
+    stderr: &mut dyn Write,
+) -> io::Result<Option<(bool, Vec<String>)>> {
     let mut staged = false;
     let mut paths = Vec::new();
+    let mut after_separator = false;
     for arg in args {
-        if arg == "--staged" || arg == "-S" {
+        if arg == "--" && !after_separator {
+            after_separator = true;
+        } else if (arg == "--staged" || arg == "-S") && !after_separator {
             staged = true;
+        } else if arg.starts_with('-') && !after_separator {
+            writeln!(stderr, "rit: unsupported restore option '{arg}'")?;
+            return Ok(None);
         } else {
             paths.push(arg.clone());
         }
     }
-    (staged, paths)
+    Ok(Some((staged, paths)))
 }
 
 fn reset_command(
@@ -979,15 +993,21 @@ fn reset_command(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    if args.is_empty() || args.iter().any(|arg| arg.starts_with('-')) {
-        writeln!(stderr, "rit: reset currently supports only file paths")?;
+    let Some(paths) = parse_plain_path_args(args, "reset", stderr)? else {
+        return Ok(ExitCode::from(129));
+    };
+    if paths.is_empty() {
+        writeln!(
+            stderr,
+            "rit: reset currently supports only ordinary file or directory pathspecs"
+        )?;
         return Ok(ExitCode::from(129));
     }
     let repository = match discover_repository(stderr)? {
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    match repository.restore_staged_paths_from_head(args) {
+    match repository.restore_staged_paths_from_head(&paths) {
         Ok(unstaged) => {
             if !unstaged.is_empty() {
                 writeln!(stdout, "Unstaged changes after reset:")?;
@@ -999,6 +1019,26 @@ fn reset_command(
         }
         Err(error) => write_command_error(stderr, error),
     }
+}
+
+fn parse_plain_path_args(
+    args: &[String],
+    command: &str,
+    stderr: &mut dyn Write,
+) -> io::Result<Option<Vec<String>>> {
+    let mut paths = Vec::new();
+    let mut after_separator = false;
+    for arg in args {
+        if arg == "--" && !after_separator {
+            after_separator = true;
+        } else if arg.starts_with('-') && !after_separator {
+            writeln!(stderr, "rit: unsupported {command} option '{arg}'")?;
+            return Ok(None);
+        } else {
+            paths.push(arg.clone());
+        }
+    }
+    Ok(Some(paths))
 }
 
 fn checkout_command(

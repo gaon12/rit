@@ -35,6 +35,11 @@ impl PathspecSet {
         self.patterns.is_empty()
     }
 
+    /// Returns the normalized literal pathspec patterns.
+    pub fn patterns(&self) -> &[String] {
+        &self.patterns
+    }
+
     /// Returns true when a repository-relative slash path matches this set.
     pub fn matches(&self, path: &str) -> bool {
         self.is_all()

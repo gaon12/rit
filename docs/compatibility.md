@@ -31,6 +31,8 @@ The current codebase implements an early local Git subset:
   `branch`, `tag`, `restore`, `reset`, `checkout`, and `switch`.
 - Ordinary literal file and directory pathspec filtering is supported for
   `status --porcelain=v1` and the supported `diff` summary modes.
+- Ordinary literal file, directory, and `.` pathspec expansion is supported for
+  `add`, `restore`, and `reset`.
 
 ## Compatibility Policy
 
@@ -76,3 +78,7 @@ Pathspec compatibility tests currently cover ordinary literal file and
 directory filters for `status --porcelain=v1` and supported `diff` summary
 outputs. Git pathspec magic, glob matching, and pathspec-file input remain
 unsupported.
+
+Local write compatibility tests currently cover directory pathspec behavior for
+`add`, `restore`, and `reset` by comparing the resulting porcelain status and
+restored file contents.

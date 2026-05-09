@@ -57,12 +57,12 @@ rit diff --cached --numstat
 rit diff --cached --stat
 rit diff [--cached] <summary-mode> -- <pathspec>
 rit log
-rit add
+rit add <pathspec>...
 rit commit
 rit branch
 rit tag
-rit restore
-rit reset
+rit restore <pathspec>...
+rit reset <pathspec>...
 rit checkout
 rit switch
 ```
