@@ -35,6 +35,7 @@
 - Added staged diff support through `Repository::diff_index_to_head()`.
 - `rit diff --cached --name-only`, `rit diff --cached --stat`, `rit diff --staged --name-only`, and `rit diff --staged --stat` now compare the index with `HEAD`.
 - Unborn `HEAD` is treated like an empty tree for staged diff, matching the usual Git shape for newly added files.
+- Added `--name-status` formatting for both default and cached diff scopes.
 
 ## Implemented Commands
 
@@ -111,7 +112,7 @@
 ### `rit diff`
 
 - Baseline command checked: `git diff -h`
-- Supported options: `--name-only`, `--stat`, plus `--cached`/`--staged` with those output modes.
+- Supported options: `--name-only`, `--name-status`, `--stat`, plus `--cached`/`--staged` with those output modes.
 - Unsupported options: patch output, commit/tree/blob arguments, pathspecs, rename/copy detection, binary stat details.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files.
 - Git-compatible behavior: cached diff scope compares the index against `HEAD`.

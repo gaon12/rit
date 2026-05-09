@@ -25,9 +25,9 @@ The current codebase implements an early local Git subset:
   resolution.
 - CLI commands: `version`, `help`, `init`, `rev-parse`, `cat-file`, `ls-tree`,
   `ls-files`, `show`, `status --porcelain=v1`, `diff --name-only`,
-  `diff --stat`, `diff --cached --name-only`, `diff --cached --stat`, `log`,
-  `add`, `commit`, `branch`, `tag`, `restore`, `reset`, `checkout`, and
-  `switch`.
+  `diff --name-status`, `diff --stat`, `diff --cached --name-only`,
+  `diff --cached --name-status`, `diff --cached --stat`, `log`, `add`,
+  `commit`, `branch`, `tag`, `restore`, `reset`, `checkout`, and `switch`.
 
 ## Compatibility Policy
 

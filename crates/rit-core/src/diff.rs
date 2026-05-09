@@ -17,6 +17,18 @@ impl DiffSummary {
         self.files.iter().map(|file| file.path.as_str()).collect()
     }
 
+    /// Renders a Git-like `--name-status` summary.
+    pub fn to_name_status_text(&self) -> String {
+        let mut output = String::new();
+        for file in &self.files {
+            output.push(file.status);
+            output.push('\t');
+            output.push_str(&file.path);
+            output.push('\n');
+        }
+        output
+    }
+
     /// Renders a Git-like `--stat` summary.
     pub fn to_stat_text(&self) -> String {
         if self.files.is_empty() {
@@ -79,6 +91,8 @@ impl DiffSummary {
 /// Per-file line statistics.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DiffFileStat {
+    /// Git name-status code for this path.
+    pub status: char,
     /// Repository-relative path using `/` separators.
     pub path: String,
     /// Added line count.
@@ -113,6 +127,7 @@ impl Repository {
 
             if !worktree_path.exists() {
                 files.push(DiffFileStat {
+                    status: 'D',
                     path: entry.path,
                     insertions: 0,
                     deletions: count_lines(&old_object.data),
@@ -129,6 +144,7 @@ impl Repository {
 
             let (insertions, deletions) = line_delta(&old_object.data, &new_data)?;
             files.push(DiffFileStat {
+                status: 'M',
                 path: entry.path,
                 insertions,
                 deletions,
@@ -159,6 +175,7 @@ impl Repository {
                 (None, Some(new_id)) => {
                     let new_object = self.read_blob(*new_id)?;
                     files.push(DiffFileStat {
+                        status: 'A',
                         path,
                         insertions: count_lines(&new_object.data),
                         deletions: 0,
@@ -167,6 +184,7 @@ impl Repository {
                 (Some(old_id), None) => {
                     let old_object = self.read_blob(*old_id)?;
                     files.push(DiffFileStat {
+                        status: 'D',
                         path,
                         insertions: 0,
                         deletions: count_lines(&old_object.data),
@@ -177,6 +195,7 @@ impl Repository {
                     let new_object = self.read_blob(*new_id)?;
                     let (insertions, deletions) = line_delta(&old_object.data, &new_object.data)?;
                     files.push(DiffFileStat {
+                        status: 'M',
                         path,
                         insertions,
                         deletions,
@@ -321,6 +340,7 @@ mod tests {
     fn stat_text_matches_small_git_shape() {
         let summary = DiffSummary {
             files: vec![DiffFileStat {
+                status: 'M',
                 path: "a.txt".to_owned(),
                 insertions: 1,
                 deletions: 0,
@@ -331,6 +351,20 @@ mod tests {
             summary.to_stat_text(),
             " a.txt | 1 +\n 1 file changed, 1 insertion(+)\n"
         );
+    }
+
+    #[test]
+    fn name_status_text_lists_status_and_path() {
+        let summary = DiffSummary {
+            files: vec![DiffFileStat {
+                status: 'A',
+                path: "a.txt".to_owned(),
+                insertions: 1,
+                deletions: 0,
+            }],
+        };
+
+        assert_eq!(summary.to_name_status_text(), "A\ta.txt\n");
     }
 
     #[test]
@@ -361,6 +395,7 @@ mod tests {
         assert_eq!(
             diff.files,
             vec![DiffFileStat {
+                status: 'M',
                 path: "a.txt".to_owned(),
                 insertions: 1,
                 deletions: 0,
