@@ -6,7 +6,7 @@ The project is intentionally not a wrapper around the `git` executable. Existing
 
 ## Current Scope
 
-This repository currently implements the initial workspace skeleton, the `rit` CLI entry point, repository discovery, loose object reading, index reading, and basic `help` / `version` / `init` / `rev-parse` / `cat-file` / `ls-tree` / `status --porcelain=v1` / `diff --name-only` / `diff --stat` commands.
+This repository currently implements the initial workspace skeleton, the `rit` CLI entry point, repository discovery, loose object reading, index reading, and basic `help` / `version` / `init` / `rev-parse` / `cat-file` / `ls-tree` / `status --porcelain=v1` / `diff --name-only` / `diff --stat` / `log` commands.
 
 ## Development
 

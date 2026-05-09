@@ -163,6 +163,25 @@ impl Repository {
         self.loose_objects().read_object(object_id)
     }
 
+    /// Resolves `HEAD` to an object ID. Unborn branches return `None`.
+    pub fn resolve_head(&self) -> Result<Option<ObjectId>> {
+        let head_path = self.git_dir.join("HEAD");
+        let contents =
+            fs::read_to_string(&head_path).map_err(|source| RitError::io(&head_path, source))?;
+        let trimmed = contents.trim();
+        if let Some(reference_name) = trimmed.strip_prefix("ref: ") {
+            let reference_path = self.common_dir.join(reference_name);
+            if !reference_path.exists() {
+                return Ok(None);
+            }
+            let object_id = fs::read_to_string(&reference_path)
+                .map_err(|source| RitError::io(&reference_path, source))?;
+            return Ok(Some(ObjectId::from_hex(object_id.trim())?));
+        }
+
+        Ok(Some(ObjectId::from_hex(trimmed)?))
+    }
+
     /// Returns the working tree root, or `None` for bare repositories.
     pub fn worktree(&self) -> Option<&Path> {
         self.worktree.as_deref()

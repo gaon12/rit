@@ -1,5 +1,6 @@
 use crate::index::{Index, join_slash_path, relative_slash_path};
 use crate::object::{ObjectKind, hash_object, parse_tree_entries};
+use crate::parse_commit;
 use crate::{ObjectId, Repository, Result, RitError};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -121,28 +122,10 @@ impl Repository {
                 commit.kind
             )));
         }
-        let tree_id = parse_commit_tree(&commit.data)?;
+        let tree_id = parse_commit(&commit.data)?.tree;
         let mut entries = BTreeMap::new();
         self.collect_tree_entries("", tree_id, &mut entries)?;
         Ok(entries)
-    }
-
-    fn resolve_head(&self) -> Result<Option<ObjectId>> {
-        let head_path = self.git_dir().join("HEAD");
-        let contents =
-            fs::read_to_string(&head_path).map_err(|source| RitError::io(&head_path, source))?;
-        let trimmed = contents.trim();
-        if let Some(reference_name) = trimmed.strip_prefix("ref: ") {
-            let reference_path = self.common_dir().join(reference_name);
-            if !reference_path.exists() {
-                return Ok(None);
-            }
-            let object_id = fs::read_to_string(&reference_path)
-                .map_err(|source| RitError::io(&reference_path, source))?;
-            return Ok(Some(ObjectId::from_hex(object_id.trim())?));
-        }
-
-        Ok(Some(ObjectId::from_hex(trimmed)?))
     }
 
     fn collect_tree_entries(
@@ -174,20 +157,6 @@ impl Repository {
 
         Ok(())
     }
-}
-
-fn parse_commit_tree(data: &[u8]) -> Result<ObjectId> {
-    let text = std::str::from_utf8(data)
-        .map_err(|_| RitError::invalid_input("commit object is not UTF-8"))?;
-    for line in text.lines() {
-        if let Some(tree_id) = line.strip_prefix("tree ") {
-            return ObjectId::from_hex(tree_id);
-        }
-    }
-
-    Err(RitError::invalid_input(
-        "commit object is missing tree line",
-    ))
 }
 
 fn hash_worktree_file(path: &Path) -> Result<ObjectId> {

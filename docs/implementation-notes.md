@@ -87,3 +87,13 @@
 - Intentional differences: binary `--stat` reports a clear unsupported error until binary diff accounting is implemented.
 - Repository mutation: no
 - Risk: no repository writes.
+
+### `rit log`
+
+- Baseline command checked: `git log -h`
+- Supported options: default output, `--oneline`.
+- Unsupported options: revision ranges, decoration, graph, path filtering, grep, ordering controls, diff output.
+- Git-compatible behavior: reads commits from `HEAD`, follows the first parent, prints default author/date/message layout and 7-character oneline IDs.
+- Intentional differences: merge traversal is first-parent only until revision walking is implemented.
+- Repository mutation: no
+- Risk: no repository writes.

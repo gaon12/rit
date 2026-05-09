@@ -4,8 +4,10 @@
 //! CLI crate should format these structured results instead of embedding Git
 //! behavior directly in argument handling.
 
+pub mod commit;
 pub mod diff;
 pub mod error;
+pub mod history;
 pub mod index;
 pub mod object;
 pub mod odb;
@@ -13,6 +15,7 @@ pub mod repository;
 pub mod status;
 
 pub use error::{Result, RitError};
+pub use history::LogEntry;
 pub use index::{Index, IndexEntry};
 pub use object::{GitObject, ObjectId, ObjectKind, TreeEntry, hash_object};
 pub use odb::LooseObjectDb;
@@ -23,4 +26,5 @@ pub use status::{PorcelainStatus, StatusEntry};
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
+pub use commit::{Commit, Signature, parse_commit};
 pub use diff::{DiffFileStat, DiffSummary};

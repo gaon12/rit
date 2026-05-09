@@ -17,6 +17,7 @@ Core commands:
   ls-tree       List entries in a tree object
   status        Show porcelain working tree status
   diff          Show working tree changes
+  log           Show commit history
 
 Run 'rit help <command>' for command-specific notes.
 ";
@@ -69,6 +70,12 @@ rit diff (--name-only|--stat)
 Show working tree changes compared with the index.
 ";
 
+const LOG_HELP: &str = "\
+rit log [--oneline]
+
+Show commits reachable from HEAD by following the first parent.
+";
+
 fn main() -> ExitCode {
     match run(env::args().skip(1), &mut io::stdout(), &mut io::stderr()) {
         Ok(code) => code,
@@ -103,6 +110,7 @@ fn run(
         [command, rest @ ..] if command == "ls-tree" => ls_tree_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "status" => status_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "diff" => diff_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "log" => log_command(rest, stdout, stderr),
         [command] if command == "help" => {
             stdout.write_all(GENERAL_HELP.as_bytes())?;
             Ok(ExitCode::SUCCESS)
@@ -135,6 +143,7 @@ fn print_command_help(
         "ls-tree" => stdout.write_all(LS_TREE_HELP.as_bytes())?,
         "status" => stdout.write_all(STATUS_HELP.as_bytes())?,
         "diff" => stdout.write_all(DIFF_HELP.as_bytes())?,
+        "log" => stdout.write_all(LOG_HELP.as_bytes())?,
         unknown => {
             writeln!(stderr, "rit: no help for unknown command '{unknown}'")?;
             return Ok(ExitCode::from(129));
@@ -428,6 +437,149 @@ fn diff_command(
     Ok(ExitCode::SUCCESS)
 }
 
+fn log_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    if !args.is_empty() && !matches!(args, [flag] if flag == "--oneline") {
+        writeln!(stderr, "rit: log currently supports only --oneline")?;
+        return Ok(ExitCode::from(129));
+    }
+
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    let entries = match repository.log_first_parent() {
+        Ok(entries) => entries,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(1));
+        }
+    };
+
+    if matches!(args, [flag] if flag == "--oneline") {
+        for entry in entries {
+            writeln!(
+                stdout,
+                "{} {}",
+                &entry.object_id.to_hex()[..7],
+                first_message_line(&entry.commit.message)
+            )?;
+        }
+    } else {
+        for (index, entry) in entries.iter().enumerate() {
+            if index > 0 {
+                writeln!(stdout)?;
+            }
+            writeln!(stdout, "commit {}", entry.object_id)?;
+            writeln!(
+                stdout,
+                "Author: {} <{}>",
+                entry.commit.author.name, entry.commit.author.email
+            )?;
+            writeln!(stdout, "Date:   {}", format_git_date(&entry.commit.author))?;
+            writeln!(stdout)?;
+            for line in entry.commit.message.trim_end_matches('\n').lines() {
+                writeln!(stdout, "    {line}")?;
+            }
+        }
+    }
+
+    Ok(ExitCode::SUCCESS)
+}
+
+fn first_message_line(message: &str) -> &str {
+    message.lines().next().unwrap_or("")
+}
+
+fn format_git_date(signature: &rit_core::Signature) -> String {
+    let offset_seconds = parse_timezone_offset(&signature.offset).unwrap_or(0);
+    let local_seconds = signature.timestamp + offset_seconds;
+    let (year, month, day, hour, minute, second, weekday) = civil_time(local_seconds);
+    format!(
+        "{} {} {:>2} {:02}:{:02}:{:02} {} {}",
+        weekday_name(weekday),
+        month_name(month),
+        day,
+        hour,
+        minute,
+        second,
+        year,
+        signature.offset
+    )
+}
+
+fn parse_timezone_offset(offset: &str) -> Option<i64> {
+    if offset.len() != 5 {
+        return None;
+    }
+    let sign = match &offset[..1] {
+        "+" => 1,
+        "-" => -1,
+        _ => return None,
+    };
+    let hours = offset[1..3].parse::<i64>().ok()?;
+    let minutes = offset[3..5].parse::<i64>().ok()?;
+    Some(sign * (hours * 3600 + minutes * 60))
+}
+
+fn civil_time(seconds: i64) -> (i32, u32, u32, u32, u32, u32, u32) {
+    let days = seconds.div_euclid(86_400);
+    let seconds_of_day = seconds.rem_euclid(86_400);
+    let (year, month, day) = civil_from_days(days);
+    let hour = (seconds_of_day / 3600) as u32;
+    let minute = ((seconds_of_day % 3600) / 60) as u32;
+    let second = (seconds_of_day % 60) as u32;
+    let weekday = (days + 4).rem_euclid(7) as u32;
+    (year, month, day, hour, minute, second, weekday)
+}
+
+fn civil_from_days(days: i64) -> (i32, u32, u32) {
+    let days = days + 719_468;
+    let era = if days >= 0 { days } else { days - 146_096 } / 146_097;
+    let day_of_era = days - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_prime = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
+    let month = month_prime + if month_prime < 10 { 3 } else { -9 };
+    let year = year + i64::from(month <= 2);
+    (year as i32, month as u32, day as u32)
+}
+
+fn weekday_name(weekday: u32) -> &'static str {
+    match weekday {
+        0 => "Sun",
+        1 => "Mon",
+        2 => "Tue",
+        3 => "Wed",
+        4 => "Thu",
+        5 => "Fri",
+        _ => "Sat",
+    }
+}
+
+fn month_name(month: u32) -> &'static str {
+    match month {
+        1 => "Jan",
+        2 => "Feb",
+        3 => "Mar",
+        4 => "Apr",
+        5 => "May",
+        6 => "Jun",
+        7 => "Jul",
+        8 => "Aug",
+        9 => "Sep",
+        10 => "Oct",
+        11 => "Nov",
+        _ => "Dec",
+    }
+}
+
 fn discover_repository(stderr: &mut dyn Write) -> io::Result<Option<rit_core::Repository>> {
     match rit_core::Repository::discover(".") {
         Ok(repository) => Ok(Some(repository)),
@@ -481,7 +633,7 @@ fn print_tree_entries(
 
 #[cfg(test)]
 mod tests {
-    use super::run;
+    use super::{format_git_date, run};
     use std::process::ExitCode;
 
     fn run_with(args: &[&str]) -> (ExitCode, String, String) {
@@ -563,5 +715,29 @@ mod tests {
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit diff"));
         assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn log_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "log"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit log"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn formats_git_date_with_offset() {
+        let signature = rit_core::Signature {
+            name: "A".to_owned(),
+            email: "a@example.test".to_owned(),
+            timestamp: 1_700_000_000,
+            offset: "+0900".to_owned(),
+        };
+
+        assert_eq!(
+            format_git_date(&signature),
+            "Wed Nov 15 07:13:20 2023 +0900"
+        );
     }
 }
