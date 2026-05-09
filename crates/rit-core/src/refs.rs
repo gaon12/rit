@@ -1,5 +1,5 @@
-use crate::{ObjectId, Repository, Result, RitError};
-use std::collections::BTreeMap;
+use crate::{ObjectId, ObjectKind, Repository, Result, RitError, parse_commit};
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::io::Write;
 
@@ -107,6 +107,14 @@ impl Repository {
         }
         let target = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
         let target = ObjectId::from_hex(target.trim())?;
+        let head = self.resolve_head()?.ok_or_else(|| {
+            RitError::invalid_input("cannot delete branch because HEAD does not point at a commit")
+        })?;
+        if !self.commit_is_reachable_from(target, head)? {
+            return Err(RitError::invalid_input(format!(
+                "branch '{name}' is not fully merged"
+            )));
+        }
         fs::remove_file(&path).map_err(|source| RitError::io(&path, source))?;
         Ok(target)
     }
@@ -195,6 +203,31 @@ impl Repository {
             refs.insert(name.to_owned(), ObjectId::from_hex(object_id)?);
         }
         Ok(refs)
+    }
+
+    fn commit_is_reachable_from(&self, target: ObjectId, start: ObjectId) -> Result<bool> {
+        let mut stack = vec![start];
+        let mut seen = HashSet::new();
+
+        while let Some(object_id) = stack.pop() {
+            if object_id == target {
+                return Ok(true);
+            }
+            if !seen.insert(object_id) {
+                continue;
+            }
+            let object = self.read_object(object_id)?;
+            if object.kind != ObjectKind::Commit {
+                return Err(RitError::invalid_input(format!(
+                    "object {object_id} is {}, not commit",
+                    object.kind
+                )));
+            }
+            let commit = parse_commit(&object.data)?;
+            stack.extend(commit.parents);
+        }
+
+        Ok(false)
     }
 }
 

@@ -40,6 +40,7 @@ The current codebase implements an early local Git subset:
 - Ordinary literal file, directory, and `.` pathspec expansion is supported for
   `add`, `restore`, and `reset`.
 - Detached `checkout <commit>` is supported for clean worktrees.
+- `branch -d` refuses unmerged local branches.
 
 ## Compatibility Policy
 
@@ -100,3 +101,6 @@ restored file contents.
 
 Detached checkout compatibility tests compare detached `.git/HEAD`, branch
 state, porcelain status, and materialized file contents.
+
+Branch deletion compatibility tests cover merged branch deletion and refusal to
+delete an unmerged branch.

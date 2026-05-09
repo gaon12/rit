@@ -115,7 +115,7 @@ Completion criteria:
   - [ ] Pathspec magic, pathspec files, and glob parity.
 - [ ] Hook execution for commit.
 - [ ] Commit author/date override.
-- [ ] Safer branch delete merge checks.
+- [x] Safer branch delete merge checks.
 - [x] Detached HEAD checkout.
 
 Completion criteria:

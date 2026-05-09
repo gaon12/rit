@@ -112,6 +112,72 @@ fn checkout_detached_commit_matches_git_state() {
     );
 }
 
+#[test]
+fn branch_delete_refuses_unmerged_branch_like_git() {
+    let fixture = BranchDeleteFixture::unmerged("branch-delete-unmerged");
+    let workspace = temp_path("branch-delete-unmerged-compare");
+    let git_repo = workspace.join("git");
+    let rit_repo = workspace.join("rit");
+    copy_directory(fixture.path(), &git_repo);
+    copy_directory(fixture.path(), &rit_repo);
+
+    let git =
+        run_command_allow_failure(&command_words("git", ["branch", "-d", "topic"]), &git_repo);
+    let rit = run_command_allow_failure(
+        &command_words(rit_binary(), ["branch", "-d", "topic"]),
+        &rit_repo,
+    );
+
+    assert!(!git.success);
+    assert!(!rit.success);
+    assert!(
+        git_repo
+            .join(".git")
+            .join("refs")
+            .join("heads")
+            .join("topic")
+            .exists()
+    );
+    assert!(
+        rit_repo
+            .join(".git")
+            .join("refs")
+            .join("heads")
+            .join("topic")
+            .exists()
+    );
+    let _ = fs::remove_dir_all(workspace);
+}
+
+#[test]
+fn branch_delete_allows_merged_branch_like_git() {
+    let fixture = BranchDeleteFixture::merged("branch-delete-merged");
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words("git", ["branch", "-d", "topic"]),
+        command_words(rit_binary(), ["branch", "-d", "topic"]),
+    );
+
+    assert!(
+        !outcome
+            .git_repo
+            .join(".git")
+            .join("refs")
+            .join("heads")
+            .join("topic")
+            .exists()
+    );
+    assert!(
+        !outcome
+            .rit_repo
+            .join(".git")
+            .join("refs")
+            .join("heads")
+            .join("topic")
+            .exists()
+    );
+}
+
 struct CommandSpec {
     program: OsString,
     args: Vec<OsString>,
@@ -183,6 +249,21 @@ fn run_command(spec: &CommandSpec, cwd: &Path) -> (String, String) {
         String::from_utf8_lossy(&output.stdout).into_owned(),
         String::from_utf8_lossy(&output.stderr).into_owned(),
     )
+}
+
+struct CommandRun {
+    success: bool,
+}
+
+fn run_command_allow_failure(spec: &CommandSpec, cwd: &Path) -> CommandRun {
+    let output = Command::new(&spec.program)
+        .args(&spec.args)
+        .current_dir(cwd)
+        .output()
+        .expect("command should start");
+    CommandRun {
+        success: output.status.success(),
+    }
 }
 
 fn run_capture<const N: usize>(
@@ -277,6 +358,51 @@ impl Drop for DetachedCheckoutFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }
+}
+
+struct BranchDeleteFixture {
+    path: PathBuf,
+}
+
+impl BranchDeleteFixture {
+    fn merged(name: &str) -> Self {
+        let path = base_branch_delete_fixture(name);
+        run_git(&path, ["branch", "topic"]);
+        Self { path }
+    }
+
+    fn unmerged(name: &str) -> Self {
+        let path = base_branch_delete_fixture(name);
+        run_git(&path, ["checkout", "--quiet", "-b", "topic"]);
+        fs::write(path.join("tracked.txt"), "topic\n").expect("topic file should be written");
+        run_git(&path, ["add", "tracked.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "topic"]);
+        run_git(&path, ["checkout", "--quiet", "master"]);
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for BranchDeleteFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+fn base_branch_delete_fixture(name: &str) -> PathBuf {
+    let path = temp_path(name);
+    fs::create_dir_all(&path).expect("fixture directory should be created");
+    run_git(&path, ["init", "--quiet"]);
+    run_git(&path, ["config", "user.name", "Rit Test"]);
+    run_git(&path, ["config", "user.email", "rit@example.test"]);
+    run_git(&path, ["config", "core.autocrlf", "false"]);
+    fs::write(path.join("tracked.txt"), "base\n").expect("tracked file should be written");
+    run_git(&path, ["add", "tracked.txt"]);
+    run_git(&path, ["commit", "--quiet", "-m", "base"]);
+    path
 }
 
 fn run_git<const N: usize>(cwd: &Path, args: [&str; N]) {

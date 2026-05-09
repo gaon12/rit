@@ -11,6 +11,7 @@
 - 2026-05-09 pathspec filter milestone checked: `git status -h`, `git diff -h`, `git add -h`, `git restore -h`, and `git reset -h`.
 - 2026-05-09 diff patch milestone checked: `git diff -h`.
 - 2026-05-09 detached checkout milestone checked: `git checkout -h`.
+- 2026-05-09 branch delete safety milestone checked: `git branch -h`.
 
 ## Milestone Notes
 
@@ -199,9 +200,14 @@
 
 - Baseline command checked: `git branch -h`
 - Supported options: list local branches, `--show-current`, create branch at `HEAD`, `-d`/`--delete`.
-- Unsupported options: remote branches, rename/copy, upstream config, merged checks, formatting, sorting controls, force.
+- Unsupported options: remote branches, rename/copy, upstream config,
+  `--merged`/`--no-merged` listing filters, formatting, sorting controls,
+  force.
 - Git-compatible behavior: local branches are refs under `refs/heads`; current branch is detected from symbolic `HEAD`.
-- Intentional differences: delete does not yet validate merge safety beyond refusing the current branch.
+- Git-compatible behavior: `-d` refuses the current branch and refuses local
+  branches whose target commit is not reachable from `HEAD`.
+- Intentional differences: packed branch deletion and force deletion with `-D`
+  are not implemented yet.
 - Repository mutation: branch create/delete writes or removes refs.
 - Risk: low for explicit local refs; create uses lock/rename.
 
