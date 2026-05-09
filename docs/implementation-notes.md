@@ -127,3 +127,13 @@
 - Intentional differences: delete does not yet validate merge safety beyond refusing the current branch.
 - Repository mutation: branch create/delete writes or removes refs.
 - Risk: low for explicit local refs; create uses lock/rename.
+
+### `rit tag`
+
+- Baseline command checked: `git tag -h`
+- Supported options: list tags, `-l`/`--list`, create lightweight tag at `HEAD`, `-d`/`--delete`.
+- Unsupported options: annotated/signed tags, messages, object arguments, patterns, verification, sort/format controls.
+- Git-compatible behavior: lightweight tags are refs under `refs/tags`.
+- Intentional differences: only `HEAD` can be tagged for now.
+- Repository mutation: tag create/delete writes or removes refs.
+- Risk: low for explicit lightweight refs; create uses lock/rename.

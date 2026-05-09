@@ -13,6 +13,15 @@ pub struct Branch {
     pub current: bool,
 }
 
+/// One lightweight tag reference.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Tag {
+    /// Short tag name under `refs/tags`.
+    pub name: String,
+    /// Object ID stored in the tag ref.
+    pub target: ObjectId,
+}
+
 impl Repository {
     /// Returns the current symbolic branch name, if `HEAD` points at `refs/heads`.
     pub fn current_branch_name(&self) -> Result<Option<String>> {
@@ -73,6 +82,47 @@ impl Repository {
         fs::remove_file(&path).map_err(|source| RitError::io(&path, source))?;
         Ok(target)
     }
+
+    /// Lists lightweight tags under `refs/tags`.
+    pub fn list_tags(&self) -> Result<Vec<Tag>> {
+        let tags_dir = self.common_dir().join("refs").join("tags");
+        let mut tags = Vec::new();
+        if !tags_dir.exists() {
+            return Ok(tags);
+        }
+        collect_tag_refs(&tags_dir, "", &mut tags)?;
+        tags.sort_by(|left, right| left.name.cmp(&right.name));
+        Ok(tags)
+    }
+
+    /// Creates a lightweight tag at `HEAD`.
+    pub fn create_tag(&self, name: &str) -> Result<ObjectId> {
+        validate_ref_short_name(name)?;
+        let target = self.resolve_head()?.ok_or_else(|| {
+            RitError::invalid_input("cannot create tag because HEAD does not point at a commit")
+        })?;
+        let path = self.common_dir().join("refs").join("tags").join(name);
+        if path.exists() {
+            return Err(RitError::invalid_input(format!(
+                "tag already exists: {name}"
+            )));
+        }
+        write_ref_atomically(&path, target)?;
+        Ok(target)
+    }
+
+    /// Deletes a lightweight tag.
+    pub fn delete_tag(&self, name: &str) -> Result<ObjectId> {
+        validate_ref_short_name(name)?;
+        let path = self.common_dir().join("refs").join("tags").join(name);
+        if !path.exists() {
+            return Err(RitError::invalid_input(format!("tag not found: {name}")));
+        }
+        let target = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
+        let target = ObjectId::from_hex(target.trim())?;
+        fs::remove_file(&path).map_err(|source| RitError::io(&path, source))?;
+        Ok(target)
+    }
 }
 
 fn collect_branch_refs(
@@ -99,6 +149,36 @@ fn collect_branch_refs(
             let target = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
             output.push(Branch {
                 current: current == Some(full_name.as_str()),
+                name: full_name,
+                target: ObjectId::from_hex(target.trim())?,
+            });
+        }
+    }
+    Ok(())
+}
+
+fn collect_tag_refs(
+    directory: &std::path::Path,
+    prefix: &str,
+    output: &mut Vec<Tag>,
+) -> Result<()> {
+    for entry in fs::read_dir(directory).map_err(|source| RitError::io(directory, source))? {
+        let entry = entry.map_err(|source| RitError::io(directory, source))?;
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let full_name = if prefix.is_empty() {
+            name
+        } else {
+            format!("{prefix}/{name}")
+        };
+        let file_type = entry
+            .file_type()
+            .map_err(|source| RitError::io(&path, source))?;
+        if file_type.is_dir() {
+            collect_tag_refs(&path, &full_name, output)?;
+        } else if file_type.is_file() {
+            let target = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
+            output.push(Tag {
                 name: full_name,
                 target: ObjectId::from_hex(target.trim())?,
             });

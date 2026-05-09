@@ -21,6 +21,7 @@ Core commands:
   add           Add file contents to the index
   commit        Record staged changes
   branch        List, create, or delete branches
+  tag           List, create, or delete lightweight tags
 
 Run 'rit help <command>' for command-specific notes.
 ";
@@ -100,6 +101,14 @@ rit branch -d <branch-name>
 List, create, or delete local branches.
 ";
 
+const TAG_HELP: &str = "\
+rit tag
+rit tag <tag-name>
+rit tag -d <tag-name>
+
+List, create, or delete lightweight tags.
+";
+
 fn main() -> ExitCode {
     match run(env::args().skip(1), &mut io::stdout(), &mut io::stderr()) {
         Ok(code) => code,
@@ -138,6 +147,7 @@ fn run(
         [command, rest @ ..] if command == "add" => add_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "commit" => commit_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "branch" => branch_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "tag" => tag_command(rest, stdout, stderr),
         [command] if command == "help" => {
             stdout.write_all(GENERAL_HELP.as_bytes())?;
             Ok(ExitCode::SUCCESS)
@@ -174,6 +184,7 @@ fn print_command_help(
         "add" => stdout.write_all(ADD_HELP.as_bytes())?,
         "commit" => stdout.write_all(COMMIT_HELP.as_bytes())?,
         "branch" => stdout.write_all(BRANCH_HELP.as_bytes())?,
+        "tag" => stdout.write_all(TAG_HELP.as_bytes())?,
         unknown => {
             writeln!(stderr, "rit: no help for unknown command '{unknown}'")?;
             return Ok(ExitCode::from(129));
@@ -630,6 +641,57 @@ fn branch_command(
     }
 }
 
+fn tag_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+
+    match args {
+        [] => match repository.list_tags() {
+            Ok(tags) => {
+                for tag in tags {
+                    writeln!(stdout, "{}", tag.name)?;
+                }
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_command_error(stderr, error),
+        },
+        [flag] if flag == "-l" || flag == "--list" => match repository.list_tags() {
+            Ok(tags) => {
+                for tag in tags {
+                    writeln!(stdout, "{}", tag.name)?;
+                }
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_command_error(stderr, error),
+        },
+        [flag, name] if flag == "-d" || flag == "--delete" => match repository.delete_tag(name) {
+            Ok(target) => {
+                writeln!(
+                    stdout,
+                    "Deleted tag '{name}' (was {}).",
+                    &target.to_hex()[..7]
+                )?;
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_command_error(stderr, error),
+        },
+        [name] if !name.starts_with('-') => match repository.create_tag(name) {
+            Ok(_) => Ok(ExitCode::SUCCESS),
+            Err(error) => write_command_error(stderr, error),
+        },
+        _ => {
+            writeln!(stderr, "rit: unsupported tag arguments")?;
+            Ok(ExitCode::from(129))
+        }
+    }
+}
+
 fn write_command_error(stderr: &mut dyn Write, error: rit_core::RitError) -> io::Result<ExitCode> {
     writeln!(stderr, "rit: {error}")?;
     Ok(ExitCode::from(1))
@@ -894,6 +956,15 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit branch"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn tag_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "tag"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit tag"));
         assert_eq!(stderr, "");
     }
 

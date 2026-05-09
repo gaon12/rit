@@ -21,7 +21,7 @@ pub use history::LogEntry;
 pub use index::{Index, IndexEntry};
 pub use object::{GitObject, ObjectId, ObjectKind, TreeEntry, hash_object};
 pub use odb::LooseObjectDb;
-pub use refs::Branch;
+pub use refs::{Branch, Tag};
 pub use repository::{InitOptions, Repository};
 pub use status::{PorcelainStatus, StatusEntry};
 pub use write::CommitResult;
