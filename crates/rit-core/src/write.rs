@@ -244,6 +244,22 @@ impl Repository {
         Ok(target)
     }
 
+    /// Checks out a commit and leaves `HEAD` detached at that commit.
+    pub fn checkout_detached(&self, revision: &str) -> Result<ObjectId> {
+        ensure_clean_for_checkout(self)?;
+        let target = self.resolve_revision(revision)?;
+        let object = self.read_object(target)?;
+        if object.kind != ObjectKind::Commit {
+            return Err(RitError::invalid_input(format!(
+                "object {target} is {}, not commit",
+                object.kind
+            )));
+        }
+        self.checkout_commit_tree(target)?;
+        write_text_atomically(&self.git_dir().join("HEAD"), &format!("{target}\n"))?;
+        Ok(target)
+    }
+
     fn write_tree_from_index(&self, index: &Index) -> Result<ObjectId> {
         let mut root = TreeNode::default();
         for entry in &index.entries {

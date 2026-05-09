@@ -65,7 +65,7 @@ rit branch
 rit tag
 rit restore <pathspec>...
 rit reset <pathspec>...
-rit checkout
+rit checkout <branch-or-commit>
 rit switch
 ```
 

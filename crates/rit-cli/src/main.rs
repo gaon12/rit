@@ -129,9 +129,10 @@ Reset staged file entries from HEAD.
 
 const CHECKOUT_HELP: &str = "\
 rit checkout <branch>
+rit checkout <commit>
 rit checkout -b <branch>
 
-Switch to an existing branch, or create and switch to a new branch.
+Switch to an existing branch, detach at a commit, or create and switch to a new branch.
 ";
 
 const SWITCH_HELP: &str = "\
@@ -1150,7 +1151,7 @@ fn checkout_command(
 ) -> io::Result<ExitCode> {
     match args {
         [branch] if !branch.starts_with('-') => {
-            checkout_existing_branch(branch, "Switched to branch", stdout, stderr)
+            checkout_existing_branch_or_revision(branch, stdout, stderr)
         }
         [flag, branch] if flag == "-b" => {
             checkout_new_branch(branch, "Switched to a new branch", stdout, stderr)
@@ -1158,7 +1159,7 @@ fn checkout_command(
         _ => {
             writeln!(
                 stderr,
-                "rit: checkout currently supports only <branch> and -b <branch>"
+                "rit: checkout currently supports only <branch>, <commit>, and -b <branch>"
             )?;
             Ok(ExitCode::from(129))
         }
@@ -1203,6 +1204,34 @@ fn checkout_existing_branch(
             Ok(ExitCode::SUCCESS)
         }
         Err(error) => write_command_error(stderr, error),
+    }
+}
+
+fn checkout_existing_branch_or_revision(
+    target: &str,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    if repository.branch_target(target).is_ok() {
+        match repository.checkout_branch(target) {
+            Ok(_) => {
+                writeln!(stdout, "Switched to branch '{target}'")?;
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_command_error(stderr, error),
+        }
+    } else {
+        match repository.checkout_detached(target) {
+            Ok(commit_id) => {
+                writeln!(stdout, "HEAD is now at {}", &commit_id.to_hex()[..7])?;
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_command_error(stderr, error),
+        }
     }
 }
 

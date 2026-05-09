@@ -116,7 +116,7 @@ Completion criteria:
 - [ ] Hook execution for commit.
 - [ ] Commit author/date override.
 - [ ] Safer branch delete merge checks.
-- [ ] Detached HEAD checkout.
+- [x] Detached HEAD checkout.
 
 Completion criteria:
 - Local write commands use lock files or atomic writes and have compatibility

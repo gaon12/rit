@@ -39,6 +39,7 @@ The current codebase implements an early local Git subset:
 - Ordinary literal path filtering is supported for first-parent `log`.
 - Ordinary literal file, directory, and `.` pathspec expansion is supported for
   `add`, `restore`, and `reset`.
+- Detached `checkout <commit>` is supported for clean worktrees.
 
 ## Compatibility Policy
 
@@ -96,3 +97,6 @@ Patch compatibility tests cover default and cached text patches for small files.
 Local write compatibility tests currently cover directory pathspec behavior for
 `add`, `restore`, and `reset` by comparing the resulting porcelain status and
 restored file contents.
+
+Detached checkout compatibility tests compare detached `.git/HEAD`, branch
+state, porcelain status, and materialized file contents.

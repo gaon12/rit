@@ -73,6 +73,45 @@ fn reset_directory_pathspec_matches_git_status() {
     assert_eq!(outcome.git_status, outcome.rit_status);
 }
 
+#[test]
+fn checkout_detached_commit_matches_git_state() {
+    let fixture = DetachedCheckoutFixture::new("detached-checkout");
+    let base = fixture.base_commit.clone();
+
+    let outcome = compare_after_command(
+        fixture.path(),
+        CommandSpec {
+            program: OsString::from("git"),
+            args: vec![OsString::from("checkout"), OsString::from(base.clone())],
+        },
+        CommandSpec {
+            program: rit_binary(),
+            args: vec![OsString::from("checkout"), OsString::from(base)],
+        },
+    );
+
+    assert_eq!(outcome.git_status, outcome.rit_status);
+    assert_eq!(
+        fs::read_to_string(outcome.git_repo.join(".git").join("HEAD"))
+            .expect("git HEAD should read"),
+        fs::read_to_string(outcome.rit_repo.join(".git").join("HEAD"))
+            .expect("rit HEAD should read")
+    );
+    assert_eq!(
+        run_capture("git", ["branch", "--show-current"], &outcome.git_repo).0,
+        run_capture(
+            rit_binary(),
+            ["branch", "--show-current"],
+            &outcome.rit_repo
+        )
+        .0
+    );
+    assert_eq!(
+        fs::read_to_string(outcome.git_repo.join("tracked.txt")).expect("git file should read"),
+        fs::read_to_string(outcome.rit_repo.join("tracked.txt")).expect("rit file should read")
+    );
+}
+
 struct CommandSpec {
     program: OsString,
     args: Vec<OsString>,
@@ -195,6 +234,46 @@ impl WriteFixture {
 }
 
 impl Drop for WriteFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct DetachedCheckoutFixture {
+    path: PathBuf,
+    base_commit: String,
+}
+
+impl DetachedCheckoutFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("tracked.txt"), "base\n").expect("tracked file should be written");
+        run_git(&path, ["add", "tracked.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+        let base_commit = run_capture("git", ["rev-parse", "HEAD"], &path)
+            .0
+            .trim()
+            .to_owned();
+
+        fs::write(path.join("tracked.txt"), "second\n").expect("tracked file should be modified");
+        run_git(&path, ["add", "tracked.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "second"]);
+
+        Self { path, base_commit }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for DetachedCheckoutFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

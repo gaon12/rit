@@ -10,6 +10,7 @@
 - 2026-05-09 diff numstat milestone checked: `git diff -h`.
 - 2026-05-09 pathspec filter milestone checked: `git status -h`, `git diff -h`, `git add -h`, `git restore -h`, and `git reset -h`.
 - 2026-05-09 diff patch milestone checked: `git diff -h`.
+- 2026-05-09 detached checkout milestone checked: `git checkout -h`.
 
 ## Milestone Notes
 
@@ -241,10 +242,16 @@
 ### `rit checkout`
 
 - Baseline command checked: `git checkout -h`
-- Supported options: checkout existing local branch, `-b <branch>` create and checkout.
-- Unsupported options: path checkout, detach, force, orphan, tracking, merge/conflict modes, submodules.
+- Supported options: checkout existing local branch, checkout a commit with
+  detached `HEAD`, `-b <branch>` create and checkout.
+- Unsupported options: path checkout, explicit `--detach`, force, orphan,
+  tracking, merge/conflict modes, submodules.
 - Git-compatible behavior: updates symbolic `HEAD`, writes index from target commit tree, materializes tracked worktree files.
-- Intentional differences: checkout requires a clean index and working tree instead of attempting merges.
+- Git-compatible behavior: detached checkout writes the target commit ID
+  directly to `.git/HEAD`.
+- Intentional differences: checkout requires a clean index and working tree
+  instead of attempting merges; detached checkout emits a short message instead
+  of Git's full advisory text.
 - Repository mutation: writes `HEAD`, `.git/index`, and tracked worktree files.
 - Risk: moderate; file writes use temp files and branch refs use lock/rename.
 
