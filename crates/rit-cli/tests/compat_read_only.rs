@@ -42,6 +42,58 @@ fn diff_cached_outputs_match_git() {
     }
 }
 
+#[test]
+fn diff_pathspec_outputs_match_git() {
+    let fixture = DiffFixture::new("pathspec-diff");
+
+    for (git_args, rit_args) in [
+        (
+            vec!["diff", "--name-only", "--", "nested"],
+            vec!["diff", "--name-only", "--", "nested"],
+        ),
+        (
+            vec!["diff", "--cached", "--name-status", "--", "nested"],
+            vec!["diff", "--cached", "--name-status", "--", "nested"],
+        ),
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&git_args),
+            rit_command_slice(&rit_args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "pathspec diff {:?}\n{}",
+            git_args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
+fn status_pathspec_outputs_match_git() {
+    let fixture = DiffFixture::new("pathspec-status");
+
+    for args in [
+        ["status", "--porcelain=v1", "--", "a.txt"],
+        ["status", "--porcelain=v1", "--", "nested"],
+    ] {
+        let mut options = CompareOptions::new(fixture.path(), git_command(args), rit_command(args));
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "pathspec status {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
 struct DiffFixture {
     path: PathBuf,
 }
@@ -64,11 +116,18 @@ impl DiffFixture {
 
         fs::write(path.join("a.txt"), "one\nthree\nfour\n")
             .expect("modified file should be written");
+        fs::write(path.join("nested").join("base.txt"), "base\nstaged\n")
+            .expect("nested staged file should be written");
         fs::write(path.join("b.txt"), "new\n").expect("added file should be written");
-        run_git(&path, ["add", "a.txt", "b.txt"]);
+        run_git(&path, ["add", "a.txt", "b.txt", "nested/base.txt"]);
 
         fs::write(path.join("a.txt"), "one\nthree\nfour\nfive\n")
             .expect("worktree modification should be written");
+        fs::write(
+            path.join("nested").join("base.txt"),
+            "base\nstaged\nworktree\n",
+        )
+        .expect("nested worktree modification should be written");
 
         Self { path }
     }
@@ -90,6 +149,14 @@ fn git_command<const N: usize>(args: [&str; N]) -> CommandSpec {
 
 fn rit_command<const N: usize>(args: [&str; N]) -> CommandSpec {
     CommandSpec::new(rit_binary(), os_args(args))
+}
+
+fn git_command_slice(args: &[&str]) -> CommandSpec {
+    CommandSpec::new("git", args.iter().map(OsString::from).collect())
+}
+
+fn rit_command_slice(args: &[&str]) -> CommandSpec {
+    CommandSpec::new(rit_binary(), args.iter().map(OsString::from).collect())
 }
 
 fn os_args<const N: usize>(args: [&str; N]) -> Vec<OsString> {

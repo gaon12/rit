@@ -79,7 +79,10 @@ Completion criteria:
 - [x] `rit diff --stat`
 - [x] `rit diff --numstat`
 - [ ] `rit diff` patch output.
-- [ ] Pathspec support for read-only commands.
+- [~] Pathspec support for read-only commands.
+  - [x] Ordinary literal pathspec filters for `status --porcelain=v1` and
+    `diff` summary modes.
+  - [ ] Pathspec filters for `log`, `show`, `ls-tree`, and `ls-files`.
 - [ ] Rename detection.
 - [ ] Binary diff accounting.
 
@@ -252,6 +255,7 @@ Completion criteria:
 
 1. Add fixtures for local write commands.
 2. Expand `status --porcelain=v1` with stronger Git compatibility.
-3. Implement pathspec support shared by status/diff/add/restore/reset.
+3. Continue pathspec support for add/restore/reset and remaining read-only
+   commands.
 4. Add index stat refresh or document and test the remaining difference.
 5. Start patch output for `rit diff`.

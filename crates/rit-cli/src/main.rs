@@ -499,17 +499,22 @@ fn status_command(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    if !matches!(args, [flag] if flag == "--porcelain" || flag == "--porcelain=v1" || flag == "-s")
-    {
-        writeln!(stderr, "rit: status currently supports only --porcelain=v1")?;
+    let Some(pathspecs) = parse_status_pathspecs(args, stderr)? else {
         return Ok(ExitCode::from(129));
-    }
+    };
+    let pathspecs = match rit_core::PathspecSet::from_args(&pathspecs) {
+        Ok(pathspecs) => pathspecs,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(129));
+        }
+    };
 
     let repository = match discover_repository(stderr)? {
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    match repository.status_porcelain_v1() {
+    match repository.status_porcelain_v1_with_pathspecs(&pathspecs) {
         Ok(status) => {
             stdout.write_all(status.to_porcelain_v1().as_bytes())?;
             Ok(ExitCode::SUCCESS)
@@ -521,6 +526,34 @@ fn status_command(
     }
 }
 
+fn parse_status_pathspecs(
+    args: &[String],
+    stderr: &mut dyn Write,
+) -> io::Result<Option<Vec<String>>> {
+    let mut has_porcelain = false;
+    let mut pathspecs = Vec::new();
+    let mut after_separator = false;
+
+    for arg in args {
+        match arg.as_str() {
+            "--" if !after_separator => after_separator = true,
+            "--porcelain" | "--porcelain=v1" | "-s" if !after_separator => has_porcelain = true,
+            unsupported if unsupported.starts_with('-') && !after_separator => {
+                writeln!(stderr, "rit: unsupported status option '{unsupported}'")?;
+                return Ok(None);
+            }
+            pathspec => pathspecs.push(pathspec.to_owned()),
+        }
+    }
+
+    if has_porcelain {
+        Ok(Some(pathspecs))
+    } else {
+        writeln!(stderr, "rit: status currently supports only --porcelain=v1")?;
+        Ok(None)
+    }
+}
+
 fn diff_command(
     args: &[String],
     stdout: &mut dyn Write,
@@ -528,20 +561,24 @@ fn diff_command(
 ) -> io::Result<ExitCode> {
     let mut cached = false;
     let mut output_mode = None;
+    let mut pathspec_args = Vec::new();
+    let mut after_separator = false;
 
     for arg in args {
         match arg.as_str() {
-            "--cached" | "--staged" => cached = true,
-            "--name-only" | "--name-status" | "--numstat" | "--stat" => {
+            "--" if !after_separator => after_separator = true,
+            "--cached" | "--staged" if !after_separator => cached = true,
+            "--name-only" | "--name-status" | "--numstat" | "--stat" if !after_separator => {
                 if output_mode.replace(arg.as_str()).is_some() {
                     writeln!(stderr, "rit: diff accepts one output option")?;
                     return Ok(ExitCode::from(129));
                 }
             }
-            unsupported => {
+            unsupported if unsupported.starts_with('-') && !after_separator => {
                 writeln!(stderr, "rit: unsupported diff option '{unsupported}'")?;
                 return Ok(ExitCode::from(129));
             }
+            pathspec => pathspec_args.push(pathspec.to_owned()),
         }
     }
 
@@ -552,15 +589,22 @@ fn diff_command(
         )?;
         return Ok(ExitCode::from(129));
     };
+    let pathspecs = match rit_core::PathspecSet::from_args(&pathspec_args) {
+        Ok(pathspecs) => pathspecs,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(129));
+        }
+    };
 
     let repository = match discover_repository(stderr)? {
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
     let diff_result = if cached {
-        repository.diff_index_to_head()
+        repository.diff_index_to_head_with_pathspecs(&pathspecs)
     } else {
-        repository.diff_worktree_to_index()
+        repository.diff_worktree_to_index_with_pathspecs(&pathspecs)
     };
     let diff = match diff_result {
         Ok(diff) => diff,

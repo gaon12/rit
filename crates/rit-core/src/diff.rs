@@ -1,6 +1,8 @@
 use crate::index::{Index, join_slash_path};
 use crate::object::parse_tree_entries;
-use crate::{ObjectId, ObjectKind, Repository, Result, RitError, hash_object, parse_commit};
+use crate::{
+    ObjectId, ObjectKind, PathspecSet, Repository, Result, RitError, hash_object, parse_commit,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 
@@ -124,6 +126,14 @@ impl DiffFileStat {
 impl Repository {
     /// Computes default `git diff` scope: working tree compared with the index.
     pub fn diff_worktree_to_index(&self) -> Result<DiffSummary> {
+        self.diff_worktree_to_index_with_pathspecs(&PathspecSet::all())
+    }
+
+    /// Computes default `git diff` scope for matching paths only.
+    pub fn diff_worktree_to_index_with_pathspecs(
+        &self,
+        pathspecs: &PathspecSet,
+    ) -> Result<DiffSummary> {
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
                 "diff must be run in a repository with a working tree",
@@ -133,6 +143,9 @@ impl Repository {
         let mut files = Vec::new();
 
         for entry in index.entries {
+            if !pathspecs.matches(&entry.path) {
+                continue;
+            }
             let worktree_path = join_slash_path(worktree, &entry.path);
             let old_object = self.read_object(entry.object_id)?;
             if old_object.kind != ObjectKind::Blob {
@@ -170,6 +183,14 @@ impl Repository {
 
     /// Computes `git diff --cached` scope: index compared with `HEAD`.
     pub fn diff_index_to_head(&self) -> Result<DiffSummary> {
+        self.diff_index_to_head_with_pathspecs(&PathspecSet::all())
+    }
+
+    /// Computes `git diff --cached` scope for matching paths only.
+    pub fn diff_index_to_head_with_pathspecs(
+        &self,
+        pathspecs: &PathspecSet,
+    ) -> Result<DiffSummary> {
         let index = Index::read(&self.git_dir().join("index"))?;
         let index_entries = index
             .entries
@@ -185,6 +206,9 @@ impl Repository {
         let mut files = Vec::new();
 
         for path in paths {
+            if !pathspecs.matches(&path) {
+                continue;
+            }
             match (head_entries.get(&path), index_entries.get(&path)) {
                 (None, Some(new_id)) => {
                     let new_object = self.read_blob(*new_id)?;

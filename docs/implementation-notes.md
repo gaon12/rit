@@ -8,6 +8,7 @@
 - 2026-05-09 baseline refresh checked: `git status -h`, `git add -h`, `git commit -h`, `git diff -h`, and `git log -h`.
 - 2026-05-09 diff cached milestone checked: `git diff -h`.
 - 2026-05-09 diff numstat milestone checked: `git diff -h`.
+- 2026-05-09 pathspec filter milestone checked: `git status -h`, `git diff -h`, `git add -h`, `git restore -h`, and `git reset -h`.
 
 ## Milestone Notes
 
@@ -40,6 +41,14 @@
 - Unborn `HEAD` is treated like an empty tree for staged diff, matching the usual Git shape for newly added files.
 - Added `--name-status` formatting for both default and cached diff scopes.
 - Added `--numstat` formatting for both default and cached diff scopes.
+- Added a conservative `PathspecSet` model for ordinary literal file and
+  directory pathspecs.
+- Added pathspec filtering for `status --porcelain=v1` and all supported
+  `diff` summary modes, including `--cached`/`--staged`.
+- Added Git comparison coverage for `status --porcelain=v1 -- <pathspec>` and
+  `diff ... -- <pathspec>`.
+- Still unsupported: pathspec magic, glob pathspec matching, pathspec files,
+  and pathspec filtering for `log`, `show`, `ls-tree`, and `ls-files`.
 
 ## Implemented Commands
 
@@ -106,8 +115,10 @@
 ### `rit status`
 
 - Baseline command checked: `git status -h`
-- Supported options: `--porcelain`, `--porcelain=v1`, `-s`.
-- Unsupported options: long output, branch header, ignored display modes, pathspecs, rename detection, submodules, sparse checkout.
+- Supported options: `--porcelain`, `--porcelain=v1`, `-s`, plus ordinary
+  literal file and directory pathspecs after `--`.
+- Unsupported options: long output, branch header, ignored display modes,
+  pathspec magic/globs, rename detection, submodules, sparse checkout.
 - Git-compatible behavior: porcelain v1 entries for staged add/modify/delete, working tree modify/delete, and untracked files.
 - Intentional differences: ignore handling supports simple literal and directory patterns first; advanced gitignore glob semantics are not complete yet.
 - Repository mutation: no
@@ -116,8 +127,11 @@
 ### `rit diff`
 
 - Baseline command checked: `git diff -h`
-- Supported options: `--name-only`, `--name-status`, `--numstat`, `--stat`, plus `--cached`/`--staged` with those output modes.
-- Unsupported options: patch output, commit/tree/blob arguments, pathspecs, rename/copy detection, binary stat details.
+- Supported options: `--name-only`, `--name-status`, `--numstat`, `--stat`,
+  plus `--cached`/`--staged` with those output modes, and ordinary literal file
+  and directory pathspec filters.
+- Unsupported options: patch output, commit/tree/blob arguments, pathspec
+  magic/globs, rename/copy detection, binary stat details.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files.
 - Git-compatible behavior: cached diff scope compares the index against `HEAD`.
 - Intentional differences: binary `--stat` reports a clear unsupported error until binary diff accounting is implemented.

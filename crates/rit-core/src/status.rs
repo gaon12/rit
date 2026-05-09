@@ -1,7 +1,7 @@
 use crate::index::{Index, join_slash_path, relative_slash_path};
 use crate::object::{ObjectKind, hash_object, parse_tree_entries};
 use crate::parse_commit;
-use crate::{ObjectId, Repository, Result, RitError};
+use crate::{ObjectId, PathspecSet, Repository, Result, RitError};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -42,6 +42,14 @@ impl PorcelainStatus {
 impl Repository {
     /// Computes a conservative porcelain v1 status.
     pub fn status_porcelain_v1(&self) -> Result<PorcelainStatus> {
+        self.status_porcelain_v1_with_pathspecs(&PathspecSet::all())
+    }
+
+    /// Computes a conservative porcelain v1 status for matching paths only.
+    pub fn status_porcelain_v1_with_pathspecs(
+        &self,
+        pathspecs: &PathspecSet,
+    ) -> Result<PorcelainStatus> {
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
                 "status must be run in a repository with a working tree",
@@ -89,7 +97,7 @@ impl Repository {
                 }
             };
 
-            if index_status != ' ' || worktree_status != ' ' {
+            if pathspecs.matches(&path) && (index_status != ' ' || worktree_status != ' ') {
                 entries.push(StatusEntry {
                     index_status,
                     worktree_status,
@@ -99,7 +107,7 @@ impl Repository {
         }
 
         for path in working_files {
-            if !index_entries.contains_key(&path) {
+            if pathspecs.matches(&path) && !index_entries.contains_key(&path) {
                 entries.push(StatusEntry {
                     index_status: '?',
                     worktree_status: '?',

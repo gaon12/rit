@@ -29,6 +29,8 @@ The current codebase implements an early local Git subset:
   `diff --cached --name-only`, `diff --cached --name-status`,
   `diff --cached --numstat`, `diff --cached --stat`, `log`, `add`, `commit`,
   `branch`, `tag`, `restore`, `reset`, `checkout`, and `switch`.
+- Ordinary literal file and directory pathspec filtering is supported for
+  `status --porcelain=v1` and the supported `diff` summary modes.
 
 ## Compatibility Policy
 
@@ -69,3 +71,8 @@ The `rit-cli` integration tests include reusable read-only diff fixtures for
 default and cached output modes. Some worktree diff comparisons intentionally
 skip repository-state comparison until Git-compatible index stat refresh is
 implemented.
+
+Pathspec compatibility tests currently cover ordinary literal file and
+directory filters for `status --porcelain=v1` and supported `diff` summary
+outputs. Git pathspec magic, glob matching, and pathspec-file input remain
+unsupported.

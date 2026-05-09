@@ -46,6 +46,7 @@ rit ls-tree
 rit ls-files
 rit show
 rit status --porcelain=v1
+rit status --porcelain=v1 -- <pathspec>
 rit diff --name-only
 rit diff --name-status
 rit diff --numstat
@@ -54,6 +55,7 @@ rit diff --cached --name-only
 rit diff --cached --name-status
 rit diff --cached --numstat
 rit diff --cached --stat
+rit diff [--cached] <summary-mode> -- <pathspec>
 rit log
 rit add
 rit commit
