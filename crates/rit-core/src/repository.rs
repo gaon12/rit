@@ -182,6 +182,37 @@ impl Repository {
         Ok(Some(ObjectId::from_hex(trimmed)?))
     }
 
+    /// Resolves a small, explicit revision set: full object ID, `HEAD`, local
+    /// branch name, or lightweight tag name.
+    pub fn resolve_revision(&self, revision: &str) -> Result<ObjectId> {
+        if revision == "HEAD" {
+            return self
+                .resolve_head()?
+                .ok_or_else(|| RitError::invalid_input("HEAD does not point at a commit yet"));
+        }
+
+        if revision.len() == 40
+            && revision
+                .chars()
+                .all(|character| character.is_ascii_hexdigit())
+        {
+            return ObjectId::from_hex(revision);
+        }
+
+        for namespace in ["heads", "tags"] {
+            let path = self.common_dir.join("refs").join(namespace).join(revision);
+            if path.exists() {
+                let target =
+                    fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
+                return ObjectId::from_hex(target.trim());
+            }
+        }
+
+        Err(RitError::invalid_input(format!(
+            "unknown revision or object: {revision}"
+        )))
+    }
+
     /// Returns the working tree root, or `None` for bare repositories.
     pub fn worktree(&self) -> Option<&Path> {
         self.worktree.as_deref()

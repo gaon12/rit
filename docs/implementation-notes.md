@@ -177,3 +177,19 @@
 - Intentional differences: switch requires a clean index and working tree.
 - Repository mutation: writes `HEAD`, `.git/index`, and tracked worktree files.
 - Risk: moderate; file writes use temp files and branch refs use lock/rename.
+
+### `rit rev-parse` revision support
+
+- Baseline command checked: `git rev-parse -h`
+- Added support: full object IDs, `HEAD`, local branch names, lightweight tag names.
+- Unsupported revision syntax: abbreviated IDs, ancestry operators, ranges, path suffixes, reflog selectors.
+- Repository mutation: no.
+
+### `rit show`
+
+- Baseline command checked: `git show -h`
+- Supported options: default object display and `--no-patch`/`-s` for commits, with optional revision.
+- Unsupported options: commit diffs, revision ranges, path filters, decorations, formatting controls.
+- Git-compatible behavior: commit no-patch layout, tree pretty printing, blob contents.
+- Intentional differences: commit diffs are not emitted yet.
+- Repository mutation: no.

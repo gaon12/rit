@@ -26,6 +26,7 @@ Core commands:
   reset         Reset staged file entries
   checkout      Switch branches
   switch        Switch branches
+  show          Show one object
 
 Run 'rit help <command>' for command-specific notes.
 ";
@@ -49,9 +50,9 @@ Create an empty Git-compatible repository.
 ";
 
 const REV_PARSE_HELP: &str = "\
-rit rev-parse [--git-dir] [--show-toplevel] [--is-inside-work-tree]
+rit rev-parse [--git-dir] [--show-toplevel] [--is-inside-work-tree] [<revision>...]
 
-Print selected paths or repository facts for the current repository.
+Print selected paths, repository facts, or resolved object IDs.
 ";
 
 const CAT_FILE_HELP: &str = "\
@@ -139,6 +140,12 @@ rit switch -c <branch>
 Switch to an existing branch, or create and switch to a new branch.
 ";
 
+const SHOW_HELP: &str = "\
+rit show [--no-patch] [<revision>]
+
+Show one commit, tree, or blob object. Commit diffs are not emitted yet.
+";
+
 fn main() -> ExitCode {
     match run(env::args().skip(1), &mut io::stdout(), &mut io::stderr()) {
         Ok(code) => code,
@@ -182,6 +189,7 @@ fn run(
         [command, rest @ ..] if command == "reset" => reset_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "checkout" => checkout_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "switch" => switch_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "show" => show_command(rest, stdout, stderr),
         [command] if command == "help" => {
             stdout.write_all(GENERAL_HELP.as_bytes())?;
             Ok(ExitCode::SUCCESS)
@@ -223,6 +231,7 @@ fn print_command_help(
         "reset" => stdout.write_all(RESET_HELP.as_bytes())?,
         "checkout" => stdout.write_all(CHECKOUT_HELP.as_bytes())?,
         "switch" => stdout.write_all(SWITCH_HELP.as_bytes())?,
+        "show" => stdout.write_all(SHOW_HELP.as_bytes())?,
         unknown => {
             writeln!(stderr, "rit: no help for unknown command '{unknown}'")?;
             return Ok(ExitCode::from(129));
@@ -324,10 +333,17 @@ fn rev_parse_command(
             "--is-inside-work-tree" => {
                 writeln!(stdout, "{}", repository.worktree().is_some())?;
             }
-            unsupported => {
+            unsupported if unsupported.starts_with('-') => {
                 writeln!(stderr, "rit: unsupported rev-parse option '{unsupported}'")?;
                 return Ok(ExitCode::from(129));
             }
+            revision => match repository.resolve_revision(revision) {
+                Ok(object_id) => writeln!(stdout, "{object_id}")?,
+                Err(error) => {
+                    writeln!(stderr, "rit: {error}")?;
+                    return Ok(ExitCode::from(1));
+                }
+            },
         }
     }
 
@@ -348,7 +364,7 @@ fn cat_file_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    let object_id = match rit_core::ObjectId::from_hex(&args[1]) {
+    let object_id = match repository.resolve_revision(&args[1]) {
         Ok(object_id) => object_id,
         Err(error) => {
             writeln!(stderr, "rit: {error}")?;
@@ -420,17 +436,35 @@ fn ls_tree_command(
         writeln!(stderr, "rit: ls-tree expects one tree object")?;
         return Ok(ExitCode::from(129));
     };
-    let object_id = match rit_core::ObjectId::from_hex(&tree_id) {
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    let mut object_id = match repository.resolve_revision(&tree_id) {
         Ok(object_id) => object_id,
         Err(error) => {
             writeln!(stderr, "rit: {error}")?;
             return Ok(ExitCode::from(129));
         }
     };
-    let repository = match discover_repository(stderr)? {
-        Some(repository) => repository,
-        None => return Ok(ExitCode::from(128)),
+    let object = match repository.read_object(object_id) {
+        Ok(object) => object,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(1));
+        }
     };
+    if object.kind == rit_core::ObjectKind::Commit {
+        match rit_core::parse_commit(&object.data) {
+            Ok(commit) => {
+                object_id = commit.tree;
+            }
+            Err(error) => {
+                writeln!(stderr, "rit: {error}")?;
+                return Ok(ExitCode::from(1));
+            }
+        }
+    }
     let object = match repository.read_object(object_id) {
         Ok(object) => object,
         Err(error) => {
@@ -552,21 +586,80 @@ fn log_command(
             if index > 0 {
                 writeln!(stdout)?;
             }
-            writeln!(stdout, "commit {}", entry.object_id)?;
-            writeln!(
-                stdout,
-                "Author: {} <{}>",
-                entry.commit.author.name, entry.commit.author.email
-            )?;
-            writeln!(stdout, "Date:   {}", format_git_date(&entry.commit.author))?;
-            writeln!(stdout)?;
-            for line in entry.commit.message.trim_end_matches('\n').lines() {
-                writeln!(stdout, "    {line}")?;
-            }
+            print_commit_no_patch(entry.object_id, &entry.commit, stdout)?;
         }
     }
 
     Ok(ExitCode::SUCCESS)
+}
+
+fn show_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let revision = match args {
+        [] => "HEAD",
+        [revision] if !revision.starts_with('-') => revision,
+        [flag] if flag == "--no-patch" || flag == "-s" => "HEAD",
+        [flag, revision] if flag == "--no-patch" || flag == "-s" => revision,
+        _ => {
+            writeln!(
+                stderr,
+                "rit: show currently supports [--no-patch] [<revision>]"
+            )?;
+            return Ok(ExitCode::from(129));
+        }
+    };
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    let object_id = match repository.resolve_revision(revision) {
+        Ok(object_id) => object_id,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(1));
+        }
+    };
+    let object = match repository.read_object(object_id) {
+        Ok(object) => object,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(1));
+        }
+    };
+    match object.kind {
+        rit_core::ObjectKind::Commit => match rit_core::parse_commit(&object.data) {
+            Ok(commit) => print_commit_no_patch(object_id, &commit, stdout)?,
+            Err(error) => {
+                writeln!(stderr, "rit: {error}")?;
+                return Ok(ExitCode::from(1));
+            }
+        },
+        rit_core::ObjectKind::Tree => print_tree_entries(&object.data, false, false, stdout)?,
+        rit_core::ObjectKind::Blob | rit_core::ObjectKind::Tag => stdout.write_all(&object.data)?,
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn print_commit_no_patch(
+    object_id: rit_core::ObjectId,
+    commit: &rit_core::Commit,
+    stdout: &mut dyn Write,
+) -> io::Result<()> {
+    writeln!(stdout, "commit {object_id}")?;
+    writeln!(
+        stdout,
+        "Author: {} <{}>",
+        commit.author.name, commit.author.email
+    )?;
+    writeln!(stdout, "Date:   {}", format_git_date(&commit.author))?;
+    writeln!(stdout)?;
+    for line in commit.message.trim_end_matches('\n').lines() {
+        writeln!(stdout, "    {line}")?;
+    }
+    Ok(())
 }
 
 fn add_command(
@@ -898,7 +991,7 @@ fn format_git_date(signature: &rit_core::Signature) -> String {
     let local_seconds = signature.timestamp + offset_seconds;
     let (year, month, day, hour, minute, second, weekday) = civil_time(local_seconds);
     format!(
-        "{} {} {:>2} {:02}:{:02}:{:02} {} {}",
+        "{} {} {} {:02}:{:02}:{:02} {} {}",
         weekday_name(weekday),
         month_name(month),
         day,
@@ -1167,6 +1260,15 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit checkout"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn show_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "show"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit show"));
         assert_eq!(stderr, "");
     }
 
