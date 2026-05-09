@@ -1,4 +1,4 @@
-use crate::{Result, RitError};
+use crate::{GitObject, LooseObjectDb, ObjectId, Result, RitError};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -151,6 +151,16 @@ impl Repository {
     /// `git_dir`, with a separate accessor reserved for linked worktrees.
     pub fn common_dir(&self) -> &Path {
         &self.common_dir
+    }
+
+    /// Returns a loose object database reader for this repository.
+    pub fn loose_objects(&self) -> LooseObjectDb {
+        LooseObjectDb::new(self.common_dir.join("objects"))
+    }
+
+    /// Reads a loose object by its full object ID.
+    pub fn read_object(&self, object_id: ObjectId) -> Result<GitObject> {
+        self.loose_objects().read_object(object_id)
     }
 
     /// Returns the working tree root, or `None` for bare repositories.

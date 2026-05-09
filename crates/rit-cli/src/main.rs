@@ -13,6 +13,8 @@ Core commands:
   help          Display help for rit or a command
   init          Create an empty Git repository
   rev-parse     Inspect the current repository paths
+  cat-file      Inspect loose objects
+  ls-tree       List entries in a tree object
 
 Run 'rit help <command>' for command-specific notes.
 ";
@@ -39,6 +41,18 @@ const REV_PARSE_HELP: &str = "\
 rit rev-parse [--git-dir] [--show-toplevel] [--is-inside-work-tree]
 
 Print selected paths or repository facts for the current repository.
+";
+
+const CAT_FILE_HELP: &str = "\
+rit cat-file (-t|-s|-p|<type>) <object>
+
+Read a loose object and print its type, size, pretty contents, or raw contents.
+";
+
+const LS_TREE_HELP: &str = "\
+rit ls-tree [--name-only|--object-only] <tree>
+
+List entries in a loose tree object.
 ";
 
 fn main() -> ExitCode {
@@ -71,6 +85,8 @@ fn run(
         [command] if command == "version" => print_version(stdout),
         [command, rest @ ..] if command == "init" => init_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "rev-parse" => rev_parse_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "cat-file" => cat_file_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "ls-tree" => ls_tree_command(rest, stdout, stderr),
         [command] if command == "help" => {
             stdout.write_all(GENERAL_HELP.as_bytes())?;
             Ok(ExitCode::SUCCESS)
@@ -99,6 +115,8 @@ fn print_command_help(
         "help" => stdout.write_all(HELP_HELP.as_bytes())?,
         "init" => stdout.write_all(INIT_HELP.as_bytes())?,
         "rev-parse" => stdout.write_all(REV_PARSE_HELP.as_bytes())?,
+        "cat-file" => stdout.write_all(CAT_FILE_HELP.as_bytes())?,
+        "ls-tree" => stdout.write_all(LS_TREE_HELP.as_bytes())?,
         unknown => {
             writeln!(stderr, "rit: no help for unknown command '{unknown}'")?;
             return Ok(ExitCode::from(129));
@@ -210,6 +228,174 @@ fn rev_parse_command(
     Ok(ExitCode::SUCCESS)
 }
 
+fn cat_file_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    if args.len() != 2 {
+        writeln!(stderr, "rit: cat-file expects exactly two arguments")?;
+        return Ok(ExitCode::from(129));
+    }
+
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    let object_id = match rit_core::ObjectId::from_hex(&args[1]) {
+        Ok(object_id) => object_id,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(129));
+        }
+    };
+    let object = match repository.read_object(object_id) {
+        Ok(object) => object,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(1));
+        }
+    };
+
+    match args[0].as_str() {
+        "-t" => writeln!(stdout, "{}", object.kind)?,
+        "-s" => writeln!(stdout, "{}", object.size())?,
+        "-p" => pretty_print_object(&object, stdout)?,
+        kind_name => {
+            let expected_kind = match rit_core::ObjectKind::parse(kind_name) {
+                Ok(kind) => kind,
+                Err(error) => {
+                    writeln!(stderr, "rit: {error}")?;
+                    return Ok(ExitCode::from(129));
+                }
+            };
+            if object.kind != expected_kind {
+                writeln!(
+                    stderr,
+                    "rit: object {} is {}, not {}",
+                    object_id, object.kind, expected_kind
+                )?;
+                return Ok(ExitCode::from(1));
+            }
+            stdout.write_all(&object.data)?;
+        }
+    }
+
+    Ok(ExitCode::SUCCESS)
+}
+
+fn ls_tree_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let mut name_only = false;
+    let mut object_only = false;
+    let mut tree_id = None;
+
+    for arg in args {
+        match arg.as_str() {
+            "--name-only" => name_only = true,
+            "--object-only" => object_only = true,
+            unsupported if unsupported.starts_with('-') => {
+                writeln!(stderr, "rit: unsupported ls-tree option '{unsupported}'")?;
+                return Ok(ExitCode::from(129));
+            }
+            object => {
+                if tree_id.replace(object.to_owned()).is_some() {
+                    writeln!(stderr, "rit: ls-tree expects one tree object")?;
+                    return Ok(ExitCode::from(129));
+                }
+            }
+        }
+    }
+
+    let Some(tree_id) = tree_id else {
+        writeln!(stderr, "rit: ls-tree expects one tree object")?;
+        return Ok(ExitCode::from(129));
+    };
+    let object_id = match rit_core::ObjectId::from_hex(&tree_id) {
+        Ok(object_id) => object_id,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(129));
+        }
+    };
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    let object = match repository.read_object(object_id) {
+        Ok(object) => object,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(1));
+        }
+    };
+    if object.kind != rit_core::ObjectKind::Tree {
+        writeln!(
+            stderr,
+            "rit: object {object_id} is {}, not tree",
+            object.kind
+        )?;
+        return Ok(ExitCode::from(1));
+    }
+
+    print_tree_entries(&object.data, name_only, object_only, stdout)?;
+    Ok(ExitCode::SUCCESS)
+}
+
+fn discover_repository(stderr: &mut dyn Write) -> io::Result<Option<rit_core::Repository>> {
+    match rit_core::Repository::discover(".") {
+        Ok(repository) => Ok(Some(repository)),
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            Ok(None)
+        }
+    }
+}
+
+fn pretty_print_object(object: &rit_core::GitObject, stdout: &mut dyn Write) -> io::Result<()> {
+    if object.kind == rit_core::ObjectKind::Tree {
+        print_tree_entries(&object.data, false, false, stdout)
+    } else {
+        stdout.write_all(&object.data)
+    }
+}
+
+fn print_tree_entries(
+    data: &[u8],
+    name_only: bool,
+    object_only: bool,
+    stdout: &mut dyn Write,
+) -> io::Result<()> {
+    let entries = rit_core::object::parse_tree_entries(data).map_err(io::Error::other)?;
+
+    for entry in entries {
+        if name_only {
+            writeln!(stdout, "{}", entry.name_lossy())?;
+        } else if object_only {
+            writeln!(stdout, "{}", entry.object_id)?;
+        } else {
+            let printed_mode = if entry.kind == rit_core::ObjectKind::Tree {
+                "040000".to_owned()
+            } else {
+                entry.mode.clone()
+            };
+            writeln!(
+                stdout,
+                "{} {} {}\t{}",
+                printed_mode,
+                entry.kind,
+                entry.object_id,
+                entry.name_lossy()
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::run;
@@ -266,6 +452,15 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit init"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn cat_file_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "cat-file"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit cat-file"));
         assert_eq!(stderr, "");
     }
 }

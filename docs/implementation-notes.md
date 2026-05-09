@@ -47,3 +47,23 @@
 - Intentional differences: only the supported path/fact options are accepted.
 - Repository mutation: no
 - Risk: none
+
+### `rit cat-file`
+
+- Baseline command checked: `git cat-file -h`
+- Supported options: `-t`, `-s`, `-p`, and `<type> <object>` for full 40-character loose object IDs.
+- Unsupported options: abbreviated object IDs, revision syntax, batch modes, filters, textconv, mailmap, packed objects.
+- Git-compatible behavior: loose object zlib decoding, header validation, object type and size output, tree pretty printing.
+- Intentional differences: packed objects and revision resolution fail clearly until the object database grows those features.
+- Repository mutation: no
+- Risk: none
+
+### `rit ls-tree`
+
+- Baseline command checked: `git ls-tree -h`
+- Supported options: default output, `--name-only`, `--object-only` for full 40-character loose tree IDs.
+- Unsupported options: recursion, path filtering, long output, custom format, abbreviation, revision syntax.
+- Git-compatible behavior: tree entry parsing and default `<mode> <type> <object>\t<path>` output.
+- Intentional differences: only loose tree object IDs are accepted.
+- Repository mutation: no
+- Risk: none
