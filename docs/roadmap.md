@@ -4,6 +4,9 @@ This roadmap turns the AGENTS.md final product image into implementation
 milestones. Each milestone must end with formatting, linting, tests,
 compatibility checks where relevant, documentation updates, and a commit.
 
+For day-to-day status, active queues, and completion checklists, update
+`docs/milestones.md` alongside code changes.
+
 ## M0: Baseline and Rules
 
 - Keep `git --version`, `git help -a`, and command help notes current.

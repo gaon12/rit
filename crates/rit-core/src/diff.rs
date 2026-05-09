@@ -29,6 +29,20 @@ impl DiffSummary {
         output
     }
 
+    /// Renders a Git-like `--numstat` summary for text files.
+    pub fn to_numstat_text(&self) -> String {
+        let mut output = String::new();
+        for file in &self.files {
+            output.push_str(&file.insertions.to_string());
+            output.push('\t');
+            output.push_str(&file.deletions.to_string());
+            output.push('\t');
+            output.push_str(&file.path);
+            output.push('\n');
+        }
+        output
+    }
+
     /// Renders a Git-like `--stat` summary.
     pub fn to_stat_text(&self) -> String {
         if self.files.is_empty() {
@@ -365,6 +379,20 @@ mod tests {
         };
 
         assert_eq!(summary.to_name_status_text(), "A\ta.txt\n");
+    }
+
+    #[test]
+    fn numstat_text_lists_insertions_deletions_and_path() {
+        let summary = DiffSummary {
+            files: vec![DiffFileStat {
+                status: 'M',
+                path: "a.txt".to_owned(),
+                insertions: 2,
+                deletions: 1,
+            }],
+        };
+
+        assert_eq!(summary.to_numstat_text(), "2\t1\ta.txt\n");
     }
 
     #[test]

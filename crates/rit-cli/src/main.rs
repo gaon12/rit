@@ -75,7 +75,7 @@ Show a conservative porcelain v1 status.
 ";
 
 const DIFF_HELP: &str = "\
-rit diff [--cached|--staged] (--name-only|--name-status|--stat)
+rit diff [--cached|--staged] (--name-only|--name-status|--numstat|--stat)
 
 Show working tree changes compared with the index, or staged changes compared with HEAD.
 ";
@@ -532,7 +532,7 @@ fn diff_command(
     for arg in args {
         match arg.as_str() {
             "--cached" | "--staged" => cached = true,
-            "--name-only" | "--name-status" | "--stat" => {
+            "--name-only" | "--name-status" | "--numstat" | "--stat" => {
                 if output_mode.replace(arg.as_str()).is_some() {
                     writeln!(stderr, "rit: diff accepts one output option")?;
                     return Ok(ExitCode::from(129));
@@ -548,7 +548,7 @@ fn diff_command(
     let Some(output_mode) = output_mode else {
         writeln!(
             stderr,
-            "rit: diff currently supports --name-only, --name-status, and --stat"
+            "rit: diff currently supports --name-only, --name-status, --numstat, and --stat"
         )?;
         return Ok(ExitCode::from(129));
     };
@@ -577,6 +577,7 @@ fn diff_command(
             }
         }
         "--name-status" => stdout.write_all(diff.to_name_status_text().as_bytes())?,
+        "--numstat" => stdout.write_all(diff.to_numstat_text().as_bytes())?,
         "--stat" => stdout.write_all(diff.to_stat_text().as_bytes())?,
         _ => unreachable!("validated above"),
     }

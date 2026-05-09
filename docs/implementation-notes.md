@@ -7,6 +7,7 @@
 - `git help <command>` opened the local manual pager in this environment and timed out, so command-specific checks used `git <command> -h`.
 - 2026-05-09 baseline refresh checked: `git status -h`, `git add -h`, `git commit -h`, `git diff -h`, and `git log -h`.
 - 2026-05-09 diff cached milestone checked: `git diff -h`.
+- 2026-05-09 diff numstat milestone checked: `git diff -h`.
 
 ## Milestone Notes
 
@@ -36,6 +37,7 @@
 - `rit diff --cached --name-only`, `rit diff --cached --stat`, `rit diff --staged --name-only`, and `rit diff --staged --stat` now compare the index with `HEAD`.
 - Unborn `HEAD` is treated like an empty tree for staged diff, matching the usual Git shape for newly added files.
 - Added `--name-status` formatting for both default and cached diff scopes.
+- Added `--numstat` formatting for both default and cached diff scopes.
 
 ## Implemented Commands
 
@@ -112,7 +114,7 @@
 ### `rit diff`
 
 - Baseline command checked: `git diff -h`
-- Supported options: `--name-only`, `--name-status`, `--stat`, plus `--cached`/`--staged` with those output modes.
+- Supported options: `--name-only`, `--name-status`, `--numstat`, `--stat`, plus `--cached`/`--staged` with those output modes.
 - Unsupported options: patch output, commit/tree/blob arguments, pathspecs, rename/copy detection, binary stat details.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files.
 - Git-compatible behavior: cached diff scope compares the index against `HEAD`.
