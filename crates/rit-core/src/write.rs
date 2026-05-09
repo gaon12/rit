@@ -1,6 +1,9 @@
 use crate::index::{Index, IndexEntry, join_slash_path, relative_slash_path};
 use crate::object::{hash_object, parse_tree_entries};
-use crate::{ObjectId, ObjectKind, Repository, Result, RitError, Signature, parse_commit};
+use crate::{
+    ObjectId, ObjectKind, Repository, Result, RitError, Signature, parse_commit,
+    refs::validate_ref_short_name,
+};
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
@@ -204,6 +207,32 @@ impl Repository {
         Ok(unstaged)
     }
 
+    /// Checks out an existing local branch into a clean working tree.
+    pub fn checkout_branch(&self, name: &str) -> Result<ObjectId> {
+        validate_ref_short_name(name)?;
+        ensure_clean_for_checkout(self)?;
+        let target = self.branch_target(name)?;
+        self.checkout_commit_tree(target)?;
+        write_text_atomically(
+            &self.git_dir().join("HEAD"),
+            &format!("ref: refs/heads/{name}\n"),
+        )?;
+        Ok(target)
+    }
+
+    /// Creates and checks out a new branch at `HEAD`.
+    pub fn checkout_new_branch(&self, name: &str) -> Result<ObjectId> {
+        validate_ref_short_name(name)?;
+        ensure_clean_for_checkout(self)?;
+        let target = self.create_branch(name)?;
+        self.checkout_commit_tree(target)?;
+        write_text_atomically(
+            &self.git_dir().join("HEAD"),
+            &format!("ref: refs/heads/{name}\n"),
+        )?;
+        Ok(target)
+    }
+
     fn write_tree_from_index(&self, index: &Index) -> Result<ObjectId> {
         let mut root = TreeNode::default();
         for entry in &index.entries {
@@ -298,6 +327,93 @@ impl Repository {
         }
         Ok(())
     }
+
+    fn checkout_commit_tree(&self, commit_id: ObjectId) -> Result<()> {
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "checkout must be run in a repository with a working tree",
+            ));
+        };
+        let target_entries = self.commit_index_entries(commit_id)?;
+        let current_index = Index::read(&self.git_dir().join("index"))?;
+        let current_paths = current_index
+            .entries
+            .iter()
+            .map(|entry| entry.path.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        let target_paths = target_entries
+            .iter()
+            .map(|entry| entry.path.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+
+        for entry in &current_index.entries {
+            if !target_paths.contains(entry.path.as_str()) {
+                let path = join_slash_path(worktree, &entry.path);
+                if path.exists() {
+                    fs::remove_file(&path).map_err(|source| RitError::io(&path, source))?;
+                }
+            }
+        }
+
+        for entry in &target_entries {
+            let worktree_path = join_slash_path(worktree, &entry.path);
+            if !current_paths.contains(entry.path.as_str()) && worktree_path.exists() {
+                return Err(RitError::invalid_input(format!(
+                    "untracked working tree file would be overwritten by checkout: {}",
+                    entry.path
+                )));
+            }
+            let object = self.read_object(entry.object_id)?;
+            if object.kind != ObjectKind::Blob {
+                return Err(RitError::invalid_input(format!(
+                    "object {} is {}, not blob",
+                    entry.object_id, object.kind
+                )));
+            }
+            write_worktree_file_atomically(&worktree_path, &object.data)?;
+        }
+
+        Index {
+            entries: target_entries,
+        }
+        .write(&self.git_dir().join("index"))
+    }
+
+    fn commit_index_entries(&self, commit_id: ObjectId) -> Result<Vec<IndexEntry>> {
+        let object = self.read_object(commit_id)?;
+        if object.kind != ObjectKind::Commit {
+            return Err(RitError::invalid_input(format!(
+                "object {commit_id} is {}, not commit",
+                object.kind
+            )));
+        }
+        let commit = parse_commit(&object.data)?;
+        let mut entries = BTreeMap::new();
+        self.collect_head_blob_entries("", commit.tree, &mut entries)?;
+        Ok(entries
+            .into_iter()
+            .map(|(path, entry)| IndexEntry {
+                mode: entry.mode,
+                object_id: entry.object_id,
+                file_size: entry.file_size,
+                path,
+            })
+            .collect())
+    }
+}
+
+fn ensure_clean_for_checkout(repository: &Repository) -> Result<()> {
+    let status = repository.status_porcelain_v1()?;
+    if status
+        .entries
+        .iter()
+        .any(|entry| entry.index_status != '?' || entry.worktree_status != '?')
+    {
+        return Err(RitError::invalid_input(
+            "checkout requires a clean index and working tree",
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy)]

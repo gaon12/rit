@@ -157,3 +157,23 @@
 - Intentional differences: no index refresh metadata beyond object ID/size/mode.
 - Repository mutation: writes `.git/index`.
 - Risk: low for explicit paths; index writes use lock/rename.
+
+### `rit checkout`
+
+- Baseline command checked: `git checkout -h`
+- Supported options: checkout existing local branch, `-b <branch>` create and checkout.
+- Unsupported options: path checkout, detach, force, orphan, tracking, merge/conflict modes, submodules.
+- Git-compatible behavior: updates symbolic `HEAD`, writes index from target commit tree, materializes tracked worktree files.
+- Intentional differences: checkout requires a clean index and working tree instead of attempting merges.
+- Repository mutation: writes `HEAD`, `.git/index`, and tracked worktree files.
+- Risk: moderate; file writes use temp files and branch refs use lock/rename.
+
+### `rit switch`
+
+- Baseline command checked: `git switch -h`
+- Supported options: switch existing local branch, `-c`/`--create <branch>`.
+- Unsupported options: force create/reset, detach, discard changes, guess, tracking, merge/conflict modes, submodules.
+- Git-compatible behavior: same local branch switching machinery as `checkout`.
+- Intentional differences: switch requires a clean index and working tree.
+- Repository mutation: writes `HEAD`, `.git/index`, and tracked worktree files.
+- Risk: moderate; file writes use temp files and branch refs use lock/rename.

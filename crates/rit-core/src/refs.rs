@@ -65,6 +65,17 @@ impl Repository {
         Ok(target)
     }
 
+    /// Reads a local branch target.
+    pub fn branch_target(&self, name: &str) -> Result<ObjectId> {
+        validate_ref_short_name(name)?;
+        let path = self.common_dir().join("refs").join("heads").join(name);
+        if !path.exists() {
+            return Err(RitError::invalid_input(format!("branch not found: {name}")));
+        }
+        let target = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
+        ObjectId::from_hex(target.trim())
+    }
+
     /// Deletes a local branch ref.
     pub fn delete_branch(&self, name: &str) -> Result<ObjectId> {
         validate_ref_short_name(name)?;

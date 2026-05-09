@@ -24,6 +24,8 @@ Core commands:
   tag           List, create, or delete lightweight tags
   restore       Restore working tree or staged files
   reset         Reset staged file entries
+  checkout      Switch branches
+  switch        Switch branches
 
 Run 'rit help <command>' for command-specific notes.
 ";
@@ -123,6 +125,20 @@ rit reset <file>...
 Reset staged file entries from HEAD.
 ";
 
+const CHECKOUT_HELP: &str = "\
+rit checkout <branch>
+rit checkout -b <branch>
+
+Switch to an existing branch, or create and switch to a new branch.
+";
+
+const SWITCH_HELP: &str = "\
+rit switch <branch>
+rit switch -c <branch>
+
+Switch to an existing branch, or create and switch to a new branch.
+";
+
 fn main() -> ExitCode {
     match run(env::args().skip(1), &mut io::stdout(), &mut io::stderr()) {
         Ok(code) => code,
@@ -164,6 +180,8 @@ fn run(
         [command, rest @ ..] if command == "tag" => tag_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "restore" => restore_command(rest, stderr),
         [command, rest @ ..] if command == "reset" => reset_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "checkout" => checkout_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "switch" => switch_command(rest, stdout, stderr),
         [command] if command == "help" => {
             stdout.write_all(GENERAL_HELP.as_bytes())?;
             Ok(ExitCode::SUCCESS)
@@ -203,6 +221,8 @@ fn print_command_help(
         "tag" => stdout.write_all(TAG_HELP.as_bytes())?,
         "restore" => stdout.write_all(RESTORE_HELP.as_bytes())?,
         "reset" => stdout.write_all(RESET_HELP.as_bytes())?,
+        "checkout" => stdout.write_all(CHECKOUT_HELP.as_bytes())?,
+        "switch" => stdout.write_all(SWITCH_HELP.as_bytes())?,
         unknown => {
             writeln!(stderr, "rit: no help for unknown command '{unknown}'")?;
             return Ok(ExitCode::from(129));
@@ -774,6 +794,88 @@ fn reset_command(
     }
 }
 
+fn checkout_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    match args {
+        [branch] if !branch.starts_with('-') => {
+            checkout_existing_branch(branch, "Switched to branch", stdout, stderr)
+        }
+        [flag, branch] if flag == "-b" => {
+            checkout_new_branch(branch, "Switched to a new branch", stdout, stderr)
+        }
+        _ => {
+            writeln!(
+                stderr,
+                "rit: checkout currently supports only <branch> and -b <branch>"
+            )?;
+            Ok(ExitCode::from(129))
+        }
+    }
+}
+
+fn switch_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    match args {
+        [branch] if !branch.starts_with('-') => {
+            checkout_existing_branch(branch, "Switched to branch", stdout, stderr)
+        }
+        [flag, branch] if flag == "-c" || flag == "--create" => {
+            checkout_new_branch(branch, "Switched to a new branch", stdout, stderr)
+        }
+        _ => {
+            writeln!(
+                stderr,
+                "rit: switch currently supports only <branch> and -c <branch>"
+            )?;
+            Ok(ExitCode::from(129))
+        }
+    }
+}
+
+fn checkout_existing_branch(
+    branch: &str,
+    message_prefix: &str,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    match repository.checkout_branch(branch) {
+        Ok(_) => {
+            writeln!(stdout, "{message_prefix} '{branch}'")?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(error) => write_command_error(stderr, error),
+    }
+}
+
+fn checkout_new_branch(
+    branch: &str,
+    message_prefix: &str,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    match repository.checkout_new_branch(branch) {
+        Ok(_) => {
+            writeln!(stdout, "{message_prefix} '{branch}'")?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(error) => write_command_error(stderr, error),
+    }
+}
+
 fn write_command_error(stderr: &mut dyn Write, error: rit_core::RitError) -> io::Result<ExitCode> {
     writeln!(stderr, "rit: {error}")?;
     Ok(ExitCode::from(1))
@@ -1056,6 +1158,15 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit restore"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn checkout_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "checkout"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit checkout"));
         assert_eq!(stderr, "");
     }
 
