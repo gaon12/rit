@@ -1,0 +1,17 @@
+[package]
+name = "rit-testkit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "rit_testkit"
+path = "src/lib.rs"
+
+[[bin]]
+name = "rit-testkit"
+path = "src/main.rs"
+
+[dependencies]
+rit-core.workspace = true

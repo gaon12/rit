@@ -13,6 +13,8 @@ pub enum RitError {
     ObjectNotFound { object_id: String },
     /// A repository uses a format version that this build will not write to.
     UnsupportedRepositoryFormat { version: u32 },
+    /// A repository declares an extension that this build does not understand.
+    UnsupportedRepositoryExtension { name: String },
     /// A path-related I/O operation failed.
     Io {
         path: PathBuf,
@@ -57,6 +59,9 @@ impl Display for RitError {
                     formatter,
                     "unsupported repository format version: {version}"
                 )
+            }
+            Self::UnsupportedRepositoryExtension { name } => {
+                write!(formatter, "unsupported repository extension: {name}")
             }
             Self::Io { path, source } => {
                 write!(

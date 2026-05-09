@@ -39,6 +39,15 @@ pub struct Repository {
 }
 
 impl Repository {
+    /// Opens the repository containing `path`.
+    ///
+    /// This is a convenience alias for [`Repository::discover`] and is the
+    /// preferred entry point for application code that already has a path from
+    /// the user.
+    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+        Self::discover(path)
+    }
+
     /// Walks upward from `start` until a `.git` directory or file is found.
     pub fn discover(start: impl AsRef<Path>) -> Result<Self> {
         let start = start.as_ref();
@@ -60,12 +69,7 @@ impl Repository {
             let dot_git = current.join(".git");
             if dot_git.is_dir() {
                 let git_dir = canonicalize_existing_path(&dot_git)?;
-                return Ok(Self {
-                    worktree: Some(current),
-                    common_dir: git_dir.clone(),
-                    git_dir,
-                    bare: false,
-                });
+                return Self::from_paths(Some(current), git_dir, false);
             }
 
             if dot_git.is_file() {
@@ -76,22 +80,12 @@ impl Repository {
                     current.join(git_dir)
                 };
                 let git_dir = canonicalize_existing_path(&resolved_git_dir)?;
-                return Ok(Self {
-                    worktree: Some(current),
-                    common_dir: git_dir.clone(),
-                    git_dir,
-                    bare: false,
-                });
+                return Self::from_paths(Some(current), git_dir, false);
             }
 
             if looks_like_bare_repository(&current) {
                 let git_dir = canonicalize_existing_path(&current)?;
-                return Ok(Self {
-                    worktree: None,
-                    common_dir: git_dir.clone(),
-                    git_dir,
-                    bare: true,
-                });
+                return Self::from_paths(None, git_dir, true);
             }
 
             if !current.pop() {
@@ -134,12 +128,7 @@ impl Repository {
             default_config(options.bare).as_bytes(),
         )?;
 
-        Ok(Self {
-            worktree: (!options.bare).then_some(target),
-            common_dir: git_dir.clone(),
-            git_dir,
-            bare: options.bare,
-        })
+        Self::from_paths((!options.bare).then_some(target), git_dir, options.bare)
     }
 
     /// Returns the path to the repository metadata directory.
@@ -229,6 +218,83 @@ impl Repository {
     pub fn is_bare(&self) -> bool {
         self.bare
     }
+
+    fn from_paths(worktree: Option<PathBuf>, git_dir: PathBuf, bare: bool) -> Result<Self> {
+        let repository = Self {
+            worktree,
+            common_dir: git_dir.clone(),
+            git_dir,
+            bare,
+        };
+        repository.ensure_supported_format()?;
+        Ok(repository)
+    }
+
+    fn ensure_supported_format(&self) -> Result<()> {
+        let config_path = self.common_dir.join("config");
+        if !config_path.exists() {
+            return Ok(());
+        }
+
+        let config = fs::read_to_string(&config_path)
+            .map_err(|source| RitError::io(&config_path, source))?;
+        let format = parse_repository_format(&config)?;
+        if format.version != 0 {
+            return Err(RitError::UnsupportedRepositoryFormat {
+                version: format.version,
+            });
+        }
+        if let Some(extension) = format.extensions.first() {
+            return Err(RitError::UnsupportedRepositoryExtension {
+                name: extension.clone(),
+            });
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct RepositoryFormat {
+    version: u32,
+    extensions: Vec<String>,
+}
+
+fn parse_repository_format(config: &str) -> Result<RepositoryFormat> {
+    let mut section = String::new();
+    let mut version = 0;
+    let mut extensions = Vec::new();
+
+    for raw_line in config.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
+            continue;
+        }
+        if line.starts_with('[') && line.ends_with(']') {
+            section = line[1..line.len() - 1].trim().to_ascii_lowercase();
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let key = key.trim().to_ascii_lowercase();
+        let value = value.trim();
+        match (section.as_str(), key.as_str()) {
+            ("core", "repositoryformatversion") => {
+                version = value.parse::<u32>().map_err(|_| {
+                    RitError::invalid_input(format!(
+                        "invalid repository format version in config: {value}"
+                    ))
+                })?;
+            }
+            ("extensions", extension_name) => extensions.push(extension_name.to_owned()),
+            _ => {}
+        }
+    }
+
+    Ok(RepositoryFormat {
+        version,
+        extensions,
+    })
 }
 
 fn create_repository_directories(git_dir: &Path) -> Result<()> {
@@ -364,6 +430,66 @@ mod tests {
         );
         assert!(!repository.is_bare());
 
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn open_discovers_repository_from_path() {
+        let temp = temp_path("open");
+        Repository::init(&InitOptions::new(&temp)).expect("init should create repository");
+
+        let repository = Repository::open(&temp).expect("repository should open");
+
+        assert_eq!(
+            repository.worktree(),
+            Some(
+                fs::canonicalize(&temp)
+                    .expect("temp path should canonicalize")
+                    .as_path()
+            )
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn open_rejects_unsupported_repository_format() {
+        let temp = temp_path("unsupported-format");
+        let repository =
+            Repository::init(&InitOptions::new(&temp)).expect("init should create repository");
+        fs::write(
+            repository.git_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 9\n\tbare = false\n",
+        )
+        .expect("config should be rewritten");
+
+        let error = Repository::open(&temp).expect_err("unsupported format should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("unsupported repository format version: 9")
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn open_rejects_unknown_repository_extension() {
+        let temp = temp_path("unsupported-extension");
+        let repository =
+            Repository::init(&InitOptions::new(&temp)).expect("init should create repository");
+        fs::write(
+            repository.git_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n[extensions]\n\tunknown = true\n",
+        )
+        .expect("config should be rewritten");
+
+        let error = Repository::open(&temp).expect_err("unsupported extension should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("unsupported repository extension: unknown")
+        );
         remove_dir_all(&temp);
     }
 

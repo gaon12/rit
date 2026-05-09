@@ -2,6 +2,7 @@
 members = [
     "crates/rit-cli",
     "crates/rit-core",
+    "crates/rit-testkit",
 ]
 resolver = "3"
 
@@ -11,3 +12,5 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://example.invalid/rit"
 
+[workspace.dependencies]
+rit-core = { path = "crates/rit-core" }

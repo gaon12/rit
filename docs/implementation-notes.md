@@ -5,6 +5,29 @@
 - Checked Git version: `git version 2.52.0.windows.1`
 - Checked command list: `git help -a`
 - `git help <command>` opened the local manual pager in this environment and timed out, so command-specific checks used `git <command> -h`.
+- 2026-05-09 baseline refresh checked: `git status -h`, `git add -h`, `git commit -h`, `git diff -h`, and `git log -h`.
+
+## Milestone Notes
+
+### M0: Baseline and rules
+
+- Added `docs/compatibility.md` to record the active Git baseline, command-help checks, current implemented surface, and compatibility policy.
+- Added `docs/roadmap.md` to keep the final-product milestones visible while implementation proceeds in small commits.
+- Quality gates remain `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, and `cargo test --workspace`.
+
+### M1: Compatibility test harness
+
+- Added the `rit-testkit` crate as a library and `rit-testkit` CLI.
+- The harness copies a fixture repository into isolated Git and rit workspaces, runs the provided command specs, captures stdout/stderr/exit code, and optionally compares final repository snapshots.
+- `rit-testkit` may execute `git` because it is test infrastructure. Production `rit` runtime code must not depend on it.
+- First smoke test: `git status --porcelain=v1` and `rit status --porcelain=v1` match stdout, stderr, and exit code on a simple committed fixture.
+- Known gap exposed by state comparison: `git status` refreshes `.git/index` stat data, while `rit status` currently leaves the index unchanged.
+
+### M2: Core repository model foundation
+
+- Added `Repository::open(path)` as the application-facing alias for repository discovery.
+- Repository discovery and init now construct repositories through a shared format guard.
+- Repositories with `core.repositoryformatversion` other than `0`, or unknown `[extensions]` keys, fail with clear errors before use.
 
 ## Implemented Commands
 
