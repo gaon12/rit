@@ -27,6 +27,7 @@ Core commands:
   checkout      Switch branches
   switch        Switch branches
   show          Show one object
+  ls-files      Show files in the index
 
 Run 'rit help <command>' for command-specific notes.
 ";
@@ -146,6 +147,12 @@ rit show [--no-patch] [<revision>]
 Show one commit, tree, or blob object. Commit diffs are not emitted yet.
 ";
 
+const LS_FILES_HELP: &str = "\
+rit ls-files [--stage]
+
+Show files tracked in the index.
+";
+
 fn main() -> ExitCode {
     match run(env::args().skip(1), &mut io::stdout(), &mut io::stderr()) {
         Ok(code) => code,
@@ -190,6 +197,7 @@ fn run(
         [command, rest @ ..] if command == "checkout" => checkout_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "switch" => switch_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "show" => show_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "ls-files" => ls_files_command(rest, stdout, stderr),
         [command] if command == "help" => {
             stdout.write_all(GENERAL_HELP.as_bytes())?;
             Ok(ExitCode::SUCCESS)
@@ -232,6 +240,7 @@ fn print_command_help(
         "checkout" => stdout.write_all(CHECKOUT_HELP.as_bytes())?,
         "switch" => stdout.write_all(SWITCH_HELP.as_bytes())?,
         "show" => stdout.write_all(SHOW_HELP.as_bytes())?,
+        "ls-files" => stdout.write_all(LS_FILES_HELP.as_bytes())?,
         unknown => {
             writeln!(stderr, "rit: no help for unknown command '{unknown}'")?;
             return Ok(ExitCode::from(129));
@@ -639,6 +648,41 @@ fn show_command(
         },
         rit_core::ObjectKind::Tree => print_tree_entries(&object.data, false, false, stdout)?,
         rit_core::ObjectKind::Blob | rit_core::ObjectKind::Tag => stdout.write_all(&object.data)?,
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn ls_files_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    if !args.is_empty() && !matches!(args, [flag] if flag == "--stage" || flag == "-s") {
+        writeln!(stderr, "rit: ls-files currently supports only --stage")?;
+        return Ok(ExitCode::from(129));
+    }
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    let index = match rit_core::Index::read(&repository.git_dir().join("index")) {
+        Ok(index) => index,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(1));
+        }
+    };
+    let stage = matches!(args, [flag] if flag == "--stage" || flag == "-s");
+    for entry in index.entries {
+        if stage {
+            writeln!(
+                stdout,
+                "{:06o} {} 0\t{}",
+                entry.mode, entry.object_id, entry.path
+            )?;
+        } else {
+            writeln!(stdout, "{}", entry.path)?;
+        }
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -1269,6 +1313,15 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit show"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn ls_files_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "ls-files"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit ls-files"));
         assert_eq!(stderr, "");
     }
 

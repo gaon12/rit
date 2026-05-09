@@ -194,6 +194,14 @@
 - Intentional differences: commit diffs are not emitted yet.
 - Repository mutation: no.
 
+### `rit ls-files`
+
+- Baseline command checked: `git ls-files -h`
+- Supported options: default cached file listing, `--stage`/`-s`.
+- Unsupported options: deleted/modified/others/ignored filters, pathspecs, EOL/debug/format output, sparse/submodule modes.
+- Git-compatible behavior: lists index paths and stage records as `<mode> <object> 0<TAB><path>`.
+- Repository mutation: no.
+
 ## Object Database
 
 ### Loose objects
