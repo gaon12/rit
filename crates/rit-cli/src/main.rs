@@ -20,6 +20,7 @@ Core commands:
   log           Show commit history
   add           Add file contents to the index
   commit        Record staged changes
+  branch        List, create, or delete branches
 
 Run 'rit help <command>' for command-specific notes.
 ";
@@ -90,6 +91,15 @@ rit commit -m <message>
 Create a commit from the current index and advance HEAD.
 ";
 
+const BRANCH_HELP: &str = "\
+rit branch
+rit branch --show-current
+rit branch <branch-name>
+rit branch -d <branch-name>
+
+List, create, or delete local branches.
+";
+
 fn main() -> ExitCode {
     match run(env::args().skip(1), &mut io::stdout(), &mut io::stderr()) {
         Ok(code) => code,
@@ -127,6 +137,7 @@ fn run(
         [command, rest @ ..] if command == "log" => log_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "add" => add_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "commit" => commit_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "branch" => branch_command(rest, stdout, stderr),
         [command] if command == "help" => {
             stdout.write_all(GENERAL_HELP.as_bytes())?;
             Ok(ExitCode::SUCCESS)
@@ -162,6 +173,7 @@ fn print_command_help(
         "log" => stdout.write_all(LOG_HELP.as_bytes())?,
         "add" => stdout.write_all(ADD_HELP.as_bytes())?,
         "commit" => stdout.write_all(COMMIT_HELP.as_bytes())?,
+        "branch" => stdout.write_all(BRANCH_HELP.as_bytes())?,
         unknown => {
             writeln!(stderr, "rit: no help for unknown command '{unknown}'")?;
             return Ok(ExitCode::from(129));
@@ -565,6 +577,64 @@ fn commit_command(
     }
 }
 
+fn branch_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+
+    match args {
+        [] => match repository.list_branches() {
+            Ok(branches) => {
+                for branch in branches {
+                    let marker = if branch.current { '*' } else { ' ' };
+                    writeln!(stdout, "{marker} {}", branch.name)?;
+                }
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_command_error(stderr, error),
+        },
+        [flag] if flag == "--show-current" => match repository.current_branch_name() {
+            Ok(Some(branch)) => {
+                writeln!(stdout, "{branch}")?;
+                Ok(ExitCode::SUCCESS)
+            }
+            Ok(None) => Ok(ExitCode::SUCCESS),
+            Err(error) => write_command_error(stderr, error),
+        },
+        [flag, name] if flag == "-d" || flag == "--delete" => {
+            match repository.delete_branch(name) {
+                Ok(target) => {
+                    writeln!(
+                        stdout,
+                        "Deleted branch {name} (was {}).",
+                        &target.to_hex()[..7]
+                    )?;
+                    Ok(ExitCode::SUCCESS)
+                }
+                Err(error) => write_command_error(stderr, error),
+            }
+        }
+        [name] if !name.starts_with('-') => match repository.create_branch(name) {
+            Ok(_) => Ok(ExitCode::SUCCESS),
+            Err(error) => write_command_error(stderr, error),
+        },
+        _ => {
+            writeln!(stderr, "rit: unsupported branch arguments")?;
+            Ok(ExitCode::from(129))
+        }
+    }
+}
+
+fn write_command_error(stderr: &mut dyn Write, error: rit_core::RitError) -> io::Result<ExitCode> {
+    writeln!(stderr, "rit: {error}")?;
+    Ok(ExitCode::from(1))
+}
+
 fn parse_commit_message(args: &[String]) -> Option<String> {
     match args {
         [flag, message] if flag == "-m" || flag == "--message" => Some(message.clone()),
@@ -816,6 +886,15 @@ mod tests {
         assert_eq!(code, ExitCode::from(129));
         assert_eq!(stdout, "");
         assert!(stderr.contains("-m <message>"));
+    }
+
+    #[test]
+    fn branch_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "branch"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit branch"));
+        assert_eq!(stderr, "");
     }
 
     #[test]

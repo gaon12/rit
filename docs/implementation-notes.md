@@ -117,3 +117,13 @@
 - Intentional differences: commit timestamps use UTC `+0000`; hooks are not run yet.
 - Repository mutation: yes, writes objects and updates the current branch ref using lock/rename.
 - Risk: moderate; implemented only for simple indexed regular files.
+
+### `rit branch`
+
+- Baseline command checked: `git branch -h`
+- Supported options: list local branches, `--show-current`, create branch at `HEAD`, `-d`/`--delete`.
+- Unsupported options: remote branches, rename/copy, upstream config, merged checks, formatting, sorting controls, force.
+- Git-compatible behavior: local branches are refs under `refs/heads`; current branch is detected from symbolic `HEAD`.
+- Intentional differences: delete does not yet validate merge safety beyond refusing the current branch.
+- Repository mutation: branch create/delete writes or removes refs.
+- Risk: low for explicit local refs; create uses lock/rename.
