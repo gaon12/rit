@@ -193,3 +193,19 @@
 - Git-compatible behavior: commit no-patch layout, tree pretty printing, blob contents.
 - Intentional differences: commit diffs are not emitted yet.
 - Repository mutation: no.
+
+## Object Database
+
+### Loose objects
+
+- Supports reading and writing loose `blob`, `tree`, `commit`, and `tag` objects.
+- Loose writes use zlib compression and temp-file/rename placement.
+
+### Packed objects
+
+- Baseline documents checked through `git help -a` developer-facing `format-pack` listing and compatibility tests against `git gc`.
+- Supported index format: pack index v2.
+- Supported pack object types: non-delta commit, tree, blob, tag.
+- Unsupported object types: OFS_DELTA and REF_DELTA are detected and reported clearly.
+- Git-compatible behavior: after `git gc --aggressive --prune=now`, `rit cat-file`, `rit ls-tree`, `rit log`, and `rit show --no-patch` can read packed non-delta objects.
+- Repository mutation: no.
