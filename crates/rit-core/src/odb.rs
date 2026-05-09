@@ -84,6 +84,31 @@ impl LooseObjectDb {
         &self.objects_dir
     }
 
+    /// Finds one object ID by a hexadecimal prefix. Ambiguous prefixes return
+    /// an explicit error instead of guessing.
+    pub fn find_object_id_by_prefix(&self, prefix: &str) -> Result<Option<ObjectId>> {
+        if prefix.len() < 4 || prefix.len() > 40 {
+            return Ok(None);
+        }
+        if !prefix
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+        {
+            return Ok(None);
+        }
+        let prefix = prefix.to_ascii_lowercase();
+        let mut found = None;
+
+        for object_id in self.loose_object_ids_with_prefix(&prefix)? {
+            remember_unique_object_id(&mut found, object_id, &prefix)?;
+        }
+        for object_id in self.packed_object_ids_with_prefix(&prefix)? {
+            remember_unique_object_id(&mut found, object_id, &prefix)?;
+        }
+
+        Ok(found)
+    }
+
     fn read_packed_object(&self, object_id: ObjectId) -> Result<Option<GitObject>> {
         let pack_dir = self.objects_dir.join("pack");
         if !pack_dir.exists() {
@@ -109,6 +134,61 @@ impl LooseObjectDb {
 
         Ok(None)
     }
+
+    fn loose_object_ids_with_prefix(&self, prefix: &str) -> Result<Vec<ObjectId>> {
+        let mut matches = Vec::new();
+        let (directory_prefix, file_prefix) = prefix.split_at(2);
+        let directory = self.objects_dir.join(directory_prefix);
+        if !directory.exists() {
+            return Ok(matches);
+        }
+        for entry in fs::read_dir(&directory).map_err(|source| RitError::io(&directory, source))? {
+            let entry = entry.map_err(|source| RitError::io(&directory, source))?;
+            let file_name = entry.file_name().to_string_lossy().into_owned();
+            if file_name.len() != 38 || !file_name.starts_with(file_prefix) {
+                continue;
+            }
+            matches.push(ObjectId::from_hex(&format!(
+                "{directory_prefix}{file_name}"
+            ))?);
+        }
+        Ok(matches)
+    }
+
+    fn packed_object_ids_with_prefix(&self, prefix: &str) -> Result<Vec<ObjectId>> {
+        let pack_dir = self.objects_dir.join("pack");
+        let mut matches = Vec::new();
+        if !pack_dir.exists() {
+            return Ok(matches);
+        }
+        for entry in fs::read_dir(&pack_dir).map_err(|source| RitError::io(&pack_dir, source))? {
+            let entry = entry.map_err(|source| RitError::io(&pack_dir, source))?;
+            let index_path = entry.path();
+            if index_path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                != Some("idx")
+            {
+                continue;
+            }
+            matches.extend(pack_object_ids_with_prefix(&index_path, prefix)?);
+        }
+        Ok(matches)
+    }
+}
+
+fn remember_unique_object_id(
+    found: &mut Option<ObjectId>,
+    object_id: ObjectId,
+    prefix: &str,
+) -> Result<()> {
+    if found.is_some_and(|existing| existing != object_id) {
+        return Err(RitError::invalid_input(format!(
+            "short object id is ambiguous: {prefix}"
+        )));
+    }
+    *found = Some(object_id);
+    Ok(())
 }
 
 fn find_pack_offset(index_path: &Path, object_id: ObjectId) -> Result<Option<u64>> {
@@ -170,6 +250,43 @@ fn find_pack_offset(index_path: &Path, object_id: ObjectId) -> Result<Option<u64
     }
 
     Ok(None)
+}
+
+fn pack_object_ids_with_prefix(index_path: &Path, prefix: &str) -> Result<Vec<ObjectId>> {
+    let bytes = fs::read(index_path).map_err(|source| RitError::io(index_path, source))?;
+    let (object_count, names_start) = parse_pack_index_header(&bytes, index_path)?;
+    let mut matches = Vec::new();
+    for index in 0..object_count {
+        let name_start = names_start + index * 20;
+        let name = bytes
+            .get(name_start..name_start + 20)
+            .ok_or_else(|| RitError::invalid_input("pack index object name table is truncated"))?;
+        let mut object_bytes = [0_u8; 20];
+        object_bytes.copy_from_slice(name);
+        let object_id = ObjectId::from_bytes(object_bytes);
+        if object_id.to_hex().starts_with(prefix) {
+            matches.push(object_id);
+        }
+    }
+    Ok(matches)
+}
+
+fn parse_pack_index_header(bytes: &[u8], index_path: &Path) -> Result<(usize, usize)> {
+    if bytes.len() < 8 || &bytes[..4] != b"\xfftOc" {
+        return Err(RitError::invalid_input(format!(
+            "unsupported pack index format: {}",
+            index_path.display()
+        )));
+    }
+    let version = read_u32(bytes, 4)?;
+    if version != 2 {
+        return Err(RitError::invalid_input(format!(
+            "unsupported pack index version: {version}"
+        )));
+    }
+    let fanout_start = 8;
+    let object_count = read_u32(bytes, fanout_start + 255 * 4)? as usize;
+    Ok((object_count, fanout_start + 256 * 4))
 }
 
 fn read_pack_object_at(pack_path: &Path, offset: u64) -> Result<GitObject> {

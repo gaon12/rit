@@ -199,6 +199,10 @@ impl Repository {
             return ObjectId::from_hex(revision);
         }
 
+        if let Some(object_id) = self.loose_objects().find_object_id_by_prefix(revision)? {
+            return Ok(object_id);
+        }
+
         for namespace in ["heads", "tags"] {
             let path = self.common_dir.join("refs").join(namespace).join(revision);
             if path.exists() {

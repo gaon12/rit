@@ -181,8 +181,8 @@
 ### `rit rev-parse` revision support
 
 - Baseline command checked: `git rev-parse -h`
-- Added support: full object IDs, `HEAD`, local branch names, lightweight tag names.
-- Unsupported revision syntax: abbreviated IDs, ancestry operators, ranges, path suffixes, reflog selectors.
+- Added support: full object IDs, unambiguous abbreviated object IDs, `HEAD`, local branch names, lightweight tag names.
+- Unsupported revision syntax: ancestry operators, ranges, path suffixes, reflog selectors.
 - Repository mutation: no.
 
 ### `rit show`
