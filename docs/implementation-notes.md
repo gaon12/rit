@@ -97,3 +97,23 @@
 - Intentional differences: merge traversal is first-parent only until revision walking is implemented.
 - Repository mutation: no
 - Risk: no repository writes.
+
+### `rit add`
+
+- Baseline command checked: `git add -h`
+- Supported options: explicit regular file paths.
+- Unsupported options: all pathspec expansion, update/all modes, patch/interactive mode, chmod, sparse mode, ignored-file override.
+- Git-compatible behavior: writes blob loose objects and Git index v2 entries for regular files.
+- Intentional differences: directories and wildcard pathspecs are rejected until pathspec handling is expanded.
+- Repository mutation: yes, writes loose objects and `.git/index` using lock/rename.
+- Risk: low for explicit files; missing paths remove matching index entries.
+
+### `rit commit`
+
+- Baseline command checked: `git commit -h`
+- Supported options: `-m <message>`, `--message <message>`, `--message=<message>`.
+- Unsupported options: hooks, signing, amend, templates, cleanup modes, pathspec commits, author/date override.
+- Git-compatible behavior: writes tree and commit loose objects, uses first parent from `HEAD`, advances symbolic `HEAD` ref.
+- Intentional differences: commit timestamps use UTC `+0000`; hooks are not run yet.
+- Repository mutation: yes, writes objects and updates the current branch ref using lock/rename.
+- Risk: moderate; implemented only for simple indexed regular files.

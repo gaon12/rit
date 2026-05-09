@@ -1,5 +1,6 @@
-use crate::{ObjectId, Result, RitError};
+use crate::{ObjectId, Result, RitError, object::sha1_bytes};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 /// Parsed Git index.
@@ -12,8 +13,12 @@ pub struct Index {
 /// One tracked path in the Git index.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IndexEntry {
+    /// Git file mode stored in the index.
+    pub mode: u32,
     /// Object ID stored for this path.
     pub object_id: ObjectId,
+    /// File size stored in the index.
+    pub file_size: u32,
     /// Repository-relative path using `/` separators.
     pub path: String,
 }
@@ -29,6 +34,43 @@ impl Index {
 
         let bytes = fs::read(path).map_err(|source| RitError::io(path, source))?;
         parse_index(&bytes)
+    }
+
+    /// Writes this index as Git index v2.
+    pub fn write(&self, path: &Path) -> Result<()> {
+        let mut entries = self.entries.clone();
+        entries.sort_by(|left, right| left.path.cmp(&right.path));
+
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(b"DIRC");
+        bytes.extend_from_slice(&2_u32.to_be_bytes());
+        bytes.extend_from_slice(&(entries.len() as u32).to_be_bytes());
+
+        for entry in entries {
+            let entry_start = bytes.len();
+            bytes.extend_from_slice(&0_u32.to_be_bytes());
+            bytes.extend_from_slice(&0_u32.to_be_bytes());
+            bytes.extend_from_slice(&0_u32.to_be_bytes());
+            bytes.extend_from_slice(&0_u32.to_be_bytes());
+            bytes.extend_from_slice(&0_u32.to_be_bytes());
+            bytes.extend_from_slice(&0_u32.to_be_bytes());
+            bytes.extend_from_slice(&entry.mode.to_be_bytes());
+            bytes.extend_from_slice(&0_u32.to_be_bytes());
+            bytes.extend_from_slice(&0_u32.to_be_bytes());
+            bytes.extend_from_slice(&entry.file_size.to_be_bytes());
+            bytes.extend_from_slice(entry.object_id.as_bytes());
+            let flags = entry.path.len().min(0x0fff) as u16;
+            bytes.extend_from_slice(&flags.to_be_bytes());
+            bytes.extend_from_slice(entry.path.as_bytes());
+            bytes.push(0);
+            while (bytes.len() - entry_start) % 8 != 0 {
+                bytes.push(0);
+            }
+        }
+
+        let checksum = sha1_bytes(&bytes);
+        bytes.extend_from_slice(&checksum);
+        write_file_atomically(path, &bytes)
     }
 }
 
@@ -53,6 +95,8 @@ fn parse_index(bytes: &[u8]) -> Result<Index> {
             return Err(RitError::invalid_input("index entry is truncated"));
         }
 
+        let mode = read_u32(bytes, offset + 24)?;
+        let file_size = read_u32(bytes, offset + 36)?;
         let mut object_id = [0_u8; 20];
         object_id.copy_from_slice(&bytes[offset + 40..offset + 60]);
         let flags = read_u16(bytes, offset + 60)?;
@@ -89,12 +133,34 @@ fn parse_index(bytes: &[u8]) -> Result<Index> {
         offset += padding;
 
         entries.push(IndexEntry {
+            mode,
             object_id: ObjectId::from_bytes(object_id),
+            file_size,
             path,
         });
     }
 
     Ok(Index { entries })
+}
+
+fn write_file_atomically(path: &Path, contents: &[u8]) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| RitError::io(parent, source))?;
+    }
+    let lock_path = path.with_extension("lock");
+    {
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&lock_path)
+            .map_err(|source| RitError::io(&lock_path, source))?;
+        file.write_all(contents)
+            .map_err(|source| RitError::io(&lock_path, source))?;
+        file.sync_all()
+            .map_err(|source| RitError::io(&lock_path, source))?;
+    }
+    fs::rename(&lock_path, path).map_err(|source| RitError::io(path, source))?;
+    Ok(())
 }
 
 fn read_u32(bytes: &[u8], offset: usize) -> Result<u32> {

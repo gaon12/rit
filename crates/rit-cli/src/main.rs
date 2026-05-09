@@ -18,6 +18,8 @@ Core commands:
   status        Show porcelain working tree status
   diff          Show working tree changes
   log           Show commit history
+  add           Add file contents to the index
+  commit        Record staged changes
 
 Run 'rit help <command>' for command-specific notes.
 ";
@@ -76,6 +78,18 @@ rit log [--oneline]
 Show commits reachable from HEAD by following the first parent.
 ";
 
+const ADD_HELP: &str = "\
+rit add <file>...
+
+Add explicit regular files to the index.
+";
+
+const COMMIT_HELP: &str = "\
+rit commit -m <message>
+
+Create a commit from the current index and advance HEAD.
+";
+
 fn main() -> ExitCode {
     match run(env::args().skip(1), &mut io::stdout(), &mut io::stderr()) {
         Ok(code) => code,
@@ -111,6 +125,8 @@ fn run(
         [command, rest @ ..] if command == "status" => status_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "diff" => diff_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "log" => log_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "add" => add_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "commit" => commit_command(rest, stdout, stderr),
         [command] if command == "help" => {
             stdout.write_all(GENERAL_HELP.as_bytes())?;
             Ok(ExitCode::SUCCESS)
@@ -144,6 +160,8 @@ fn print_command_help(
         "status" => stdout.write_all(STATUS_HELP.as_bytes())?,
         "diff" => stdout.write_all(DIFF_HELP.as_bytes())?,
         "log" => stdout.write_all(LOG_HELP.as_bytes())?,
+        "add" => stdout.write_all(ADD_HELP.as_bytes())?,
+        "commit" => stdout.write_all(COMMIT_HELP.as_bytes())?,
         unknown => {
             writeln!(stderr, "rit: no help for unknown command '{unknown}'")?;
             return Ok(ExitCode::from(129));
@@ -490,6 +508,71 @@ fn log_command(
     Ok(ExitCode::SUCCESS)
 }
 
+fn add_command(
+    args: &[String],
+    _stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    if args.is_empty() || args.iter().any(|arg| arg.starts_with('-')) {
+        writeln!(
+            stderr,
+            "rit: add currently supports only explicit file paths"
+        )?;
+        return Ok(ExitCode::from(129));
+    }
+
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    match repository.add_paths(args) {
+        Ok(_) => Ok(ExitCode::SUCCESS),
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            Ok(ExitCode::from(1))
+        }
+    }
+}
+
+fn commit_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let Some(message) = parse_commit_message(args) else {
+        writeln!(stderr, "rit: commit currently supports only -m <message>")?;
+        return Ok(ExitCode::from(129));
+    };
+
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    match repository.commit_index(&message) {
+        Ok(result) => {
+            writeln!(
+                stdout,
+                "[{}] {}",
+                &result.commit_id.to_hex()[..7],
+                first_message_line(&message)
+            )?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            Ok(ExitCode::from(1))
+        }
+    }
+}
+
+fn parse_commit_message(args: &[String]) -> Option<String> {
+    match args {
+        [flag, message] if flag == "-m" || flag == "--message" => Some(message.clone()),
+        [flag] if flag.starts_with("--message=") => Some(flag["--message=".len()..].to_owned()),
+        _ => None,
+    }
+}
+
 fn first_message_line(message: &str) -> &str {
     message.lines().next().unwrap_or("")
 }
@@ -724,6 +807,15 @@ mod tests {
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit log"));
         assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn commit_requires_message() {
+        let (code, stdout, stderr) = run_with(&["commit"]);
+
+        assert_eq!(code, ExitCode::from(129));
+        assert_eq!(stdout, "");
+        assert!(stderr.contains("-m <message>"));
     }
 
     #[test]

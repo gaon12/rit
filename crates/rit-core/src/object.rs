@@ -230,7 +230,12 @@ pub fn hash_object(kind: ObjectKind, data: &[u8]) -> ObjectId {
     bytes.extend_from_slice(data.len().to_string().as_bytes());
     bytes.push(0);
     bytes.extend_from_slice(data);
-    ObjectId::from_bytes(sha1(&bytes))
+    ObjectId::from_bytes(sha1_bytes(&bytes))
+}
+
+/// Computes raw SHA-1 bytes.
+pub fn sha1_bytes(input: &[u8]) -> [u8; 20] {
+    sha1(input)
 }
 
 fn decode_hex_digit(byte: u8) -> Result<u8> {
