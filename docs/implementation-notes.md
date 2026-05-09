@@ -27,3 +27,23 @@
 - Repository mutation: no
 - Risk: none
 
+### `rit init`
+
+- Baseline command checked: `git init -h`
+- Supported options: `-q`, `--quiet`, `--bare`, `-b <branch>`, `--initial-branch <branch>`, optional directory.
+- Unsupported options: templates, separate git dir, object format, ref format, shared repositories.
+- Git-compatible behavior: creates `HEAD`, `config`, `objects`, `refs`, `info`, `hooks`, `branches`.
+- Intentional differences: default branch is currently `master` unless explicitly set; template hooks are not copied.
+- Repository mutation: yes
+- Safety notes: files are first written through exclusive `.lock` files and then renamed into place.
+- Risk: low for empty or reinitialized repositories; unsupported advanced init modes fail instead of guessing.
+
+### `rit rev-parse`
+
+- Baseline command checked: `git rev-parse -h`
+- Supported options: `--git-dir`, `--show-toplevel`, `--is-inside-work-tree`.
+- Unsupported options: revision parsing, path formatting, quoting, parseopt, abbreviation, symbolic refs.
+- Git-compatible behavior: discovers `.git` by walking upward from the current directory.
+- Intentional differences: only the supported path/fact options are accepted.
+- Repository mutation: no
+- Risk: none

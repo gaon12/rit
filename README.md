@@ -6,7 +6,7 @@ The project is intentionally not a wrapper around the `git` executable. Existing
 
 ## Current Scope
 
-This repository currently implements the initial workspace skeleton, the `rit` CLI entry point, and basic `help` / `version` commands.
+This repository currently implements the initial workspace skeleton, the `rit` CLI entry point, repository discovery, and basic `help` / `version` / `init` / `rev-parse` commands.
 
 ## Development
 
@@ -15,4 +15,3 @@ cargo fmt --all
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
-
