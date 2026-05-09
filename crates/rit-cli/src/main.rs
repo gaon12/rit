@@ -16,6 +16,7 @@ Core commands:
   cat-file      Inspect loose objects
   ls-tree       List entries in a tree object
   status        Show porcelain working tree status
+  diff          Show working tree changes
 
 Run 'rit help <command>' for command-specific notes.
 ";
@@ -62,6 +63,12 @@ rit status --porcelain[=v1]
 Show a conservative porcelain v1 status.
 ";
 
+const DIFF_HELP: &str = "\
+rit diff (--name-only|--stat)
+
+Show working tree changes compared with the index.
+";
+
 fn main() -> ExitCode {
     match run(env::args().skip(1), &mut io::stdout(), &mut io::stderr()) {
         Ok(code) => code,
@@ -95,6 +102,7 @@ fn run(
         [command, rest @ ..] if command == "cat-file" => cat_file_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ls-tree" => ls_tree_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "status" => status_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "diff" => diff_command(rest, stdout, stderr),
         [command] if command == "help" => {
             stdout.write_all(GENERAL_HELP.as_bytes())?;
             Ok(ExitCode::SUCCESS)
@@ -126,6 +134,7 @@ fn print_command_help(
         "cat-file" => stdout.write_all(CAT_FILE_HELP.as_bytes())?,
         "ls-tree" => stdout.write_all(LS_TREE_HELP.as_bytes())?,
         "status" => stdout.write_all(STATUS_HELP.as_bytes())?,
+        "diff" => stdout.write_all(DIFF_HELP.as_bytes())?,
         unknown => {
             writeln!(stderr, "rit: no help for unknown command '{unknown}'")?;
             return Ok(ExitCode::from(129));
@@ -381,6 +390,44 @@ fn status_command(
     }
 }
 
+fn diff_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    if !matches!(args, [flag] if flag == "--name-only" || flag == "--stat") {
+        writeln!(
+            stderr,
+            "rit: diff currently supports only --name-only and --stat"
+        )?;
+        return Ok(ExitCode::from(129));
+    }
+
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    let diff = match repository.diff_worktree_to_index() {
+        Ok(diff) => diff,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(1));
+        }
+    };
+
+    match args[0].as_str() {
+        "--name-only" => {
+            for path in diff.name_only() {
+                writeln!(stdout, "{path}")?;
+            }
+        }
+        "--stat" => stdout.write_all(diff.to_stat_text().as_bytes())?,
+        _ => unreachable!("validated above"),
+    }
+
+    Ok(ExitCode::SUCCESS)
+}
+
 fn discover_repository(stderr: &mut dyn Write) -> io::Result<Option<rit_core::Repository>> {
     match rit_core::Repository::discover(".") {
         Ok(repository) => Ok(Some(repository)),
@@ -507,5 +554,14 @@ mod tests {
         assert_eq!(code, ExitCode::from(129));
         assert_eq!(stdout, "");
         assert!(stderr.contains("--porcelain=v1"));
+    }
+
+    #[test]
+    fn diff_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "diff"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit diff"));
+        assert_eq!(stderr, "");
     }
 }

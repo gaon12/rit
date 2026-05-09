@@ -77,3 +77,13 @@
 - Intentional differences: ignore handling supports simple literal and directory patterns first; advanced gitignore glob semantics are not complete yet.
 - Repository mutation: no
 - Risk: no repository writes.
+
+### `rit diff`
+
+- Baseline command checked: `git diff -h`
+- Supported options: `--name-only`, `--stat`.
+- Unsupported options: patch output, cached diff, commit/tree/blob arguments, pathspecs, rename/copy detection, binary stat details.
+- Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files.
+- Intentional differences: binary `--stat` reports a clear unsupported error until binary diff accounting is implemented.
+- Repository mutation: no
+- Risk: no repository writes.

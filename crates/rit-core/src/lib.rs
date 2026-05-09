@@ -4,6 +4,7 @@
 //! CLI crate should format these structured results instead of embedding Git
 //! behavior directly in argument handling.
 
+pub mod diff;
 pub mod error;
 pub mod index;
 pub mod object;
@@ -22,3 +23,4 @@ pub use status::{PorcelainStatus, StatusEntry};
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
+pub use diff::{DiffFileStat, DiffSummary};
