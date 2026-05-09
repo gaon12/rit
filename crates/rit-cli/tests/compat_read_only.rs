@@ -1,0 +1,132 @@
+use rit_testkit::{CommandSpec, CompareOptions, compare};
+use std::ffi::OsString;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[test]
+fn diff_worktree_outputs_match_git() {
+    let fixture = DiffFixture::new("worktree-diff");
+
+    for option in ["--name-only", "--name-status", "--numstat", "--stat"] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command(["diff", option]),
+            rit_command(["diff", option]),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(outcome.is_match(), "diff {option}\n{}", outcome.report());
+    }
+}
+
+#[test]
+fn diff_cached_outputs_match_git() {
+    let fixture = DiffFixture::new("cached-diff");
+
+    for option in ["--name-only", "--name-status", "--numstat", "--stat"] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command(["diff", "--cached", option]),
+            rit_command(["diff", "--cached", option]),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "diff --cached {option}\n{}",
+            outcome.report()
+        );
+    }
+}
+
+struct DiffFixture {
+    path: PathBuf,
+}
+
+impl DiffFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("a.txt"), "one\ntwo\n").expect("base file should be written");
+        fs::create_dir_all(path.join("nested")).expect("nested directory should be created");
+        fs::write(path.join("nested").join("base.txt"), "base\n")
+            .expect("nested base file should be written");
+        run_git(&path, ["add", "a.txt", "nested/base.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+
+        fs::write(path.join("a.txt"), "one\nthree\nfour\n")
+            .expect("modified file should be written");
+        fs::write(path.join("b.txt"), "new\n").expect("added file should be written");
+        run_git(&path, ["add", "a.txt", "b.txt"]);
+
+        fs::write(path.join("a.txt"), "one\nthree\nfour\nfive\n")
+            .expect("worktree modification should be written");
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for DiffFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+fn git_command<const N: usize>(args: [&str; N]) -> CommandSpec {
+    CommandSpec::new("git", os_args(args))
+}
+
+fn rit_command<const N: usize>(args: [&str; N]) -> CommandSpec {
+    CommandSpec::new(rit_binary(), os_args(args))
+}
+
+fn os_args<const N: usize>(args: [&str; N]) -> Vec<OsString> {
+    args.into_iter().map(OsString::from).collect()
+}
+
+fn rit_binary() -> OsString {
+    std::env::var_os("CARGO_BIN_EXE_rit").unwrap_or_else(|| {
+        let mut path =
+            std::env::current_exe().expect("current test executable path should be available");
+        path.pop();
+        if path.ends_with("deps") {
+            path.pop();
+        }
+        path.push(format!("rit{}", std::env::consts::EXE_SUFFIX));
+        path.into_os_string()
+    })
+}
+
+fn run_git<const N: usize>(cwd: &Path, args: [&str; N]) {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .expect("git should start");
+    assert!(
+        output.status.success(),
+        "git command failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn temp_path(name: &str) -> PathBuf {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time should be after epoch")
+        .as_nanos();
+    std::env::temp_dir().join(format!("rit-cli-compat-{name}-{unique}"))
+}

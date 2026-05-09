@@ -181,6 +181,12 @@ impl CompareOutcome {
         );
         push_check(&mut report, "stdout", self.git.stdout == self.rit.stdout);
         push_check(&mut report, "stderr", self.git.stderr == self.rit.stderr);
+        if self.git.stdout != self.rit.stdout {
+            append_first_text_difference(&mut report, "stdout", &self.git.stdout, &self.rit.stdout);
+        }
+        if self.git.stderr != self.rit.stderr {
+            append_first_text_difference(&mut report, "stderr", &self.git.stderr, &self.rit.stderr);
+        }
         if let Some(repository_state) = &self.repository_state {
             push_check(&mut report, "repository state", repository_state.is_match());
             if !repository_state.is_match() {
@@ -428,6 +434,36 @@ fn push_check(report: &mut String, name: &str, matched: bool) {
     report.push_str(if matched { "same\n" } else { "different\n" });
 }
 
+fn append_first_text_difference(report: &mut String, label: &str, git: &str, rit: &str) {
+    let git_lines = git.lines().collect::<Vec<_>>();
+    let rit_lines = rit.lines().collect::<Vec<_>>();
+    let max_len = git_lines.len().max(rit_lines.len());
+
+    for index in 0..max_len {
+        let git_line = git_lines.get(index).copied();
+        let rit_line = rit_lines.get(index).copied();
+        if git_line == rit_line {
+            continue;
+        }
+        report.push_str("first ");
+        report.push_str(label);
+        report.push_str(" difference at line ");
+        report.push_str(&(index + 1).to_string());
+        report.push_str(":\n  git: ");
+        report.push_str(git_line.unwrap_or("<missing>"));
+        report.push_str("\n  rit: ");
+        report.push_str(rit_line.unwrap_or("<missing>"));
+        report.push('\n');
+        return;
+    }
+
+    if git != rit {
+        report.push_str("first ");
+        report.push_str(label);
+        report.push_str(" difference: text differs without line-level difference\n");
+    }
+}
+
 fn hex(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut output = String::with_capacity(bytes.len() * 2);
@@ -440,7 +476,7 @@ fn hex(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{CommandSpec, CompareOptions, compare};
+    use super::{CommandOutput, CommandSpec, CompareOptions, CompareOutcome, compare};
     use std::ffi::OsString;
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -458,6 +494,30 @@ mod tests {
 
         assert!(outcome.is_match(), "{}", outcome.report());
         remove_dir_all(&fixture);
+    }
+
+    #[test]
+    fn report_includes_first_stdout_difference() {
+        let outcome = CompareOutcome {
+            git: CommandOutput {
+                exit_code: Some(0),
+                stdout: "same\nleft\n".to_owned(),
+                stderr: String::new(),
+            },
+            rit: CommandOutput {
+                exit_code: Some(0),
+                stdout: "same\nright\n".to_owned(),
+                stderr: String::new(),
+            },
+            repository_state: None,
+        };
+
+        let report = outcome.report();
+
+        assert!(report.contains("stdout: different"));
+        assert!(report.contains("first stdout difference at line 2"));
+        assert!(report.contains("git: left"));
+        assert!(report.contains("rit: right"));
     }
 
     fn git_program() -> OsString {

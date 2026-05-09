@@ -12,3 +12,5 @@ path = "src/main.rs"
 [dependencies]
 rit-core = { path = "../rit-core" }
 
+[dev-dependencies]
+rit-testkit = { path = "../rit-testkit" }

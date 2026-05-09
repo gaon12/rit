@@ -64,3 +64,8 @@ command in the other copy, then compares:
 - exit code
 - selected `.git` metadata
 - working tree file snapshot
+
+The `rit-cli` integration tests include reusable read-only diff fixtures for
+default and cached output modes. Some worktree diff comparisons intentionally
+skip repository-state comparison until Git-compatible index stat refresh is
+implemented.

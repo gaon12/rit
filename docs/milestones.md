@@ -41,9 +41,9 @@ Completion criteria:
 - [x] Provide `rit-testkit` CLI.
 - [x] Compare stdout, stderr, and exit code.
 - [x] Compare repository snapshots.
-- [ ] Add reusable checked-in fixtures for common read-only commands.
+- [x] Add reusable checked-in fixtures for common read-only commands.
 - [ ] Add fixtures for local write commands.
-- [ ] Add focused reports for first differing stdout/stderr line.
+- [x] Add focused reports for first differing stdout/stderr line.
 
 Completion criteria:
 - A contributor can add a Git-vs-rit comparison without hand-writing process
@@ -250,7 +250,7 @@ Completion criteria:
 
 ## Active Queue
 
-1. Add checked-in compatibility fixtures for read-only commands.
+1. Add fixtures for local write commands.
 2. Expand `status --porcelain=v1` with stronger Git compatibility.
 3. Implement pathspec support shared by status/diff/add/restore/reset.
 4. Add index stat refresh or document and test the remaining difference.
