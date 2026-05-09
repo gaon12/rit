@@ -75,9 +75,9 @@ Show a conservative porcelain v1 status.
 ";
 
 const DIFF_HELP: &str = "\
-rit diff (--name-only|--stat)
+rit diff [--cached|--staged] (--name-only|--stat)
 
-Show working tree changes compared with the index.
+Show working tree changes compared with the index, or staged changes compared with HEAD.
 ";
 
 const LOG_HELP: &str = "\
@@ -526,19 +526,43 @@ fn diff_command(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    if !matches!(args, [flag] if flag == "--name-only" || flag == "--stat") {
+    let mut cached = false;
+    let mut output_mode = None;
+
+    for arg in args {
+        match arg.as_str() {
+            "--cached" | "--staged" => cached = true,
+            "--name-only" | "--stat" => {
+                if output_mode.replace(arg.as_str()).is_some() {
+                    writeln!(stderr, "rit: diff accepts one output option")?;
+                    return Ok(ExitCode::from(129));
+                }
+            }
+            unsupported => {
+                writeln!(stderr, "rit: unsupported diff option '{unsupported}'")?;
+                return Ok(ExitCode::from(129));
+            }
+        }
+    }
+
+    let Some(output_mode) = output_mode else {
         writeln!(
             stderr,
-            "rit: diff currently supports only --name-only and --stat"
+            "rit: diff currently supports --name-only and --stat"
         )?;
         return Ok(ExitCode::from(129));
-    }
+    };
 
     let repository = match discover_repository(stderr)? {
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    let diff = match repository.diff_worktree_to_index() {
+    let diff_result = if cached {
+        repository.diff_index_to_head()
+    } else {
+        repository.diff_worktree_to_index()
+    };
+    let diff = match diff_result {
         Ok(diff) => diff,
         Err(error) => {
             writeln!(stderr, "rit: {error}")?;
@@ -546,7 +570,7 @@ fn diff_command(
         }
     };
 
-    match args[0].as_str() {
+    match output_mode {
         "--name-only" => {
             for path in diff.name_only() {
                 writeln!(stdout, "{path}")?;

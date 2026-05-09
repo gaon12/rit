@@ -6,6 +6,7 @@
 - Checked command list: `git help -a`
 - `git help <command>` opened the local manual pager in this environment and timed out, so command-specific checks used `git <command> -h`.
 - 2026-05-09 baseline refresh checked: `git status -h`, `git add -h`, `git commit -h`, `git diff -h`, and `git log -h`.
+- 2026-05-09 diff cached milestone checked: `git diff -h`.
 
 ## Milestone Notes
 
@@ -28,6 +29,12 @@
 - Added `Repository::open(path)` as the application-facing alias for repository discovery.
 - Repository discovery and init now construct repositories through a shared format guard.
 - Repositories with `core.repositoryformatversion` other than `0`, or unknown `[extensions]` keys, fail with clear errors before use.
+
+### M3: Local diff scope expansion
+
+- Added staged diff support through `Repository::diff_index_to_head()`.
+- `rit diff --cached --name-only`, `rit diff --cached --stat`, `rit diff --staged --name-only`, and `rit diff --staged --stat` now compare the index with `HEAD`.
+- Unborn `HEAD` is treated like an empty tree for staged diff, matching the usual Git shape for newly added files.
 
 ## Implemented Commands
 
@@ -104,9 +111,10 @@
 ### `rit diff`
 
 - Baseline command checked: `git diff -h`
-- Supported options: `--name-only`, `--stat`.
-- Unsupported options: patch output, cached diff, commit/tree/blob arguments, pathspecs, rename/copy detection, binary stat details.
+- Supported options: `--name-only`, `--stat`, plus `--cached`/`--staged` with those output modes.
+- Unsupported options: patch output, commit/tree/blob arguments, pathspecs, rename/copy detection, binary stat details.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files.
+- Git-compatible behavior: cached diff scope compares the index against `HEAD`.
 - Intentional differences: binary `--stat` reports a clear unsupported error until binary diff accounting is implemented.
 - Repository mutation: no
 - Risk: no repository writes.

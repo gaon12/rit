@@ -25,8 +25,9 @@ The current codebase implements an early local Git subset:
   resolution.
 - CLI commands: `version`, `help`, `init`, `rev-parse`, `cat-file`, `ls-tree`,
   `ls-files`, `show`, `status --porcelain=v1`, `diff --name-only`,
-  `diff --stat`, `log`, `add`, `commit`, `branch`, `tag`, `restore`, `reset`,
-  `checkout`, and `switch`.
+  `diff --stat`, `diff --cached --name-only`, `diff --cached --stat`, `log`,
+  `add`, `commit`, `branch`, `tag`, `restore`, `reset`, `checkout`, and
+  `switch`.
 
 ## Compatibility Policy
 
@@ -46,8 +47,8 @@ The current codebase implements an early local Git subset:
   pathspec-file options define the eventual add scope.
 - `git commit -h`: message, author/date, hooks, amend, dry-run, signing, and
   pathspec commit modes define the eventual commit scope.
-- `git diff -h`: patch, stat, numstat, name-only, name-status, rename/copy, and
-  no-index modes define the eventual diff scope.
+- `git diff -h`: patch, cached/staged, stat, numstat, name-only, name-status,
+  rename/copy, and no-index modes define the eventual diff scope.
 - `git log -h`: revision ranges, decoration, mailmap, path filtering, and diff
   output define the eventual log/show scope.
 
@@ -62,4 +63,3 @@ command in the other copy, then compares:
 - exit code
 - selected `.git` metadata
 - working tree file snapshot
-
