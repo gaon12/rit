@@ -43,7 +43,7 @@ rit init
 rit rev-parse
 rit cat-file
 rit ls-tree
-rit ls-files
+rit ls-files [--stage] [--] [<pathspec>...]
 rit show
 rit status --porcelain=v1
 rit status --porcelain=v1 -- <pathspec>

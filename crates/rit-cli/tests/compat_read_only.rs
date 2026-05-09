@@ -94,6 +94,30 @@ fn status_pathspec_outputs_match_git() {
     }
 }
 
+#[test]
+fn ls_files_pathspec_outputs_match_git() {
+    let fixture = DiffFixture::new("pathspec-ls-files");
+
+    for args in [
+        vec!["ls-files", "--", "nested"],
+        vec!["ls-files", "--stage", "--", "nested"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "pathspec ls-files {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
 struct DiffFixture {
     path: PathBuf,
 }

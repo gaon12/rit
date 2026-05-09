@@ -49,10 +49,12 @@
   `diff ... -- <pathspec>`.
 - Added ordinary literal file, directory, and `.` pathspec expansion for
   `add`, `restore`, and `reset`.
+- Added ordinary literal pathspec filtering for `ls-files`, including
+  `--stage`.
 - Added local write compatibility coverage that compares Git and rit porcelain
   state after directory pathspec `add`, `restore`, and `reset`.
 - Still unsupported: pathspec magic, glob pathspec matching, pathspec files,
-  and pathspec filtering for `log`, `show`, `ls-tree`, and `ls-files`.
+  and pathspec filtering for `log`, `show`, and `ls-tree`.
 
 ## Implemented Commands
 
@@ -259,8 +261,10 @@
 ### `rit ls-files`
 
 - Baseline command checked: `git ls-files -h`
-- Supported options: default cached file listing, `--stage`/`-s`.
-- Unsupported options: deleted/modified/others/ignored filters, pathspecs, EOL/debug/format output, sparse/submodule modes.
+- Supported options: default cached file listing, `--stage`/`-s`, and ordinary
+  literal file or directory pathspec filters.
+- Unsupported options: deleted/modified/others/ignored filters, advanced
+  pathspec forms, EOL/debug/format output, sparse/submodule modes.
 - Git-compatible behavior: lists index paths and stage records as `<mode> <object> 0<TAB><path>`.
 - Repository mutation: no.
 

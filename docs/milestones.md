@@ -85,7 +85,8 @@ Completion criteria:
 - [~] Pathspec support for read-only commands.
   - [x] Ordinary literal pathspec filters for `status --porcelain=v1` and
     `diff` summary modes.
-  - [ ] Pathspec filters for `log`, `show`, `ls-tree`, and `ls-files`.
+  - [x] Ordinary literal pathspec filters for `ls-files`.
+  - [ ] Pathspec filters for `log`, `show`, and `ls-tree`.
 - [ ] Rename detection.
 - [ ] Binary diff accounting.
 

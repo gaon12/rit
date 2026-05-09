@@ -148,7 +148,7 @@ Show one commit, tree, or blob object. Commit diffs are not emitted yet.
 ";
 
 const LS_FILES_HELP: &str = "\
-rit ls-files [--stage]
+rit ls-files [--stage] [--] [<pathspec>...]
 
 Show files tracked in the index.
 ";
@@ -727,10 +727,16 @@ fn ls_files_command(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    if !args.is_empty() && !matches!(args, [flag] if flag == "--stage" || flag == "-s") {
-        writeln!(stderr, "rit: ls-files currently supports only --stage")?;
+    let Some((stage, pathspec_args)) = parse_ls_files_args(args, stderr)? else {
         return Ok(ExitCode::from(129));
-    }
+    };
+    let pathspecs = match rit_core::PathspecSet::from_args(&pathspec_args) {
+        Ok(pathspecs) => pathspecs,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(129));
+        }
+    };
     let repository = match discover_repository(stderr)? {
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
@@ -742,8 +748,10 @@ fn ls_files_command(
             return Ok(ExitCode::from(1));
         }
     };
-    let stage = matches!(args, [flag] if flag == "--stage" || flag == "-s");
     for entry in index.entries {
+        if !pathspecs.matches(&entry.path) {
+            continue;
+        }
         if stage {
             writeln!(
                 stdout,
@@ -755,6 +763,29 @@ fn ls_files_command(
         }
     }
     Ok(ExitCode::SUCCESS)
+}
+
+fn parse_ls_files_args(
+    args: &[String],
+    stderr: &mut dyn Write,
+) -> io::Result<Option<(bool, Vec<String>)>> {
+    let mut stage = false;
+    let mut pathspecs = Vec::new();
+    let mut after_separator = false;
+
+    for arg in args {
+        match arg.as_str() {
+            "--" if !after_separator => after_separator = true,
+            "--stage" | "-s" if !after_separator => stage = true,
+            unsupported if unsupported.starts_with('-') && !after_separator => {
+                writeln!(stderr, "rit: unsupported ls-files option '{unsupported}'")?;
+                return Ok(None);
+            }
+            pathspec => pathspecs.push(pathspec.to_owned()),
+        }
+    }
+
+    Ok(Some((stage, pathspecs)))
 }
 
 fn print_commit_no_patch(
