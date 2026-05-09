@@ -34,6 +34,7 @@ The current codebase implements an early local Git subset:
 - Ordinary literal file and directory pathspec filtering is supported for
   `ls-files`, including `--stage`.
 - Ordinary literal path lookup is supported for `ls-tree`.
+- Ordinary literal path filtering is supported for first-parent `log`.
 - Ordinary literal file, directory, and `.` pathspec expansion is supported for
   `add`, `restore`, and `reset`.
 
@@ -84,6 +85,9 @@ matching, and pathspec-file input remain unsupported.
 
 `ls-tree` compatibility tests cover literal directory and file path lookup with
 default, `--name-only`, and `--object-only` output.
+
+`log` compatibility tests cover `--oneline -- <pathspec>` on simple
+first-parent histories.
 
 Local write compatibility tests currently cover directory pathspec behavior for
 `add`, `restore`, and `reset` by comparing the resulting porcelain status and

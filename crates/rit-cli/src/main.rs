@@ -81,7 +81,7 @@ Show working tree changes compared with the index, or staged changes compared wi
 ";
 
 const LOG_HELP: &str = "\
-rit log [--oneline]
+rit log [--oneline] [--] [<pathspec>...]
 
 Show commits reachable from HEAD by following the first parent.
 ";
@@ -658,16 +658,22 @@ fn log_command(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    if !args.is_empty() && !matches!(args, [flag] if flag == "--oneline") {
-        writeln!(stderr, "rit: log currently supports only --oneline")?;
+    let Some((oneline, pathspec_args)) = parse_log_args(args, stderr)? else {
         return Ok(ExitCode::from(129));
-    }
+    };
+    let pathspecs = match rit_core::PathspecSet::from_args(&pathspec_args) {
+        Ok(pathspecs) => pathspecs,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(129));
+        }
+    };
 
     let repository = match discover_repository(stderr)? {
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    let entries = match repository.log_first_parent() {
+    let entries = match repository.log_first_parent_with_pathspecs(&pathspecs) {
         Ok(entries) => entries,
         Err(error) => {
             writeln!(stderr, "rit: {error}")?;
@@ -675,7 +681,7 @@ fn log_command(
         }
     };
 
-    if matches!(args, [flag] if flag == "--oneline") {
+    if oneline {
         for entry in entries {
             writeln!(
                 stdout,
@@ -694,6 +700,29 @@ fn log_command(
     }
 
     Ok(ExitCode::SUCCESS)
+}
+
+fn parse_log_args(
+    args: &[String],
+    stderr: &mut dyn Write,
+) -> io::Result<Option<(bool, Vec<String>)>> {
+    let mut oneline = false;
+    let mut pathspecs = Vec::new();
+    let mut after_separator = false;
+
+    for arg in args {
+        match arg.as_str() {
+            "--" if !after_separator => after_separator = true,
+            "--oneline" if !after_separator => oneline = true,
+            unsupported if unsupported.starts_with('-') && !after_separator => {
+                writeln!(stderr, "rit: unsupported log option '{unsupported}'")?;
+                return Ok(None);
+            }
+            pathspec => pathspecs.push(pathspec.to_owned()),
+        }
+    }
+
+    Ok(Some((oneline, pathspecs)))
 }
 
 fn show_command(

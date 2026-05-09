@@ -143,6 +143,30 @@ fn ls_tree_pathspec_outputs_match_git() {
     }
 }
 
+#[test]
+fn log_pathspec_outputs_match_git() {
+    let fixture = LogPathFixture::new("pathspec-log");
+
+    for args in [
+        vec!["log", "--oneline", "--", "a.txt"],
+        vec!["log", "--oneline", "--", "nested"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "pathspec log {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
 struct DiffFixture {
     path: PathBuf,
 }
@@ -187,6 +211,51 @@ impl DiffFixture {
 }
 
 impl Drop for DiffFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct LogPathFixture {
+    path: PathBuf,
+}
+
+impl LogPathFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(path.join("nested")).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("a.txt"), "base\n").expect("base file should be written");
+        fs::write(path.join("nested").join("base.txt"), "base\n")
+            .expect("nested base file should be written");
+        run_git(&path, ["add", "a.txt", "nested/base.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+
+        fs::write(path.join("a.txt"), "base\na change\n").expect("a file should be modified");
+        run_git(&path, ["add", "a.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "change a"]);
+
+        fs::write(
+            path.join("nested").join("base.txt"),
+            "base\nnested change\n",
+        )
+        .expect("nested file should be modified");
+        run_git(&path, ["add", "nested/base.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "change nested"]);
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for LogPathFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

@@ -53,10 +53,12 @@
   `--stage`.
 - Added ordinary literal path lookup for `ls-tree <tree-ish> <path>`,
   including `--name-only` and `--object-only`.
+- Added ordinary literal path filtering for first-parent `log`, including
+  `--oneline`.
 - Added local write compatibility coverage that compares Git and rit porcelain
   state after directory pathspec `add`, `restore`, and `reset`.
 - Still unsupported: pathspec magic, glob pathspec matching, pathspec files,
-  and pathspec filtering for `log` and `show`.
+  and pathspec filtering for `show`.
 
 ## Implemented Commands
 
@@ -151,10 +153,15 @@
 ### `rit log`
 
 - Baseline command checked: `git log -h`
-- Supported options: default output, `--oneline`.
-- Unsupported options: revision ranges, decoration, graph, path filtering, grep, ordering controls, diff output.
-- Git-compatible behavior: reads commits from `HEAD`, follows the first parent, prints default author/date/message layout and 7-character oneline IDs.
-- Intentional differences: merge traversal is first-parent only until revision walking is implemented.
+- Supported options: default output, `--oneline`, and ordinary literal file or
+  directory path filters.
+- Unsupported options: revision ranges, decoration, graph, advanced path
+  history simplification, grep, ordering controls, diff output.
+- Git-compatible behavior: reads commits from `HEAD`, follows the first parent,
+  prints default author/date/message layout and 7-character oneline IDs.
+- Intentional differences: merge traversal is first-parent only until revision
+  walking is implemented; rename-aware history simplification is not
+  implemented.
 - Repository mutation: no
 - Risk: no repository writes.
 

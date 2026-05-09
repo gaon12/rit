@@ -87,7 +87,8 @@ Completion criteria:
     `diff` summary modes.
   - [x] Ordinary literal pathspec filters for `ls-files`.
   - [x] Ordinary literal path lookup for `ls-tree`.
-  - [ ] Pathspec filters for `log` and `show`.
+  - [x] Ordinary literal path filters for first-parent `log`.
+  - [ ] Pathspec filters for `show`.
 - [ ] Rename detection.
 - [ ] Binary diff accounting.
 
