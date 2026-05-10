@@ -358,6 +358,31 @@ fn status_detached_branch_header_matches_git() {
 }
 
 #[test]
+fn status_unborn_branch_header_matches_git() {
+    let fixture = UnbornStatusFixture::new("unborn-branch-header-status");
+
+    for args in [
+        vec!["status", "--porcelain=v1", "-b"],
+        vec!["status", "--porcelain=v1", "-b", "-z"],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "unborn branch header status {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn status_index_refresh_difference_is_documented() {
     let fixture = StatusRefreshFixture::new("status-refresh-difference");
     let outcome = compare(&CompareOptions::new(
@@ -784,6 +809,33 @@ impl DetachedStatusFixture {
 }
 
 impl Drop for DetachedStatusFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct UnbornStatusFixture {
+    path: PathBuf,
+}
+
+impl UnbornStatusFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("new.txt"), "new\n").expect("untracked file should be written");
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for UnbornStatusFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

@@ -184,9 +184,9 @@
   characters are quoted.
 - Git-compatible behavior: `-z` writes raw paths and terminates each entry with
   NUL instead of newline.
-- Git-compatible behavior: `-b` writes the porcelain branch header for local
-  and detached HEAD states. Upstream ahead/behind details and unborn-repository
-  status are not implemented yet.
+- Git-compatible behavior: `-b` writes the porcelain branch header for local,
+  unborn, and detached HEAD states. Upstream ahead/behind details are not
+  implemented yet.
 - Intentional differences: ignore handling supports simple literal and directory patterns first; advanced gitignore glob semantics are not complete yet.
 - Repository mutation: no
 - Risk: no repository writes.

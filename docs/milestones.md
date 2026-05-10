@@ -100,7 +100,7 @@ Completion criteria:
     modes.
   - [x] Git-like `-z` NUL-terminated porcelain v1 output.
   - [x] Git-like `-b` / `--branch` porcelain v1 branch header for local and
-    detached HEAD states.
+    unborn/detached HEAD states.
 - [x] `rit diff --name-only`
 - [x] `rit diff --name-status`
 - [x] `rit diff --stat`
