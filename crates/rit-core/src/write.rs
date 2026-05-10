@@ -309,7 +309,11 @@ impl Repository {
                     entry.object_id, object.kind
                 )));
             }
-            write_worktree_file_atomically(&join_slash_path(worktree, &entry.path), &object.data)?;
+            write_worktree_file_atomically(
+                &join_slash_path(worktree, &entry.path),
+                &object.data,
+                entry.mode,
+            )?;
         }
 
         Ok(())
@@ -568,7 +572,7 @@ impl Repository {
                     entry.object_id, object.kind
                 )));
             }
-            write_worktree_file_atomically(&worktree_path, &object.data)?;
+            write_worktree_file_atomically(&worktree_path, &object.data, entry.mode)?;
         }
 
         Index {
@@ -1110,7 +1114,7 @@ fn write_text_atomically(path: &Path, contents: &str) -> Result<()> {
     Ok(())
 }
 
-fn write_worktree_file_atomically(path: &Path, contents: &[u8]) -> Result<()> {
+fn write_worktree_file_atomically(path: &Path, contents: &[u8], mode: u32) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|source| RitError::io(parent, source))?;
     }
@@ -1130,6 +1134,23 @@ fn write_worktree_file_atomically(path: &Path, contents: &[u8]) -> Result<()> {
         fs::remove_file(path).map_err(|source| RitError::io(path, source))?;
     }
     fs::rename(&temp_path, path).map_err(|source| RitError::io(path, source))?;
+    set_worktree_file_mode(path, mode)?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn set_worktree_file_mode(path: &Path, mode: u32) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let permission_mode = match mode {
+        0o100755 => 0o755,
+        _ => 0o644,
+    };
+    let permissions = fs::Permissions::from_mode(permission_mode);
+    fs::set_permissions(path, permissions).map_err(|source| RitError::io(path, source))
+}
+
+#[cfg(not(unix))]
+fn set_worktree_file_mode(_path: &Path, _mode: u32) -> Result<()> {
     Ok(())
 }
 
@@ -1279,6 +1300,39 @@ mod tests {
         remove_dir_all(&temp);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn restore_worktree_paths_materializes_executable_mode() {
+        let temp = temp_path("restore-executable-mode");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        let script_path = temp.join("script.sh");
+        fs::write(&script_path, "#!/bin/sh\n").expect("file should be written");
+        fs::write(
+            repository.git_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n[user]\n\tname = Rit Test\n\temail = rit@example.test\n",
+        )
+        .expect("config should be written");
+        repository
+            .add_paths_with_options(
+                &["script.sh".to_owned()],
+                &AddOptions {
+                    mode_override: Some(FileModeOverride::Executable),
+                },
+            )
+            .expect("file should be added with executable mode");
+        repository
+            .commit_index("add executable")
+            .expect("commit should be created");
+
+        set_test_permissions(&script_path, 0o644);
+        repository
+            .restore_worktree_paths(&["script.sh".to_owned()])
+            .expect("restore should write executable mode");
+
+        assert!(is_test_executable(&script_path));
+        remove_dir_all(&temp);
+    }
+
     #[test]
     fn restore_directory_pathspec_restores_matching_worktree_files() {
         let temp = temp_path("restore-directory");
@@ -1349,5 +1403,23 @@ mod tests {
         if path.exists() {
             fs::remove_dir_all(path).expect("temporary directory should be removed");
         }
+    }
+
+    #[cfg(unix)]
+    fn set_test_permissions(path: &Path, mode: u32) {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(mode))
+            .expect("test permissions should be set");
+    }
+
+    #[cfg(unix)]
+    fn is_test_executable(path: &Path) -> bool {
+        use std::os::unix::fs::PermissionsExt;
+        fs::metadata(path)
+            .expect("metadata should read")
+            .permissions()
+            .mode()
+            & 0o111
+            != 0
     }
 }

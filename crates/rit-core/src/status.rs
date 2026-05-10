@@ -198,19 +198,24 @@ impl Repository {
                     } else if hash_worktree_file(&full_path)? != index_object.object_id {
                         'M'
                     } else {
-                        if let Some(position) = index_entry_positions.get(path) {
-                            let metadata = fs::metadata(&full_path)
-                                .map_err(|source| RitError::io(&full_path, source))?;
-                            let entry = &mut index.entries[*position];
-                            let refreshed_stat = entry.stat.with_mtime_from_metadata(&metadata);
-                            let refreshed_size = metadata.len().min(u32::MAX as u64) as u32;
-                            if entry.stat != refreshed_stat || entry.file_size != refreshed_size {
-                                entry.stat = refreshed_stat;
-                                entry.file_size = refreshed_size;
-                                index_refreshed = true;
+                        let metadata = fs::metadata(&full_path)
+                            .map_err(|source| RitError::io(&full_path, source))?;
+                        if !worktree_mode_matches_index(&metadata, index_object.mode) {
+                            'M'
+                        } else {
+                            if let Some(position) = index_entry_positions.get(path) {
+                                let entry = &mut index.entries[*position];
+                                let refreshed_stat = entry.stat.with_mtime_from_metadata(&metadata);
+                                let refreshed_size = metadata.len().min(u32::MAX as u64) as u32;
+                                if entry.stat != refreshed_stat || entry.file_size != refreshed_size
+                                {
+                                    entry.stat = refreshed_stat;
+                                    entry.file_size = refreshed_size;
+                                    index_refreshed = true;
+                                }
                             }
+                            ' '
                         }
-                        ' '
                     }
                 }
             };
@@ -329,6 +334,19 @@ struct TreeBlobEntry {
 fn parse_tree_mode(mode: &str) -> Result<u32> {
     u32::from_str_radix(mode, 8)
         .map_err(|_| RitError::invalid_input(format!("invalid tree mode: {mode}")))
+}
+
+#[cfg(unix)]
+fn worktree_mode_matches_index(metadata: &fs::Metadata, index_mode: u32) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    let executable = metadata.permissions().mode() & 0o111 != 0;
+    let worktree_mode = if executable { 0o100755 } else { 0o100644 };
+    worktree_mode == index_mode
+}
+
+#[cfg(not(unix))]
+fn worktree_mode_matches_index(_metadata: &fs::Metadata, _index_mode: u32) -> bool {
+    true
 }
 
 fn quote_porcelain_path(path: &str) -> String {
@@ -576,7 +594,15 @@ mod tests {
         untracked_status_paths,
     };
     use crate::PathspecSet;
+    #[cfg(unix)]
+    use crate::{AddOptions, FileModeOverride, InitOptions, Repository};
     use std::collections::BTreeSet;
+    #[cfg(unix)]
+    use std::fs;
+    #[cfg(unix)]
+    use std::path::{Path, PathBuf};
+    #[cfg(unix)]
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn porcelain_v1_renders_entries() {
@@ -748,7 +774,63 @@ mod tests {
         assert_eq!(paths, set(["ignored/"]));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn status_reports_worktree_executable_bit_mismatch() {
+        let temp = temp_path("status-executable-mode");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        let script_path = temp.join("script.sh");
+        fs::write(&script_path, "#!/bin/sh\n").expect("file should be written");
+        fs::write(
+            repository.git_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n[user]\n\tname = Rit Test\n\temail = rit@example.test\n",
+        )
+        .expect("config should be written");
+        repository
+            .add_paths_with_options(
+                &["script.sh".to_owned()],
+                &AddOptions {
+                    mode_override: Some(FileModeOverride::Executable),
+                },
+            )
+            .expect("file should be added as executable");
+        repository
+            .commit_index("add executable")
+            .expect("commit should be created");
+        set_test_permissions(&script_path, 0o644);
+
+        let status = repository
+            .status_porcelain_v1()
+            .expect("status should be computed");
+
+        assert_eq!(status.to_porcelain_v1(), " M script.sh\n");
+        remove_dir_all(&temp);
+    }
+
     fn set<const N: usize>(paths: [&str; N]) -> BTreeSet<String> {
         paths.into_iter().map(ToOwned::to_owned).collect()
+    }
+
+    #[cfg(unix)]
+    fn temp_path(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("rit-status-{name}-{unique}"))
+    }
+
+    #[cfg(unix)]
+    fn set_test_permissions(path: &Path, mode: u32) {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(mode))
+            .expect("test permissions should be set");
+    }
+
+    #[cfg(unix)]
+    fn remove_dir_all(path: &Path) {
+        if path.exists() {
+            fs::remove_dir_all(path).expect("temporary directory should be removed");
+        }
     }
 }

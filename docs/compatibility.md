@@ -47,6 +47,9 @@ The current codebase implements an early local Git subset:
   `add`, `restore`, and `reset`.
 - `add --chmod=+x|-x` records executable-bit mode overrides in the index and
   committed trees.
+- On Unix, `status --porcelain=v1` detects worktree executable-bit changes and
+  `restore`/`checkout` materialize `100755` paths as executable. Windows keeps
+  filemode-insensitive behavior.
 - Detached `checkout <commit>` is supported for clean worktrees.
 - `branch -d` refuses unmerged local branches.
 
@@ -141,6 +144,8 @@ Reusable local write fixture builders live in `rit-testkit` so new write
 comparisons can share repository setup.
 Local write compatibility tests also cover `add --chmod=+x` by comparing
 porcelain status after staging and `git ls-tree` output after committing.
+Unix-only unit coverage verifies executable-mode restore and worktree status
+refresh behavior.
 
 Commit compatibility tests cover `--author` and raw `--date` overrides with
 fixed committer environment variables by comparing the resulting `HEAD` object

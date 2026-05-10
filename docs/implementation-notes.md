@@ -21,7 +21,8 @@
 - 2026-05-10 milestone verification checked: `git --version`,
   `git help -a`, `git worktree -h`, `git rev-parse --git-dir`, and
   `git rev-parse --git-common-dir`.
-- 2026-05-10 executable-bit slice checked: `git add -h` and `git status -h`.
+- 2026-05-10 executable-bit slice checked: `git add -h`, `git status -h`,
+  `git checkout -h`, and `git restore -h`.
 
 ## Milestone Notes
 
@@ -256,9 +257,12 @@
   stage deletions for matching tracked files that no longer exist.
 - Git-compatible behavior: `--chmod=+x|-x` updates the index mode for regular
   files and committed trees preserve `100644`/`100755` modes.
+- Git-compatible behavior: existing index modes are preserved when content is
+  refreshed without an explicit `--chmod` override.
 - Intentional differences: pathspec magic, ignored-file checks, and
-  pathspec-file inputs are not implemented yet. Platform executable-bit
-  changes observed directly from the worktree are still incomplete.
+  pathspec-file inputs are not implemented yet. On Windows, worktree
+  executable bits remain filemode-insensitive like Git's usual `core.filemode`
+  behavior there.
 - Repository mutation: yes, writes loose objects and `.git/index` using lock/rename.
 - Risk: low for explicit files; missing paths remove matching index entries.
 
@@ -279,6 +283,8 @@
 - Git-compatible behavior: runs executable `pre-commit`,
   `prepare-commit-msg`, `commit-msg`, and `post-commit` hooks from
   `.git/hooks`; `--no-verify` bypasses `pre-commit` and `commit-msg`.
+- Git-compatible behavior: committed `100644`/`100755` blob modes are written
+  into tree objects from the index.
 - Intentional differences: default commit timestamps use UTC `+0000`;
   Windows hook execution looks for common Git for Windows `sh.exe` locations
   when running shebang hook scripts.
@@ -317,7 +323,8 @@
   restore index from `HEAD`, with ordinary literal file, directory, `.`, simple
   `*`, `?`, and bracket-class wildcard pathspecs.
 - Unsupported options: source revisions, patch mode, merge conflict modes, sparse controls, pathspec files.
-- Git-compatible behavior: explicit tracked file restore for regular files.
+- Git-compatible behavior: explicit tracked file restore for regular files,
+  including executable worktree permissions for `100755` index entries on Unix.
 - Intentional differences: pathspec magic/pathspec files and conflict handling
   are not implemented.
 - Repository mutation: worktree restore writes files; staged restore writes `.git/index`.
@@ -345,7 +352,9 @@
   detached `HEAD`, `-b <branch>` create and checkout.
 - Unsupported options: path checkout, explicit `--detach`, force, orphan,
   tracking, merge/conflict modes, submodules.
-- Git-compatible behavior: updates symbolic `HEAD`, writes index from target commit tree, materializes tracked worktree files.
+- Git-compatible behavior: updates symbolic `HEAD`, writes index from target
+  commit tree, materializes tracked worktree files, and applies executable
+  permissions for `100755` entries on Unix.
 - Git-compatible behavior: detached checkout writes the target commit ID
   directly to `.git/HEAD`.
 - Intentional differences: checkout requires a clean index and working tree
