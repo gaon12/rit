@@ -71,6 +71,14 @@ impl IndexExtension {
             data: self.data.clone(),
         })
     }
+
+    /// Parses this extension as an untracked-cache extension when its signature is `UNTR`.
+    pub fn untracked_cache(&self) -> Result<Option<UntrackedCache>> {
+        if self.kind != IndexExtensionKind::UntrackedCache {
+            return Ok(None);
+        }
+        parse_untracked_cache(&self.data).map(Some)
+    }
 }
 
 /// Known Git index extension signatures.
@@ -180,6 +188,54 @@ pub struct SplitIndexLink {
 pub struct SparseDirectory {
     /// Raw marker payload. Git currently defines the extension by its presence.
     pub data: Vec<u8>,
+}
+
+/// Parsed `UNTR` untracked-cache header and raw directory payload.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UntrackedCache {
+    /// Environment strings that describe when the cache is reusable.
+    pub environment: Vec<String>,
+    /// Stat data for `$GIT_DIR/info/exclude`.
+    pub info_exclude_stat: UntrackedCacheStat,
+    /// Stat data for `core.excludesFile`.
+    pub excludes_file_stat: UntrackedCacheStat,
+    /// Git dir flags stored by the untracked-cache extension.
+    pub dir_flags: u32,
+    /// Hash of `$GIT_DIR/info/exclude`.
+    pub info_exclude_hash: ObjectId,
+    /// Hash of `core.excludesFile`.
+    pub excludes_file_hash: ObjectId,
+    /// Per-directory exclude filename, usually `.gitignore`.
+    pub per_directory_exclude_name: String,
+    /// Number of directory blocks declared by the extension.
+    pub directory_block_count: u64,
+    /// Raw directory-block, bitmap, stat, hash, and terminator payload.
+    pub directory_data: Vec<u8>,
+}
+
+/// Stat block stored by the untracked-cache extension.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UntrackedCacheStat {
+    /// Change-time seconds.
+    pub ctime_seconds: u32,
+    /// Change-time nanoseconds.
+    pub ctime_nanoseconds: u32,
+    /// Modification-time seconds.
+    pub mtime_seconds: u32,
+    /// Modification-time nanoseconds.
+    pub mtime_nanoseconds: u32,
+    /// Device number.
+    pub device: u32,
+    /// Inode number.
+    pub inode: u32,
+    /// File mode.
+    pub mode: u32,
+    /// Owner user ID.
+    pub uid: u32,
+    /// Owner group ID.
+    pub gid: u32,
+    /// File size.
+    pub file_size: u32,
 }
 
 /// One tracked path in the Git index.
@@ -606,6 +662,108 @@ fn parse_split_index_link(bytes: &[u8]) -> Result<SplitIndexLink> {
         shared_index_id: ObjectId::from_bytes(shared_index_id),
         bitmap_data: bytes[20..].to_vec(),
     })
+}
+
+fn parse_untracked_cache(bytes: &[u8]) -> Result<UntrackedCache> {
+    let mut offset = 0;
+    let environment_count = read_variable_width_integer(bytes, &mut offset)?;
+    let mut environment = Vec::new();
+    for _ in 0..environment_count {
+        environment.push(read_nul_terminated_text(
+            bytes,
+            &mut offset,
+            "untracked-cache environment",
+        )?);
+    }
+    let info_exclude_stat = read_untracked_cache_stat(bytes, &mut offset)?;
+    let excludes_file_stat = read_untracked_cache_stat(bytes, &mut offset)?;
+    if bytes.len().saturating_sub(offset) < 4 {
+        return Err(RitError::invalid_input(
+            "untracked-cache dir flags are truncated",
+        ));
+    }
+    let dir_flags = read_u32(bytes, offset)?;
+    offset += 4;
+    let info_exclude_hash = read_object_id(bytes, &mut offset, "untracked-cache info hash")?;
+    let excludes_file_hash = read_object_id(bytes, &mut offset, "untracked-cache excludes hash")?;
+    let per_directory_exclude_name = read_nul_terminated_text(
+        bytes,
+        &mut offset,
+        "untracked-cache per-directory exclude name",
+    )?;
+    let directory_block_count = read_variable_width_integer(bytes, &mut offset)?;
+
+    Ok(UntrackedCache {
+        environment,
+        info_exclude_stat,
+        excludes_file_stat,
+        dir_flags,
+        info_exclude_hash,
+        excludes_file_hash,
+        per_directory_exclude_name,
+        directory_block_count,
+        directory_data: bytes[offset..].to_vec(),
+    })
+}
+
+fn read_untracked_cache_stat(bytes: &[u8], offset: &mut usize) -> Result<UntrackedCacheStat> {
+    if bytes.len().saturating_sub(*offset) < 40 {
+        return Err(RitError::invalid_input(
+            "untracked-cache stat data is truncated",
+        ));
+    }
+    let stat = UntrackedCacheStat {
+        ctime_seconds: read_u32(bytes, *offset)?,
+        ctime_nanoseconds: read_u32(bytes, *offset + 4)?,
+        mtime_seconds: read_u32(bytes, *offset + 8)?,
+        mtime_nanoseconds: read_u32(bytes, *offset + 12)?,
+        device: read_u32(bytes, *offset + 16)?,
+        inode: read_u32(bytes, *offset + 20)?,
+        mode: read_u32(bytes, *offset + 24)?,
+        uid: read_u32(bytes, *offset + 28)?,
+        gid: read_u32(bytes, *offset + 32)?,
+        file_size: read_u32(bytes, *offset + 36)?,
+    };
+    *offset += 40;
+    Ok(stat)
+}
+
+fn read_object_id(bytes: &[u8], offset: &mut usize, label: &str) -> Result<ObjectId> {
+    if bytes.len().saturating_sub(*offset) < 20 {
+        return Err(RitError::invalid_input(format!("{label} is truncated")));
+    }
+    let mut object_id = [0_u8; 20];
+    object_id.copy_from_slice(&bytes[*offset..*offset + 20]);
+    *offset += 20;
+    Ok(ObjectId::from_bytes(object_id))
+}
+
+fn read_variable_width_integer(bytes: &[u8], offset: &mut usize) -> Result<u64> {
+    if *offset == bytes.len() {
+        return Err(RitError::invalid_input(
+            "variable-width integer is truncated",
+        ));
+    }
+    let mut value = u64::from(bytes[*offset] & 0x7f);
+    let mut byte = bytes[*offset];
+    *offset += 1;
+
+    while byte & 0x80 != 0 {
+        if *offset == bytes.len() {
+            return Err(RitError::invalid_input(
+                "variable-width integer is truncated",
+            ));
+        }
+        byte = bytes[*offset];
+        *offset += 1;
+        value = value
+            .checked_add(1)
+            .and_then(|value| value.checked_shl(7))
+            .and_then(|value| value.checked_add(u64::from(byte & 0x7f)))
+            .ok_or_else(|| RitError::invalid_input("variable-width integer is too large"))?;
+    }
+
+    Ok(value)
 }
 
 fn read_nul_terminated_text(bytes: &[u8], offset: &mut usize, label: &str) -> Result<String> {
@@ -1083,11 +1241,73 @@ mod tests {
         assert!(sparse_directory.data.is_empty());
     }
 
+    #[test]
+    fn untracked_cache_extension_parses_header_and_preserves_directory_data() {
+        let info_hash = ObjectId::from_bytes([1; 20]);
+        let excludes_hash = ObjectId::from_bytes([2; 20]);
+        let mut payload = Vec::new();
+        payload.push(2);
+        payload.extend_from_slice(b"Location C:/repo\0");
+        payload.extend_from_slice(b"mtime 1\0");
+        payload.extend_from_slice(&untracked_cache_stat_bytes(10));
+        payload.extend_from_slice(&untracked_cache_stat_bytes(20));
+        payload.extend_from_slice(&5_u32.to_be_bytes());
+        payload.extend_from_slice(info_hash.as_bytes());
+        payload.extend_from_slice(excludes_hash.as_bytes());
+        payload.extend_from_slice(b".gitignore\0");
+        payload.push(1);
+        payload.extend_from_slice(b"directory-tail");
+        let index = Index {
+            entries: Vec::new(),
+            extensions: extension_record(b"UNTR", &payload),
+        };
+
+        let extensions = index.parsed_extensions().expect("extensions should parse");
+        let untracked_cache = extensions[0]
+            .untracked_cache()
+            .expect("untracked cache should parse")
+            .expect("UNTR extension should return untracked cache");
+
+        assert_eq!(
+            untracked_cache.environment,
+            vec!["Location C:/repo".to_owned(), "mtime 1".to_owned()]
+        );
+        assert_eq!(untracked_cache.info_exclude_stat.ctime_seconds, 10);
+        assert_eq!(untracked_cache.excludes_file_stat.ctime_seconds, 20);
+        assert_eq!(untracked_cache.dir_flags, 5);
+        assert_eq!(untracked_cache.info_exclude_hash, info_hash);
+        assert_eq!(untracked_cache.excludes_file_hash, excludes_hash);
+        assert_eq!(untracked_cache.per_directory_exclude_name, ".gitignore");
+        assert_eq!(untracked_cache.directory_block_count, 1);
+        assert_eq!(untracked_cache.directory_data, b"directory-tail");
+    }
+
+    #[test]
+    fn untracked_cache_extension_rejects_truncated_stat_data() {
+        let index = Index {
+            entries: Vec::new(),
+            extensions: extension_record(b"UNTR", &[0, 1, 2, 3]),
+        };
+
+        let extensions = index.parsed_extensions().expect("extensions should parse");
+        let error = extensions[0]
+            .untracked_cache()
+            .expect_err("truncated stat should fail");
+
+        assert_eq!(error.to_string(), "untracked-cache stat data is truncated");
+    }
+
     fn extension_record(signature: &[u8; 4], payload: &[u8]) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(signature);
         bytes.extend_from_slice(&(payload.len() as u32).to_be_bytes());
         bytes.extend_from_slice(payload);
         bytes
+    }
+
+    fn untracked_cache_stat_bytes(base: u32) -> Vec<u8> {
+        (0..10)
+            .flat_map(|offset| (base + offset).to_be_bytes())
+            .collect()
     }
 }
