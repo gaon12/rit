@@ -26,7 +26,8 @@ The current codebase implements an early local Git subset:
   user identity lookup.
 - Index v2 read/write for regular files, including status stat refresh for
   clean tracked files, raw extension-byte preservation, and committed
-  `100644`/`100755` executable-bit modes.
+  `100644`/`100755` executable-bit modes. Optional index extension records can
+  be parsed and classified by signature while preserving raw payloads.
 - Local refs, packed refs lookup, lightweight tags, and simple revision
   resolution.
 - CLI commands: `version`, `help`, `init`, `rev-parse`, `cat-file`, `ls-tree`,

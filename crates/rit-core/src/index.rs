@@ -13,6 +13,43 @@ pub struct Index {
     pub extensions: Vec<u8>,
 }
 
+/// One optional extension record stored after index entries.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IndexExtension {
+    /// Four-byte extension signature.
+    pub signature: [u8; 4],
+    /// Recognized extension kind, or `Unknown`.
+    pub kind: IndexExtensionKind,
+    /// Raw payload bytes for callers that need extension-specific parsing.
+    pub data: Vec<u8>,
+}
+
+impl IndexExtension {
+    /// Returns the extension signature as readable ASCII when possible.
+    pub fn signature_text(&self) -> String {
+        String::from_utf8_lossy(&self.signature).into_owned()
+    }
+}
+
+/// Known Git index extension signatures.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum IndexExtensionKind {
+    /// Cache-tree extension (`TREE`).
+    CacheTree,
+    /// Resolve-undo extension (`REUC`).
+    ResolveUndo,
+    /// Untracked-cache extension (`UNTR`).
+    UntrackedCache,
+    /// File-system monitor extension (`FSMN`).
+    FsMonitor,
+    /// Split-index link extension (`link`).
+    SplitIndexLink,
+    /// Sparse-directory extension (`sdir`).
+    SparseDirectory,
+    /// Extension not classified by this version of rit.
+    Unknown([u8; 4]),
+}
+
 /// One tracked path in the Git index.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IndexEntry {
@@ -128,6 +165,11 @@ impl Index {
         bytes.extend_from_slice(&checksum);
         write_file_atomically(path, &bytes)
     }
+
+    /// Parses raw extension bytes into structured extension records.
+    pub fn parsed_extensions(&self) -> Result<Vec<IndexExtension>> {
+        parse_index_extensions(&self.extensions)
+    }
 }
 
 fn parse_index(bytes: &[u8]) -> Result<Index> {
@@ -222,6 +264,51 @@ fn parse_index(bytes: &[u8]) -> Result<Index> {
     })
 }
 
+fn parse_index_extensions(bytes: &[u8]) -> Result<Vec<IndexExtension>> {
+    let mut offset = 0;
+    let mut extensions = Vec::new();
+
+    while offset < bytes.len() {
+        if bytes.len().saturating_sub(offset) < 8 {
+            return Err(RitError::invalid_input(
+                "index extension header is truncated",
+            ));
+        }
+        let mut signature = [0_u8; 4];
+        signature.copy_from_slice(&bytes[offset..offset + 4]);
+        let length = read_u32(bytes, offset + 4)? as usize;
+        offset += 8;
+        if bytes.len().saturating_sub(offset) < length {
+            return Err(RitError::invalid_input(
+                "index extension payload is truncated",
+            ));
+        }
+        let data = bytes[offset..offset + length].to_vec();
+        offset += length;
+        extensions.push(IndexExtension {
+            signature,
+            kind: IndexExtensionKind::from_signature(signature),
+            data,
+        });
+    }
+
+    Ok(extensions)
+}
+
+impl IndexExtensionKind {
+    fn from_signature(signature: [u8; 4]) -> Self {
+        match &signature {
+            b"TREE" => Self::CacheTree,
+            b"REUC" => Self::ResolveUndo,
+            b"UNTR" => Self::UntrackedCache,
+            b"FSMN" => Self::FsMonitor,
+            b"link" => Self::SplitIndexLink,
+            b"sdir" => Self::SparseDirectory,
+            _ => Self::Unknown(signature),
+        }
+    }
+}
+
 fn system_time_parts(time: Option<SystemTime>) -> Option<(u32, u32)> {
     let duration = time?.duration_since(UNIX_EPOCH).ok()?;
     Some((
@@ -293,7 +380,9 @@ pub fn join_slash_path(root: &Path, path: &str) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use super::{Index, IndexEntry, IndexEntryStat, join_slash_path, relative_slash_path};
+    use super::{
+        Index, IndexEntry, IndexEntryStat, IndexExtensionKind, join_slash_path, relative_slash_path,
+    };
     use crate::ObjectId;
     use std::fs;
     use std::path::Path;
@@ -359,5 +448,37 @@ mod tests {
         let _ = fs::remove_file(&path);
 
         assert_eq!(parsed.extensions, b"TREE\0\0\0\x05hello");
+    }
+
+    #[test]
+    fn parsed_extensions_classify_known_records() {
+        let index = Index {
+            entries: Vec::new(),
+            extensions: b"TREE\0\0\0\x05helloREUC\0\0\0\x05there".to_vec(),
+        };
+
+        let extensions = index.parsed_extensions().expect("extensions should parse");
+
+        assert_eq!(extensions.len(), 2);
+        assert_eq!(extensions[0].signature_text(), "TREE");
+        assert_eq!(extensions[0].kind, IndexExtensionKind::CacheTree);
+        assert_eq!(extensions[0].data, b"hello");
+        assert_eq!(extensions[1].signature_text(), "REUC");
+        assert_eq!(extensions[1].kind, IndexExtensionKind::ResolveUndo);
+        assert_eq!(extensions[1].data, b"there");
+    }
+
+    #[test]
+    fn parsed_extensions_reject_truncated_payloads() {
+        let index = Index {
+            entries: Vec::new(),
+            extensions: b"TREE\0\0\0\x05he".to_vec(),
+        };
+
+        let error = index
+            .parsed_extensions()
+            .expect_err("truncated extension should fail");
+
+        assert_eq!(error.to_string(), "index extension payload is truncated");
     }
 }

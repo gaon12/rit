@@ -20,7 +20,7 @@ pub mod write;
 
 pub use error::{Result, RitError};
 pub use history::LogEntry;
-pub use index::{Index, IndexEntry};
+pub use index::{Index, IndexEntry, IndexExtension, IndexExtensionKind};
 pub use object::{GitObject, ObjectId, ObjectKind, TreeEntry, hash_object};
 pub use odb::LooseObjectDb;
 pub use pathspec::PathspecSet;

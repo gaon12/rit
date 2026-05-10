@@ -23,6 +23,7 @@
   `git rev-parse --git-common-dir`.
 - 2026-05-10 executable-bit slice checked: `git add -h`, `git status -h`,
   `git checkout -h`, and `git restore -h`.
+- 2026-05-10 index extension slice checked: `git update-index -h`.
 
 ## Milestone Notes
 
@@ -41,6 +42,9 @@
 - `status --porcelain=v1` now refreshes `.git/index` stat data for clean
   tracked files while preserving existing index extensions. The compatibility
   test compares command output and final repository state against Git.
+- `Index::parsed_extensions()` now exposes optional extension records with
+  classified signatures for `TREE`, `REUC`, `UNTR`, `FSMN`, `link`, and
+  `sdir`, while preserving raw payload bytes.
 - Added rit CLI integration compatibility fixtures for read-only `diff` output modes: `--name-only`, `--name-status`, `--numstat`, and `--stat`, including cached diff variants.
 - Compatibility reports now include the first differing stdout/stderr line when command text differs.
 - Added reusable `rit-testkit` local write fixture builders for nested tracked
@@ -427,5 +431,5 @@
 - Supported index format: v2/v3 entries for regular files.
 - Supported stat behavior: status refreshes clean tracked file mtime/size
   metadata and preserves raw optional extension bytes such as `TREE`.
-- Unsupported index behavior: semantic parsing of optional extensions,
-  conflict stages, executable-bit parity, and symlink entries.
+- Unsupported index behavior: extension-specific payload parsing, conflict
+  stages, and symlink entries.
