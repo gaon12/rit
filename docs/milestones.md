@@ -92,6 +92,8 @@ Completion criteria:
 - [x] `rit show --no-patch` and object display basics.
 - [x] `rit log` first-parent traversal.
 - [x] `rit status --porcelain=v1` basic tracked/untracked state.
+  - [x] Git-like collapse of fully untracked directories in default porcelain
+    output.
 - [x] `rit diff --name-only`
 - [x] `rit diff --name-status`
 - [x] `rit diff --stat`

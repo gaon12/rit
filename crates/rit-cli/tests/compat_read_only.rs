@@ -117,6 +117,32 @@ fn status_pathspec_outputs_match_git() {
 }
 
 #[test]
+fn status_untracked_directory_outputs_match_git() {
+    let fixture = StatusUntrackedFixture::new("untracked-directory-status");
+
+    for args in [
+        vec!["status", "--porcelain=v1"],
+        vec!["status", "--porcelain=v1", "--", "untracked"],
+        vec!["status", "--porcelain=v1", "--", "untracked/deep/new.txt"],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "untracked directory status {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn ls_files_pathspec_outputs_match_git() {
     let fixture = DiffFixture::new("pathspec-ls-files");
 
@@ -233,6 +259,43 @@ impl DiffFixture {
 }
 
 impl Drop for DiffFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct StatusUntrackedFixture {
+    path: PathBuf,
+}
+
+impl StatusUntrackedFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(path.join("tracked")).expect("fixture directory should be created");
+        fs::create_dir_all(path.join("untracked").join("deep"))
+            .expect("untracked directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("tracked").join("base.txt"), "base\n")
+            .expect("tracked file should be written");
+        run_git(&path, ["add", "tracked/base.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+
+        fs::write(path.join("untracked").join("deep").join("new.txt"), "new\n")
+            .expect("untracked file should be written");
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for StatusUntrackedFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

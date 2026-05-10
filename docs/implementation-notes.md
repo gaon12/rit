@@ -64,6 +64,9 @@
   directory pathspecs.
 - Added pathspec filtering for `status --porcelain=v1` and all supported
   `diff` summary modes, including `--cached`/`--staged`.
+- `status --porcelain=v1` now collapses fully untracked directories into
+  `?? dir/` entries like Git, while exact file pathspecs keep the untracked
+  file path expanded.
 - Added Git comparison coverage for `status --porcelain=v1 -- <pathspec>` and
   `diff ... -- <pathspec>`.
 - Added ordinary literal file, directory, and `.` pathspec expansion for
@@ -153,6 +156,8 @@
 - Unsupported options: long output, branch header, ignored display modes,
   pathspec magic/globs, rename detection, submodules, sparse checkout.
 - Git-compatible behavior: porcelain v1 entries for staged add/modify/delete, working tree modify/delete, and untracked files.
+- Git-compatible behavior: fully untracked directories are collapsed in the
+  default porcelain output, with direct file pathspecs preserving file output.
 - Intentional differences: ignore handling supports simple literal and directory patterns first; advanced gitignore glob semantics are not complete yet.
 - Repository mutation: no
 - Risk: no repository writes.

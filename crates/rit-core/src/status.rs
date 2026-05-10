@@ -73,9 +73,9 @@ impl Repository {
             .cloned()
             .collect::<BTreeSet<_>>();
 
-        for path in tracked_paths {
-            let head_object = head_entries.get(&path);
-            let index_object = index_entries.get(&path);
+        for path in &tracked_paths {
+            let head_object = head_entries.get(path);
+            let index_object = index_entries.get(path);
             let index_status = match (head_object, index_object) {
                 (None, Some(_)) => 'A',
                 (Some(_), None) => 'D',
@@ -86,7 +86,7 @@ impl Repository {
             let worktree_status = match index_object {
                 None => ' ',
                 Some(index_object) => {
-                    let full_path = join_slash_path(worktree, &path);
+                    let full_path = join_slash_path(worktree, path);
                     if !full_path.exists() {
                         'D'
                     } else if hash_worktree_file(&full_path)? != *index_object {
@@ -97,17 +97,17 @@ impl Repository {
                 }
             };
 
-            if pathspecs.matches(&path) && (index_status != ' ' || worktree_status != ' ') {
+            if pathspecs.matches(path) && (index_status != ' ' || worktree_status != ' ') {
                 entries.push(StatusEntry {
                     index_status,
                     worktree_status,
-                    path,
+                    path: path.clone(),
                 });
             }
         }
 
-        for path in working_files {
-            if pathspecs.matches(&path) && !index_entries.contains_key(&path) {
+        for path in collapse_untracked_paths(&working_files, &tracked_paths, pathspecs) {
+            if !index_entries.contains_key(&path) {
                 entries.push(StatusEntry {
                     index_status: '?',
                     worktree_status: '?',
@@ -170,6 +170,76 @@ impl Repository {
 fn hash_worktree_file(path: &Path) -> Result<ObjectId> {
     let bytes = fs::read(path).map_err(|source| RitError::io(path, source))?;
     Ok(hash_object(ObjectKind::Blob, &bytes))
+}
+
+fn collapse_untracked_paths(
+    working_files: &BTreeSet<String>,
+    tracked_paths: &BTreeSet<String>,
+    pathspecs: &PathspecSet,
+) -> BTreeSet<String> {
+    let mut output = BTreeSet::new();
+
+    for path in working_files {
+        if tracked_paths.contains(path) || !pathspecs.matches(path) {
+            continue;
+        }
+
+        output.insert(display_untracked_path(path, tracked_paths, pathspecs));
+    }
+
+    output
+}
+
+fn display_untracked_path(
+    path: &str,
+    tracked_paths: &BTreeSet<String>,
+    pathspecs: &PathspecSet,
+) -> String {
+    if pathspecs.patterns().iter().any(|pattern| pattern == path) {
+        return path.to_owned();
+    }
+
+    if !pathspecs.is_all() {
+        for pattern in pathspecs.patterns() {
+            if path.starts_with(&format!("{pattern}/"))
+                && !has_tracked_path_below(tracked_paths, pattern)
+            {
+                return format!("{pattern}/");
+            }
+        }
+    }
+
+    topmost_untracked_directory(path, tracked_paths)
+        .map(|directory| format!("{directory}/"))
+        .unwrap_or_else(|| path.to_owned())
+}
+
+fn topmost_untracked_directory(path: &str, tracked_paths: &BTreeSet<String>) -> Option<String> {
+    let mut best = None;
+    let mut prefix = String::new();
+    let mut parts = path.split('/').collect::<Vec<_>>();
+    parts.pop();
+
+    for part in parts {
+        if prefix.is_empty() {
+            prefix.push_str(part);
+        } else {
+            prefix.push('/');
+            prefix.push_str(part);
+        }
+        if !has_tracked_path_below(tracked_paths, &prefix) {
+            best = Some(prefix.clone());
+            break;
+        }
+    }
+
+    best
+}
+
+fn has_tracked_path_below(tracked_paths: &BTreeSet<String>, directory: &str) -> bool {
+    tracked_paths
+        .iter()
+        .any(|path| path == directory || path.starts_with(&format!("{directory}/")))
 }
 
 fn scan_working_files(root: &Path, ignore_rules: &IgnoreRules) -> Result<BTreeSet<String>> {
@@ -249,7 +319,9 @@ fn read_ignore_file(path: &PathBuf, patterns: &mut Vec<String>) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{IgnoreRules, PorcelainStatus, StatusEntry};
+    use super::{IgnoreRules, PorcelainStatus, StatusEntry, collapse_untracked_paths};
+    use crate::PathspecSet;
+    use std::collections::BTreeSet;
 
     #[test]
     fn porcelain_v1_renders_entries() {
@@ -272,5 +344,43 @@ mod tests {
 
         assert!(rules.matches("target/debug/app"));
         assert!(!rules.matches("src/target.rs"));
+    }
+
+    #[test]
+    fn untracked_status_collapses_fully_untracked_directories() {
+        let working_files = set(["dir/a.txt", "dir/sub/b.txt", "root.txt"]);
+        let tracked_paths = BTreeSet::new();
+        let pathspecs = PathspecSet::all();
+
+        let collapsed = collapse_untracked_paths(&working_files, &tracked_paths, &pathspecs);
+
+        assert_eq!(collapsed, set(["dir/", "root.txt"]));
+    }
+
+    #[test]
+    fn untracked_status_keeps_files_below_tracked_directories() {
+        let working_files = set(["dir/new/a.txt", "dir/tracked.txt"]);
+        let tracked_paths = set(["dir/tracked.txt"]);
+        let pathspecs = PathspecSet::all();
+
+        let collapsed = collapse_untracked_paths(&working_files, &tracked_paths, &pathspecs);
+
+        assert_eq!(collapsed, set(["dir/new/"]));
+    }
+
+    #[test]
+    fn untracked_status_respects_exact_file_pathspecs() {
+        let working_files = set(["dir/sub/a.txt"]);
+        let tracked_paths = BTreeSet::new();
+        let pathspecs =
+            PathspecSet::from_args(&["dir/sub/a.txt".to_owned()]).expect("pathspec should parse");
+
+        let collapsed = collapse_untracked_paths(&working_files, &tracked_paths, &pathspecs);
+
+        assert_eq!(collapsed, set(["dir/sub/a.txt"]));
+    }
+
+    fn set<const N: usize>(paths: [&str; N]) -> BTreeSet<String> {
+        paths.into_iter().map(ToOwned::to_owned).collect()
     }
 }

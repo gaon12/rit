@@ -91,6 +91,9 @@ directory filters for `status --porcelain=v1` and supported `diff` summary
 outputs, plus `ls-files` cached and staged output. Git pathspec magic, glob
 matching, and pathspec-file input remain unsupported.
 
+Status compatibility tests cover Git-like collapsed output for fully untracked
+directories, including directory and exact-file pathspec behavior.
+
 `ls-tree` compatibility tests cover literal directory and file path lookup with
 default, `--name-only`, and `--object-only` output.
 
