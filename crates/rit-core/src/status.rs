@@ -146,17 +146,25 @@ impl Repository {
         } else {
             None
         };
-        let index = Index::read(&self.git_dir().join("index"))?;
+        let index_path = self.git_dir().join("index");
+        let mut index = Index::read(&index_path)?;
         let index_entries = index
             .entries
             .iter()
             .map(|entry| (entry.path.clone(), entry.object_id))
+            .collect::<BTreeMap<_, _>>();
+        let index_entry_positions = index
+            .entries
+            .iter()
+            .enumerate()
+            .map(|(position, entry)| (entry.path.clone(), position))
             .collect::<BTreeMap<_, _>>();
         let head_entries = self.head_tree_entries()?;
         let ignore_rules = IgnoreRules::read(worktree, self.common_dir())?;
         let working_tree = scan_working_tree(worktree, &ignore_rules)?;
 
         let mut entries = Vec::new();
+        let mut index_refreshed = false;
         let tracked_paths = index_entries
             .keys()
             .chain(head_entries.keys())
@@ -182,6 +190,18 @@ impl Repository {
                     } else if hash_worktree_file(&full_path)? != *index_object {
                         'M'
                     } else {
+                        if let Some(position) = index_entry_positions.get(path) {
+                            let metadata = fs::metadata(&full_path)
+                                .map_err(|source| RitError::io(&full_path, source))?;
+                            let entry = &mut index.entries[*position];
+                            let refreshed_stat = entry.stat.with_mtime_from_metadata(&metadata);
+                            let refreshed_size = metadata.len().min(u32::MAX as u64) as u32;
+                            if entry.stat != refreshed_stat || entry.file_size != refreshed_size {
+                                entry.stat = refreshed_stat;
+                                entry.file_size = refreshed_size;
+                                index_refreshed = true;
+                            }
+                        }
                         ' '
                     }
                 }
@@ -221,6 +241,10 @@ impl Repository {
                     });
                 }
             }
+        }
+
+        if index_refreshed {
+            index.write(&index_path)?;
         }
 
         Ok(PorcelainStatus { branch, entries })

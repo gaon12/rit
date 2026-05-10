@@ -165,9 +165,10 @@ Completion criteria:
 - [x] Pack index v2 lookup.
 - [x] Non-delta packed object read.
 - [x] Index v2 read/write for regular files.
+- [x] Index stat refresh compatible with Git status for clean regular files.
+- [x] Raw optional index extension preservation during status refresh.
 - [ ] Delta packed object resolution.
-- [ ] Index extensions.
-- [ ] Index stat refresh compatible with Git status.
+- [ ] Semantic index extension parsing.
 - [ ] File mode and executable bit handling.
 - [ ] Symlink support.
 

@@ -24,7 +24,8 @@ The current codebase implements an early local Git subset:
   shared metadata.
 - Config reads use a shared scalar parser for repository format checks and
   user identity lookup.
-- Index v2 read/write for regular files.
+- Index v2 read/write for regular files, including status stat refresh for
+  clean tracked files and raw extension-byte preservation.
 - Local refs, packed refs lookup, lightweight tags, and simple revision
   resolution.
 - CLI commands: `version`, `help`, `init`, `rev-parse`, `cat-file`, `ls-tree`,
@@ -82,9 +83,9 @@ command in the other copy, then compares:
 - working tree file snapshot
 
 The `rit-cli` integration tests include reusable read-only diff fixtures for
-default and cached output modes. Some worktree diff comparisons intentionally
-skip repository-state comparison until Git-compatible index stat refresh is
-implemented.
+default and cached output modes. Worktree diff comparisons that do not mutate
+state still skip repository-state comparison, while status refresh coverage
+compares final `.git/index` state against Git.
 
 Pathspec compatibility tests currently cover ordinary literal file/directory
 filters and simple `*`, `?`, and bracket-class wildcard filters for
@@ -106,9 +107,9 @@ NUL-terminated form.
 Status compatibility tests cover `--ignored` porcelain entries for simple
 literal and directory ignore rules, including pathspec and NUL-terminated
 forms.
-One status compatibility test intentionally documents the remaining index stat
-refresh difference: stdout/stderr/exit code match Git, but `.git/index` differs
-because Git refreshes cached stat metadata and rit currently does not.
+One status compatibility test covers index stat refresh: stdout/stderr/exit
+code and final `.git/index` state must match Git after a clean tracked file's
+mtime changes.
 
 `ls-tree` compatibility tests cover literal directory and file path lookup with
 default, `--name-only`, and `--object-only` output.

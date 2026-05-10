@@ -1,4 +1,4 @@
-use crate::index::{Index, IndexEntry, join_slash_path, relative_slash_path};
+use crate::index::{Index, IndexEntry, IndexEntryStat, join_slash_path, relative_slash_path};
 use crate::object::{hash_object, parse_tree_entries};
 use crate::pathspec::{pattern_has_wildcard, pattern_matches};
 use crate::{
@@ -45,10 +45,13 @@ impl Repository {
         for relative_path in files_to_add {
             let full_path = join_slash_path(worktree, &relative_path);
             let data = fs::read(&full_path).map_err(|source| RitError::io(&full_path, source))?;
+            let metadata =
+                fs::metadata(&full_path).map_err(|source| RitError::io(&full_path, source))?;
             let object_id = self.loose_objects().write_object(ObjectKind::Blob, &data)?;
             entries.insert(
                 relative_path.clone(),
                 IndexEntry {
+                    stat: IndexEntryStat::from_metadata(&metadata),
                     mode: 0o100644,
                     object_id,
                     file_size: data.len().min(u32::MAX as usize) as u32,
@@ -65,6 +68,7 @@ impl Repository {
 
         index = Index {
             entries: entries.into_values().collect(),
+            extensions: Vec::new(),
         };
         let count = index.entries.len();
         index.write(&index_path)?;
@@ -189,6 +193,7 @@ impl Repository {
                     index_entries.insert(
                         normalized.clone(),
                         IndexEntry {
+                            stat: head_entry.stat,
                             mode: head_entry.mode,
                             object_id: head_entry.object_id,
                             file_size: head_entry.file_size,
@@ -214,6 +219,7 @@ impl Repository {
 
         Index {
             entries: index_entries.into_values().collect(),
+            extensions: Vec::new(),
         }
         .write(&index_path)?;
         Ok(unstaged)
@@ -346,6 +352,7 @@ impl Repository {
                 output.insert(
                     path,
                     HeadBlobEntry {
+                        stat: IndexEntryStat::default(),
                         mode: 0o100644,
                         object_id: entry.object_id,
                         file_size: object.size().min(u32::MAX as usize) as u32,
@@ -403,6 +410,7 @@ impl Repository {
 
         Index {
             entries: target_entries,
+            extensions: Vec::new(),
         }
         .write(&self.git_dir().join("index"))
     }
@@ -421,6 +429,7 @@ impl Repository {
         Ok(entries
             .into_iter()
             .map(|(path, entry)| IndexEntry {
+                stat: entry.stat,
                 mode: entry.mode,
                 object_id: entry.object_id,
                 file_size: entry.file_size,
@@ -536,6 +545,7 @@ fn ensure_clean_for_checkout(repository: &Repository) -> Result<()> {
 
 #[derive(Clone, Copy)]
 struct HeadBlobEntry {
+    stat: IndexEntryStat,
     mode: u32,
     object_id: ObjectId,
     file_size: u32,

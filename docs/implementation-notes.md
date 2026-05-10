@@ -36,10 +36,9 @@
 - The harness copies a fixture repository into isolated Git and rit workspaces, runs the provided command specs, captures stdout/stderr/exit code, and optionally compares final repository snapshots.
 - `rit-testkit` may execute `git` because it is test infrastructure. Production `rit` runtime code must not depend on it.
 - First smoke test: `git status --porcelain=v1` and `rit status --porcelain=v1` match stdout, stderr, and exit code on a simple committed fixture.
-- Known gap exposed by state comparison: `git status` refreshes `.git/index` stat data, while `rit status` currently leaves the index unchanged.
-- This index refresh gap is now covered by an explicit compatibility test:
-  command output and exit code must match, while `.git/index` is expected to
-  differ because Git refreshes cached stat fields.
+- `status --porcelain=v1` now refreshes `.git/index` stat data for clean
+  tracked files while preserving existing index extensions. The compatibility
+  test compares command output and final repository state against Git.
 - Added rit CLI integration compatibility fixtures for read-only `diff` output modes: `--name-only`, `--name-status`, `--numstat`, and `--stat`, including cached diff variants.
 - Compatibility reports now include the first differing stdout/stderr line when command text differs.
 - Added reusable `rit-testkit` local write fixture builders for nested tracked
@@ -311,7 +310,10 @@
   from `HEAD`.
 - Unsupported options: commit-moving resets, soft/mixed/hard/merge/keep modes, patch mode, pathspec files.
 - Git-compatible behavior: unstages explicit paths and reports remaining unstaged modifications.
-- Intentional differences: no index refresh metadata beyond object ID/size/mode.
+- Git-compatible behavior: clean tracked paths refresh cached index stat
+  metadata during `status --porcelain=v1`.
+- Intentional differences: full index extension parsing remains limited, but
+  raw extension bytes are preserved when status only refreshes stat fields.
 - Repository mutation: writes `.git/index`.
 - Risk: low for explicit paths; index writes use lock/rename.
 
@@ -386,3 +388,11 @@
 - Unsupported object types: OFS_DELTA and REF_DELTA are detected and reported clearly.
 - Git-compatible behavior: after `git gc --aggressive --prune=now`, `rit cat-file`, `rit ls-tree`, `rit log`, and `rit show --no-patch` can read packed non-delta objects.
 - Repository mutation: no.
+
+### Git index
+
+- Supported index format: v2/v3 entries for regular files.
+- Supported stat behavior: status refreshes clean tracked file mtime/size
+  metadata and preserves raw optional extension bytes such as `TREE`.
+- Unsupported index behavior: semantic parsing of optional extensions,
+  conflict stages, executable-bit parity, and symlink entries.

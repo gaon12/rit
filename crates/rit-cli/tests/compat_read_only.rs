@@ -1,5 +1,5 @@
 use rit_testkit::{CommandSpec, CompareOptions, compare};
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -450,30 +450,23 @@ fn status_unborn_branch_header_matches_git() {
 }
 
 #[test]
-fn status_index_refresh_difference_is_documented() {
+fn status_index_refresh_matches_git_state() {
     let fixture = StatusRefreshFixture::new("status-refresh-difference");
-    let outcome = compare(&CompareOptions::new(
-        fixture.path(),
-        git_command(["status", "--porcelain=v1"]),
-        rit_command(["status", "--porcelain=v1"]),
-    ))
-    .expect("comparison should run");
-    let state = outcome
-        .repository_state
-        .as_ref()
-        .expect("repository state should be compared");
+    let index_path = fixture.path().join(".git").join("index");
+    let stale_index = fs::read(&index_path).expect("stale index should read");
 
-    assert_eq!(outcome.git.stdout, outcome.rit.stdout);
-    assert_eq!(outcome.git.stderr, outcome.rit.stderr);
-    assert_eq!(outcome.git.exit_code, outcome.rit.exit_code);
-    assert!(
-        state
-            .differing_paths
-            .iter()
-            .any(|path| path == Path::new(".git").join("index").as_path()),
-        "git status should refresh .git/index while rit status leaves it unchanged\n{}",
-        outcome.report()
-    );
+    let (git_stdout, git_stderr) = run_capture("git", ["status", "--porcelain=v1"], fixture.path());
+    let git_index = fs::read(&index_path).expect("git-refreshed index should read");
+
+    fs::write(&index_path, &stale_index).expect("stale index should be restored");
+    let (rit_stdout, rit_stderr) =
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], fixture.path());
+    let rit_index = fs::read(&index_path).expect("rit-refreshed index should read");
+
+    assert_eq!(git_stdout, rit_stdout);
+    assert_eq!(git_stderr, rit_stderr);
+    assert_ne!(stale_index, rit_index);
+    assert_eq!(git_index, rit_index);
 }
 
 #[test]
@@ -1076,6 +1069,28 @@ fn run_git<const N: usize>(cwd: &Path, args: [&str; N]) {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+fn run_capture<const N: usize>(
+    program: impl AsRef<OsStr>,
+    args: [&str; N],
+    cwd: &Path,
+) -> (String, String) {
+    let output = Command::new(program)
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .expect("command should start");
+    assert!(
+        output.status.success(),
+        "command failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    (
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+    )
 }
 
 fn temp_path(name: &str) -> PathBuf {
