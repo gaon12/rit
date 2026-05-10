@@ -215,7 +215,10 @@ Completion criteria:
   - [x] Positive `:(literal)`, `:(glob)`, `:(top)`, and `:/` forms.
   - [x] Case-insensitive `:(icase)` pathspec magic.
   - [ ] Exclude and attr pathspec magic.
-- [ ] Case-sensitivity behavior by platform/config.
+- [~] Case-sensitivity behavior by platform/config.
+  - [x] `git add` honors `core.ignorecase=true` for mismatched-case
+    pathspecs that Git accepts as no-ops.
+  - [ ] Broader platform/config parity for case-sensitive path lookup.
 
 Completion criteria:
 - Status/add/diff path selection matches Git for ordinary pathspec and ignore

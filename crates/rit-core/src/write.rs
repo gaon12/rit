@@ -181,7 +181,8 @@ impl Repository {
             .into_iter()
             .map(|entry| (entry.path.clone(), entry))
             .collect::<BTreeMap<_, _>>();
-        let files_to_add = expand_add_pathspecs(worktree, &pathspecs, entries.keys())?;
+        let ignore_case = self.core_ignorecase_enabled()?;
+        let files_to_add = expand_add_pathspecs(worktree, &pathspecs, entries.keys(), ignore_case)?;
         let symlinks_enabled = self.core_symlinks_enabled()?;
 
         for relative_path in files_to_add {
@@ -634,6 +635,7 @@ fn expand_add_pathspecs<'a>(
     worktree: &Path,
     pathspecs: &PathspecSet,
     indexed_paths: impl Iterator<Item = &'a String>,
+    ignore_case: bool,
 ) -> Result<BTreeSet<String>> {
     let mut files = BTreeSet::new();
 
@@ -671,10 +673,20 @@ fn expand_add_pathspecs<'a>(
                 )));
             }
         } else {
+            let exact_case_exists = worktree_path_matches_exact_case(worktree, pattern.pattern());
+            if !exact_case_exists
+                && ignore_case
+                && (indexed_paths
+                    .iter()
+                    .any(|path| path.eq_ignore_ascii_case(pattern.pattern()))
+                    || worktree_path_exists_ignore_case(worktree, pattern.pattern()))
+            {
+                continue;
+            }
             let full_path = join_slash_path(worktree, pattern.pattern());
-            if full_path.is_file() {
+            if exact_case_exists && full_path.is_file() {
                 files.insert(relative_slash_path(worktree, &full_path)?);
-            } else if full_path.is_dir() {
+            } else if exact_case_exists && full_path.is_dir() {
                 collect_regular_files(worktree, &full_path, &mut files)?;
             } else if indexed_paths.iter().any(|path| pattern.matches(path)) {
                 continue;
@@ -688,6 +700,41 @@ fn expand_add_pathspecs<'a>(
     }
 
     Ok(files)
+}
+
+fn worktree_path_matches_exact_case(root: &Path, slash_path: &str) -> bool {
+    find_worktree_path_case_insensitive(root, slash_path, true).is_some()
+}
+
+fn worktree_path_exists_ignore_case(root: &Path, slash_path: &str) -> bool {
+    find_worktree_path_case_insensitive(root, slash_path, false).is_some()
+}
+
+fn find_worktree_path_case_insensitive(
+    root: &Path,
+    slash_path: &str,
+    require_exact_case: bool,
+) -> Option<PathBuf> {
+    let mut current = root.to_path_buf();
+    for component in slash_path.split('/').filter(|part| !part.is_empty()) {
+        let mut matched = None;
+        for entry in fs::read_dir(&current).ok()? {
+            let entry = entry.ok()?;
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            let is_match = if require_exact_case {
+                name == component
+            } else {
+                name.eq_ignore_ascii_case(component)
+            };
+            if is_match {
+                matched = Some(entry.path());
+                break;
+            }
+        }
+        current = matched?;
+    }
+    Some(current)
 }
 
 fn collect_regular_files(

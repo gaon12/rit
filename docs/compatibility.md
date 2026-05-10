@@ -116,6 +116,8 @@ cached and staged output. Positive `:(literal)`, `:(glob)`, `:(top)`, and
 `:/` pathspec magic is covered for status, diff, ls-files, log, show, and add.
 `:(icase)` is covered for status, diff, and add. Exclude, attr, and
 pathspec-file input remain unsupported.
+Local write compatibility tests cover `core.ignorecase=true` for a
+mismatched-case `add` pathspec that Git accepts as a no-op.
 
 Status compatibility tests cover Git-like collapsed output for fully untracked
 directories, including directory and exact-file pathspec behavior.

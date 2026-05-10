@@ -35,6 +35,8 @@
   `:(top)`, and `:/`.
 - 2026-05-10 icase pathspec magic slice checked direct Git comparisons for
   `:(icase)` in `status`, `diff`, and `add`.
+- 2026-05-10 core.ignorecase add slice checked `git config -h`, `git add -h`,
+  and direct Git comparisons for mismatched-case `git add` pathspecs.
 
 ## Milestone Notes
 
@@ -306,6 +308,10 @@
 - Git-compatible behavior: writes blob loose objects and Git index v2 entries
   for regular files; directory pathspecs recursively add regular files and
   stage deletions for matching tracked files that no longer exist.
+- Git-compatible behavior: when `core.ignorecase=true`, a mismatched-case
+  non-wildcard `add` pathspec that corresponds to an existing worktree or
+  indexed path is accepted as Git-compatible no-op instead of creating a
+  wrongly cased index entry.
 - Git-compatible behavior: `--chmod=+x|-x` updates the index mode for regular
   files and committed trees preserve `100644`/`100755` modes.
 - Git-compatible behavior: existing index modes are preserved when content is

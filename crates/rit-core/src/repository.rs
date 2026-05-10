@@ -143,16 +143,12 @@ impl Repository {
 
     /// Returns whether symlink index entries should materialize as symlinks.
     pub(crate) fn core_symlinks_enabled(&self) -> Result<bool> {
-        let config_path = self.common_dir.join("config");
-        let default = default_core_symlinks();
-        if !config_path.exists() {
-            return Ok(default);
-        }
-        let config = GitConfig::read(&config_path)?;
-        match config.get("core", "symlinks") {
-            Some(value) => parse_git_bool(value, "core.symlinks"),
-            None => Ok(default),
-        }
+        self.read_core_bool("symlinks", default_core_symlinks())
+    }
+
+    /// Returns whether Git should compare worktree path names case-insensitively.
+    pub(crate) fn core_ignorecase_enabled(&self) -> Result<bool> {
+        self.read_core_bool("ignorecase", default_core_ignorecase())
     }
 
     /// Returns a loose object database reader for this repository.
@@ -268,6 +264,18 @@ impl Repository {
         }
         Ok(())
     }
+
+    fn read_core_bool(&self, key: &str, default: bool) -> Result<bool> {
+        let config_path = self.common_dir.join("config");
+        if !config_path.exists() {
+            return Ok(default);
+        }
+        let config = GitConfig::read(&config_path)?;
+        match config.get("core", key) {
+            Some(value) => parse_git_bool(value, &format!("core.{key}")),
+            None => Ok(default),
+        }
+    }
 }
 
 #[cfg(unix)]
@@ -277,6 +285,16 @@ fn default_core_symlinks() -> bool {
 
 #[cfg(not(unix))]
 fn default_core_symlinks() -> bool {
+    false
+}
+
+#[cfg(windows)]
+fn default_core_ignorecase() -> bool {
+    true
+}
+
+#[cfg(not(windows))]
+fn default_core_ignorecase() -> bool {
     false
 }
 
