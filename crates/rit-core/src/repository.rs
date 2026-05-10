@@ -136,8 +136,7 @@ impl Repository {
         &self.git_dir
     }
 
-    /// Returns the common metadata directory. This is currently the same as
-    /// `git_dir`, with a separate accessor reserved for linked worktrees.
+    /// Returns the common metadata directory shared by linked worktrees.
     pub fn common_dir(&self) -> &Path {
         &self.common_dir
     }
@@ -147,7 +146,7 @@ impl Repository {
         LooseObjectDb::new(self.common_dir.join("objects"))
     }
 
-    /// Reads a loose object by its full object ID.
+    /// Reads an object by its full object ID.
     pub fn read_object(&self, object_id: ObjectId) -> Result<GitObject> {
         self.loose_objects().read_object(object_id)
     }
@@ -220,10 +219,11 @@ impl Repository {
     }
 
     fn from_paths(worktree: Option<PathBuf>, git_dir: PathBuf, bare: bool) -> Result<Self> {
+        let common_dir = resolve_common_dir(&git_dir)?;
         let repository = Self {
             worktree,
-            common_dir: git_dir.clone(),
             git_dir,
+            common_dir,
             bare,
         };
         repository.ensure_supported_format()?;
@@ -359,6 +359,23 @@ fn read_gitdir_file(path: &Path) -> Result<PathBuf> {
     };
 
     Ok(PathBuf::from(rest.trim()))
+}
+
+fn resolve_common_dir(git_dir: &Path) -> Result<PathBuf> {
+    let common_dir_file = git_dir.join("commondir");
+    if !common_dir_file.exists() {
+        return Ok(git_dir.to_path_buf());
+    }
+
+    let contents = fs::read_to_string(&common_dir_file)
+        .map_err(|source| RitError::io(&common_dir_file, source))?;
+    let raw_common_dir = PathBuf::from(contents.trim());
+    let resolved = if raw_common_dir.is_absolute() {
+        raw_common_dir
+    } else {
+        git_dir.join(raw_common_dir)
+    };
+    canonicalize_existing_path(&resolved)
 }
 
 fn looks_like_bare_repository(path: &Path) -> bool {
@@ -502,6 +519,61 @@ mod tests {
         let error = Repository::init(&options).expect_err("branch validation should fail");
 
         assert!(error.to_string().contains("invalid initial branch name"));
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn open_reads_common_dir_for_linked_worktree() {
+        let temp = temp_path("linked-worktree");
+        let main_worktree = temp.join("main");
+        let linked_worktree = temp.join("linked");
+        let repository =
+            Repository::init(&InitOptions::new(&main_worktree)).expect("init should work");
+        fs::write(
+            repository.git_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n[user]\n\tname = Rit Test\n\temail = rit@example.test\n",
+        )
+        .expect("config should be written");
+        fs::write(main_worktree.join("tracked.txt"), "base\n").expect("file should be written");
+        repository
+            .add_paths(&["tracked.txt".to_owned()])
+            .expect("file should be added");
+        let commit = repository
+            .commit_index("base")
+            .expect("commit should be created")
+            .commit_id;
+
+        let linked_git_dir = repository.git_dir().join("worktrees").join("linked");
+        fs::create_dir_all(&linked_git_dir).expect("linked git dir should be written");
+        fs::create_dir_all(&linked_worktree).expect("linked worktree should be written");
+        fs::write(
+            linked_worktree.join(".git"),
+            format!("gitdir: {}\n", linked_git_dir.display()),
+        )
+        .expect(".git file should be written");
+        fs::write(linked_git_dir.join("commondir"), "../..").expect("commondir should be written");
+        fs::write(linked_git_dir.join("HEAD"), "ref: refs/heads/master\n")
+            .expect("linked HEAD should be written");
+
+        let linked_repository =
+            Repository::open(&linked_worktree).expect("linked worktree should open");
+
+        assert_eq!(
+            linked_repository.common_dir(),
+            fs::canonicalize(repository.git_dir())
+                .expect("main git dir should canonicalize")
+                .as_path()
+        );
+        assert_eq!(
+            linked_repository
+                .resolve_head()
+                .expect("HEAD should resolve"),
+            Some(commit)
+        );
+        assert!(
+            linked_repository.read_object(commit).is_ok(),
+            "linked worktree should read objects from the common directory"
+        );
         remove_dir_all(&temp);
     }
 

@@ -12,6 +12,9 @@
 - 2026-05-09 diff patch milestone checked: `git diff -h`.
 - 2026-05-09 detached checkout milestone checked: `git checkout -h`.
 - 2026-05-09 branch delete safety milestone checked: `git branch -h`.
+- 2026-05-10 milestone verification checked: `git --version`,
+  `git help -a`, `git worktree -h`, `git rev-parse --git-dir`, and
+  `git rev-parse --git-common-dir`.
 
 ## Milestone Notes
 
@@ -36,6 +39,9 @@
 - Added `Repository::open(path)` as the application-facing alias for repository discovery.
 - Repository discovery and init now construct repositories through a shared format guard.
 - Repositories with `core.repositoryformatversion` other than `0`, or unknown `[extensions]` keys, fail with clear errors before use.
+- Linked worktrees now read the per-worktree gitdir from a `.git` file and
+  resolve `commondir` for shared objects, refs, packed refs, config, and
+  info/exclude while keeping `HEAD` and `index` under the per-worktree gitdir.
 
 ### M3: Local diff scope expansion
 

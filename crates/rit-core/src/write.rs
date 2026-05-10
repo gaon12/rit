@@ -554,11 +554,11 @@ fn read_signature(repository: &Repository) -> Result<Signature> {
     let name = std::env::var("GIT_AUTHOR_NAME")
         .or_else(|_| std::env::var("GIT_COMMITTER_NAME"))
         .ok()
-        .or_else(|| read_config_value(&repository.git_dir().join("config"), "user", "name"));
+        .or_else(|| read_config_value(&repository.common_dir().join("config"), "user", "name"));
     let email = std::env::var("GIT_AUTHOR_EMAIL")
         .or_else(|_| std::env::var("GIT_COMMITTER_EMAIL"))
         .ok()
-        .or_else(|| read_config_value(&repository.git_dir().join("config"), "user", "email"));
+        .or_else(|| read_config_value(&repository.common_dir().join("config"), "user", "email"));
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| RitError::invalid_input("system time is before Unix epoch"))?

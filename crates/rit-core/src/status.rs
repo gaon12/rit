@@ -63,7 +63,7 @@ impl Repository {
             .map(|entry| (entry.path.clone(), entry.object_id))
             .collect::<BTreeMap<_, _>>();
         let head_entries = self.head_tree_entries()?;
-        let ignore_rules = IgnoreRules::read(worktree, self.git_dir())?;
+        let ignore_rules = IgnoreRules::read(worktree, self.common_dir())?;
         let working_files = scan_working_files(worktree, &ignore_rules)?;
 
         let mut entries = Vec::new();

@@ -6,7 +6,7 @@ and implementation notes may use Git as the reference implementation.
 
 ## Checked Baseline
 
-- Date checked: 2026-05-09
+- Date checked: 2026-05-10
 - Git version: `git version 2.52.0.windows.1`
 - Command list checked with: `git help -a`
 - Command help checked with: `git <command> -h`
@@ -20,6 +20,8 @@ The current codebase implements an early local Git subset:
 
 - Repository discovery, init, bare repository detection, loose object I/O, and
   packed object reading for non-delta objects.
+- Linked worktree discovery reads `.git` gitdir files plus `commondir` for
+  shared metadata.
 - Index v2 read/write for regular files.
 - Local refs, packed refs lookup, lightweight tags, and simple revision
   resolution.

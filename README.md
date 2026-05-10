@@ -25,8 +25,8 @@ implementation for documentation, compatibility tests, and benchmarks.
 `rit` is an early local Git engine. It currently includes:
 
 - Workspace crates for CLI, core library, and compatibility testkit.
-- Repository discovery, init, bare repository detection, and repository format
-  guards.
+- Repository discovery, init, bare repository detection, linked worktree
+  common-dir discovery, and repository format guards.
 - Loose object read/write for blobs, trees, commits, and tags.
 - Pack index v2 lookup and non-delta packed object reads.
 - Index v2 read/write for regular files.

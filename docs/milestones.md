@@ -14,7 +14,7 @@ drift.
 
 ## Current Baseline
 
-- Date: 2026-05-09
+- Date: 2026-05-10
 - Reference Git: `git version 2.52.0.windows.1`
 - Required recurring checks:
   - `git --version`
@@ -23,6 +23,20 @@ drift.
   - `cargo fmt --all`
   - `cargo clippy --workspace --all-targets -- -D warnings`
   - `cargo test --workspace`
+
+## Milestone Verification
+
+Verified on 2026-05-10 before continuing implementation:
+
+- Production crates do not execute `git`; `Command::new` usage is limited to
+  `rit-testkit` and compatibility tests.
+- M1 local write compatibility coverage exists as generated Git-vs-rit
+  scenarios, but reusable checked-in local write fixtures are still not present.
+- M2 linked worktree/common-dir support was marked incomplete and was also
+  incomplete in code: `Repository::common_dir` always pointed at `git_dir`.
+- M2 config parsing is still intentionally minimal and remains incomplete.
+- M3/M4 pathspec and diff gaps in this file match the implementation notes:
+  ordinary literal pathspecs exist, advanced pathspec magic/globs do not.
 
 ## M0: Baseline And Rules
 
@@ -59,7 +73,7 @@ Completion criteria:
 - [x] Basic bare repository detection.
 - [x] Repository format version guard.
 - [x] Unknown repository extension guard.
-- [ ] Linked worktree/common-dir support.
+- [x] Linked worktree/common-dir support.
 - [ ] More complete config parser.
 
 Completion criteria:
@@ -266,8 +280,10 @@ Completion criteria:
 ## Active Queue
 
 1. Add reusable checked-in fixtures for local write commands.
-2. Expand `status --porcelain=v1` with stronger Git compatibility.
-3. Continue pathspec support for remaining read-only commands and advanced
+2. Expand the config parser beyond the current minimal `core`, `extensions`,
+   and user identity reads.
+3. Expand `status --porcelain=v1` with stronger Git compatibility.
+4. Continue pathspec support for remaining read-only commands and advanced
    pathspec forms.
-4. Add index stat refresh or document and test the remaining difference.
-5. Expand `rit diff` patch output beyond small text files.
+5. Add index stat refresh or document and test the remaining difference.
+6. Expand `rit diff` patch output beyond small text files.
