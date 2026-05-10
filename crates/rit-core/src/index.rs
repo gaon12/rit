@@ -61,6 +61,16 @@ impl IndexExtension {
         }
         parse_split_index_link(&self.data).map(Some)
     }
+
+    /// Parses this extension as a sparse-directory marker when its signature is `sdir`.
+    pub fn sparse_directory(&self) -> Option<SparseDirectory> {
+        if self.kind != IndexExtensionKind::SparseDirectory {
+            return None;
+        }
+        Some(SparseDirectory {
+            data: self.data.clone(),
+        })
+    }
 }
 
 /// Known Git index extension signatures.
@@ -163,6 +173,13 @@ pub struct SplitIndexLink {
     pub shared_index_id: ObjectId,
     /// Raw delete and replace EWAH bitmap bytes after the shared index ID.
     pub bitmap_data: Vec<u8>,
+}
+
+/// Parsed `sdir` sparse-directory marker extension.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SparseDirectory {
+    /// Raw marker payload. Git currently defines the extension by its presence.
+    pub data: Vec<u8>,
 }
 
 /// One tracked path in the Git index.
@@ -1049,6 +1066,21 @@ mod tests {
             error.to_string(),
             "split-index shared index id is truncated"
         );
+    }
+
+    #[test]
+    fn sparse_directory_extension_marks_sparse_indexes() {
+        let index = Index {
+            entries: Vec::new(),
+            extensions: extension_record(b"sdir", b""),
+        };
+
+        let extensions = index.parsed_extensions().expect("extensions should parse");
+        let sparse_directory = extensions[0]
+            .sparse_directory()
+            .expect("sdir extension should return marker");
+
+        assert!(sparse_directory.data.is_empty());
     }
 
     fn extension_record(signature: &[u8; 4], payload: &[u8]) -> Vec<u8> {

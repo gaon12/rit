@@ -58,6 +58,8 @@
   still deliberately left as a later payload-specific step.
 - `IndexExtension::split_index_link()` parses the `link` shared-index object
   ID and preserves the following delete/replace bitmap bytes.
+- `IndexExtension::sparse_directory()` exposes the `sdir` sparse-directory
+  marker extension and preserves any raw marker payload.
 - Added rit CLI integration compatibility fixtures for read-only `diff` output modes: `--name-only`, `--name-status`, `--numstat`, and `--stat`, including cached diff variants.
 - Compatibility reports now include the first differing stdout/stderr line when command text differs.
 - Added reusable `rit-testkit` local write fixture builders for nested tracked
