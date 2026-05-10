@@ -37,6 +37,8 @@
   `:(icase)` in `status`, `diff`, and `add`.
 - 2026-05-10 core.ignorecase add slice checked `git config -h`, `git add -h`,
   and direct Git comparisons for mismatched-case `git add` pathspecs.
+- 2026-05-10 exclude pathspec magic slice checked direct Git comparisons for
+  `:!`, `:^`, and `:(exclude)` in `status`, `diff`, `ls-files`, and `add`.
 
 ## Milestone Notes
 
@@ -138,6 +140,8 @@
   first-parent `log`, `show --no-patch`, and `add`.
 - Added ASCII case-insensitive `:(icase)` pathspec matching with Git comparison
   coverage for status, diff, and add.
+- Added exclude pathspec magic for `:!`, `:^`, and `:(exclude)`, including the
+  Git behavior where exclude-only pathspecs filter from the full path set.
 - Added patch output for small text files in default and cached diff scopes,
   with Git comparison coverage for default patch, `-p`, and `--cached`.
 - Patch output now emits `\ No newline at end of file` markers for missing
@@ -153,7 +157,7 @@
   state after directory pathspec `add`, `restore`, and `reset`.
 - Added local write compatibility coverage for simple wildcard and
   bracket-class pathspecs in `add`, `restore`, and `reset`.
-- Still unsupported: exclude/attr pathspec magic, pathspec files, and
+- Still unsupported: attr pathspec magic, pathspec files, and
   `show` path filtering for patch output.
 
 ## Implemented Commands
@@ -236,7 +240,7 @@
   NUL-terminated output, plus `-b` / `--branch` branch headers and
   `--ignored` / `--ignored=traditional|matching` for `.gitignore` and
   `.git/info/exclude` rules.
-- Unsupported options: long output, exclude/attr pathspec magic, rename
+- Unsupported options: long output, attr pathspec magic, rename
   detection, submodules, sparse checkout.
 - Git-compatible behavior: porcelain v1 entries for staged add/modify/delete, working tree modify/delete, and untracked files.
 - Git-compatible behavior: fully untracked directories are collapsed in the
@@ -269,8 +273,8 @@
   file/directory plus simple `*`, `?`, and bracket-class wildcard pathspec
   filters and positive `:(literal)`, `:(glob)`, `:(top)`, `:/`, and
   `:(icase)` pathspec magic.
-- Unsupported options: commit/tree/blob arguments, exclude/attr pathspec
-  magic, rename/copy detection, and many advanced patch formatting options.
+- Unsupported options: commit/tree/blob arguments, attr pathspec magic,
+  rename/copy detection, and many advanced patch formatting options.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files.
 - Git-compatible behavior: cached diff scope compares the index against `HEAD`.
 - Intentional differences: advanced patch formatting and custom diff drivers
@@ -284,8 +288,8 @@
 - Supported options: default output, `--oneline`, and ordinary literal plus
   simple `*`/`?` wildcard file or directory path filters and positive
   `:(literal)`, `:(glob)`, `:(top)`, `:/`, and `:(icase)` pathspec magic.
-- Unsupported options: revision ranges, decoration, graph, pathspec
-  exclude/attr magic, advanced path history simplification, grep, ordering
+- Unsupported options: revision ranges, decoration, graph, pathspec attr magic,
+  advanced path history simplification, grep, ordering
   controls, diff output.
 - Git-compatible behavior: reads commits from `HEAD`, follows the first parent,
   prints default author/date/message layout and 7-character oneline IDs.
@@ -302,8 +306,7 @@
   and bracket-class wildcard pathspecs, positive `:(literal)`, `:(glob)`,
   `:(top)`, `:/`, and `:(icase)` pathspec magic, plus `--chmod=+x`, `--chmod=-x`,
   `--chmod +x`, and `--chmod -x`.
-- Unsupported options: exclude/attr pathspec magic, pathspec files,
-  update/all modes,
+- Unsupported options: attr pathspec magic, pathspec files, update/all modes,
   patch/interactive mode, sparse mode, ignored-file override.
 - Git-compatible behavior: writes blob loose objects and Git index v2 entries
   for regular files; directory pathspecs recursively add regular files and
@@ -387,7 +390,7 @@
   `*`, `?`, and bracket-class wildcard pathspecs plus positive `:(literal)`,
   `:(glob)`, `:(top)`, `:/`, and `:(icase)` pathspec magic.
 - Unsupported options: source revisions, patch mode, merge conflict modes,
-  sparse controls, exclude/attr magic, pathspec files.
+  sparse controls, attr magic, pathspec files.
 - Git-compatible behavior: explicit tracked file restore for regular files,
   including executable worktree permissions for `100755` index entries on Unix.
 - Git-compatible behavior: symlink index entries are restored as symlinks on
@@ -408,7 +411,7 @@
   `:(top)`, `:/`, and `:(icase)` pathspec magic, equivalent to unstaging matching paths
   from `HEAD`.
 - Unsupported options: commit-moving resets, soft/mixed/hard/merge/keep modes,
-  patch mode, exclude/attr magic, pathspec files.
+  patch mode, attr magic, pathspec files.
 - Git-compatible behavior: unstages explicit paths and reports remaining unstaged modifications.
 - Git-compatible behavior: clean tracked paths refresh cached index stat
   metadata during `status --porcelain=v1`.
@@ -461,7 +464,7 @@
   filters plus positive `:(literal)`, `:(glob)`, `:(top)`, and `:/` pathspec
   magic plus `:(icase)` for no-patch commit display.
 - Unsupported options: commit diffs, revision ranges, decorations, formatting
-  controls, exclude/attr pathspec magic and bracket globs.
+  controls, attr pathspec magic and bracket globs.
 - Git-compatible behavior: commit no-patch layout, tree pretty printing, blob contents.
 - Intentional differences: commit diffs are not emitted yet.
 - Repository mutation: no.
@@ -472,9 +475,9 @@
 - Supported options: default cached file listing, `--stage`/`-s`, and ordinary
   literal file or directory pathspec filters plus simple `*`/`?` wildcard
   pathspec filters plus positive `:(literal)`, `:(glob)`, `:(top)`, and `:/`
-  pathspec magic plus `:(icase)`.
+  pathspec magic plus `:(icase)` and exclude pathspec magic.
 - Unsupported options: deleted/modified/others/ignored filters, pathspec
-  exclude/attr magic, bracket globs, EOL/debug/format output,
+  attr magic, bracket globs, EOL/debug/format output,
   sparse/submodule modes.
 - Git-compatible behavior: lists index paths and stage records as `<mode> <object> 0<TAB><path>`.
 - Repository mutation: no.

@@ -476,6 +476,7 @@ fn ignored_path_matches_pathspecs(path: &str, pathspecs: &PathspecSet) -> bool {
     pathspecs
         .patterns()
         .iter()
+        .filter(|pattern| !pattern.is_exclude())
         .any(|pattern| pattern.starts_with_directory(directory))
 }
 
@@ -487,6 +488,7 @@ fn display_untracked_path(
     if pathspecs
         .patterns()
         .iter()
+        .filter(|pattern| !pattern.is_exclude())
         .any(|pattern| pattern.is_exact_path(path))
     {
         return path.to_owned();
@@ -494,6 +496,9 @@ fn display_untracked_path(
 
     if !pathspecs.is_all() {
         for pattern in pathspecs.patterns() {
+            if pattern.is_exclude() {
+                continue;
+            }
             let pattern_text = pattern.pattern();
             if path.starts_with(&format!("{pattern_text}/"))
                 && !has_tracked_path_below(tracked_paths, pattern_text)

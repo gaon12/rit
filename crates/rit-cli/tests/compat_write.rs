@@ -81,6 +81,28 @@ fn add_magic_pathspec_matches_git_status() {
 }
 
 #[test]
+fn add_exclude_magic_pathspec_matches_git_status() {
+    let fixture = LocalWriteFixture::new("add-exclude-magic", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
+    fs::write(fixture.path().join("a.txt"), "root\n").expect("root file should be written");
+    fs::write(
+        fixture.path().join("nested").join("new.txt"),
+        "nested new\n",
+    )
+    .expect("nested new file should be written");
+
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words("git", ["add", "*.txt", ":!nested/new.txt"]),
+        command_words(rit_binary(), ["add", "*.txt", ":!nested/new.txt"]),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
+}
+
+#[test]
 fn add_icase_magic_pathspec_matches_git_status() {
     let fixture = LocalWriteFixture::new("add-icase-magic", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");

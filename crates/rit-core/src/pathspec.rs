@@ -16,6 +16,7 @@ pub struct PathspecPattern {
     pattern: String,
     mode: PathspecMatchMode,
     ignore_case: bool,
+    exclude: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -57,7 +58,21 @@ impl PathspecSet {
 
     /// Returns true when a repository-relative slash path matches this set.
     pub fn matches(&self, path: &str) -> bool {
-        self.is_all() || self.patterns.iter().any(|pattern| pattern.matches(path))
+        if self.is_all() {
+            return true;
+        }
+
+        let has_positive = self.patterns.iter().any(|pattern| !pattern.exclude);
+        let mut matched = !has_positive;
+        for pattern in &self.patterns {
+            if pattern.matches(path) {
+                if pattern.exclude {
+                    return false;
+                }
+                matched = true;
+            }
+        }
+        matched
     }
 }
 
@@ -80,6 +95,11 @@ impl PathspecPattern {
     /// Returns true when this pattern uses `:(icase)` matching.
     pub fn ignore_case(&self) -> bool {
         self.ignore_case
+    }
+
+    /// Returns true when this pattern removes paths from the matched set.
+    pub fn is_exclude(&self) -> bool {
+        self.exclude
     }
 
     /// Returns true when this pattern is a non-wildcard exact path filter.
@@ -296,6 +316,18 @@ fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
             pattern: normalize_pathspec_pattern(rest, pathspec, true)?,
             mode: PathspecMatchMode::Default,
             ignore_case: false,
+            exclude: false,
+        });
+    }
+    if let Some(pattern) = normalized
+        .strip_prefix(":!")
+        .or_else(|| normalized.strip_prefix(":^"))
+    {
+        return Ok(PathspecPattern {
+            pattern: normalize_pathspec_pattern(pattern, pathspec, false)?,
+            mode: PathspecMatchMode::Default,
+            ignore_case: false,
+            exclude: true,
         });
     }
     if let Some(rest) = normalized.strip_prefix(":(") {
@@ -307,12 +339,14 @@ fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
         let mut mode = PathspecMatchMode::Default;
         let mut top = false;
         let mut ignore_case = false;
+        let mut exclude = false;
         for word in magic.split(',').filter(|word| !word.is_empty()) {
             match word {
                 "top" => top = true,
                 "literal" => mode = PathspecMatchMode::Literal,
                 "glob" => mode = PathspecMatchMode::Glob,
                 "icase" => ignore_case = true,
+                "exclude" => exclude = true,
                 _ => {
                     return Err(RitError::invalid_input(format!(
                         "unsupported pathspec magic '{word}' in {pathspec}"
@@ -325,6 +359,7 @@ fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
             pattern: normalize_pathspec_pattern(pattern, pathspec, top)?,
             mode,
             ignore_case,
+            exclude,
         });
     }
 
@@ -338,6 +373,7 @@ fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
         pattern: normalize_pathspec_pattern(&normalized, pathspec, false)?,
         mode: PathspecMatchMode::Default,
         ignore_case: false,
+        exclude: false,
     })
 }
 
@@ -487,6 +523,28 @@ mod tests {
 
         assert!(pathspec.matches("Camel.txt"));
         assert!(!pathspec.matches("nested/Camel.txt"));
+    }
+
+    #[test]
+    fn exclude_magic_removes_matching_paths() {
+        let pathspec = PathspecSet::from_args(&["*.txt".to_owned(), ":!b.txt".to_owned()])
+            .expect("valid exclude pathspec");
+
+        assert!(pathspec.matches("a.txt"));
+        assert!(!pathspec.matches("b.txt"));
+
+        let pathspec =
+            PathspecSet::from_args(&[":^b.txt".to_owned()]).expect("valid short exclude pathspec");
+
+        assert!(pathspec.matches("a.txt"));
+        assert!(!pathspec.matches("b.txt"));
+
+        let pathspec =
+            PathspecSet::from_args(&["*.txt".to_owned(), ":(exclude,icase)camel.txt".to_owned()])
+                .expect("valid long exclude pathspec");
+
+        assert!(pathspec.matches("a.txt"));
+        assert!(!pathspec.matches("Camel.txt"));
     }
 
     #[test]

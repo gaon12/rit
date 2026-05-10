@@ -639,14 +639,21 @@ fn expand_add_pathspecs<'a>(
 ) -> Result<BTreeSet<String>> {
     let mut files = BTreeSet::new();
 
-    if pathspecs.is_all() {
+    let positive_patterns = pathspecs
+        .patterns()
+        .iter()
+        .filter(|pattern| !pattern.is_exclude())
+        .collect::<Vec<_>>();
+
+    if pathspecs.is_all() || positive_patterns.is_empty() {
         collect_regular_files(worktree, worktree, &mut files)?;
+        files.retain(|path| pathspecs.matches(path));
         return Ok(files);
     }
 
     let indexed_paths = indexed_paths.cloned().collect::<Vec<_>>();
     let mut worktree_files = None;
-    for pattern in pathspecs.patterns() {
+    for pattern in positive_patterns {
         if pattern.has_wildcard() || pattern.ignore_case() {
             if worktree_files.is_none() {
                 let mut files = BTreeSet::new();
@@ -698,6 +705,8 @@ fn expand_add_pathspecs<'a>(
             }
         }
     }
+
+    files.retain(|path| pathspecs.matches(path));
 
     Ok(files)
 }

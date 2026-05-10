@@ -114,7 +114,8 @@ filters and simple `*`, `?`, and bracket-class wildcard filters for
 `status --porcelain=v1` and supported `diff` summary outputs, plus `ls-files`
 cached and staged output. Positive `:(literal)`, `:(glob)`, `:(top)`, and
 `:/` pathspec magic is covered for status, diff, ls-files, log, show, and add.
-`:(icase)` is covered for status, diff, and add. Exclude, attr, and
+`:(icase)` is covered for status, diff, and add. Exclude `:!`, `:^`, and
+`:(exclude)` is covered for status, diff, ls-files, and add. Attr magic and
 pathspec-file input remain unsupported.
 Local write compatibility tests cover `core.ignorecase=true` for a
 mismatched-case `add` pathspec that Git accepts as a no-op.
@@ -135,7 +136,8 @@ literal and directory ignore rules, glob ignore rules, negation, and
 `.git/info/exclude`, including pathspec and NUL-terminated forms.
 Pathspec compatibility tests cover positive `:(literal)`, `:(glob)`,
 `:(top)`, and `:/` magic for status, diff, ls-files, log, show, add, restore,
-and reset. They also cover `:(icase)` for status, diff, and add.
+and reset. They also cover `:(icase)` for status, diff, and add, and exclude
+magic for status, diff, ls-files, and add.
 One status compatibility test covers index stat refresh: stdout/stderr/exit
 code and final `.git/index` state must match Git after a clean tracked file's
 mtime changes.

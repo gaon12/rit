@@ -201,6 +201,14 @@ fn diff_pathspec_outputs_match_git() {
             vec!["diff", "--name-only", "--", ":(icase)camel.txt"],
             vec!["diff", "--name-only", "--", ":(icase)camel.txt"],
         ),
+        (
+            vec!["diff", "--name-only", "--", "*.txt", ":!b.txt"],
+            vec!["diff", "--name-only", "--", "*.txt", ":!b.txt"],
+        ),
+        (
+            vec!["diff", "--name-only", "--", "*.txt", ":(exclude)Camel.txt"],
+            vec!["diff", "--name-only", "--", "*.txt", ":(exclude)Camel.txt"],
+        ),
     ] {
         let mut options = CompareOptions::new(
             fixture.path(),
@@ -244,6 +252,32 @@ fn status_pathspec_outputs_match_git() {
         assert!(
             outcome.is_match(),
             "pathspec status {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+
+    for args in [
+        vec!["status", "--porcelain=v1", "--", "*.txt", ":!b.txt"],
+        vec![
+            "status",
+            "--porcelain=v1",
+            "--",
+            "*.txt",
+            ":(exclude)Camel.txt",
+        ],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "exclude pathspec status {:?}\n{}",
             args,
             outcome.report()
         );
@@ -575,6 +609,7 @@ fn ls_files_pathspec_outputs_match_git() {
         vec!["ls-files", "--", ":(glob)*.txt"],
         vec!["ls-files", "--stage", "--", ":(top)nested/base.txt"],
         vec!["ls-files", "--", ":(icase)camel.txt"],
+        vec!["ls-files", "--", "*.txt", ":!Camel.txt"],
     ] {
         let outcome = compare(&CompareOptions::new(
             fixture.path(),
