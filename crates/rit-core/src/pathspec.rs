@@ -15,6 +15,7 @@ pub struct PathspecSet {
 pub struct PathspecPattern {
     pattern: String,
     mode: PathspecMatchMode,
+    ignore_case: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -76,6 +77,11 @@ impl PathspecPattern {
         }
     }
 
+    /// Returns true when this pattern uses `:(icase)` matching.
+    pub fn ignore_case(&self) -> bool {
+        self.ignore_case
+    }
+
     /// Returns true when this pattern is a non-wildcard exact path filter.
     pub(crate) fn is_exact_path(&self, path: &str) -> bool {
         !self.has_wildcard() && self.pattern == path
@@ -88,6 +94,15 @@ impl PathspecPattern {
 
     /// Returns true when this pathspec matches a repository-relative slash path.
     pub(crate) fn matches(&self, path: &str) -> bool {
+        if self.ignore_case {
+            let pattern = self.pattern.to_ascii_lowercase();
+            let path = path.to_ascii_lowercase();
+            return match self.mode {
+                PathspecMatchMode::Default => pattern_matches(&pattern, &path),
+                PathspecMatchMode::Literal => literal_pattern_matches(&pattern, &path),
+                PathspecMatchMode::Glob => glob_pattern_matches(&pattern, &path),
+            };
+        }
         match self.mode {
             PathspecMatchMode::Default => pattern_matches(&self.pattern, path),
             PathspecMatchMode::Literal => literal_pattern_matches(&self.pattern, path),
@@ -280,6 +295,7 @@ fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
         return Ok(PathspecPattern {
             pattern: normalize_pathspec_pattern(rest, pathspec, true)?,
             mode: PathspecMatchMode::Default,
+            ignore_case: false,
         });
     }
     if let Some(rest) = normalized.strip_prefix(":(") {
@@ -290,11 +306,13 @@ fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
         };
         let mut mode = PathspecMatchMode::Default;
         let mut top = false;
+        let mut ignore_case = false;
         for word in magic.split(',').filter(|word| !word.is_empty()) {
             match word {
                 "top" => top = true,
                 "literal" => mode = PathspecMatchMode::Literal,
                 "glob" => mode = PathspecMatchMode::Glob,
+                "icase" => ignore_case = true,
                 _ => {
                     return Err(RitError::invalid_input(format!(
                         "unsupported pathspec magic '{word}' in {pathspec}"
@@ -306,6 +324,7 @@ fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
         return Ok(PathspecPattern {
             pattern: normalize_pathspec_pattern(pattern, pathspec, top)?,
             mode,
+            ignore_case,
         });
     }
 
@@ -318,6 +337,7 @@ fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
     Ok(PathspecPattern {
         pattern: normalize_pathspec_pattern(&normalized, pathspec, false)?,
         mode: PathspecMatchMode::Default,
+        ignore_case: false,
     })
 }
 
@@ -451,6 +471,22 @@ mod tests {
             .expect("valid short top pathspec");
 
         assert!(pathspec.matches("nested/a.txt"));
+    }
+
+    #[test]
+    fn icase_magic_matches_ascii_case_insensitively() {
+        let pathspec =
+            PathspecSet::from_args(&[":(icase)camel.txt".to_owned()]).expect("valid pathspec");
+
+        assert!(pathspec.matches("Camel.txt"));
+        assert!(pathspec.matches("CAMEL.TXT"));
+        assert!(!pathspec.matches("nested/Camel.txt"));
+
+        let pathspec =
+            PathspecSet::from_args(&[":(icase,glob)*.txt".to_owned()]).expect("valid pathspec");
+
+        assert!(pathspec.matches("Camel.txt"));
+        assert!(!pathspec.matches("nested/Camel.txt"));
     }
 
     #[test]

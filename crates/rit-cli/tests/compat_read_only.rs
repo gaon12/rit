@@ -197,6 +197,10 @@ fn diff_pathspec_outputs_match_git() {
             vec!["diff", "--name-only", "--", ":(top)nested/base.txt"],
             vec!["diff", "--name-only", "--", ":(top)nested/base.txt"],
         ),
+        (
+            vec!["diff", "--name-only", "--", ":(icase)camel.txt"],
+            vec!["diff", "--name-only", "--", ":(icase)camel.txt"],
+        ),
     ] {
         let mut options = CompareOptions::new(
             fixture.path(),
@@ -231,6 +235,7 @@ fn status_pathspec_outputs_match_git() {
         ["status", "--porcelain=v1", "--", ":(glob)**/*.txt"],
         ["status", "--porcelain=v1", "--", ":(top)nested/base.txt"],
         ["status", "--porcelain=v1", "--", ":/nested/base.txt"],
+        ["status", "--porcelain=v1", "--", ":(icase)camel.txt"],
     ] {
         let mut options = CompareOptions::new(fixture.path(), git_command(args), rit_command(args));
         options.compare_repository_state = false;
@@ -569,6 +574,7 @@ fn ls_files_pathspec_outputs_match_git() {
         vec!["ls-files", "--stage", "--", "nested/*.txt"],
         vec!["ls-files", "--", ":(glob)*.txt"],
         vec!["ls-files", "--stage", "--", ":(top)nested/base.txt"],
+        vec!["ls-files", "--", ":(icase)camel.txt"],
     ] {
         let outcome = compare(&CompareOptions::new(
             fixture.path(),
@@ -622,6 +628,7 @@ fn log_pathspec_outputs_match_git() {
         vec!["log", "--oneline", "--", "nested/*.txt"],
         vec!["log", "--oneline", "--", ":(glob)*.txt"],
         vec!["log", "--oneline", "--", ":(top)nested/base.txt"],
+        vec!["log", "--oneline", "--", ":(icase)camel.txt"],
     ] {
         let outcome = compare(&CompareOptions::new(
             fixture.path(),
@@ -651,6 +658,7 @@ fn show_pathspec_outputs_match_git() {
         vec!["show", "--no-patch", "HEAD", "--", "nested/*.txt"],
         vec!["show", "--no-patch", "--", ":(glob)*.txt"],
         vec!["show", "--no-patch", "HEAD", "--", ":(top)nested/base.txt"],
+        vec!["show", "--no-patch", "--", ":(icase)camel.txt"],
     ] {
         let outcome = compare(&CompareOptions::new(
             fixture.path(),
@@ -682,10 +690,11 @@ impl DiffFixture {
         run_git(&path, ["config", "core.autocrlf", "false"]);
 
         fs::write(path.join("a.txt"), "one\ntwo\n").expect("base file should be written");
+        fs::write(path.join("Camel.txt"), "camel\n").expect("case fixture should be written");
         fs::create_dir_all(path.join("nested")).expect("nested directory should be created");
         fs::write(path.join("nested").join("base.txt"), "base\n")
             .expect("nested base file should be written");
-        run_git(&path, ["add", "a.txt", "nested/base.txt"]);
+        run_git(&path, ["add", "a.txt", "Camel.txt", "nested/base.txt"]);
         run_git(&path, ["commit", "--quiet", "-m", "base"]);
 
         fs::write(path.join("a.txt"), "one\nthree\nfour\n")
@@ -697,6 +706,8 @@ impl DiffFixture {
 
         fs::write(path.join("a.txt"), "one\nthree\nfour\nfive\n")
             .expect("worktree modification should be written");
+        fs::write(path.join("Camel.txt"), "camel changed\n")
+            .expect("case fixture should be modified");
         fs::write(
             path.join("nested").join("base.txt"),
             "base\nstaged\nworktree\n",

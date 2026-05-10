@@ -81,6 +81,23 @@ fn add_magic_pathspec_matches_git_status() {
 }
 
 #[test]
+fn add_icase_magic_pathspec_matches_git_status() {
+    let fixture = LocalWriteFixture::new("add-icase-magic", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
+    fs::write(fixture.path().join("New.txt"), "new\n").expect("new file should be written");
+
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words("git", ["add", ":(icase)new.txt"]),
+        command_words(rit_binary(), ["add", ":(icase)new.txt"]),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
+}
+
+#[test]
 fn add_chmod_executable_matches_git_status_and_tree_mode() {
     let fixture = LocalWriteFixture::new("add-chmod", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");

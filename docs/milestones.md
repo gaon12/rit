@@ -37,7 +37,8 @@ Verified on 2026-05-10 before continuing implementation:
 - M2 config parsing was previously split across repository format and user
   identity reads; it now has a shared parser for scalar config reads.
 - M3/M4 pathspec and diff gaps in this file match the implementation notes:
-  ordinary literal pathspecs exist, advanced pathspec magic/globs do not.
+  ordinary literal, wildcard, and positive magic pathspecs exist; exclude/attr
+  pathspec magic and pathspec files remain open.
 
 ## M0: Baseline And Rules
 
@@ -212,7 +213,8 @@ Completion criteria:
 - [x] Attributes parser.
 - [~] Pathspec magic.
   - [x] Positive `:(literal)`, `:(glob)`, `:(top)`, and `:/` forms.
-  - [ ] Exclude, attr, and case-insensitive pathspec magic.
+  - [x] Case-insensitive `:(icase)` pathspec magic.
+  - [ ] Exclude and attr pathspec magic.
 - [ ] Case-sensitivity behavior by platform/config.
 
 Completion criteria:

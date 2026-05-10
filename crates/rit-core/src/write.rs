@@ -645,7 +645,7 @@ fn expand_add_pathspecs<'a>(
     let indexed_paths = indexed_paths.cloned().collect::<Vec<_>>();
     let mut worktree_files = None;
     for pattern in pathspecs.patterns() {
-        if pattern.has_wildcard() {
+        if pattern.has_wildcard() || pattern.ignore_case() {
             if worktree_files.is_none() {
                 let mut files = BTreeSet::new();
                 collect_regular_files(worktree, worktree, &mut files)?;
