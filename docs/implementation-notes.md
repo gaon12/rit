@@ -42,6 +42,12 @@
 - Linked worktrees now read the per-worktree gitdir from a `.git` file and
   resolve `commondir` for shared objects, refs, packed refs, config, and
   info/exclude while keeping `HEAD` and `index` under the per-worktree gitdir.
+- Added a shared `GitConfig` parser for scalar config reads. It handles
+  section names case-insensitively, quoted subsections, comments, key-only
+  booleans, quoted values, and last-one-wins lookup. It is now used for the
+  repository format guard and commit identity config reads.
+- Still unsupported: include/includeIf expansion, full escape parity, typed
+  value coercion beyond current callers, and multi-valued config APIs.
 
 ### M3: Local diff scope expansion
 

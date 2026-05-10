@@ -1,8 +1,8 @@
 use crate::index::{Index, IndexEntry, join_slash_path, relative_slash_path};
 use crate::object::{hash_object, parse_tree_entries};
 use crate::{
-    ObjectId, ObjectKind, PathspecSet, Repository, Result, RitError, Signature, parse_commit,
-    refs::validate_ref_short_name,
+    GitConfig, ObjectId, ObjectKind, PathspecSet, Repository, Result, RitError, Signature,
+    parse_commit, refs::validate_ref_short_name,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -551,14 +551,15 @@ impl TreeNode {
 }
 
 fn read_signature(repository: &Repository) -> Result<Signature> {
+    let config_path = repository.common_dir().join("config");
     let name = std::env::var("GIT_AUTHOR_NAME")
         .or_else(|_| std::env::var("GIT_COMMITTER_NAME"))
         .ok()
-        .or_else(|| read_config_value(&repository.common_dir().join("config"), "user", "name"));
+        .or_else(|| read_config_value(&config_path, "user", "name"));
     let email = std::env::var("GIT_AUTHOR_EMAIL")
         .or_else(|_| std::env::var("GIT_COMMITTER_EMAIL"))
         .ok()
-        .or_else(|| read_config_value(&repository.common_dir().join("config"), "user", "email"));
+        .or_else(|| read_config_value(&config_path, "user", "email"));
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| RitError::invalid_input("system time is before Unix epoch"))?
@@ -577,24 +578,9 @@ fn read_signature(repository: &Repository) -> Result<Signature> {
 }
 
 fn read_config_value(path: &Path, section: &str, key: &str) -> Option<String> {
-    let contents = fs::read_to_string(path).ok()?;
-    let mut current_section = None;
-    for line in contents.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with('[') && trimmed.ends_with(']') {
-            current_section = Some(trimmed.trim_matches(&['[', ']'][..]).to_owned());
-            continue;
-        }
-        if current_section.as_deref() == Some(section) {
-            let Some((left, right)) = trimmed.split_once('=') else {
-                continue;
-            };
-            if left.trim() == key {
-                return Some(right.trim().to_owned());
-            }
-        }
-    }
-    None
+    GitConfig::read(path)
+        .ok()
+        .and_then(|config| config.get(section, key).map(ToOwned::to_owned))
 }
 
 fn format_signature(signature: &Signature) -> String {

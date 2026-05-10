@@ -1,4 +1,4 @@
-use crate::{GitObject, LooseObjectDb, ObjectId, Result, RitError};
+use crate::{GitConfig, GitObject, LooseObjectDb, ObjectId, Result, RitError};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -236,65 +236,24 @@ impl Repository {
             return Ok(());
         }
 
-        let config = fs::read_to_string(&config_path)
-            .map_err(|source| RitError::io(&config_path, source))?;
-        let format = parse_repository_format(&config)?;
-        if format.version != 0 {
+        let config = GitConfig::read(&config_path)?;
+        let format_version = config
+            .get("core", "repositoryformatversion")
+            .unwrap_or("0")
+            .parse::<u32>()
+            .map_err(|_| RitError::invalid_input("invalid repository format version in config"))?;
+        if format_version != 0 {
             return Err(RitError::UnsupportedRepositoryFormat {
-                version: format.version,
+                version: format_version,
             });
         }
-        if let Some(extension) = format.extensions.first() {
+        if let Some(extension) = config.keys_in_section("extensions").first() {
             return Err(RitError::UnsupportedRepositoryExtension {
-                name: extension.clone(),
+                name: (*extension).to_owned(),
             });
         }
         Ok(())
     }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct RepositoryFormat {
-    version: u32,
-    extensions: Vec<String>,
-}
-
-fn parse_repository_format(config: &str) -> Result<RepositoryFormat> {
-    let mut section = String::new();
-    let mut version = 0;
-    let mut extensions = Vec::new();
-
-    for raw_line in config.lines() {
-        let line = raw_line.trim();
-        if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
-            continue;
-        }
-        if line.starts_with('[') && line.ends_with(']') {
-            section = line[1..line.len() - 1].trim().to_ascii_lowercase();
-            continue;
-        }
-        let Some((key, value)) = line.split_once('=') else {
-            continue;
-        };
-        let key = key.trim().to_ascii_lowercase();
-        let value = value.trim();
-        match (section.as_str(), key.as_str()) {
-            ("core", "repositoryformatversion") => {
-                version = value.parse::<u32>().map_err(|_| {
-                    RitError::invalid_input(format!(
-                        "invalid repository format version in config: {value}"
-                    ))
-                })?;
-            }
-            ("extensions", extension_name) => extensions.push(extension_name.to_owned()),
-            _ => {}
-        }
-    }
-
-    Ok(RepositoryFormat {
-        version,
-        extensions,
-    })
 }
 
 fn create_repository_directories(git_dir: &Path) -> Result<()> {

@@ -22,6 +22,8 @@ The current codebase implements an early local Git subset:
   packed object reading for non-delta objects.
 - Linked worktree discovery reads `.git` gitdir files plus `commondir` for
   shared metadata.
+- Config reads use a shared scalar parser for repository format checks and
+  user identity lookup.
 - Index v2 read/write for regular files.
 - Local refs, packed refs lookup, lightweight tags, and simple revision
   resolution.

@@ -34,7 +34,8 @@ Verified on 2026-05-10 before continuing implementation:
   scenarios, but reusable checked-in local write fixtures are still not present.
 - M2 linked worktree/common-dir support was marked incomplete and was also
   incomplete in code: `Repository::common_dir` always pointed at `git_dir`.
-- M2 config parsing is still intentionally minimal and remains incomplete.
+- M2 config parsing was previously split across repository format and user
+  identity reads; it now has a shared parser for scalar config reads.
 - M3/M4 pathspec and diff gaps in this file match the implementation notes:
   ordinary literal pathspecs exist, advanced pathspec magic/globs do not.
 
@@ -74,7 +75,7 @@ Completion criteria:
 - [x] Repository format version guard.
 - [x] Unknown repository extension guard.
 - [x] Linked worktree/common-dir support.
-- [ ] More complete config parser.
+- [x] More complete config parser.
 
 Completion criteria:
 - Read and write operations fail clearly before touching unsupported
@@ -280,10 +281,8 @@ Completion criteria:
 ## Active Queue
 
 1. Add reusable checked-in fixtures for local write commands.
-2. Expand the config parser beyond the current minimal `core`, `extensions`,
-   and user identity reads.
-3. Expand `status --porcelain=v1` with stronger Git compatibility.
-4. Continue pathspec support for remaining read-only commands and advanced
+2. Expand `status --porcelain=v1` with stronger Git compatibility.
+3. Continue pathspec support for remaining read-only commands and advanced
    pathspec forms.
-5. Add index stat refresh or document and test the remaining difference.
-6. Expand `rit diff` patch output beyond small text files.
+4. Add index stat refresh or document and test the remaining difference.
+5. Expand `rit diff` patch output beyond small text files.

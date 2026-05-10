@@ -5,6 +5,7 @@
 //! behavior directly in argument handling.
 
 pub mod commit;
+pub mod config;
 pub mod diff;
 pub mod error;
 pub mod history;
@@ -33,4 +34,5 @@ pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 pub use commit::{Commit, Signature, parse_commit};
+pub use config::{GitConfig, GitConfigEntry};
 pub use diff::{DiffFileStat, DiffPatch, DiffPatchFile, DiffSummary};
