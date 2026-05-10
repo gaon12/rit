@@ -45,6 +45,7 @@ rit cat-file
 rit ls-tree [--name-only|--object-only] <tree-ish> [--] [<pathspec>...]
 rit ls-files [--stage] [--] [<pathspec>...]
 rit show
+rit show --no-patch -- <pathspec>
 rit status --porcelain=v1
 rit status --porcelain=v1 -- <pathspec>
 rit diff --name-only

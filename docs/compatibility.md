@@ -100,6 +100,9 @@ default, `--name-only`, and `--object-only` output.
 `log` compatibility tests cover `--oneline -- <pathspec>` on simple
 first-parent histories.
 
+`show` compatibility tests cover `--no-patch -- <pathspec>` for commits that
+do and do not touch the requested path.
+
 Patch compatibility tests cover default and cached text patches for small files.
 
 Local write compatibility tests currently cover directory pathspec behavior for

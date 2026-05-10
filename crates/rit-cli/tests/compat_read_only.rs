@@ -215,6 +215,31 @@ fn log_pathspec_outputs_match_git() {
     }
 }
 
+#[test]
+fn show_pathspec_outputs_match_git() {
+    let fixture = LogPathFixture::new("pathspec-show");
+
+    for args in [
+        vec!["show", "--no-patch", "--", "nested"],
+        vec!["show", "--no-patch", "--", "a.txt"],
+        vec!["show", "--no-patch", "HEAD", "--", "nested/base.txt"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "pathspec show {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
 struct DiffFixture {
     path: PathBuf,
 }

@@ -77,12 +77,15 @@
   including `--name-only` and `--object-only`.
 - Added ordinary literal path filtering for first-parent `log`, including
   `--oneline`.
+- Added ordinary literal path filtering for `show --no-patch`. Commits that do
+  not touch the requested paths produce no output, matching Git's no-patch
+  behavior for simple path filters.
 - Added patch output for small text files in default and cached diff scopes,
   with Git comparison coverage for default patch, `-p`, and `--cached`.
 - Added local write compatibility coverage that compares Git and rit porcelain
   state after directory pathspec `add`, `restore`, and `reset`.
 - Still unsupported: pathspec magic, glob pathspec matching, pathspec files,
-  and pathspec filtering for `show`.
+  and `show` path filtering for patch output.
 
 ## Implemented Commands
 
@@ -302,8 +305,10 @@
 ### `rit show`
 
 - Baseline command checked: `git show -h`
-- Supported options: default object display and `--no-patch`/`-s` for commits, with optional revision.
-- Unsupported options: commit diffs, revision ranges, path filters, decorations, formatting controls.
+- Supported options: default object display and `--no-patch`/`-s` for commits,
+  optional revision, and ordinary literal path filters for no-patch commit
+  display.
+- Unsupported options: commit diffs, revision ranges, decorations, formatting controls, pathspec magic/globs.
 - Git-compatible behavior: commit no-patch layout, tree pretty printing, blob contents.
 - Intentional differences: commit diffs are not emitted yet.
 - Repository mutation: no.

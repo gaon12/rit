@@ -108,7 +108,7 @@ Completion criteria:
   - [x] Ordinary literal pathspec filters for `ls-files`.
   - [x] Ordinary literal path lookup for `ls-tree`.
   - [x] Ordinary literal path filters for first-parent `log`.
-  - [ ] Pathspec filters for `show`.
+  - [x] Ordinary literal path filters for `show --no-patch`.
 - [ ] Rename detection.
 - [ ] Binary diff accounting.
 

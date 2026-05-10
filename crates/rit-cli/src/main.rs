@@ -143,7 +143,7 @@ Switch to an existing branch, or create and switch to a new branch.
 ";
 
 const SHOW_HELP: &str = "\
-rit show [--no-patch] [<revision>]
+rit show [--no-patch] [<revision>] [--] [<pathspec>...]
 
 Show one commit, tree, or blob object. Commit diffs are not emitted yet.
 ";
@@ -749,16 +749,13 @@ fn show_command(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    let revision = match args {
-        [] => "HEAD",
-        [revision] if !revision.starts_with('-') => revision,
-        [flag] if flag == "--no-patch" || flag == "-s" => "HEAD",
-        [flag, revision] if flag == "--no-patch" || flag == "-s" => revision,
-        _ => {
-            writeln!(
-                stderr,
-                "rit: show currently supports [--no-patch] [<revision>]"
-            )?;
+    let Some((revision, pathspec_args)) = parse_show_args(args, stderr)? else {
+        return Ok(ExitCode::from(129));
+    };
+    let pathspecs = match rit_core::PathspecSet::from_args(&pathspec_args) {
+        Ok(pathspecs) => pathspecs,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
             return Ok(ExitCode::from(129));
         }
     };
@@ -766,7 +763,7 @@ fn show_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    let object_id = match repository.resolve_revision(revision) {
+    let object_id = match repository.resolve_revision(&revision) {
         Ok(object_id) => object_id,
         Err(error) => {
             writeln!(stderr, "rit: {error}")?;
@@ -782,7 +779,22 @@ fn show_command(
     };
     match object.kind {
         rit_core::ObjectKind::Commit => match rit_core::parse_commit(&object.data) {
-            Ok(commit) => print_commit_no_patch(object_id, &commit, stdout)?,
+            Ok(commit) => {
+                let touches_pathspecs = if pathspecs.is_all() {
+                    true
+                } else {
+                    match repository.commit_touches_pathspecs(&commit, &pathspecs) {
+                        Ok(touches) => touches,
+                        Err(error) => {
+                            writeln!(stderr, "rit: {error}")?;
+                            return Ok(ExitCode::from(1));
+                        }
+                    }
+                };
+                if touches_pathspecs {
+                    print_commit_no_patch(object_id, &commit, stdout)?;
+                }
+            }
             Err(error) => {
                 writeln!(stderr, "rit: {error}")?;
                 return Ok(ExitCode::from(1));
@@ -792,6 +804,40 @@ fn show_command(
         rit_core::ObjectKind::Blob | rit_core::ObjectKind::Tag => stdout.write_all(&object.data)?,
     }
     Ok(ExitCode::SUCCESS)
+}
+
+fn parse_show_args(
+    args: &[String],
+    stderr: &mut dyn Write,
+) -> io::Result<Option<(String, Vec<String>)>> {
+    let mut revision = None;
+    let mut pathspecs = Vec::new();
+    let mut after_separator = false;
+
+    for arg in args {
+        match arg.as_str() {
+            "--" if !after_separator => after_separator = true,
+            "--no-patch" | "-s" if !after_separator => {}
+            unsupported if unsupported.starts_with('-') && !after_separator => {
+                writeln!(stderr, "rit: unsupported show option '{unsupported}'")?;
+                return Ok(None);
+            }
+            value if after_separator => pathspecs.push(value.to_owned()),
+            value if revision.is_none() => revision = Some(value.to_owned()),
+            extra => {
+                writeln!(
+                    stderr,
+                    "rit: show accepts at most one revision before --: {extra}"
+                )?;
+                return Ok(None);
+            }
+        }
+    }
+
+    Ok(Some((
+        revision.unwrap_or_else(|| "HEAD".to_owned()),
+        pathspecs,
+    )))
 }
 
 fn ls_files_command(

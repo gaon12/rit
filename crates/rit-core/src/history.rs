@@ -44,7 +44,12 @@ impl Repository {
         Ok(entries)
     }
 
-    fn commit_touches_pathspecs(&self, commit: &Commit, pathspecs: &PathspecSet) -> Result<bool> {
+    /// Returns whether one commit changes any path matched by `pathspecs`.
+    pub fn commit_touches_pathspecs(
+        &self,
+        commit: &Commit,
+        pathspecs: &PathspecSet,
+    ) -> Result<bool> {
         let current_entries = self.tree_blob_entries(commit.tree)?;
         let parent_entries = if let Some(parent_id) = commit.parents.first() {
             let parent_object = self.read_object(*parent_id)?;
