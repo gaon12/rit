@@ -150,7 +150,12 @@ Completion criteria:
     - [x] Shared simple bracket-class wildcard matcher.
     - [x] Simple wildcard and bracket-class expansion for `add`, `restore`,
       and `reset`.
-- [ ] Hook execution for commit.
+- [x] Hook execution for commit.
+  - [x] `pre-commit`, `prepare-commit-msg`, and `commit-msg` can block the
+    commit.
+  - [x] `post-commit` runs after a successful commit without changing the
+    commit result.
+  - [x] `--no-verify` bypasses `pre-commit` and `commit-msg`.
 - [x] Commit author/date override for `--author=<name <email>>` and raw
   `--date=<unix-seconds> <+/-HHMM>`.
 - [x] Safer branch delete merge checks.

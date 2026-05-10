@@ -138,6 +138,9 @@ comparisons can share repository setup.
 Commit compatibility tests cover `--author` and raw `--date` overrides with
 fixed committer environment variables by comparing the resulting `HEAD` object
 ID and raw commit object contents.
+Commit hook compatibility tests cover `commit-msg` message edits,
+`pre-commit` failure blocking, `--no-verify` bypass behavior, and
+`post-commit` side effects.
 
 Detached checkout compatibility tests compare detached `.git/HEAD`, branch
 state, porcelain status, and materialized file contents.

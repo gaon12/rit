@@ -8,7 +8,8 @@ use crate::{
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Result of creating a commit.
@@ -21,12 +22,31 @@ pub struct CommitResult {
 }
 
 /// Options that affect commit metadata without changing the committed tree.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommitOptions {
     /// Author identity supplied by `git commit --author=<author>`.
     pub author: Option<SignatureIdentity>,
     /// Author timestamp supplied by `git commit --date=<date>`.
     pub author_date: Option<SignatureTime>,
+    /// Whether `pre-commit` and `commit-msg` hooks should run.
+    pub verify: bool,
+}
+
+impl CommitOptions {
+    /// Builds default commit options with hook verification enabled.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Default for CommitOptions {
+    fn default() -> Self {
+        Self {
+            author: None,
+            author_date: None,
+            verify: true,
+        }
+    }
 }
 
 /// Name and e-mail pair used in a commit signature.
@@ -185,6 +205,8 @@ impl Repository {
             }
         }
 
+        let mut commit_message = message.trim_end_matches('\n').to_owned();
+        run_commit_hooks(self, options, &mut commit_message)?;
         let signatures = read_commit_signatures(self, options)?;
         let mut commit = Vec::new();
         commit.extend_from_slice(format!("tree {tree_id}\n").as_bytes());
@@ -197,13 +219,14 @@ impl Repository {
         commit.extend_from_slice(
             format!("committer {}\n\n", format_signature(&signatures.committer)).as_bytes(),
         );
-        commit.extend_from_slice(message.trim_end_matches('\n').as_bytes());
+        commit.extend_from_slice(commit_message.trim_end_matches('\n').as_bytes());
         commit.push(b'\n');
 
         let commit_id = self
             .loose_objects()
             .write_object(ObjectKind::Commit, &commit)?;
         self.update_head(commit_id)?;
+        run_post_commit_hook(self);
         Ok(CommitResult {
             commit_id,
             file_count: index.entries.len(),
@@ -686,6 +709,193 @@ impl TreeNode {
         };
         child.insert_parts(parts, object_id)
     }
+}
+
+fn run_commit_hooks(
+    repository: &Repository,
+    options: &CommitOptions,
+    message: &mut String,
+) -> Result<()> {
+    let message_path = repository.git_dir().join("COMMIT_EDITMSG");
+    write_text_atomically(
+        &message_path,
+        &format!("{}\n", message.trim_end_matches('\n')),
+    )?;
+    if !options.verify {
+        run_hook(
+            repository,
+            "prepare-commit-msg",
+            &[message_path.clone(), PathBuf::from("message")],
+        )?;
+        *message = fs::read_to_string(&message_path)
+            .map_err(|source| RitError::io(&message_path, source))?;
+        return Ok(());
+    }
+
+    run_hook(repository, "pre-commit", &[])?;
+    run_hook(
+        repository,
+        "prepare-commit-msg",
+        &[message_path.clone(), PathBuf::from("message")],
+    )?;
+    run_hook(
+        repository,
+        "commit-msg",
+        std::slice::from_ref(&message_path),
+    )?;
+    *message =
+        fs::read_to_string(&message_path).map_err(|source| RitError::io(&message_path, source))?;
+    Ok(())
+}
+
+fn run_hook(repository: &Repository, name: &str, args: &[PathBuf]) -> Result<()> {
+    let hook_path = repository.common_dir().join("hooks").join(name);
+    if !hook_should_run(&hook_path)? {
+        return Ok(());
+    }
+
+    let mut command = hook_command(&hook_path)?;
+    let child_args = args
+        .iter()
+        .map(|argument| child_path(argument))
+        .collect::<Vec<_>>();
+    let current_dir = child_path(repository.worktree().unwrap_or(repository.common_dir()));
+    command
+        .args(&child_args)
+        .current_dir(current_dir)
+        .env("GIT_DIR", child_path(repository.git_dir()))
+        .env(
+            "GIT_INDEX_FILE",
+            child_path(&repository.git_dir().join("index")),
+        );
+    let output = command
+        .output()
+        .map_err(|source| RitError::io(&hook_path, source))?;
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let detail = String::from_utf8_lossy(if output.stderr.is_empty() {
+        &output.stdout
+    } else {
+        &output.stderr
+    })
+    .trim()
+    .to_owned();
+    let status = output
+        .status
+        .code()
+        .map_or_else(|| "signal".to_owned(), |code| code.to_string());
+    if detail.is_empty() {
+        Err(RitError::invalid_input(format!(
+            "hook '{name}' failed with status {status}"
+        )))
+    } else {
+        Err(RitError::invalid_input(format!(
+            "hook '{name}' failed with status {status}: {detail}"
+        )))
+    }
+}
+
+fn run_post_commit_hook(repository: &Repository) {
+    let hook_path = repository.common_dir().join("hooks").join("post-commit");
+    if !matches!(hook_should_run(&hook_path), Ok(true)) {
+        return;
+    }
+    let Ok(mut command) = hook_command(&hook_path) else {
+        return;
+    };
+    let current_dir = child_path(repository.worktree().unwrap_or(repository.common_dir()));
+    let _ = command
+        .current_dir(current_dir)
+        .env("GIT_DIR", child_path(repository.git_dir()))
+        .env(
+            "GIT_INDEX_FILE",
+            child_path(&repository.git_dir().join("index")),
+        )
+        .output();
+}
+
+fn hook_should_run(path: &Path) -> Result<bool> {
+    let metadata = match fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => return Err(RitError::io(path, error)),
+    };
+    if !metadata.is_file() {
+        return Ok(false);
+    }
+    Ok(hook_is_executable(&metadata))
+}
+
+#[cfg(unix)]
+fn hook_is_executable(metadata: &fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    metadata.permissions().mode() & 0o111 != 0
+}
+
+#[cfg(not(unix))]
+fn hook_is_executable(_metadata: &fs::Metadata) -> bool {
+    true
+}
+
+fn hook_command(path: &Path) -> Result<Command> {
+    #[cfg(windows)]
+    {
+        let shell = windows_shell_path().ok_or_else(|| {
+            RitError::invalid_input(
+                "cannot run hook script because no Git-compatible sh.exe was found",
+            )
+        })?;
+        let mut command = Command::new(shell);
+        command.arg(child_path(path));
+        Ok(command)
+    }
+
+    #[cfg(not(windows))]
+    {
+        Ok(Command::new(path))
+    }
+}
+
+fn child_path(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        let text = path.as_os_str().to_string_lossy();
+        if let Some(stripped) = text.strip_prefix(r"\\?\") {
+            return PathBuf::from(stripped);
+        }
+    }
+    path.to_path_buf()
+}
+
+#[cfg(windows)]
+fn windows_shell_path() -> Option<PathBuf> {
+    std::env::var_os("SHELL")
+        .map(PathBuf::from)
+        .filter(|path| path.exists() && is_sh_like_shell(path))
+        .or_else(|| {
+            [
+                r"C:\Program Files\Git\bin\sh.exe",
+                r"C:\Program Files\Git\usr\bin\sh.exe",
+                r"C:\Program Files (x86)\Git\bin\sh.exe",
+                r"C:\Program Files (x86)\Git\usr\bin\sh.exe",
+            ]
+            .into_iter()
+            .map(PathBuf::from)
+            .find(|path| path.exists())
+        })
+}
+
+#[cfg(windows)]
+fn is_sh_like_shell(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| {
+            let lower = name.to_ascii_lowercase();
+            lower == "sh.exe" || lower == "bash.exe" || lower == "sh" || lower == "bash"
+        })
+        .unwrap_or(false)
 }
 
 struct CommitSignatures {

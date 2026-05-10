@@ -217,6 +217,200 @@ fn commit_author_and_date_overrides_match_git_object() {
 }
 
 #[test]
+fn commit_msg_hook_modifies_message_like_git() {
+    let fixture = LocalWriteFixture::new("commit-msg-hook", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
+    let workspace = temp_path("commit-msg-hook-compare");
+    let git_repo = workspace.join("git");
+    let rit_repo = workspace.join("rit");
+    copy_directory(fixture.path(), &git_repo);
+    copy_directory(fixture.path(), &rit_repo);
+    write_hook(
+        &git_repo,
+        "commit-msg",
+        "#!/bin/sh\nprintf '\\nHooked-by: test\\n' >> \"$1\"\n",
+    );
+    write_hook(
+        &rit_repo,
+        "commit-msg",
+        "#!/bin/sh\nprintf '\\nHooked-by: test\\n' >> \"$1\"\n",
+    );
+
+    fs::write(git_repo.join("nested").join("tracked.txt"), "hooked\n")
+        .expect("git file should be changed");
+    fs::write(rit_repo.join("nested").join("tracked.txt"), "hooked\n")
+        .expect("rit file should be changed");
+    run_git(&git_repo, ["add", "nested/tracked.txt"]);
+    run_git(&rit_repo, ["add", "nested/tracked.txt"]);
+
+    let env = [
+        ("GIT_AUTHOR_DATE", "1700000010 +0900"),
+        ("GIT_COMMITTER_DATE", "1700000011 +0900"),
+    ];
+    run_command(
+        &command_words_with_env("git", ["commit", "-m", "hooked"], &env),
+        &git_repo,
+    );
+    run_command(
+        &command_words_with_env(rit_binary(), ["commit", "-m", "hooked"], &env),
+        &rit_repo,
+    );
+
+    assert_eq!(
+        run_capture("git", ["cat-file", "-p", "HEAD"], &git_repo).0,
+        run_capture("git", ["cat-file", "-p", "HEAD"], &rit_repo).0
+    );
+    let _ = fs::remove_dir_all(workspace);
+}
+
+#[test]
+fn pre_commit_hook_blocks_commit_like_git() {
+    let fixture = LocalWriteFixture::new("pre-commit-hook", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
+    let workspace = temp_path("pre-commit-hook-compare");
+    let git_repo = workspace.join("git");
+    let rit_repo = workspace.join("rit");
+    copy_directory(fixture.path(), &git_repo);
+    copy_directory(fixture.path(), &rit_repo);
+    write_hook(
+        &git_repo,
+        "pre-commit",
+        "#!/bin/sh\necho blocked >&2\nexit 1\n",
+    );
+    write_hook(
+        &rit_repo,
+        "pre-commit",
+        "#!/bin/sh\necho blocked >&2\nexit 1\n",
+    );
+
+    fs::write(git_repo.join("nested").join("tracked.txt"), "blocked\n")
+        .expect("git file should be changed");
+    fs::write(rit_repo.join("nested").join("tracked.txt"), "blocked\n")
+        .expect("rit file should be changed");
+    run_git(&git_repo, ["add", "nested/tracked.txt"]);
+    run_git(&rit_repo, ["add", "nested/tracked.txt"]);
+
+    let env = [
+        ("GIT_AUTHOR_DATE", "1700000020 +0900"),
+        ("GIT_COMMITTER_DATE", "1700000021 +0900"),
+    ];
+    let git = run_command_allow_failure(
+        &command_words_with_env("git", ["commit", "-m", "blocked"], &env),
+        &git_repo,
+    );
+    let rit = run_command_allow_failure(
+        &command_words_with_env(rit_binary(), ["commit", "-m", "blocked"], &env),
+        &rit_repo,
+    );
+
+    assert!(!git.success);
+    assert!(!rit.success);
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &git_repo).0,
+        run_capture("git", ["rev-parse", "HEAD"], &rit_repo).0
+    );
+    let _ = fs::remove_dir_all(workspace);
+}
+
+#[test]
+fn no_verify_bypasses_commit_hooks_like_git() {
+    let fixture = LocalWriteFixture::new("no-verify-hook", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
+    let workspace = temp_path("no-verify-hook-compare");
+    let git_repo = workspace.join("git");
+    let rit_repo = workspace.join("rit");
+    copy_directory(fixture.path(), &git_repo);
+    copy_directory(fixture.path(), &rit_repo);
+    write_hook(
+        &git_repo,
+        "pre-commit",
+        "#!/bin/sh\necho blocked >&2\nexit 1\n",
+    );
+    write_hook(
+        &rit_repo,
+        "pre-commit",
+        "#!/bin/sh\necho blocked >&2\nexit 1\n",
+    );
+
+    fs::write(git_repo.join("nested").join("tracked.txt"), "allowed\n")
+        .expect("git file should be changed");
+    fs::write(rit_repo.join("nested").join("tracked.txt"), "allowed\n")
+        .expect("rit file should be changed");
+    run_git(&git_repo, ["add", "nested/tracked.txt"]);
+    run_git(&rit_repo, ["add", "nested/tracked.txt"]);
+
+    let env = [
+        ("GIT_AUTHOR_DATE", "1700000030 +0900"),
+        ("GIT_COMMITTER_DATE", "1700000031 +0900"),
+    ];
+    run_command(
+        &command_words_with_env("git", ["commit", "--no-verify", "-m", "allowed"], &env),
+        &git_repo,
+    );
+    run_command(
+        &command_words_with_env(
+            rit_binary(),
+            ["commit", "--no-verify", "-m", "allowed"],
+            &env,
+        ),
+        &rit_repo,
+    );
+
+    assert_eq!(
+        run_capture("git", ["cat-file", "-p", "HEAD"], &git_repo).0,
+        run_capture("git", ["cat-file", "-p", "HEAD"], &rit_repo).0
+    );
+    let _ = fs::remove_dir_all(workspace);
+}
+
+#[test]
+fn post_commit_hook_runs_after_success_like_git() {
+    let fixture = LocalWriteFixture::new("post-commit-hook", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
+    let workspace = temp_path("post-commit-hook-compare");
+    let git_repo = workspace.join("git");
+    let rit_repo = workspace.join("rit");
+    copy_directory(fixture.path(), &git_repo);
+    copy_directory(fixture.path(), &rit_repo);
+    write_hook(
+        &git_repo,
+        "post-commit",
+        "#!/bin/sh\nprintf done > post.txt\n",
+    );
+    write_hook(
+        &rit_repo,
+        "post-commit",
+        "#!/bin/sh\nprintf done > post.txt\n",
+    );
+
+    fs::write(git_repo.join("nested").join("tracked.txt"), "post\n")
+        .expect("git file should be changed");
+    fs::write(rit_repo.join("nested").join("tracked.txt"), "post\n")
+        .expect("rit file should be changed");
+    run_git(&git_repo, ["add", "nested/tracked.txt"]);
+    run_git(&rit_repo, ["add", "nested/tracked.txt"]);
+
+    let env = [
+        ("GIT_AUTHOR_DATE", "1700000040 +0900"),
+        ("GIT_COMMITTER_DATE", "1700000041 +0900"),
+    ];
+    run_command(
+        &command_words_with_env("git", ["commit", "-m", "post"], &env),
+        &git_repo,
+    );
+    run_command(
+        &command_words_with_env(rit_binary(), ["commit", "-m", "post"], &env),
+        &rit_repo,
+    );
+
+    assert_eq!(
+        fs::read_to_string(git_repo.join("post.txt")).expect("git post marker should read"),
+        fs::read_to_string(rit_repo.join("post.txt")).expect("rit post marker should read")
+    );
+    let _ = fs::remove_dir_all(workspace);
+}
+
+#[test]
 fn checkout_detached_commit_matches_git_state() {
     let fixture =
         LocalWriteFixture::new("detached-checkout", LocalWriteFixtureKind::DetachedCheckout)
@@ -476,6 +670,25 @@ fn run_git<const N: usize>(cwd: &Path, args: [&str; N]) {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+fn write_hook(repository: &Path, name: &str, contents: &str) {
+    let path = repository.join(".git").join("hooks").join(name);
+    fs::write(&path, contents).expect("hook should be written");
+    make_hook_executable(&path);
+}
+
+#[cfg(unix)]
+fn make_hook_executable(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    let mut permissions = fs::metadata(path)
+        .expect("hook metadata should read")
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions).expect("hook permissions should be set");
+}
+
+#[cfg(not(unix))]
+fn make_hook_executable(_path: &Path) {}
 
 fn copy_directory(from: &Path, to: &Path) {
     fs::create_dir_all(to).expect("target directory should be created");

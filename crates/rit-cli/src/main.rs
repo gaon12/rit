@@ -1014,7 +1014,7 @@ fn commit_command(
         Ok(None) => {
             writeln!(
                 stderr,
-                "rit: commit currently supports -m <message>, --author, and --date"
+                "rit: commit currently supports -m <message>, --author, --date, and --no-verify"
             )?;
             return Ok(ExitCode::from(129));
         }
@@ -1401,6 +1401,10 @@ fn parse_commit_args(args: &[String]) -> rit_core::Result<Option<ParsedCommitArg
             options.author_date = Some(rit_core::SignatureTime::parse_git_raw(value)?);
         } else if let Some(value) = arg.strip_prefix("--date=") {
             options.author_date = Some(rit_core::SignatureTime::parse_git_raw(value)?);
+        } else if arg == "-n" || arg == "--no-verify" {
+            options.verify = false;
+        } else if arg == "--verify" {
+            options.verify = true;
         } else {
             return Ok(None);
         }
