@@ -116,9 +116,12 @@ Completion criteria:
   - [x] Simple `*` and `?` wildcard pathspec filters for
     `status --porcelain=v1` and `diff` summary modes.
   - [x] Ordinary literal pathspec filters for `ls-files`.
+  - [x] Simple `*` and `?` wildcard pathspec filters for `ls-files`.
   - [x] Ordinary literal path lookup for `ls-tree`.
   - [x] Ordinary literal path filters for first-parent `log`.
   - [x] Ordinary literal path filters for `show --no-patch`.
+  - [x] Simple `*` and `?` wildcard pathspec filters for first-parent `log`
+    and `show --no-patch`.
 - [ ] Rename detection.
 - [x] Binary diff accounting for summary modes.
 

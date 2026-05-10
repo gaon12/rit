@@ -426,6 +426,8 @@ fn ls_files_pathspec_outputs_match_git() {
     for args in [
         vec!["ls-files", "--", "nested"],
         vec!["ls-files", "--stage", "--", "nested"],
+        vec!["ls-files", "--", "*.txt"],
+        vec!["ls-files", "--stage", "--", "nested/*.txt"],
     ] {
         let outcome = compare(&CompareOptions::new(
             fixture.path(),
@@ -475,6 +477,8 @@ fn log_pathspec_outputs_match_git() {
     for args in [
         vec!["log", "--oneline", "--", "a.txt"],
         vec!["log", "--oneline", "--", "nested"],
+        vec!["log", "--oneline", "--", "*.txt"],
+        vec!["log", "--oneline", "--", "nested/*.txt"],
     ] {
         let outcome = compare(&CompareOptions::new(
             fixture.path(),
@@ -500,6 +504,8 @@ fn show_pathspec_outputs_match_git() {
         vec!["show", "--no-patch", "--", "nested"],
         vec!["show", "--no-patch", "--", "a.txt"],
         vec!["show", "--no-patch", "HEAD", "--", "nested/base.txt"],
+        vec!["show", "--no-patch", "--", "*.txt"],
+        vec!["show", "--no-patch", "HEAD", "--", "nested/*.txt"],
     ] {
         let outcome = compare(&CompareOptions::new(
             fixture.path(),

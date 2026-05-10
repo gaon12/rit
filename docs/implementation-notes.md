@@ -88,6 +88,8 @@
 - Added ordinary literal path filtering for `show --no-patch`. Commits that do
   not touch the requested paths produce no output, matching Git's no-patch
   behavior for simple path filters.
+- Added simple wildcard pathspec compatibility coverage for `ls-files`,
+  first-parent `log`, and `show --no-patch`.
 - Added patch output for small text files in default and cached diff scopes,
   with Git comparison coverage for default patch, `-p`, and `--cached`.
 - Patch output now emits `\ No newline at end of file` markers for missing
@@ -214,10 +216,11 @@
 ### `rit log`
 
 - Baseline command checked: `git log -h`
-- Supported options: default output, `--oneline`, and ordinary literal file or
-  directory path filters.
-- Unsupported options: revision ranges, decoration, graph, advanced path
-  history simplification, grep, ordering controls, diff output.
+- Supported options: default output, `--oneline`, and ordinary literal plus
+  simple `*`/`?` wildcard file or directory path filters.
+- Unsupported options: revision ranges, decoration, graph, pathspec
+  magic/bracket globs, advanced path history simplification, grep, ordering
+  controls, diff output.
 - Git-compatible behavior: reads commits from `HEAD`, follows the first parent,
   prints default author/date/message layout and 7-character oneline IDs.
 - Intentional differences: merge traversal is first-parent only until revision
@@ -336,9 +339,10 @@
 
 - Baseline command checked: `git show -h`
 - Supported options: default object display and `--no-patch`/`-s` for commits,
-  optional revision, and ordinary literal path filters for no-patch commit
-  display.
-- Unsupported options: commit diffs, revision ranges, decorations, formatting controls, pathspec magic/globs.
+  optional revision, and ordinary literal plus simple `*`/`?` wildcard path
+  filters for no-patch commit display.
+- Unsupported options: commit diffs, revision ranges, decorations, formatting
+  controls, pathspec magic/bracket globs.
 - Git-compatible behavior: commit no-patch layout, tree pretty printing, blob contents.
 - Intentional differences: commit diffs are not emitted yet.
 - Repository mutation: no.
@@ -347,9 +351,10 @@
 
 - Baseline command checked: `git ls-files -h`
 - Supported options: default cached file listing, `--stage`/`-s`, and ordinary
-  literal file or directory pathspec filters.
-- Unsupported options: deleted/modified/others/ignored filters, advanced
-  pathspec forms, EOL/debug/format output, sparse/submodule modes.
+  literal file or directory pathspec filters plus simple `*`/`?` wildcard
+  pathspec filters.
+- Unsupported options: deleted/modified/others/ignored filters, pathspec
+  magic/bracket globs, EOL/debug/format output, sparse/submodule modes.
 - Git-compatible behavior: lists index paths and stage records as `<mode> <object> 0<TAB><path>`.
 - Repository mutation: no.
 

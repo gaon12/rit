@@ -110,10 +110,10 @@ because Git refreshes cached stat metadata and rit currently does not.
 default, `--name-only`, and `--object-only` output.
 
 `log` compatibility tests cover `--oneline -- <pathspec>` on simple
-first-parent histories.
+first-parent histories, including simple wildcard pathspecs.
 
 `show` compatibility tests cover `--no-patch -- <pathspec>` for commits that
-do and do not touch the requested path.
+do and do not touch the requested path, including simple wildcard pathspecs.
 
 Patch compatibility tests cover default and cached text patches for small files.
 Patch compatibility tests also cover missing trailing newline markers for
