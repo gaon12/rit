@@ -25,7 +25,8 @@ The current codebase implements an early local Git subset:
 - Config reads use a shared scalar parser for repository format checks and
   user identity lookup.
 - Index v2 read/write for regular files, including status stat refresh for
-  clean tracked files and raw extension-byte preservation.
+  clean tracked files, raw extension-byte preservation, and committed
+  `100644`/`100755` executable-bit modes.
 - Local refs, packed refs lookup, lightweight tags, and simple revision
   resolution.
 - CLI commands: `version`, `help`, `init`, `rev-parse`, `cat-file`, `ls-tree`,
@@ -44,6 +45,8 @@ The current codebase implements an early local Git subset:
 - Ordinary literal path filtering is supported for first-parent `log`.
 - Ordinary literal file, directory, and `.` pathspec expansion is supported for
   `add`, `restore`, and `reset`.
+- `add --chmod=+x|-x` records executable-bit mode overrides in the index and
+  committed trees.
 - Detached `checkout <commit>` is supported for clean worktrees.
 - `branch -d` refuses unmerged local branches.
 
@@ -136,6 +139,8 @@ simple wildcard/bracket-class pathspec behavior for `add`, `restore`, and
 `reset` by comparing the resulting porcelain status and restored file contents.
 Reusable local write fixture builders live in `rit-testkit` so new write
 comparisons can share repository setup.
+Local write compatibility tests also cover `add --chmod=+x` by comparing
+porcelain status after staging and `git ls-tree` output after committing.
 
 Commit compatibility tests cover `--author` and raw `--date` overrides with
 fixed committer environment variables by comparing the resulting `HEAD` object

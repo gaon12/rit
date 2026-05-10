@@ -175,7 +175,12 @@ Completion criteria:
 - [x] Raw optional index extension preservation during status refresh.
 - [x] Delta packed object resolution.
 - [ ] Semantic index extension parsing.
-- [ ] File mode and executable bit handling.
+- [~] File mode and executable bit handling.
+  - [x] Preserve `100644`/`100755` modes when writing trees from the index.
+  - [x] `rit add --chmod=+x|-x` records executable-bit overrides in the index.
+  - [x] `status --porcelain=v1` and cached diff summaries detect staged
+    mode-only changes.
+  - [ ] Platform worktree executable-bit refresh and checkout materialization.
 - [ ] Symlink support.
 
 Completion criteria:
@@ -309,6 +314,7 @@ Completion criteria:
 
 ## Active Queue
 
-1. Continue pathspec support for remaining read-only commands and advanced
+1. Finish M5 file mode parity by refreshing platform worktree executable-bit
+   changes and materializing executable files during checkout/restore.
+2. Continue pathspec support for remaining read-only commands and advanced
    pathspec forms.
-2. Start the next small `status --porcelain=v1` compatibility slice.

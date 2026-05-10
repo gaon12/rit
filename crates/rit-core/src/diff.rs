@@ -380,7 +380,15 @@ impl Repository {
         let index_entries = index
             .entries
             .iter()
-            .map(|entry| (entry.path.clone(), entry.object_id))
+            .map(|entry| {
+                (
+                    entry.path.clone(),
+                    DiffTreeEntry {
+                        object_id: entry.object_id,
+                        mode: entry.mode,
+                    },
+                )
+            })
             .collect::<BTreeMap<_, _>>();
         let head_entries = self.head_diff_entries()?;
         let paths = index_entries
@@ -395,8 +403,8 @@ impl Repository {
                 continue;
             }
             match (head_entries.get(&path), index_entries.get(&path)) {
-                (None, Some(new_id)) => {
-                    let new_object = self.read_blob(*new_id)?;
+                (None, Some(new_entry)) => {
+                    let new_object = self.read_blob(new_entry.object_id)?;
                     files.push(DiffFileStat {
                         status: 'A',
                         path,
@@ -407,8 +415,8 @@ impl Repository {
                         new_size: new_object.data.len(),
                     });
                 }
-                (Some(old_id), None) => {
-                    let old_object = self.read_blob(*old_id)?;
+                (Some(old_entry), None) => {
+                    let old_object = self.read_blob(old_entry.object_id)?;
                     files.push(DiffFileStat {
                         status: 'D',
                         path,
@@ -419,9 +427,9 @@ impl Repository {
                         new_size: 0,
                     });
                 }
-                (Some(old_id), Some(new_id)) if old_id != new_id => {
-                    let old_object = self.read_blob(*old_id)?;
-                    let new_object = self.read_blob(*new_id)?;
+                (Some(old_entry), Some(new_entry)) if old_entry != new_entry => {
+                    let old_object = self.read_blob(old_entry.object_id)?;
+                    let new_object = self.read_blob(new_entry.object_id)?;
                     let (insertions, deletions, binary) =
                         file_delta(&old_object.data, &new_object.data)?;
                     files.push(DiffFileStat {
@@ -450,7 +458,15 @@ impl Repository {
         let index_entries = index
             .entries
             .iter()
-            .map(|entry| (entry.path.clone(), (entry.object_id, entry.mode)))
+            .map(|entry| {
+                (
+                    entry.path.clone(),
+                    DiffTreeEntry {
+                        object_id: entry.object_id,
+                        mode: entry.mode,
+                    },
+                )
+            })
             .collect::<BTreeMap<_, _>>();
         let head_entries = self.head_diff_entries()?;
         let paths = index_entries
@@ -465,39 +481,39 @@ impl Repository {
                 continue;
             }
             match (head_entries.get(&path), index_entries.get(&path)) {
-                (None, Some((new_id, mode))) => {
-                    let new_object = self.read_blob(*new_id)?;
+                (None, Some(new_entry)) => {
+                    let new_object = self.read_blob(new_entry.object_id)?;
                     files.push(DiffPatchFile {
                         status: 'A',
                         path,
                         old_object_id: None,
-                        new_object_id: Some(*new_id),
-                        mode: *mode,
+                        new_object_id: Some(new_entry.object_id),
+                        mode: new_entry.mode,
                         old_data: Vec::new(),
                         new_data: new_object.data,
                     });
                 }
-                (Some(old_id), None) => {
-                    let old_object = self.read_blob(*old_id)?;
+                (Some(old_entry), None) => {
+                    let old_object = self.read_blob(old_entry.object_id)?;
                     files.push(DiffPatchFile {
                         status: 'D',
                         path,
-                        old_object_id: Some(*old_id),
+                        old_object_id: Some(old_entry.object_id),
                         new_object_id: None,
-                        mode: 0o100644,
+                        mode: old_entry.mode,
                         old_data: old_object.data,
                         new_data: Vec::new(),
                     });
                 }
-                (Some(old_id), Some((new_id, mode))) if old_id != new_id => {
-                    let old_object = self.read_blob(*old_id)?;
-                    let new_object = self.read_blob(*new_id)?;
+                (Some(old_entry), Some(new_entry)) if old_entry != new_entry => {
+                    let old_object = self.read_blob(old_entry.object_id)?;
+                    let new_object = self.read_blob(new_entry.object_id)?;
                     files.push(DiffPatchFile {
                         status: 'M',
                         path,
-                        old_object_id: Some(*old_id),
-                        new_object_id: Some(*new_id),
-                        mode: *mode,
+                        old_object_id: Some(old_entry.object_id),
+                        new_object_id: Some(new_entry.object_id),
+                        mode: new_entry.mode,
                         old_data: old_object.data,
                         new_data: new_object.data,
                     });
@@ -520,7 +536,7 @@ impl Repository {
         Ok(object)
     }
 
-    fn head_diff_entries(&self) -> Result<BTreeMap<String, ObjectId>> {
+    fn head_diff_entries(&self) -> Result<BTreeMap<String, DiffTreeEntry>> {
         let Some(head_object_id) = self.resolve_head()? else {
             return Ok(BTreeMap::new());
         };
@@ -541,7 +557,7 @@ impl Repository {
         &self,
         prefix: &str,
         tree_id: ObjectId,
-        output: &mut BTreeMap<String, ObjectId>,
+        output: &mut BTreeMap<String, DiffTreeEntry>,
     ) -> Result<()> {
         let tree = self.read_object(tree_id)?;
         if tree.kind != ObjectKind::Tree {
@@ -560,12 +576,29 @@ impl Repository {
             if entry.kind == ObjectKind::Tree {
                 self.collect_diff_tree_entries(&path, entry.object_id, output)?;
             } else {
-                output.insert(path, entry.object_id);
+                output.insert(
+                    path,
+                    DiffTreeEntry {
+                        object_id: entry.object_id,
+                        mode: parse_tree_mode(&entry.mode)?,
+                    },
+                );
             }
         }
 
         Ok(())
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct DiffTreeEntry {
+    object_id: ObjectId,
+    mode: u32,
+}
+
+fn parse_tree_mode(mode: &str) -> Result<u32> {
+    u32::from_str_radix(mode, 8)
+        .map_err(|_| RitError::invalid_input(format!("invalid tree mode: {mode}")))
 }
 
 fn unified_hunk(old_data: &[u8], new_data: &[u8]) -> Result<String> {

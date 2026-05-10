@@ -151,7 +151,15 @@ impl Repository {
         let index_entries = index
             .entries
             .iter()
-            .map(|entry| (entry.path.clone(), entry.object_id))
+            .map(|entry| {
+                (
+                    entry.path.clone(),
+                    TreeBlobEntry {
+                        object_id: entry.object_id,
+                        mode: entry.mode,
+                    },
+                )
+            })
             .collect::<BTreeMap<_, _>>();
         let index_entry_positions = index
             .entries
@@ -187,7 +195,7 @@ impl Repository {
                     let full_path = join_slash_path(worktree, path);
                     if !full_path.exists() {
                         'D'
-                    } else if hash_worktree_file(&full_path)? != *index_object {
+                    } else if hash_worktree_file(&full_path)? != index_object.object_id {
                         'M'
                     } else {
                         if let Some(position) = index_entry_positions.get(path) {
@@ -258,7 +266,7 @@ impl Repository {
         }
     }
 
-    fn head_tree_entries(&self) -> Result<BTreeMap<String, ObjectId>> {
+    fn head_tree_entries(&self) -> Result<BTreeMap<String, TreeBlobEntry>> {
         let Some(head_object_id) = self.resolve_head()? else {
             return Ok(BTreeMap::new());
         };
@@ -279,7 +287,7 @@ impl Repository {
         &self,
         prefix: &str,
         tree_id: ObjectId,
-        output: &mut BTreeMap<String, ObjectId>,
+        output: &mut BTreeMap<String, TreeBlobEntry>,
     ) -> Result<()> {
         let tree = self.read_object(tree_id)?;
         if tree.kind != ObjectKind::Tree {
@@ -298,12 +306,29 @@ impl Repository {
             if entry.kind == ObjectKind::Tree {
                 self.collect_tree_entries(&path, entry.object_id, output)?;
             } else {
-                output.insert(path, entry.object_id);
+                output.insert(
+                    path,
+                    TreeBlobEntry {
+                        object_id: entry.object_id,
+                        mode: parse_tree_mode(&entry.mode)?,
+                    },
+                );
             }
         }
 
         Ok(())
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct TreeBlobEntry {
+    object_id: ObjectId,
+    mode: u32,
+}
+
+fn parse_tree_mode(mode: &str) -> Result<u32> {
+    u32::from_str_radix(mode, 8)
+        .map_err(|_| RitError::invalid_input(format!("invalid tree mode: {mode}")))
 }
 
 fn quote_porcelain_path(path: &str) -> String {

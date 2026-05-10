@@ -21,6 +21,7 @@
 - 2026-05-10 milestone verification checked: `git --version`,
   `git help -a`, `git worktree -h`, `git rev-parse --git-dir`, and
   `git rev-parse --git-common-dir`.
+- 2026-05-10 executable-bit slice checked: `git add -h` and `git status -h`.
 
 ## Milestone Notes
 
@@ -246,14 +247,18 @@
 
 - Baseline command checked: `git add -h`
 - Supported options: ordinary literal file, directory, `.`, simple `*`, `?`,
-  and bracket-class wildcard pathspecs.
+  and bracket-class wildcard pathspecs, plus `--chmod=+x`, `--chmod=-x`,
+  `--chmod +x`, and `--chmod -x`.
 - Unsupported options: pathspec magic/pathspec files, update/all modes,
-  patch/interactive mode, chmod, sparse mode, ignored-file override.
+  patch/interactive mode, sparse mode, ignored-file override.
 - Git-compatible behavior: writes blob loose objects and Git index v2 entries
   for regular files; directory pathspecs recursively add regular files and
   stage deletions for matching tracked files that no longer exist.
+- Git-compatible behavior: `--chmod=+x|-x` updates the index mode for regular
+  files and committed trees preserve `100644`/`100755` modes.
 - Intentional differences: pathspec magic, ignored-file checks, and
-  pathspec-file inputs are not implemented yet.
+  pathspec-file inputs are not implemented yet. Platform executable-bit
+  changes observed directly from the worktree are still incomplete.
 - Repository mutation: yes, writes loose objects and `.git/index` using lock/rename.
 - Risk: low for explicit files; missing paths remove matching index entries.
 

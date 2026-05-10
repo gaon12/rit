@@ -54,6 +54,49 @@ fn add_wildcard_pathspec_matches_git_status() {
 }
 
 #[test]
+fn add_chmod_executable_matches_git_status_and_tree_mode() {
+    let fixture = LocalWriteFixture::new("add-chmod", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words("git", ["add", "--chmod=+x", "nested/tracked.txt"]),
+        command_words(rit_binary(), ["add", "--chmod=+x", "nested/tracked.txt"]),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
+
+    let env = [
+        ("GIT_AUTHOR_DATE", "1700000000 +0900"),
+        ("GIT_COMMITTER_DATE", "1700000000 +0900"),
+    ];
+    run_command(
+        &command_words_with_env("git", ["commit", "-m", "mode"], &env),
+        &outcome.git_repo,
+    );
+    run_command(
+        &command_words_with_env(rit_binary(), ["commit", "-m", "mode"], &env),
+        &outcome.rit_repo,
+    );
+
+    assert_eq!(
+        run_capture(
+            "git",
+            ["ls-tree", "HEAD", "nested/tracked.txt"],
+            &outcome.git_repo
+        )
+        .0,
+        run_capture(
+            "git",
+            ["ls-tree", "HEAD", "nested/tracked.txt"],
+            &outcome.rit_repo
+        )
+        .0
+    );
+}
+
+#[test]
 fn restore_directory_pathspec_matches_git_status_and_files() {
     let fixture = LocalWriteFixture::new("restore-directory", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");

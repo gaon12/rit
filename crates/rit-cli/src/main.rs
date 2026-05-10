@@ -87,9 +87,9 @@ Show commits reachable from HEAD by following the first parent.
 ";
 
 const ADD_HELP: &str = "\
-rit add <file>...
+rit add [--chmod=(+|-)x] <file>...
 
-Add explicit regular files to the index.
+Add regular files to the index.
 ";
 
 const COMMIT_HELP: &str = "\
@@ -980,13 +980,13 @@ fn add_command(
     _stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    let Some(paths) = parse_plain_path_args(args, "add", stderr)? else {
+    let Some(add_args) = parse_add_args(args, stderr)? else {
         return Ok(ExitCode::from(129));
     };
-    if paths.is_empty() {
+    if add_args.paths.is_empty() {
         writeln!(
             stderr,
-            "rit: add currently supports only ordinary file or directory pathspecs"
+            "rit: add currently supports ordinary pathspecs and --chmod=(+|-)x"
         )?;
         return Ok(ExitCode::from(129));
     }
@@ -995,12 +995,65 @@ fn add_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    match repository.add_paths(&paths) {
+    match repository.add_paths_with_options(&add_args.paths, &add_args.options) {
         Ok(_) => Ok(ExitCode::SUCCESS),
         Err(error) => {
             writeln!(stderr, "rit: {error}")?;
             Ok(ExitCode::from(1))
         }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ParsedAddArgs {
+    paths: Vec<String>,
+    options: rit_core::AddOptions,
+}
+
+fn parse_add_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Option<ParsedAddArgs>> {
+    let mut paths = Vec::new();
+    let mut options = rit_core::AddOptions::default();
+    let mut after_separator = false;
+    let mut index = 0;
+
+    while index < args.len() {
+        let arg = &args[index];
+        if arg == "--" && !after_separator {
+            after_separator = true;
+        } else if arg == "--chmod" && !after_separator {
+            index += 1;
+            let Some(value) = args.get(index) else {
+                writeln!(stderr, "rit: option requires an argument: --chmod")?;
+                return Ok(None);
+            };
+            let Some(mode) = parse_chmod_mode(value) else {
+                writeln!(stderr, "rit: unsupported add chmod mode '{value}'")?;
+                return Ok(None);
+            };
+            options.mode_override = Some(mode);
+        } else if let Some(value) = arg.strip_prefix("--chmod=").filter(|_| !after_separator) {
+            let Some(mode) = parse_chmod_mode(value) else {
+                writeln!(stderr, "rit: unsupported add chmod mode '{value}'")?;
+                return Ok(None);
+            };
+            options.mode_override = Some(mode);
+        } else if arg.starts_with('-') && !after_separator {
+            writeln!(stderr, "rit: unsupported add option '{arg}'")?;
+            return Ok(None);
+        } else {
+            paths.push(arg.clone());
+        }
+        index += 1;
+    }
+
+    Ok(Some(ParsedAddArgs { paths, options }))
+}
+
+fn parse_chmod_mode(value: &str) -> Option<rit_core::FileModeOverride> {
+    match value {
+        "+x" => Some(rit_core::FileModeOverride::Executable),
+        "-x" => Some(rit_core::FileModeOverride::Regular),
+        _ => None,
     }
 }
 

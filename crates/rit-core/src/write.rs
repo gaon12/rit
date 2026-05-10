@@ -12,6 +12,38 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Options that affect how `add` records files in the index.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct AddOptions {
+    /// Optional executable-bit override matching `git add --chmod=+x|-x`.
+    pub mode_override: Option<FileModeOverride>,
+}
+
+impl AddOptions {
+    /// Builds default add options.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+/// Explicit file mode override for regular files added to the index.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FileModeOverride {
+    /// Record the file as a normal non-executable blob.
+    Regular,
+    /// Record the file as an executable blob.
+    Executable,
+}
+
+impl FileModeOverride {
+    fn index_mode(self) -> u32 {
+        match self {
+            Self::Regular => 0o100644,
+            Self::Executable => 0o100755,
+        }
+    }
+}
+
 /// Result of creating a commit.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommitResult {
@@ -128,6 +160,11 @@ impl SignatureTime {
 impl Repository {
     /// Adds files matching ordinary literal pathspecs to the index.
     pub fn add_paths(&self, paths: &[String]) -> Result<usize> {
+        self.add_paths_with_options(paths, &AddOptions::default())
+    }
+
+    /// Adds files matching ordinary pathspecs to the index with explicit options.
+    pub fn add_paths_with_options(&self, paths: &[String], options: &AddOptions) -> Result<usize> {
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
                 "add must be run in a repository with a working tree",
@@ -153,11 +190,16 @@ impl Repository {
             let metadata =
                 fs::metadata(&full_path).map_err(|source| RitError::io(&full_path, source))?;
             let object_id = self.loose_objects().write_object(ObjectKind::Blob, &data)?;
+            let mode = options
+                .mode_override
+                .map(FileModeOverride::index_mode)
+                .or_else(|| entries.get(&relative_path).map(|entry| entry.mode))
+                .unwrap_or_else(|| file_mode_from_metadata(&metadata));
             entries.insert(
                 relative_path.clone(),
                 IndexEntry {
                     stat: IndexEntryStat::from_metadata(&metadata),
-                    mode: 0o100644,
+                    mode,
                     object_id,
                     file_size: data.len().min(u32::MAX as usize) as u32,
                     path: relative_path,
@@ -390,7 +432,7 @@ impl Repository {
     fn write_tree_from_index(&self, index: &Index) -> Result<ObjectId> {
         let mut root = TreeNode::default();
         for entry in &index.entries {
-            root.insert(&entry.path, entry.object_id)?;
+            root.insert(&entry.path, entry.object_id, entry.mode)?;
         }
         self.write_tree_node(root)
     }
@@ -399,8 +441,8 @@ impl Repository {
         let mut data = Vec::new();
         for (name, entry) in node.entries {
             match entry {
-                TreeNodeEntry::Blob(object_id) => {
-                    data.extend_from_slice(b"100644 ");
+                TreeNodeEntry::Blob { object_id, mode } => {
+                    data.extend_from_slice(format!("{mode:o} ").as_bytes());
                     data.extend_from_slice(name.as_bytes());
                     data.push(0);
                     data.extend_from_slice(object_id.as_bytes());
@@ -469,11 +511,12 @@ impl Repository {
                 self.collect_head_blob_entries(&path, entry.object_id, output)?;
             } else {
                 let object = self.read_object(entry.object_id)?;
+                let mode = parse_index_mode(&entry.mode)?;
                 output.insert(
                     path,
                     HeadBlobEntry {
                         stat: IndexEntryStat::default(),
-                        mode: 0o100644,
+                        mode,
                         object_id: entry.object_id,
                         file_size: object.size().min(u32::MAX as usize) as u32,
                     },
@@ -677,24 +720,29 @@ struct TreeNode {
 }
 
 enum TreeNodeEntry {
-    Blob(ObjectId),
+    Blob { object_id: ObjectId, mode: u32 },
     Tree(TreeNode),
 }
 
 impl TreeNode {
-    fn insert(&mut self, path: &str, object_id: ObjectId) -> Result<()> {
+    fn insert(&mut self, path: &str, object_id: ObjectId, mode: u32) -> Result<()> {
         let mut parts = path.split('/').collect::<Vec<_>>();
         if parts.is_empty() {
             return Err(RitError::invalid_input("empty index path"));
         }
-        self.insert_parts(&mut parts, object_id)
+        self.insert_parts(&mut parts, object_id, mode)
     }
 
-    fn insert_parts(&mut self, parts: &mut Vec<&str>, object_id: ObjectId) -> Result<()> {
+    fn insert_parts(
+        &mut self,
+        parts: &mut Vec<&str>,
+        object_id: ObjectId,
+        mode: u32,
+    ) -> Result<()> {
         let name = parts.remove(0);
         if parts.is_empty() {
             self.entries
-                .insert(name.to_owned(), TreeNodeEntry::Blob(object_id));
+                .insert(name.to_owned(), TreeNodeEntry::Blob { object_id, mode });
             return Ok(());
         }
 
@@ -707,8 +755,28 @@ impl TreeNode {
                 "path conflicts with file: {name}"
             )));
         };
-        child.insert_parts(parts, object_id)
+        child.insert_parts(parts, object_id, mode)
     }
+}
+
+fn parse_index_mode(mode: &str) -> Result<u32> {
+    u32::from_str_radix(mode, 8)
+        .map_err(|_| RitError::invalid_input(format!("invalid tree mode: {mode}")))
+}
+
+#[cfg(unix)]
+fn file_mode_from_metadata(metadata: &fs::Metadata) -> u32 {
+    use std::os::unix::fs::PermissionsExt;
+    if metadata.permissions().mode() & 0o111 != 0 {
+        0o100755
+    } else {
+        0o100644
+    }
+}
+
+#[cfg(not(unix))]
+fn file_mode_from_metadata(_metadata: &fs::Metadata) -> u32 {
+    0o100644
 }
 
 fn run_commit_hooks(
@@ -1067,8 +1135,11 @@ fn write_worktree_file_atomically(path: &Path, contents: &[u8]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{SignatureIdentity, SignatureTime, read_config_value};
-    use crate::{Index, InitOptions, Repository};
+    use super::{
+        AddOptions, FileModeOverride, SignatureIdentity, SignatureTime, parse_tree_entries,
+        read_config_value,
+    };
+    use crate::{Index, InitOptions, ObjectKind, Repository, parse_commit};
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1165,6 +1236,46 @@ mod tests {
             .map(|entry| entry.path.as_str())
             .collect::<Vec<_>>();
         assert_eq!(paths, vec!["nested/a.txt", "nested/deeper/b.txt"]);
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn add_chmod_executable_records_index_mode_and_tree_mode() {
+        let temp = temp_path("add-chmod-executable");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        fs::write(temp.join("script.sh"), "#!/bin/sh\n").expect("file should be written");
+        fs::write(
+            repository.git_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n[user]\n\tname = Rit Test\n\temail = rit@example.test\n",
+        )
+        .expect("config should be written");
+
+        repository
+            .add_paths_with_options(
+                &["script.sh".to_owned()],
+                &AddOptions {
+                    mode_override: Some(FileModeOverride::Executable),
+                },
+            )
+            .expect("file should be added with executable mode");
+
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        assert_eq!(index.entries[0].mode, 0o100755);
+
+        let commit_id = repository
+            .commit_index("add executable")
+            .expect("commit should be created")
+            .commit_id;
+        let commit = repository
+            .read_object(commit_id)
+            .expect("commit object should read");
+        let parsed_commit = parse_commit(&commit.data).expect("commit should parse");
+        let tree = repository
+            .read_object(parsed_commit.tree)
+            .expect("tree object should read");
+        assert_eq!(tree.kind, ObjectKind::Tree);
+        let entries = parse_tree_entries(&tree.data).expect("tree should parse");
+        assert_eq!(entries[0].mode, "100755");
         remove_dir_all(&temp);
     }
 
