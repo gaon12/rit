@@ -281,6 +281,32 @@ fn status_quotes_paths_like_git() {
 }
 
 #[test]
+fn status_null_terminated_output_matches_git() {
+    let fixture = StatusQuotedPathFixture::new("null-terminated-status");
+
+    for args in [
+        vec!["status", "--porcelain=v1", "-z"],
+        vec!["status", "--porcelain=v1", "-z", "--", "tracked space.txt"],
+        vec!["status", "--porcelain=v1", "-z", "-uall"],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "null-terminated status {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn status_index_refresh_difference_is_documented() {
     let fixture = StatusRefreshFixture::new("status-refresh-difference");
     let outcome = compare(&CompareOptions::new(

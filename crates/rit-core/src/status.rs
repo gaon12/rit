@@ -48,6 +48,19 @@ impl PorcelainStatus {
         }
         output
     }
+
+    /// Renders porcelain v1 text with NUL-terminated raw paths.
+    pub fn to_porcelain_v1_null_terminated(&self) -> String {
+        let mut output = String::new();
+        for entry in &self.entries {
+            output.push(entry.index_status);
+            output.push(entry.worktree_status);
+            output.push(' ');
+            output.push_str(&entry.path);
+            output.push('\0');
+        }
+        output
+    }
 }
 
 impl Repository {
@@ -423,6 +436,22 @@ mod tests {
         assert_eq!(
             quote_porcelain_path("quote\"tab\t.txt"),
             "\"quote\\\"tab\\t.txt\""
+        );
+    }
+
+    #[test]
+    fn porcelain_v1_null_terminated_uses_raw_paths() {
+        let status = PorcelainStatus {
+            entries: vec![StatusEntry {
+                index_status: ' ',
+                worktree_status: 'M',
+                path: "my dir/a b.txt".to_owned(),
+            }],
+        };
+
+        assert_eq!(
+            status.to_porcelain_v1_null_terminated(),
+            " M my dir/a b.txt\0"
         );
     }
 

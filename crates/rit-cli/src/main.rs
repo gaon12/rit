@@ -69,7 +69,7 @@ List entries in a loose tree object.
 ";
 
 const STATUS_HELP: &str = "\
-rit status --porcelain[=v1]
+rit status --porcelain[=v1] [-z] [-uno|-unormal|-uall] [--] [<pathspec>...]
 
 Show a conservative porcelain v1 status.
 ";
@@ -541,7 +541,11 @@ fn status_command(
     };
     match repository.status_porcelain_v1_with_options(&pathspecs, status_args.untracked_files) {
         Ok(status) => {
-            stdout.write_all(status.to_porcelain_v1().as_bytes())?;
+            if status_args.null_terminated {
+                stdout.write_all(status.to_porcelain_v1_null_terminated().as_bytes())?;
+            } else {
+                stdout.write_all(status.to_porcelain_v1().as_bytes())?;
+            }
             Ok(ExitCode::SUCCESS)
         }
         Err(error) => {
@@ -555,6 +559,7 @@ fn status_command(
 struct StatusArgs {
     pathspecs: Vec<String>,
     untracked_files: rit_core::UntrackedFilesMode,
+    null_terminated: bool,
 }
 
 fn parse_status_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Option<StatusArgs>> {
@@ -562,11 +567,13 @@ fn parse_status_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Opti
     let mut pathspecs = Vec::new();
     let mut after_separator = false;
     let mut untracked_files = rit_core::UntrackedFilesMode::Normal;
+    let mut null_terminated = false;
 
     for arg in args {
         match arg.as_str() {
             "--" if !after_separator => after_separator = true,
             "--porcelain" | "--porcelain=v1" | "-s" if !after_separator => has_porcelain = true,
+            "-z" if !after_separator => null_terminated = true,
             "-u" | "--untracked-files" if !after_separator => {
                 untracked_files = rit_core::UntrackedFilesMode::All;
             }
@@ -594,6 +601,7 @@ fn parse_status_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Opti
         Ok(Some(StatusArgs {
             pathspecs,
             untracked_files,
+            null_terminated,
         }))
     } else {
         writeln!(stderr, "rit: status currently supports only --porcelain=v1")?;

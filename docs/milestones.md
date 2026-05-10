@@ -98,6 +98,7 @@ Completion criteria:
     characters.
   - [x] Git-like `--untracked-files=no|normal|all` and `-uno|-unormal|-uall`
     modes.
+  - [x] Git-like `-z` NUL-terminated porcelain v1 output.
 - [x] `rit diff --name-only`
 - [x] `rit diff --name-status`
 - [x] `rit diff --stat`
