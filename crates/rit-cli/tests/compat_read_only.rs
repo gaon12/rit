@@ -130,6 +130,21 @@ fn diff_patch_marks_missing_trailing_newlines_like_git() {
 }
 
 #[test]
+fn diff_patch_splits_distant_changes_like_git() {
+    let fixture = MultiHunkDiffFixture::new("multi-hunk-diff");
+    let mut options =
+        CompareOptions::new(fixture.path(), git_command(["diff"]), rit_command(["diff"]));
+    options.compare_repository_state = false;
+    let outcome = compare(&options).expect("comparison should run");
+
+    assert!(
+        outcome.is_match(),
+        "multi-hunk patch diff\n{}",
+        outcome.report()
+    );
+}
+
+#[test]
 fn diff_pathspec_outputs_match_git() {
     let fixture = DiffFixture::new("pathspec-diff");
 
@@ -510,6 +525,49 @@ impl NoNewlineDiffFixture {
 }
 
 impl Drop for NoNewlineDiffFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct MultiHunkDiffFixture {
+    path: PathBuf,
+}
+
+impl MultiHunkDiffFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        let base = (1..=12)
+            .map(|number| format!("line{number}\n"))
+            .collect::<String>();
+        fs::write(path.join("a.txt"), base).expect("base file should be written");
+        run_git(&path, ["add", "a.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+
+        let changed = (1..=12)
+            .map(|number| match number {
+                2 => "changed2\n".to_owned(),
+                10 => "changed10\n".to_owned(),
+                _ => format!("line{number}\n"),
+            })
+            .collect::<String>();
+        fs::write(path.join("a.txt"), changed).expect("file should be modified");
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for MultiHunkDiffFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

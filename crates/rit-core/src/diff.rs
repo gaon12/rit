@@ -581,19 +581,98 @@ fn unified_hunk(old_data: &[u8], new_data: &[u8]) -> Result<String> {
     }
 
     let mut output = String::new();
-    output.push_str(&format!(
-        "@@ -{} +{} @@\n",
-        hunk_range(1, old_lines.len()),
-        hunk_range(1, new_lines.len())
-    ));
-    for operation in operations {
-        match operation {
-            LineOperation::Context(line) => push_patch_line(&mut output, ' ', line),
-            LineOperation::Delete(line) => push_patch_line(&mut output, '-', line),
-            LineOperation::Insert(line) => push_patch_line(&mut output, '+', line),
+    for hunk in split_hunks(&operations) {
+        let old_before = count_old_lines(&operations[..hunk.start]);
+        let new_before = count_new_lines(&operations[..hunk.start]);
+        let old_count = count_old_lines(&operations[hunk.start..hunk.end]);
+        let new_count = count_new_lines(&operations[hunk.start..hunk.end]);
+        output.push_str(&format!(
+            "@@ -{} +{} @@{}\n",
+            hunk_range(hunk_start(old_before, old_count), old_count),
+            hunk_range(hunk_start(new_before, new_count), new_count),
+            hunk_header_suffix(&operations, hunk.start)
+        ));
+        for operation in &operations[hunk.start..hunk.end] {
+            match operation {
+                LineOperation::Context(line) => push_patch_line(&mut output, ' ', line),
+                LineOperation::Delete(line) => push_patch_line(&mut output, '-', line),
+                LineOperation::Insert(line) => push_patch_line(&mut output, '+', line),
+            }
         }
     }
     Ok(output)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct HunkRange {
+    start: usize,
+    end: usize,
+}
+
+fn split_hunks(operations: &[LineOperation<'_>]) -> Vec<HunkRange> {
+    let mut hunks = Vec::new();
+    let mut current: Option<HunkRange> = None;
+
+    for (index, operation) in operations.iter().enumerate() {
+        if matches!(operation, LineOperation::Context(_)) {
+            continue;
+        }
+
+        let start = index.saturating_sub(3);
+        let end = (index + 4).min(operations.len());
+        match &mut current {
+            Some(range) if start <= range.end => range.end = range.end.max(end),
+            Some(range) => {
+                hunks.push(*range);
+                current = Some(HunkRange { start, end });
+            }
+            None => current = Some(HunkRange { start, end }),
+        }
+    }
+
+    if let Some(range) = current {
+        hunks.push(range);
+    }
+    hunks
+}
+
+fn count_old_lines(operations: &[LineOperation<'_>]) -> usize {
+    operations
+        .iter()
+        .filter(|operation| !matches!(operation, LineOperation::Insert(_)))
+        .count()
+}
+
+fn count_new_lines(operations: &[LineOperation<'_>]) -> usize {
+    operations
+        .iter()
+        .filter(|operation| !matches!(operation, LineOperation::Delete(_)))
+        .count()
+}
+
+fn hunk_start(lines_before: usize, line_count: usize) -> usize {
+    if line_count == 0 {
+        lines_before
+    } else {
+        lines_before + 1
+    }
+}
+
+fn hunk_header_suffix(operations: &[LineOperation<'_>], hunk_start: usize) -> String {
+    if hunk_start == 0 {
+        return String::new();
+    }
+    match operations.get(hunk_start - 1) {
+        Some(LineOperation::Context(line)) => {
+            let trimmed = line.trim_end_matches('\n');
+            if trimmed.is_empty() {
+                String::new()
+            } else {
+                format!(" {trimmed}")
+            }
+        }
+        _ => String::new(),
+    }
 }
 
 fn push_patch_line(output: &mut String, prefix: char, line: &str) {
@@ -841,6 +920,19 @@ mod tests {
         assert_eq!(
             hunk,
             "@@ -1 +1 @@\n-one\n\\ No newline at end of file\n+two\n\\ No newline at end of file\n"
+        );
+    }
+
+    #[test]
+    fn unified_hunk_splits_distant_changes() {
+        let old = b"line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\nline11\nline12\n";
+        let new = b"line1\nchanged2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nchanged10\nline11\nline12\n";
+
+        let hunk = unified_hunk(old, new).expect("text patch should render");
+
+        assert_eq!(
+            hunk,
+            "@@ -1,5 +1,5 @@\n line1\n-line2\n+changed2\n line3\n line4\n line5\n@@ -7,6 +7,6 @@ line6\n line7\n line8\n line9\n-line10\n+changed10\n line11\n line12\n"
         );
     }
 

@@ -100,11 +100,11 @@ Completion criteria:
 - [x] `rit diff --name-status`
 - [x] `rit diff --stat`
 - [x] `rit diff --numstat`
-- [~] `rit diff` patch output.
+- [x] `rit diff` patch output.
   - [x] Small text patch output for default and cached diff scopes.
   - [x] No-newline markers for default and cached text patch output.
   - [x] Binary patch placeholders for default and cached diff scopes.
-  - [ ] Multi-hunk context splitting.
+  - [x] Multi-hunk context splitting.
 - [~] Pathspec support for read-only commands.
   - [x] Ordinary literal pathspec filters for `status --porcelain=v1` and
     `diff` summary modes.
@@ -288,4 +288,3 @@ Completion criteria:
 1. Expand `status --porcelain=v1` with stronger Git compatibility.
 2. Continue pathspec support for remaining read-only commands and advanced
    pathspec forms.
-3. Expand `rit diff` patch output beyond small text files.

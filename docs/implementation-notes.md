@@ -91,6 +91,8 @@
   trailing newlines in default and cached text patches.
 - Binary patch output now emits Git-like `Binary files ... differ`
   placeholders for default and cached diff scopes.
+- Patch output now splits distant changes into multiple hunks with three lines
+  of context and simple Git-like hunk header context.
 - Added binary diff accounting for summary modes. `--numstat` reports
   `-\t-\t<path>` and `--stat` reports `Bin <old> -> <new> bytes` with zero
   insertion/deletion totals.
@@ -187,12 +189,11 @@
   `--cached`/`--staged` with those output modes, and ordinary literal file and
   directory pathspec filters.
 - Unsupported options: commit/tree/blob arguments, pathspec magic/globs,
-  rename/copy detection, multi-hunk context splitting, and
-  many advanced patch formatting options.
+  rename/copy detection, and many advanced patch formatting options.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files.
 - Git-compatible behavior: cached diff scope compares the index against `HEAD`.
-- Intentional differences: patch output still emits a single whole-file hunk
-  instead of splitting large changes into multiple context hunks.
+- Intentional differences: advanced patch formatting and custom diff drivers
+  are not implemented yet.
 - Repository mutation: no
 - Risk: no repository writes.
 

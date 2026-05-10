@@ -113,6 +113,7 @@ Patch compatibility tests also cover missing trailing newline markers for
 default and cached text patches.
 Binary patch compatibility tests cover default and cached `Binary files ...
 differ` placeholders.
+Patch compatibility tests cover splitting distant changes into multiple hunks.
 Binary diff compatibility tests cover `--name-only`, `--name-status`,
 `--numstat`, and `--stat` summary output.
 
