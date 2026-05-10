@@ -170,6 +170,7 @@ impl Repository {
         let head_entries = self.head_tree_entries()?;
         let ignore_rules = IgnoreRules::read(worktree, self.common_dir())?;
         let working_tree = scan_working_tree(worktree, &ignore_rules)?;
+        let symlinks_enabled = self.core_symlinks_enabled()?;
 
         let mut entries = Vec::new();
         let mut index_refreshed = false;
@@ -193,16 +194,20 @@ impl Repository {
                 None => ' ',
                 Some(index_object) => {
                     let full_path = join_slash_path(worktree, path);
-                    if !full_path.exists() {
+                    if fs::symlink_metadata(&full_path).is_err() {
                         'D'
-                    } else if hash_worktree_entry(&full_path, index_object.mode)?
+                    } else if hash_worktree_entry(&full_path, index_object.mode, symlinks_enabled)?
                         != index_object.object_id
                     {
                         'M'
                     } else {
-                        let metadata = fs::metadata(&full_path)
+                        let metadata = fs::symlink_metadata(&full_path)
                             .map_err(|source| RitError::io(&full_path, source))?;
-                        if !worktree_mode_matches_index(&metadata, index_object.mode) {
+                        if !worktree_mode_matches_index(
+                            &metadata,
+                            index_object.mode,
+                            symlinks_enabled,
+                        ) {
                             'M'
                         } else {
                             if let Some(position) = index_entry_positions.get(path) {
@@ -339,7 +344,17 @@ fn parse_tree_mode(mode: &str) -> Result<u32> {
 }
 
 #[cfg(unix)]
-fn worktree_mode_matches_index(metadata: &fs::Metadata, index_mode: u32) -> bool {
+fn worktree_mode_matches_index(
+    metadata: &fs::Metadata,
+    index_mode: u32,
+    symlinks_enabled: bool,
+) -> bool {
+    if index_mode == 0o120000 && symlinks_enabled {
+        return metadata.file_type().is_symlink();
+    }
+    if index_mode == 0o120000 && !symlinks_enabled {
+        return true;
+    }
     use std::os::unix::fs::PermissionsExt;
     let executable = metadata.permissions().mode() & 0o111 != 0;
     let worktree_mode = if executable { 0o100755 } else { 0o100644 };
@@ -347,7 +362,11 @@ fn worktree_mode_matches_index(metadata: &fs::Metadata, index_mode: u32) -> bool
 }
 
 #[cfg(not(unix))]
-fn worktree_mode_matches_index(_metadata: &fs::Metadata, _index_mode: u32) -> bool {
+fn worktree_mode_matches_index(
+    _metadata: &fs::Metadata,
+    _index_mode: u32,
+    _symlinks_enabled: bool,
+) -> bool {
     true
 }
 
@@ -374,8 +393,8 @@ fn quote_porcelain_path(path: &str) -> String {
     output
 }
 
-fn hash_worktree_entry(path: &Path, index_mode: u32) -> Result<ObjectId> {
-    let bytes = if index_mode == 0o120000 {
+fn hash_worktree_entry(path: &Path, index_mode: u32, symlinks_enabled: bool) -> Result<ObjectId> {
+    let bytes = if index_mode == 0o120000 && symlinks_enabled {
         let metadata = fs::symlink_metadata(path).map_err(|source| RitError::io(path, source))?;
         if metadata.file_type().is_symlink() {
             read_symlink_target_bytes(path)?

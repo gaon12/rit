@@ -60,7 +60,9 @@ The current codebase implements an early local Git subset:
   filemode-insensitive behavior.
 - Symlink entries are stored as `120000` blobs containing the link target and
   are preserved through add, commit tree writing, status/diff hashing, and
-  restore/checkout core paths. Full `core.symlinks=false` parity remains open.
+  restore/checkout core paths. `core.symlinks=false` is honored by adding
+  worktree symlinks as regular link-target blobs and by materializing committed
+  symlink entries as plain link-target files.
 - Detached `checkout <commit>` is supported for clean worktrees.
 - `branch -d` refuses unmerged local branches.
 
@@ -157,8 +159,8 @@ Local write compatibility tests also cover `add --chmod=+x` by comparing
 porcelain status after staging and `git ls-tree` output after committing.
 Unix-only unit coverage verifies executable-mode restore and worktree status
 refresh behavior.
-Unix-only unit coverage also verifies symlink add/restore and status target
-hashing behavior.
+Unix-only unit coverage also verifies symlink add/restore, status target
+hashing behavior, and `core.symlinks=false` add/restore parity.
 
 Commit compatibility tests cover `--author` and raw `--date` overrides with
 fixed committer environment variables by comparing the resulting `HEAD` object

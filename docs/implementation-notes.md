@@ -288,6 +288,8 @@
   refreshed without an explicit `--chmod` override.
 - Git-compatible behavior: symlinks are indexed as `120000` blobs containing
   the link target text.
+- Git-compatible behavior: when `core.symlinks=false`, `rit add` records a
+  worktree symlink as a regular `100644` blob containing the link target text.
 - Intentional differences: pathspec magic, ignored-file checks, and
   pathspec-file inputs are not implemented yet. On Windows, worktree
   executable bits remain filemode-insensitive like Git's usual `core.filemode`
@@ -358,6 +360,9 @@
   including executable worktree permissions for `100755` index entries on Unix.
 - Git-compatible behavior: symlink index entries are restored as symlinks on
   Unix and as link-target text files on platforms without Unix symlink support.
+- Git-compatible behavior: when `core.symlinks=false`, restore and checkout
+  materialize `120000` entries as plain `100644` files containing the link
+  target text, and status treats that plain file as clean.
 - Intentional differences: pathspec magic/pathspec files and conflict handling
   are not implemented.
 - Repository mutation: worktree restore writes files; staged restore writes `.git/index`.
@@ -461,5 +466,4 @@
 - Supported index format: v2/v3 entries for regular files.
 - Supported stat behavior: status refreshes clean tracked file mtime/size
   metadata and preserves raw optional extension bytes such as `TREE`.
-- Unsupported index behavior: remaining extension-specific payload parsing,
-  conflict stages, and full `core.symlinks=false` parity.
+- Unsupported index behavior: conflict stages.

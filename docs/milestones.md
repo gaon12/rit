@@ -194,11 +194,11 @@ Completion criteria:
     mode-only changes.
   - [x] Unix worktree executable-bit refresh and checkout/restore
     materialization; Windows keeps Git-like filemode-insensitive behavior.
-- [~] Symlink support.
+- [x] Symlink support.
   - [x] Add symlinks as `120000` blob entries containing the link target.
   - [x] Preserve `120000` tree/index modes through commit, status, diff, and
     restore/checkout core paths.
-  - [ ] Cross-platform Git config parity for `core.symlinks=false`.
+  - [x] Cross-platform Git config parity for `core.symlinks=false`.
 
 Completion criteria:
 - `rit` can read normal repositories after `git gc` and can safely update the
@@ -331,6 +331,6 @@ Completion criteria:
 
 ## Active Queue
 
-1. Continue M5 with semantic index extension parsing or symlink support.
+1. Continue M6 with Git-compatible ignore glob rules.
 2. Continue pathspec support for remaining read-only commands and advanced
    pathspec forms.

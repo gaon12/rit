@@ -141,6 +141,20 @@ impl Repository {
         &self.common_dir
     }
 
+    /// Returns whether symlink index entries should materialize as symlinks.
+    pub(crate) fn core_symlinks_enabled(&self) -> Result<bool> {
+        let config_path = self.common_dir.join("config");
+        let default = default_core_symlinks();
+        if !config_path.exists() {
+            return Ok(default);
+        }
+        let config = GitConfig::read(&config_path)?;
+        match config.get("core", "symlinks") {
+            Some(value) => parse_git_bool(value, "core.symlinks"),
+            None => Ok(default),
+        }
+    }
+
     /// Returns a loose object database reader for this repository.
     pub fn loose_objects(&self) -> LooseObjectDb {
         LooseObjectDb::new(self.common_dir.join("objects"))
@@ -253,6 +267,26 @@ impl Repository {
             });
         }
         Ok(())
+    }
+}
+
+#[cfg(unix)]
+fn default_core_symlinks() -> bool {
+    true
+}
+
+#[cfg(not(unix))]
+fn default_core_symlinks() -> bool {
+    false
+}
+
+fn parse_git_bool(value: &str, name: &str) -> Result<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "true" | "yes" | "on" | "1" => Ok(true),
+        "false" | "no" | "off" | "0" => Ok(false),
+        _ => Err(RitError::invalid_input(format!(
+            "invalid boolean config value for {name}: {value}"
+        ))),
     }
 }
 

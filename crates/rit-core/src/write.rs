@@ -183,26 +183,34 @@ impl Repository {
             .map(|entry| (entry.path.clone(), entry))
             .collect::<BTreeMap<_, _>>();
         let files_to_add = expand_add_pathspecs(worktree, &pathspecs, entries.keys())?;
+        let symlinks_enabled = self.core_symlinks_enabled()?;
 
         for relative_path in files_to_add {
             let full_path = join_slash_path(worktree, &relative_path);
             let metadata = fs::symlink_metadata(&full_path)
                 .map_err(|source| RitError::io(&full_path, source))?;
             let is_symlink = metadata.file_type().is_symlink();
+            let should_store_symlink = is_symlink && symlinks_enabled;
             let data = if is_symlink {
                 read_symlink_target_bytes(&full_path)?
             } else {
                 fs::read(&full_path).map_err(|source| RitError::io(&full_path, source))?
             };
             let object_id = self.loose_objects().write_object(ObjectKind::Blob, &data)?;
-            let mode = if is_symlink {
+            let mode = if should_store_symlink {
                 0o120000
             } else {
                 options
                     .mode_override
                     .map(FileModeOverride::index_mode)
                     .or_else(|| entries.get(&relative_path).map(|entry| entry.mode))
-                    .unwrap_or_else(|| file_mode_from_metadata(&metadata))
+                    .unwrap_or_else(|| {
+                        if is_symlink {
+                            0o100644
+                        } else {
+                            file_mode_from_metadata(&metadata)
+                        }
+                    })
             };
             entries.insert(
                 relative_path.clone(),
@@ -298,6 +306,7 @@ impl Repository {
         }
         let index = Index::read(&self.git_dir().join("index"))?;
         let pathspecs = PathspecSet::from_args(paths)?;
+        let symlinks_enabled = self.core_symlinks_enabled()?;
         let entries = index
             .entries
             .iter()
@@ -322,6 +331,7 @@ impl Repository {
                 &join_slash_path(worktree, &entry.path),
                 &object.data,
                 entry.mode,
+                symlinks_enabled,
             )?;
         }
 
@@ -545,6 +555,7 @@ impl Repository {
                 "checkout must be run in a repository with a working tree",
             ));
         };
+        let symlinks_enabled = self.core_symlinks_enabled()?;
         let target_entries = self.commit_index_entries(commit_id)?;
         let current_index = Index::read(&self.git_dir().join("index"))?;
         let current_paths = current_index
@@ -581,7 +592,12 @@ impl Repository {
                     entry.object_id, object.kind
                 )));
             }
-            write_worktree_entry_atomically(&worktree_path, &object.data, entry.mode)?;
+            write_worktree_entry_atomically(
+                &worktree_path,
+                &object.data,
+                entry.mode,
+                symlinks_enabled,
+            )?;
         }
 
         Index {
@@ -1123,11 +1139,17 @@ fn write_text_atomically(path: &Path, contents: &str) -> Result<()> {
     Ok(())
 }
 
-fn write_worktree_entry_atomically(path: &Path, contents: &[u8], mode: u32) -> Result<()> {
-    if mode == 0o120000 {
+fn write_worktree_entry_atomically(
+    path: &Path,
+    contents: &[u8],
+    mode: u32,
+    symlinks_enabled: bool,
+) -> Result<()> {
+    if mode == 0o120000 && symlinks_enabled {
         return write_worktree_symlink_atomically(path, contents);
     }
-    write_worktree_file_atomically(path, contents, mode)
+    let file_mode = if mode == 0o120000 { 0o100644 } else { mode };
+    write_worktree_file_atomically(path, contents, file_mode)
 }
 
 fn write_worktree_file_atomically(path: &Path, contents: &[u8], mode: u32) -> Result<()> {
@@ -1146,7 +1168,7 @@ fn write_worktree_file_atomically(path: &Path, contents: &[u8], mode: u32) -> Re
         file.sync_all()
             .map_err(|source| RitError::io(&temp_path, source))?;
     }
-    if path.exists() {
+    if path.exists() || fs::symlink_metadata(path).is_ok() {
         fs::remove_file(path).map_err(|source| RitError::io(path, source))?;
     }
     fs::rename(&temp_path, path).map_err(|source| RitError::io(path, source))?;
@@ -1205,7 +1227,9 @@ mod tests {
         AddOptions, FileModeOverride, SignatureIdentity, SignatureTime, parse_tree_entries,
         read_config_value,
     };
-    use crate::{Index, InitOptions, ObjectKind, Repository, parse_commit};
+    use crate::{
+        Index, IndexEntry, InitOptions, ObjectKind, Repository, index::IndexEntryStat, parse_commit,
+    };
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1425,6 +1449,126 @@ mod tests {
             .expect("tree object should read");
         let entries = parse_tree_entries(&tree.data).expect("tree should parse");
         assert_eq!(entries[0].mode, "120000");
+        remove_dir_all(&temp);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn core_symlinks_false_adds_symlink_as_regular_file() {
+        use std::os::unix::fs::symlink;
+
+        let temp = temp_path("core-symlinks-false-add");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        fs::write(temp.join("target.txt"), "target contents\n").expect("target should be written");
+        symlink("target.txt", temp.join("link.txt")).expect("symlink should be written");
+        fs::write(
+            repository.git_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n\tsymlinks = false\n[user]\n\tname = Rit Test\n\temail = rit@example.test\n",
+        )
+        .expect("config should be written");
+
+        repository
+            .add_paths(&["link.txt".to_owned()])
+            .expect("symlink should be added as regular file");
+
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        assert_eq!(index.entries[0].mode, 0o100644);
+        let link_object = repository
+            .read_object(index.entries[0].object_id)
+            .expect("link object should read");
+        assert_eq!(link_object.data, b"target.txt");
+        remove_dir_all(&temp);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn core_symlinks_false_restores_symlink_entry_as_plain_file() {
+        use std::os::unix::fs::symlink;
+
+        let temp = temp_path("core-symlinks-false-restore");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        fs::write(temp.join("target.txt"), "target contents\n").expect("target should be written");
+        symlink("target.txt", temp.join("link.txt")).expect("symlink should be written");
+        fs::write(
+            repository.git_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n[user]\n\tname = Rit Test\n\temail = rit@example.test\n",
+        )
+        .expect("config should be written");
+        repository
+            .add_paths(&["link.txt".to_owned()])
+            .expect("symlink should be added");
+        repository
+            .commit_index("add symlink")
+            .expect("commit should be created");
+        fs::write(
+            repository.git_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n\tsymlinks = false\n[user]\n\tname = Rit Test\n\temail = rit@example.test\n",
+        )
+        .expect("config should be rewritten");
+        fs::remove_file(temp.join("link.txt")).expect("link should be removed");
+
+        repository
+            .restore_worktree_paths(&["link.txt".to_owned()])
+            .expect("restore should write a plain link file");
+
+        let metadata = fs::symlink_metadata(temp.join("link.txt"))
+            .expect("restored path metadata should read");
+        assert!(!metadata.file_type().is_symlink());
+        assert_eq!(
+            fs::read_to_string(temp.join("link.txt")).expect("plain link file should read"),
+            "target.txt"
+        );
+        let status = repository
+            .status_porcelain_v1()
+            .expect("status should be clean");
+        assert_eq!(status.to_porcelain_v1(), "");
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn core_symlinks_false_restores_index_symlink_entry_as_plain_file() {
+        let temp = temp_path("core-symlinks-false-index-restore");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        fs::write(
+            repository.git_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n\tsymlinks = false\n[user]\n\tname = Rit Test\n\temail = rit@example.test\n",
+        )
+        .expect("config should be written");
+        let object_id = repository
+            .loose_objects()
+            .write_object(ObjectKind::Blob, b"target.txt")
+            .expect("link target blob should be written");
+        Index {
+            entries: vec![IndexEntry {
+                stat: IndexEntryStat::default(),
+                mode: 0o120000,
+                object_id,
+                file_size: b"target.txt".len() as u32,
+                path: "link.txt".to_owned(),
+            }],
+            extensions: Vec::new(),
+        }
+        .write(&repository.git_dir().join("index"))
+        .expect("index should be written");
+        repository
+            .commit_index("add symlink entry")
+            .expect("commit should be created");
+
+        repository
+            .restore_worktree_paths(&["link.txt".to_owned()])
+            .expect("restore should write a plain link file");
+
+        let metadata = fs::symlink_metadata(temp.join("link.txt"))
+            .expect("restored path metadata should read");
+        assert!(!metadata.file_type().is_symlink());
+        assert_eq!(
+            fs::read_to_string(temp.join("link.txt")).expect("plain link file should read"),
+            "target.txt"
+        );
+        let status = repository
+            .status_porcelain_v1()
+            .expect("status should be clean");
+        assert_eq!(status.to_porcelain_v1(), "");
         remove_dir_all(&temp);
     }
 
