@@ -185,6 +185,18 @@ fn diff_pathspec_outputs_match_git() {
                 "nested/[ab]*.txt",
             ],
         ),
+        (
+            vec!["diff", "--name-only", "--", ":(glob)*.txt"],
+            vec!["diff", "--name-only", "--", ":(glob)*.txt"],
+        ),
+        (
+            vec!["diff", "--name-only", "--", ":(glob)**/*.txt"],
+            vec!["diff", "--name-only", "--", ":(glob)**/*.txt"],
+        ),
+        (
+            vec!["diff", "--name-only", "--", ":(top)nested/base.txt"],
+            vec!["diff", "--name-only", "--", ":(top)nested/base.txt"],
+        ),
     ] {
         let mut options = CompareOptions::new(
             fixture.path(),
@@ -214,6 +226,11 @@ fn status_pathspec_outputs_match_git() {
         ["status", "--porcelain=v1", "--", "nested/*.txt"],
         ["status", "--porcelain=v1", "--", "[!a].txt"],
         ["status", "--porcelain=v1", "--", "nested/[ab]*.txt"],
+        ["status", "--porcelain=v1", "--", ":(literal)a.txt"],
+        ["status", "--porcelain=v1", "--", ":(glob)*.txt"],
+        ["status", "--porcelain=v1", "--", ":(glob)**/*.txt"],
+        ["status", "--porcelain=v1", "--", ":(top)nested/base.txt"],
+        ["status", "--porcelain=v1", "--", ":/nested/base.txt"],
     ] {
         let mut options = CompareOptions::new(fixture.path(), git_command(args), rit_command(args));
         options.compare_repository_state = false;
@@ -550,6 +567,8 @@ fn ls_files_pathspec_outputs_match_git() {
         vec!["ls-files", "--stage", "--", "nested"],
         vec!["ls-files", "--", "*.txt"],
         vec!["ls-files", "--stage", "--", "nested/*.txt"],
+        vec!["ls-files", "--", ":(glob)*.txt"],
+        vec!["ls-files", "--stage", "--", ":(top)nested/base.txt"],
     ] {
         let outcome = compare(&CompareOptions::new(
             fixture.path(),
@@ -601,6 +620,8 @@ fn log_pathspec_outputs_match_git() {
         vec!["log", "--oneline", "--", "nested"],
         vec!["log", "--oneline", "--", "*.txt"],
         vec!["log", "--oneline", "--", "nested/*.txt"],
+        vec!["log", "--oneline", "--", ":(glob)*.txt"],
+        vec!["log", "--oneline", "--", ":(top)nested/base.txt"],
     ] {
         let outcome = compare(&CompareOptions::new(
             fixture.path(),
@@ -628,6 +649,8 @@ fn show_pathspec_outputs_match_git() {
         vec!["show", "--no-patch", "HEAD", "--", "nested/base.txt"],
         vec!["show", "--no-patch", "--", "*.txt"],
         vec!["show", "--no-patch", "HEAD", "--", "nested/*.txt"],
+        vec!["show", "--no-patch", "--", ":(glob)*.txt"],
+        vec!["show", "--no-patch", "HEAD", "--", ":(top)nested/base.txt"],
     ] {
         let outcome = compare(&CompareOptions::new(
             fixture.path(),

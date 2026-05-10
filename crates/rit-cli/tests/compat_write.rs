@@ -54,6 +54,33 @@ fn add_wildcard_pathspec_matches_git_status() {
 }
 
 #[test]
+fn add_magic_pathspec_matches_git_status() {
+    let fixture = LocalWriteFixture::new("add-magic", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "changed\n",
+    )
+    .expect("tracked file should be modified");
+    fs::write(fixture.path().join("new.txt"), "new\n").expect("new file should be written");
+    fs::write(
+        fixture.path().join("nested").join("new.txt"),
+        "nested new\n",
+    )
+    .expect("nested new file should be written");
+
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words("git", ["add", ":(glob)*.txt"]),
+        command_words(rit_binary(), ["add", ":(glob)*.txt"]),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
+}
+
+#[test]
 fn add_chmod_executable_matches_git_status_and_tree_mode() {
     let fixture = LocalWriteFixture::new("add-chmod", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");
@@ -151,6 +178,33 @@ fn restore_wildcard_pathspec_matches_git_status_and_files() {
 }
 
 #[test]
+fn restore_magic_pathspec_matches_git_status_and_files() {
+    let fixture = LocalWriteFixture::new("restore-magic", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "changed\n",
+    )
+    .expect("tracked file should be modified");
+
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words("git", ["restore", ":(top)nested/tracked.txt"]),
+        command_words(rit_binary(), ["restore", ":(top)nested/tracked.txt"]),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
+    assert_eq!(
+        fs::read_to_string(outcome.git_repo.join("nested").join("tracked.txt"))
+            .expect("git file should read"),
+        fs::read_to_string(outcome.rit_repo.join("nested").join("tracked.txt"))
+            .expect("rit file should read")
+    );
+}
+
+#[test]
 fn reset_directory_pathspec_matches_git_status() {
     let fixture = LocalWriteFixture::new("reset-directory", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");
@@ -189,6 +243,28 @@ fn reset_wildcard_pathspec_matches_git_status() {
         fixture.path(),
         command_words("git", ["reset", "nested/[tn]*.txt"]),
         command_words(rit_binary(), ["reset", "nested/[tn]*.txt"]),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
+}
+
+#[test]
+fn reset_magic_pathspec_matches_git_status() {
+    let fixture = LocalWriteFixture::new("reset-magic", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "changed\n",
+    )
+    .expect("tracked file should be modified");
+    run_git(fixture.path(), ["add", "nested"]);
+
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words("git", ["reset", ":(top)nested/tracked.txt"]),
+        command_words(rit_binary(), ["reset", ":(top)nested/tracked.txt"]),
     );
 
     assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);

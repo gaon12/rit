@@ -3,12 +3,25 @@ use crate::{Result, RitError};
 /// A small, conservative subset of Git pathspec matching.
 ///
 /// This currently supports ordinary literal file and directory pathspecs plus
-/// simple `*`, `?`, and bracket-class wildcard pathspecs. More advanced Git
-/// pathspec features such as magic prefixes and pathspec files are deliberately
-/// left out until they can be tested against Git behavior.
+/// simple `*`, `?`, and bracket-class wildcard pathspecs. The first supported
+/// magic prefixes are `:(literal)`, `:(glob)`, `:(top)`, and `:/`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PathspecSet {
-    patterns: Vec<String>,
+    patterns: Vec<PathspecPattern>,
+}
+
+/// One normalized pathspec pattern.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PathspecPattern {
+    pattern: String,
+    mode: PathspecMatchMode,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PathspecMatchMode {
+    Default,
+    Literal,
+    Glob,
 }
 
 impl PathspecSet {
@@ -16,9 +29,9 @@ impl PathspecSet {
     pub fn from_args(pathspecs: &[String]) -> Result<Self> {
         let mut patterns = Vec::new();
         for pathspec in pathspecs {
-            let normalized = normalize_pathspec(pathspec)?;
-            if normalized != "." {
-                patterns.push(normalized);
+            let pattern = parse_pathspec(pathspec)?;
+            if pattern.pattern != "." {
+                patterns.push(pattern);
             }
         }
         Ok(Self { patterns })
@@ -36,18 +49,50 @@ impl PathspecSet {
         self.patterns.is_empty()
     }
 
-    /// Returns the normalized literal pathspec patterns.
-    pub fn patterns(&self) -> &[String] {
+    /// Returns the normalized pathspec patterns.
+    pub fn patterns(&self) -> &[PathspecPattern] {
         &self.patterns
     }
 
     /// Returns true when a repository-relative slash path matches this set.
     pub fn matches(&self, path: &str) -> bool {
-        self.is_all()
-            || self
-                .patterns
-                .iter()
-                .any(|pattern| pattern_matches(pattern, path))
+        self.is_all() || self.patterns.iter().any(|pattern| pattern.matches(path))
+    }
+}
+
+impl PathspecPattern {
+    /// Returns the normalized pattern text without pathspec magic prefixes.
+    pub fn pattern(&self) -> &str {
+        &self.pattern
+    }
+
+    /// Returns true when this pattern contains wildcard matching syntax.
+    pub fn has_wildcard(&self) -> bool {
+        match self.mode {
+            PathspecMatchMode::Literal => false,
+            PathspecMatchMode::Default | PathspecMatchMode::Glob => {
+                pattern_has_wildcard(&self.pattern)
+            }
+        }
+    }
+
+    /// Returns true when this pattern is a non-wildcard exact path filter.
+    pub(crate) fn is_exact_path(&self, path: &str) -> bool {
+        !self.has_wildcard() && self.pattern == path
+    }
+
+    /// Returns true when this pattern could refer to files below `directory`.
+    pub(crate) fn starts_with_directory(&self, directory: &str) -> bool {
+        !self.has_wildcard() && self.pattern.starts_with(&format!("{directory}/"))
+    }
+
+    /// Returns true when this pathspec matches a repository-relative slash path.
+    pub(crate) fn matches(&self, path: &str) -> bool {
+        match self.mode {
+            PathspecMatchMode::Default => pattern_matches(&self.pattern, path),
+            PathspecMatchMode::Literal => literal_pattern_matches(&self.pattern, path),
+            PathspecMatchMode::Glob => glob_pattern_matches(&self.pattern, path),
+        }
     }
 }
 
@@ -61,6 +106,89 @@ pub(crate) fn pattern_matches(pattern: &str, path: &str) -> bool {
     } else {
         path == pattern || path.starts_with(&format!("{pattern}/"))
     }
+}
+
+fn literal_pattern_matches(pattern: &str, path: &str) -> bool {
+    path == pattern || path.starts_with(&format!("{pattern}/"))
+}
+
+fn glob_pattern_matches(pattern: &str, path: &str) -> bool {
+    if pattern_has_wildcard(pattern) {
+        pathspec_glob_matches(pattern, path)
+    } else {
+        literal_pattern_matches(pattern, path)
+    }
+}
+
+fn pathspec_glob_matches(pattern: &str, path: &str) -> bool {
+    fn matches_from(pattern: &[u8], path: &[u8], pattern_index: usize, path_index: usize) -> bool {
+        if pattern_index == pattern.len() {
+            return path_index == path.len();
+        }
+
+        if pattern[pattern_index..].starts_with(b"**/") {
+            if matches_from(pattern, path, pattern_index + 3, path_index) {
+                return true;
+            }
+            for next_index in path_index..path.len() {
+                if path[next_index] == b'/'
+                    && matches_from(pattern, path, pattern_index + 3, next_index + 1)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        if pattern[pattern_index..].starts_with(b"**") {
+            if matches_from(pattern, path, pattern_index + 2, path_index) {
+                return true;
+            }
+            for next_index in path_index..path.len() {
+                if matches_from(pattern, path, pattern_index + 2, next_index + 1) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        if pattern[pattern_index] == b'*' {
+            if matches_from(pattern, path, pattern_index + 1, path_index) {
+                return true;
+            }
+            let mut next_index = path_index;
+            while next_index < path.len() && path[next_index] != b'/' {
+                next_index += 1;
+                if matches_from(pattern, path, pattern_index + 1, next_index) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        let Some(path_byte) = path.get(path_index).copied() else {
+            return false;
+        };
+        if path_byte == b'/' {
+            return pattern[pattern_index] == b'/'
+                && matches_from(pattern, path, pattern_index + 1, path_index + 1);
+        }
+
+        match pattern[pattern_index] {
+            b'?' => matches_from(pattern, path, pattern_index + 1, path_index + 1),
+            b'[' => match_bracket_class(pattern, pattern_index, path_byte).is_some_and(
+                |next_pattern_index| {
+                    matches_from(pattern, path, next_pattern_index, path_index + 1)
+                },
+            ),
+            literal if literal == path_byte => {
+                matches_from(pattern, path, pattern_index + 1, path_index + 1)
+            }
+            _ => false,
+        }
+    }
+
+    matches_from(pattern.as_bytes(), path.as_bytes(), 0, 0)
 }
 
 fn wildcard_matches(pattern: &str, path: &str) -> bool {
@@ -146,26 +274,78 @@ fn match_bracket_class(pattern: &[u8], index: usize, path_byte: u8) -> Option<us
     }
 }
 
-fn normalize_pathspec(pathspec: &str) -> Result<String> {
-    let mut normalized = pathspec.replace('\\', "/");
+fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
+    let normalized = pathspec.replace('\\', "/");
+    if let Some(rest) = normalized.strip_prefix(":/") {
+        return Ok(PathspecPattern {
+            pattern: normalize_pathspec_pattern(rest, pathspec, true)?,
+            mode: PathspecMatchMode::Default,
+        });
+    }
+    if let Some(rest) = normalized.strip_prefix(":(") {
+        let Some((magic, pattern)) = rest.split_once(')') else {
+            return Err(RitError::invalid_input(format!(
+                "unterminated pathspec magic: {pathspec}"
+            )));
+        };
+        let mut mode = PathspecMatchMode::Default;
+        let mut top = false;
+        for word in magic.split(',').filter(|word| !word.is_empty()) {
+            match word {
+                "top" => top = true,
+                "literal" => mode = PathspecMatchMode::Literal,
+                "glob" => mode = PathspecMatchMode::Glob,
+                _ => {
+                    return Err(RitError::invalid_input(format!(
+                        "unsupported pathspec magic '{word}' in {pathspec}"
+                    )));
+                }
+            }
+        }
+
+        return Ok(PathspecPattern {
+            pattern: normalize_pathspec_pattern(pattern, pathspec, top)?,
+            mode,
+        });
+    }
+
+    if normalized.starts_with(':') {
+        return Err(RitError::invalid_input(format!(
+            "unsupported pathspec magic: {pathspec}"
+        )));
+    }
+
+    Ok(PathspecPattern {
+        pattern: normalize_pathspec_pattern(&normalized, pathspec, false)?,
+        mode: PathspecMatchMode::Default,
+    })
+}
+
+fn normalize_pathspec_pattern(pattern: &str, original: &str, top_magic: bool) -> Result<String> {
+    let mut normalized = pattern.to_owned();
     while let Some(stripped) = normalized.strip_prefix("./") {
         normalized = stripped.to_owned();
+    }
+    if top_magic {
+        while let Some(stripped) = normalized.strip_prefix('/') {
+            normalized = stripped.to_owned();
+        }
     }
     while normalized.len() > 1 && normalized.ends_with('/') {
         normalized.pop();
     }
 
     if normalized.is_empty() {
-        return Err(RitError::invalid_input("empty pathspec"));
+        return Ok(".".to_owned());
     }
     if normalized.starts_with('/') {
         return Err(RitError::invalid_input(format!(
-            "absolute pathspecs are not supported yet: {pathspec}"
+            "absolute pathspecs are not supported yet: {original}"
         )));
     }
     if normalized.contains(':') {
         return Err(RitError::invalid_input(format!(
-            "pathspec magic is not supported yet: {pathspec}"
+            "pathspec magic is not supported yet: {original}"
         )));
     }
 
@@ -233,5 +413,51 @@ mod tests {
 
         assert!(pathspec.matches("b.txt"));
         assert!(!pathspec.matches("a.txt"));
+    }
+
+    #[test]
+    fn literal_magic_treats_wildcards_as_plain_text() {
+        let pathspec =
+            PathspecSet::from_args(&[":(literal)*.txt".to_owned()]).expect("valid pathspec");
+
+        assert!(pathspec.matches("*.txt"));
+        assert!(!pathspec.matches("a.txt"));
+        assert!(!pathspec.matches("nested/*.txt"));
+    }
+
+    #[test]
+    fn glob_magic_keeps_stars_from_matching_slashes() {
+        let pathspec =
+            PathspecSet::from_args(&[":(glob)*.txt".to_owned()]).expect("valid pathspec");
+
+        assert!(pathspec.matches("a.txt"));
+        assert!(!pathspec.matches("nested/a.txt"));
+
+        let pathspec =
+            PathspecSet::from_args(&[":(glob)**/*.txt".to_owned()]).expect("valid pathspec");
+
+        assert!(pathspec.matches("a.txt"));
+        assert!(pathspec.matches("nested/a.txt"));
+    }
+
+    #[test]
+    fn top_magic_normalizes_to_repository_relative_paths() {
+        let pathspec =
+            PathspecSet::from_args(&[":(top)/nested/a.txt".to_owned()]).expect("valid pathspec");
+
+        assert!(pathspec.matches("nested/a.txt"));
+
+        let pathspec = PathspecSet::from_args(&[":/nested/a.txt".to_owned()])
+            .expect("valid short top pathspec");
+
+        assert!(pathspec.matches("nested/a.txt"));
+    }
+
+    #[test]
+    fn unsupported_magic_returns_clear_error() {
+        let error =
+            PathspecSet::from_args(&[":(attr:text)README.md".to_owned()]).expect_err("unsupported");
+
+        assert!(error.to_string().contains("unsupported pathspec magic"));
     }
 }

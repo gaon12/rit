@@ -210,7 +210,9 @@ Completion criteria:
 - [x] Git-compatible ignore glob rules.
 - [x] `.git/info/exclude` parity beyond simple patterns.
 - [x] Attributes parser.
-- [ ] Pathspec magic.
+- [~] Pathspec magic.
+  - [x] Positive `:(literal)`, `:(glob)`, `:(top)`, and `:/` forms.
+  - [ ] Exclude, attr, and case-insensitive pathspec magic.
 - [ ] Case-sensitivity behavior by platform/config.
 
 Completion criteria:

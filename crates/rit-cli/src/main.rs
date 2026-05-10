@@ -506,7 +506,10 @@ fn ls_tree_command(
         print_tree_entries(&object.data, name_only, object_only, stdout)?;
     } else {
         for pathspec in pathspecs.patterns() {
-            match find_tree_entry_by_path(&repository, object_id, pathspec) {
+            if pathspec.has_wildcard() {
+                continue;
+            }
+            match find_tree_entry_by_path(&repository, object_id, pathspec.pattern()) {
                 Ok(Some(entry)) => print_tree_entry(&entry, name_only, object_only, stdout)?,
                 Ok(None) => {}
                 Err(error) => {

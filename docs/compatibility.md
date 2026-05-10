@@ -112,8 +112,9 @@ compares final `.git/index` state against Git.
 Pathspec compatibility tests currently cover ordinary literal file/directory
 filters and simple `*`, `?`, and bracket-class wildcard filters for
 `status --porcelain=v1` and supported `diff` summary outputs, plus `ls-files`
-cached and staged output. Git pathspec magic and pathspec-file input remain
-unsupported.
+cached and staged output. Positive `:(literal)`, `:(glob)`, `:(top)`, and
+`:/` pathspec magic is covered for status, diff, ls-files, log, show, and add.
+Exclude, attr, icase, and pathspec-file input remain unsupported.
 
 Status compatibility tests cover Git-like collapsed output for fully untracked
 directories, including directory and exact-file pathspec behavior.
@@ -129,6 +130,9 @@ NUL-terminated form.
 Status compatibility tests cover `--ignored` porcelain entries for simple
 literal and directory ignore rules, glob ignore rules, negation, and
 `.git/info/exclude`, including pathspec and NUL-terminated forms.
+Pathspec compatibility tests cover positive `:(literal)`, `:(glob)`,
+`:(top)`, and `:/` magic for status, diff, ls-files, log, show, add, restore,
+and reset.
 One status compatibility test covers index stat refresh: stdout/stderr/exit
 code and final `.git/index` state must match Git after a clean tracked file's
 mtime changes.
