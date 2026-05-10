@@ -3,7 +3,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[test]
 fn diff_worktree_outputs_match_git() {
@@ -157,6 +157,14 @@ fn diff_pathspec_outputs_match_git() {
             vec!["diff", "--cached", "--name-status", "--", "nested"],
             vec!["diff", "--cached", "--name-status", "--", "nested"],
         ),
+        (
+            vec!["diff", "--name-only", "--", "*.txt"],
+            vec!["diff", "--name-only", "--", "*.txt"],
+        ),
+        (
+            vec!["diff", "--cached", "--name-status", "--", "nested/*.txt"],
+            vec!["diff", "--cached", "--name-status", "--", "nested/*.txt"],
+        ),
     ] {
         let mut options = CompareOptions::new(
             fixture.path(),
@@ -182,6 +190,8 @@ fn status_pathspec_outputs_match_git() {
     for args in [
         ["status", "--porcelain=v1", "--", "a.txt"],
         ["status", "--porcelain=v1", "--", "nested"],
+        ["status", "--porcelain=v1", "--", "*.txt"],
+        ["status", "--porcelain=v1", "--", "nested/*.txt"],
     ] {
         let mut options = CompareOptions::new(fixture.path(), git_command(args), rit_command(args));
         options.compare_repository_state = false;
@@ -857,6 +867,9 @@ impl StatusRefreshFixture {
         fs::write(path.join("tracked.txt"), "base\n").expect("tracked file should be written");
         run_git(&path, ["add", "tracked.txt"]);
         run_git(&path, ["commit", "--quiet", "-m", "base"]);
+        std::thread::sleep(Duration::from_millis(1100));
+        fs::write(path.join("tracked.txt"), "base\n")
+            .expect("tracked file stat data should change");
 
         Self { path }
     }

@@ -2,9 +2,10 @@ use crate::{Result, RitError};
 
 /// A small, conservative subset of Git pathspec matching.
 ///
-/// This currently supports ordinary literal file and directory pathspecs. More
-/// advanced Git pathspec features such as magic prefixes and glob matching are
-/// deliberately left out until they can be tested against Git behavior.
+/// This currently supports ordinary literal file and directory pathspecs plus
+/// simple `*` and `?` wildcard pathspecs. More advanced Git pathspec features
+/// such as magic prefixes and pathspec files are deliberately left out until
+/// they can be tested against Git behavior.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PathspecSet {
     patterns: Vec<String>,
@@ -43,11 +44,50 @@ impl PathspecSet {
     /// Returns true when a repository-relative slash path matches this set.
     pub fn matches(&self, path: &str) -> bool {
         self.is_all()
-            || self
-                .patterns
-                .iter()
-                .any(|pattern| path == pattern || path.starts_with(&format!("{pattern}/")))
+            || self.patterns.iter().any(|pattern| {
+                if has_wildcard(pattern) {
+                    wildcard_matches(pattern, path)
+                } else {
+                    path == pattern || path.starts_with(&format!("{pattern}/"))
+                }
+            })
     }
+}
+
+fn has_wildcard(pattern: &str) -> bool {
+    pattern.contains('*') || pattern.contains('?')
+}
+
+fn wildcard_matches(pattern: &str, path: &str) -> bool {
+    let pattern = pattern.as_bytes();
+    let path = path.as_bytes();
+    let mut pattern_index = 0;
+    let mut path_index = 0;
+    let mut last_star = None;
+    let mut path_after_star = 0;
+
+    while path_index < path.len() {
+        if pattern_index < pattern.len()
+            && (pattern[pattern_index] == b'?' || pattern[pattern_index] == path[path_index])
+        {
+            pattern_index += 1;
+            path_index += 1;
+        } else if pattern_index < pattern.len() && pattern[pattern_index] == b'*' {
+            last_star = Some(pattern_index);
+            pattern_index += 1;
+            path_after_star = path_index;
+        } else if let Some(star_index) = last_star {
+            pattern_index = star_index + 1;
+            path_after_star += 1;
+            path_index = path_after_star;
+        } else {
+            return false;
+        }
+    }
+
+    pattern[pattern_index..]
+        .iter()
+        .all(|character| *character == b'*')
 }
 
 fn normalize_pathspec(pathspec: &str) -> Result<String> {
@@ -103,5 +143,20 @@ mod tests {
 
         assert!(pathspec.matches("a.txt"));
         assert!(pathspec.matches("nested/a.txt"));
+    }
+
+    #[test]
+    fn wildcard_pathspec_matches_like_git_simple_globs() {
+        let pathspec = PathspecSet::from_args(&["*.txt".to_owned()]).expect("valid pathspec");
+
+        assert!(pathspec.matches("a.txt"));
+        assert!(pathspec.matches("nested/a.txt"));
+        assert!(!pathspec.matches("nested/a.md"));
+
+        let pathspec =
+            PathspecSet::from_args(&["nested/?.txt".to_owned()]).expect("valid pathspec");
+
+        assert!(pathspec.matches("nested/a.txt"));
+        assert!(!pathspec.matches("nested/ab.txt"));
     }
 }
