@@ -1,5 +1,6 @@
 use crate::index::{Index, IndexEntry, join_slash_path, relative_slash_path};
 use crate::object::{hash_object, parse_tree_entries};
+use crate::pathspec::{pattern_has_wildcard, pattern_matches};
 use crate::{
     GitConfig, ObjectId, ObjectKind, PathspecSet, Repository, Result, RitError, Signature,
     parse_commit, refs::validate_ref_short_name,
@@ -442,21 +443,51 @@ fn expand_add_pathspecs<'a>(
     }
 
     let indexed_paths = indexed_paths.cloned().collect::<Vec<_>>();
+    let mut worktree_files = None;
     for pattern in pathspecs.patterns() {
-        let full_path = join_slash_path(worktree, pattern);
-        if full_path.is_file() {
-            files.insert(relative_slash_path(worktree, &full_path)?);
-        } else if full_path.is_dir() {
-            collect_regular_files(worktree, &full_path, &mut files)?;
-        } else if indexed_paths
-            .iter()
-            .any(|path| path == pattern || path.starts_with(&format!("{pattern}/")))
-        {
-            continue;
+        if pattern_has_wildcard(pattern) {
+            if worktree_files.is_none() {
+                let mut files = BTreeSet::new();
+                collect_regular_files(worktree, worktree, &mut files)?;
+                worktree_files = Some(files);
+            }
+            let all_worktree_files = worktree_files
+                .as_ref()
+                .expect("wildcard expansion should collect worktree files");
+            let mut matched = false;
+            for path in all_worktree_files {
+                if pattern_matches(pattern, path) {
+                    files.insert(path.clone());
+                    matched = true;
+                }
+            }
+            if indexed_paths
+                .iter()
+                .any(|path| pattern_matches(pattern, path))
+            {
+                matched = true;
+            }
+            if !matched {
+                return Err(RitError::invalid_input(format!(
+                    "pathspec did not match any files: {pattern}"
+                )));
+            }
         } else {
-            return Err(RitError::invalid_input(format!(
-                "pathspec did not match any files: {pattern}"
-            )));
+            let full_path = join_slash_path(worktree, pattern);
+            if full_path.is_file() {
+                files.insert(relative_slash_path(worktree, &full_path)?);
+            } else if full_path.is_dir() {
+                collect_regular_files(worktree, &full_path, &mut files)?;
+            } else if indexed_paths
+                .iter()
+                .any(|path| pattern_matches(pattern, path))
+            {
+                continue;
+            } else {
+                return Err(RitError::invalid_input(format!(
+                    "pathspec did not match any files: {pattern}"
+                )));
+            }
         }
     }
 

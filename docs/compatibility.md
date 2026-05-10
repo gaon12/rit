@@ -125,9 +125,9 @@ Patch compatibility tests cover splitting distant changes into multiple hunks.
 Binary diff compatibility tests cover `--name-only`, `--name-status`,
 `--numstat`, and `--stat` summary output.
 
-Local write compatibility tests currently cover directory pathspec behavior for
-`add`, `restore`, and `reset` by comparing the resulting porcelain status and
-restored file contents.
+Local write compatibility tests currently cover directory pathspec behavior and
+simple wildcard/bracket-class pathspec behavior for `add`, `restore`, and
+`reset` by comparing the resulting porcelain status and restored file contents.
 Reusable local write fixture builders live in `rit-testkit` so new write
 comparisons can share repository setup.
 

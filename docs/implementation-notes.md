@@ -107,6 +107,8 @@
   insertion/deletion totals.
 - Added local write compatibility coverage that compares Git and rit porcelain
   state after directory pathspec `add`, `restore`, and `reset`.
+- Added local write compatibility coverage for simple wildcard and
+  bracket-class pathspecs in `add`, `restore`, and `reset`.
 - Still unsupported: pathspec magic, pathspec files, and `show` path filtering
   for patch output.
 
@@ -237,14 +239,15 @@
 ### `rit add`
 
 - Baseline command checked: `git add -h`
-- Supported options: ordinary literal file, directory, and `.` pathspecs.
-- Unsupported options: advanced pathspec forms, update/all modes,
+- Supported options: ordinary literal file, directory, `.`, simple `*`, `?`,
+  and bracket-class wildcard pathspecs.
+- Unsupported options: pathspec magic/pathspec files, update/all modes,
   patch/interactive mode, chmod, sparse mode, ignored-file override.
 - Git-compatible behavior: writes blob loose objects and Git index v2 entries
   for regular files; directory pathspecs recursively add regular files and
   stage deletions for matching tracked files that no longer exist.
-- Intentional differences: pathspec magic, glob pathspecs, ignored-file checks,
-  and pathspec-file inputs are not implemented yet.
+- Intentional differences: pathspec magic, ignored-file checks, and
+  pathspec-file inputs are not implemented yet.
 - Repository mutation: yes, writes loose objects and `.git/index` using lock/rename.
 - Risk: low for explicit files; missing paths remove matching index entries.
 
@@ -287,20 +290,21 @@
 
 - Baseline command checked: `git restore -h`
 - Supported options: default worktree restore from index, `--staged`/`-S`
-  restore index from `HEAD`, with ordinary literal file, directory, and `.`
-  pathspecs.
+  restore index from `HEAD`, with ordinary literal file, directory, `.`, simple
+  `*`, `?`, and bracket-class wildcard pathspecs.
 - Unsupported options: source revisions, patch mode, merge conflict modes, sparse controls, pathspec files.
 - Git-compatible behavior: explicit tracked file restore for regular files.
-- Intentional differences: advanced pathspec forms and conflict handling are not
-  implemented.
+- Intentional differences: pathspec magic/pathspec files and conflict handling
+  are not implemented.
 - Repository mutation: worktree restore writes files; staged restore writes `.git/index`.
 - Risk: moderate; worktree writes use temp file then replace destination.
 
 ### `rit reset`
 
 - Baseline command checked: `git reset -h`
-- Supported options: ordinary literal file, directory, and `.` pathspecs,
-  equivalent to unstaging matching paths from `HEAD`.
+- Supported options: ordinary literal file, directory, `.`, simple `*`, `?`,
+  and bracket-class wildcard pathspecs, equivalent to unstaging matching paths
+  from `HEAD`.
 - Unsupported options: commit-moving resets, soft/mixed/hard/merge/keep modes, patch mode, pathspec files.
 - Git-compatible behavior: unstages explicit paths and reports remaining unstaged modifications.
 - Intentional differences: no index refresh metadata beyond object ID/size/mode.

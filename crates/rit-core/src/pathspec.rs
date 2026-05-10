@@ -44,18 +44,23 @@ impl PathspecSet {
     /// Returns true when a repository-relative slash path matches this set.
     pub fn matches(&self, path: &str) -> bool {
         self.is_all()
-            || self.patterns.iter().any(|pattern| {
-                if has_wildcard(pattern) {
-                    wildcard_matches(pattern, path)
-                } else {
-                    path == pattern || path.starts_with(&format!("{pattern}/"))
-                }
-            })
+            || self
+                .patterns
+                .iter()
+                .any(|pattern| pattern_matches(pattern, path))
     }
 }
 
-fn has_wildcard(pattern: &str) -> bool {
+pub(crate) fn pattern_has_wildcard(pattern: &str) -> bool {
     pattern.contains('*') || pattern.contains('?') || pattern.contains('[')
+}
+
+pub(crate) fn pattern_matches(pattern: &str, path: &str) -> bool {
+    if pattern_has_wildcard(pattern) {
+        wildcard_matches(pattern, path)
+    } else {
+        path == pattern || path.starts_with(&format!("{pattern}/"))
+    }
 }
 
 fn wildcard_matches(pattern: &str, path: &str) -> bool {

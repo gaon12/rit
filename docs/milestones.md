@@ -147,6 +147,8 @@ Completion criteria:
   - [~] Pathspec magic, pathspec files, and glob parity.
     - [x] Shared simple `*` and `?` wildcard matcher.
     - [x] Shared simple bracket-class wildcard matcher.
+    - [x] Simple wildcard and bracket-class expansion for `add`, `restore`,
+      and `reset`.
 - [ ] Hook execution for commit.
 - [ ] Commit author/date override.
 - [x] Safer branch delete merge checks.
