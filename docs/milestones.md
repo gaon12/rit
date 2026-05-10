@@ -207,8 +207,8 @@ Completion criteria:
 ## M6: Ignore, Attributes, And Pathspecs
 
 - [x] Simple `.gitignore` literal and directory patterns.
-- [ ] Git-compatible ignore glob rules.
-- [ ] `.git/info/exclude` parity beyond simple patterns.
+- [x] Git-compatible ignore glob rules.
+- [x] `.git/info/exclude` parity beyond simple patterns.
 - [ ] Attributes parser.
 - [ ] Pathspec magic.
 - [ ] Case-sensitivity behavior by platform/config.

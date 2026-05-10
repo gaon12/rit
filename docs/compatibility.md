@@ -124,8 +124,8 @@ Status compatibility tests cover `-b` / `--branch` branch headers for simple
 local-branch, unborn-branch, and detached-HEAD repositories, including the
 NUL-terminated form.
 Status compatibility tests cover `--ignored` porcelain entries for simple
-literal and directory ignore rules, including pathspec and NUL-terminated
-forms.
+literal and directory ignore rules, glob ignore rules, negation, and
+`.git/info/exclude`, including pathspec and NUL-terminated forms.
 One status compatibility test covers index stat refresh: stdout/stderr/exit
 code and final `.git/index` state must match Git after a clean tracked file's
 mtime changes.

@@ -322,6 +322,46 @@ fn status_ignored_outputs_match_git() {
 }
 
 #[test]
+fn status_ignored_glob_outputs_match_git() {
+    let fixture = StatusIgnoredGlobFixture::new("ignored-glob-status");
+
+    for args in [
+        vec!["status", "--porcelain=v1", "--ignored", "-uall"],
+        vec![
+            "status",
+            "--porcelain=v1",
+            "--ignored",
+            "-uall",
+            "--",
+            "nested/error.log",
+        ],
+        vec![
+            "status",
+            "--porcelain=v1",
+            "--ignored",
+            "-uall",
+            "--",
+            "docs/deep/generated.txt",
+        ],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "ignored glob status {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn status_quotes_paths_like_git() {
     let fixture = StatusQuotedPathFixture::new("quoted-status");
 
@@ -875,6 +915,70 @@ impl StatusIgnoredFixture {
 }
 
 impl Drop for StatusIgnoredFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct StatusIgnoredGlobFixture {
+    path: PathBuf,
+}
+
+impl StatusIgnoredGlobFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(path.join("docs").join("deep"))
+            .expect("docs directory should be created");
+        fs::create_dir_all(path.join("nested")).expect("nested directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(
+            path.join(".gitignore"),
+            "*.log\nbuild?.tmp\n[ab].cache\n/root-only.txt\ndocs/**/generated.txt\n!keep.log\n",
+        )
+        .expect("gitignore should be written");
+        fs::write(
+            path.join(".git").join("info").join("exclude"),
+            "local-only.tmp\n",
+        )
+        .expect("info exclude should be written");
+        run_git(&path, ["add", ".gitignore"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+
+        fs::write(path.join("error.log"), "ignored\n").expect("ignored log should be written");
+        fs::write(path.join("nested").join("error.log"), "ignored\n")
+            .expect("nested ignored log should be written");
+        fs::write(path.join("keep.log"), "visible\n").expect("unignored log should be written");
+        fs::write(path.join("build1.tmp"), "ignored\n").expect("ignored tmp should be written");
+        fs::write(path.join("build12.tmp"), "visible\n").expect("visible tmp should be written");
+        fs::write(path.join("a.cache"), "ignored\n").expect("ignored cache should be written");
+        fs::write(path.join("c.cache"), "visible\n").expect("visible cache should be written");
+        fs::write(path.join("root-only.txt"), "ignored\n")
+            .expect("root ignored file should be written");
+        fs::write(path.join("nested").join("root-only.txt"), "visible\n")
+            .expect("nested visible file should be written");
+        fs::write(path.join("docs").join("generated.txt"), "ignored\n")
+            .expect("docs generated file should be written");
+        fs::write(
+            path.join("docs").join("deep").join("generated.txt"),
+            "ignored\n",
+        )
+        .expect("deep generated file should be written");
+        fs::write(path.join("local-only.tmp"), "ignored\n")
+            .expect("info excluded file should be written");
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for StatusIgnoredGlobFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

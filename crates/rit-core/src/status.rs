@@ -4,7 +4,7 @@ use crate::parse_commit;
 use crate::{ObjectId, PathspecSet, Repository, Result, RitError};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// One porcelain v1 status entry.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -581,51 +581,225 @@ fn scan_directory(
 
 #[derive(Clone, Debug, Default)]
 struct IgnoreRules {
-    patterns: Vec<String>,
+    rules: Vec<IgnoreRule>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct IgnoreRule {
+    pattern: String,
+    negated: bool,
 }
 
 impl IgnoreRules {
     fn read(worktree: &Path, git_dir: &Path) -> Result<Self> {
-        let mut patterns = Vec::new();
-        read_ignore_file(&worktree.join(".gitignore"), &mut patterns)?;
-        read_ignore_file(&git_dir.join("info").join("exclude"), &mut patterns)?;
-        Ok(Self { patterns })
+        let mut rules = Vec::new();
+        read_ignore_file(&worktree.join(".gitignore"), &mut rules)?;
+        read_ignore_file(&git_dir.join("info").join("exclude"), &mut rules)?;
+        Ok(Self { rules })
     }
 
     fn matches(&self, path: &str) -> bool {
-        self.patterns.iter().any(|pattern| {
-            let normalized = pattern.trim_start_matches('/');
-            if let Some(directory) = normalized.strip_suffix('/') {
-                path == directory || path.starts_with(&format!("{directory}/"))
-            } else {
-                path == normalized || path.ends_with(&format!("/{normalized}"))
+        let mut ignored = false;
+        for rule in &self.rules {
+            if ignore_rule_matches(rule, path) {
+                ignored = !rule.negated;
             }
-        })
+        }
+        ignored
     }
 }
 
-fn read_ignore_file(path: &PathBuf, patterns: &mut Vec<String>) -> Result<()> {
+fn read_ignore_file(path: &Path, rules: &mut Vec<IgnoreRule>) -> Result<()> {
     if !path.exists() {
         return Ok(());
     }
 
     let contents = fs::read_to_string(path).map_err(|source| RitError::io(path, source))?;
     for line in contents.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('!') {
+        let Some(rule) = parse_ignore_rule(line) else {
             continue;
-        }
-        patterns.push(trimmed.replace('\\', "/"));
+        };
+        rules.push(rule);
     }
 
     Ok(())
 }
 
+fn parse_ignore_rule(line: &str) -> Option<IgnoreRule> {
+    let mut pattern = line.trim().to_owned();
+    if pattern.is_empty() || pattern.starts_with('#') {
+        return None;
+    }
+
+    let escaped_literal_prefix = pattern.starts_with("\\!") || pattern.starts_with("\\#");
+    let negated = pattern.starts_with('!');
+    if negated || escaped_literal_prefix {
+        pattern.remove(0);
+    }
+
+    if pattern.is_empty() {
+        return None;
+    }
+
+    Some(IgnoreRule {
+        pattern: pattern.replace('\\', "/"),
+        negated,
+    })
+}
+
+fn ignore_rule_matches(rule: &IgnoreRule, path: &str) -> bool {
+    let directory_only = rule.pattern.ends_with('/');
+    let anchored = rule.pattern.starts_with('/');
+    let pattern = rule.pattern.trim_start_matches('/').trim_end_matches('/');
+    if pattern.is_empty() {
+        return false;
+    }
+
+    let has_slash = pattern.contains('/');
+    if directory_only {
+        if anchored || has_slash {
+            return path
+                .split('/')
+                .scan(String::new(), |prefix, component| {
+                    if !prefix.is_empty() {
+                        prefix.push('/');
+                    }
+                    prefix.push_str(component);
+                    Some(prefix.clone())
+                })
+                .any(|prefix| gitignore_glob_matches(pattern, &prefix));
+        }
+        return path
+            .split('/')
+            .any(|component| gitignore_glob_matches(pattern, component));
+    }
+
+    if anchored || has_slash {
+        return gitignore_glob_matches(pattern, path);
+    }
+
+    path.rsplit('/')
+        .next()
+        .is_some_and(|name| gitignore_glob_matches(pattern, name))
+}
+
+fn gitignore_glob_matches(pattern: &str, path: &str) -> bool {
+    fn matches_from(pattern: &[u8], path: &[u8], pattern_index: usize, path_index: usize) -> bool {
+        if pattern_index == pattern.len() {
+            return path_index == path.len();
+        }
+
+        if pattern[pattern_index..].starts_with(b"**/") {
+            if matches_from(pattern, path, pattern_index + 3, path_index) {
+                return true;
+            }
+            for next_index in path_index..path.len() {
+                if path[next_index] == b'/'
+                    && matches_from(pattern, path, pattern_index + 3, next_index + 1)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        if pattern[pattern_index..].starts_with(b"**") {
+            if matches_from(pattern, path, pattern_index + 2, path_index) {
+                return true;
+            }
+            for next_index in path_index..path.len() {
+                if matches_from(pattern, path, pattern_index + 2, next_index + 1) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        if pattern[pattern_index] == b'*' {
+            if matches_from(pattern, path, pattern_index + 1, path_index) {
+                return true;
+            }
+            let mut next_index = path_index;
+            while next_index < path.len() && path[next_index] != b'/' {
+                next_index += 1;
+                if matches_from(pattern, path, pattern_index + 1, next_index) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        let Some(path_byte) = path.get(path_index).copied() else {
+            return false;
+        };
+        if path_byte == b'/' {
+            return pattern[pattern_index] == b'/'
+                && matches_from(pattern, path, pattern_index + 1, path_index + 1);
+        }
+
+        match pattern[pattern_index] {
+            b'?' => matches_from(pattern, path, pattern_index + 1, path_index + 1),
+            b'[' => match_gitignore_bracket_class(pattern, pattern_index, path_byte).is_some_and(
+                |next_pattern_index| {
+                    matches_from(pattern, path, next_pattern_index, path_index + 1)
+                },
+            ),
+            literal if literal == path_byte => {
+                matches_from(pattern, path, pattern_index + 1, path_index + 1)
+            }
+            _ => false,
+        }
+    }
+
+    matches_from(pattern.as_bytes(), path.as_bytes(), 0, 0)
+}
+
+fn match_gitignore_bracket_class(pattern: &[u8], index: usize, path_byte: u8) -> Option<usize> {
+    let mut cursor = index + 1;
+    let negated = matches!(pattern.get(cursor), Some(b'!' | b'^'));
+    if negated {
+        cursor += 1;
+    }
+
+    let class_start = cursor;
+    let mut matched = false;
+    while cursor < pattern.len() {
+        if pattern[cursor] == b']' && cursor > class_start {
+            return if matched != negated {
+                Some(cursor + 1)
+            } else {
+                None
+            };
+        }
+
+        if cursor + 2 < pattern.len() && pattern[cursor + 1] == b'-' && pattern[cursor + 2] != b']'
+        {
+            let start = pattern[cursor];
+            let end = pattern[cursor + 2];
+            if start <= path_byte && path_byte <= end {
+                matched = true;
+            }
+            cursor += 3;
+        } else {
+            if pattern[cursor] == path_byte {
+                matched = true;
+            }
+            cursor += 1;
+        }
+    }
+
+    if path_byte == b'[' {
+        Some(index + 1)
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        IgnoreRules, PorcelainStatus, StatusBranchHeader, StatusEntry, UntrackedFilesMode,
-        collapse_untracked_paths, ignored_status_paths, quote_porcelain_path,
+        IgnoreRule, IgnoreRules, PorcelainStatus, StatusBranchHeader, StatusEntry,
+        UntrackedFilesMode, collapse_untracked_paths, ignored_status_paths, quote_porcelain_path,
         untracked_status_paths,
     };
     use crate::PathspecSet;
@@ -713,11 +887,58 @@ mod tests {
     #[test]
     fn ignore_rules_match_rooted_directory() {
         let rules = IgnoreRules {
-            patterns: vec!["/target/".to_owned()],
+            rules: vec![IgnoreRule {
+                pattern: "/target/".to_owned(),
+                negated: false,
+            }],
         };
 
         assert!(rules.matches("target/debug/app"));
         assert!(!rules.matches("src/target.rs"));
+    }
+
+    #[test]
+    fn ignore_rules_match_gitignore_globs_and_negation() {
+        let rules = IgnoreRules {
+            rules: vec![
+                IgnoreRule {
+                    pattern: "*.log".to_owned(),
+                    negated: false,
+                },
+                IgnoreRule {
+                    pattern: "build?.tmp".to_owned(),
+                    negated: false,
+                },
+                IgnoreRule {
+                    pattern: "[ab].cache".to_owned(),
+                    negated: false,
+                },
+                IgnoreRule {
+                    pattern: "/root-only.txt".to_owned(),
+                    negated: false,
+                },
+                IgnoreRule {
+                    pattern: "docs/**/generated.txt".to_owned(),
+                    negated: false,
+                },
+                IgnoreRule {
+                    pattern: "keep.log".to_owned(),
+                    negated: true,
+                },
+            ],
+        };
+
+        assert!(rules.matches("error.log"));
+        assert!(rules.matches("nested/error.log"));
+        assert!(rules.matches("build1.tmp"));
+        assert!(!rules.matches("build12.tmp"));
+        assert!(rules.matches("a.cache"));
+        assert!(!rules.matches("c.cache"));
+        assert!(rules.matches("root-only.txt"));
+        assert!(!rules.matches("nested/root-only.txt"));
+        assert!(rules.matches("docs/generated.txt"));
+        assert!(rules.matches("docs/deep/generated.txt"));
+        assert!(!rules.matches("keep.log"));
     }
 
     #[test]
