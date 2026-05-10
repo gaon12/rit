@@ -95,6 +95,9 @@ Status compatibility tests cover Git-like collapsed output for fully untracked
 directories, including directory and exact-file pathspec behavior.
 Status compatibility tests also cover porcelain quoting for paths containing
 spaces.
+One status compatibility test intentionally documents the remaining index stat
+refresh difference: stdout/stderr/exit code match Git, but `.git/index` differs
+because Git refreshes cached stat metadata and rit currently does not.
 
 `ls-tree` compatibility tests cover literal directory and file path lookup with
 default, `--name-only`, and `--object-only` output.

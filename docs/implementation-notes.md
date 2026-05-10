@@ -31,6 +31,9 @@
 - `rit-testkit` may execute `git` because it is test infrastructure. Production `rit` runtime code must not depend on it.
 - First smoke test: `git status --porcelain=v1` and `rit status --porcelain=v1` match stdout, stderr, and exit code on a simple committed fixture.
 - Known gap exposed by state comparison: `git status` refreshes `.git/index` stat data, while `rit status` currently leaves the index unchanged.
+- This index refresh gap is now covered by an explicit compatibility test:
+  command output and exit code must match, while `.git/index` is expected to
+  differ because Git refreshes cached stat fields.
 - Added rit CLI integration compatibility fixtures for read-only `diff` output modes: `--name-only`, `--name-status`, `--numstat`, and `--stat`, including cached diff variants.
 - Compatibility reports now include the first differing stdout/stderr line when command text differs.
 - Added reusable `rit-testkit` local write fixture builders for nested tracked

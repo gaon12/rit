@@ -212,6 +212,33 @@ fn status_quotes_paths_like_git() {
 }
 
 #[test]
+fn status_index_refresh_difference_is_documented() {
+    let fixture = StatusRefreshFixture::new("status-refresh-difference");
+    let outcome = compare(&CompareOptions::new(
+        fixture.path(),
+        git_command(["status", "--porcelain=v1"]),
+        rit_command(["status", "--porcelain=v1"]),
+    ))
+    .expect("comparison should run");
+    let state = outcome
+        .repository_state
+        .as_ref()
+        .expect("repository state should be compared");
+
+    assert_eq!(outcome.git.stdout, outcome.rit.stdout);
+    assert_eq!(outcome.git.stderr, outcome.rit.stderr);
+    assert_eq!(outcome.git.exit_code, outcome.rit.exit_code);
+    assert!(
+        state
+            .differing_paths
+            .iter()
+            .any(|path| path == Path::new(".git").join("index").as_path()),
+        "git status should refresh .git/index while rit status leaves it unchanged\n{}",
+        outcome.report()
+    );
+}
+
+#[test]
 fn ls_files_pathspec_outputs_match_git() {
     let fixture = DiffFixture::new("pathspec-ls-files");
 
@@ -497,6 +524,37 @@ impl StatusQuotedPathFixture {
 }
 
 impl Drop for StatusQuotedPathFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct StatusRefreshFixture {
+    path: PathBuf,
+}
+
+impl StatusRefreshFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("tracked.txt"), "base\n").expect("tracked file should be written");
+        run_git(&path, ["add", "tracked.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for StatusRefreshFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

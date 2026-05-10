@@ -287,5 +287,4 @@ Completion criteria:
 1. Expand `status --porcelain=v1` with stronger Git compatibility.
 2. Continue pathspec support for remaining read-only commands and advanced
    pathspec forms.
-3. Add index stat refresh or document and test the remaining difference.
-4. Expand `rit diff` patch output beyond small text files.
+3. Expand `rit diff` patch output beyond small text files.
