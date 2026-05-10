@@ -62,8 +62,8 @@
   marker extension and preserves any raw marker payload.
 - `IndexExtension::untracked_cache()` parses `UNTR` environment strings, stat
   blocks, dir flags, exclude-file hashes, per-directory exclude filename, and
-  directory block count while preserving the remaining directory/bitmap payload
-  bytes.
+  directory blocks with untracked name lists while preserving the remaining
+  bitmap/stat/hash/terminator payload bytes.
 - Added rit CLI integration compatibility fixtures for read-only `diff` output modes: `--name-only`, `--name-status`, `--numstat`, and `--stat`, including cached diff variants.
 - Compatibility reports now include the first differing stdout/stderr line when command text differs.
 - Added reusable `rit-testkit` local write fixture builders for nested tracked

@@ -32,8 +32,8 @@ The current codebase implements an early local Git subset:
   resolve-undo payloads can be parsed into per-path stage records. `FSMN`
   file-system-monitor headers and `link` split-index shared-index IDs are
   parsed while preserving raw bitmap bytes. `sdir` sparse-directory marker
-  extensions are recognized. `UNTR` untracked-cache headers are parsed while
-  preserving raw directory payload bytes.
+  extensions are recognized. `UNTR` untracked-cache headers and directory
+  blocks are parsed while preserving raw tail payload bytes.
 - Local refs, packed refs lookup, lightweight tags, and simple revision
   resolution.
 - CLI commands: `version`, `help`, `init`, `rev-parse`, `cat-file`, `ls-tree`,

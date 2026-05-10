@@ -182,8 +182,8 @@ Completion criteria:
   - [x] Parse `FSMN` file-system-monitor headers and raw bitmap payloads.
   - [x] Parse `link` split-index shared-index IDs and raw bitmap payloads.
   - [x] Parse `sdir` sparse-directory marker extensions.
-  - [x] Parse `UNTR` untracked-cache headers and preserve raw directory data.
-  - [ ] Parse EWAH bitmap and untracked-cache directory block internals.
+  - [x] Parse `UNTR` untracked-cache headers and directory blocks.
+  - [ ] Parse EWAH bitmap, stat, hash, and null terminator tails.
 - [x] File mode and executable bit handling.
   - [x] Preserve `100644`/`100755` modes when writing trees from the index.
   - [x] `rit add --chmod=+x|-x` records executable-bit overrides in the index.

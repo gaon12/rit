@@ -209,8 +209,10 @@ pub struct UntrackedCache {
     pub per_directory_exclude_name: String,
     /// Number of directory blocks declared by the extension.
     pub directory_block_count: u64,
-    /// Raw directory-block, bitmap, stat, hash, and terminator payload.
-    pub directory_data: Vec<u8>,
+    /// Directory blocks in Git's depth-first-search order.
+    pub directory_blocks: Vec<UntrackedCacheDirectoryBlock>,
+    /// Raw bitmap, stat, hash, and terminator payload after directory blocks.
+    pub remaining_data: Vec<u8>,
 }
 
 /// Stat block stored by the untracked-cache extension.
@@ -236,6 +238,19 @@ pub struct UntrackedCacheStat {
     pub gid: u32,
     /// File size.
     pub file_size: u32,
+}
+
+/// One directory block stored by the untracked-cache extension.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UntrackedCacheDirectoryBlock {
+    /// Number of untracked names declared by this block.
+    pub untracked_count: u64,
+    /// Number of child directory blocks declared by this block.
+    pub subdirectory_count: u64,
+    /// Directory name for this block.
+    pub directory_name: String,
+    /// Untracked file or directory names stored in this block.
+    pub untracked_names: Vec<String>,
 }
 
 /// One tracked path in the Git index.
@@ -692,6 +707,10 @@ fn parse_untracked_cache(bytes: &[u8]) -> Result<UntrackedCache> {
         "untracked-cache per-directory exclude name",
     )?;
     let directory_block_count = read_variable_width_integer(bytes, &mut offset)?;
+    let mut directory_blocks = Vec::new();
+    for _ in 0..directory_block_count {
+        directory_blocks.push(read_untracked_cache_directory_block(bytes, &mut offset)?);
+    }
 
     Ok(UntrackedCache {
         environment,
@@ -702,7 +721,32 @@ fn parse_untracked_cache(bytes: &[u8]) -> Result<UntrackedCache> {
         excludes_file_hash,
         per_directory_exclude_name,
         directory_block_count,
-        directory_data: bytes[offset..].to_vec(),
+        directory_blocks,
+        remaining_data: bytes[offset..].to_vec(),
+    })
+}
+
+fn read_untracked_cache_directory_block(
+    bytes: &[u8],
+    offset: &mut usize,
+) -> Result<UntrackedCacheDirectoryBlock> {
+    let untracked_count = read_variable_width_integer(bytes, offset)?;
+    let subdirectory_count = read_variable_width_integer(bytes, offset)?;
+    let directory_name = read_nul_terminated_text(bytes, offset, "untracked-cache directory name")?;
+    let mut untracked_names = Vec::new();
+    for _ in 0..untracked_count {
+        untracked_names.push(read_nul_terminated_text(
+            bytes,
+            offset,
+            "untracked-cache untracked name",
+        )?);
+    }
+
+    Ok(UntrackedCacheDirectoryBlock {
+        untracked_count,
+        subdirectory_count,
+        directory_name,
+        untracked_names,
     })
 }
 
@@ -1256,6 +1300,11 @@ mod tests {
         payload.extend_from_slice(excludes_hash.as_bytes());
         payload.extend_from_slice(b".gitignore\0");
         payload.push(1);
+        payload.push(2);
+        payload.push(0);
+        payload.extend_from_slice(b"\0");
+        payload.extend_from_slice(b"a.txt\0");
+        payload.extend_from_slice(b"build/\0");
         payload.extend_from_slice(b"directory-tail");
         let index = Index {
             entries: Vec::new(),
@@ -1279,7 +1328,15 @@ mod tests {
         assert_eq!(untracked_cache.excludes_file_hash, excludes_hash);
         assert_eq!(untracked_cache.per_directory_exclude_name, ".gitignore");
         assert_eq!(untracked_cache.directory_block_count, 1);
-        assert_eq!(untracked_cache.directory_data, b"directory-tail");
+        assert_eq!(untracked_cache.directory_blocks.len(), 1);
+        assert_eq!(untracked_cache.directory_blocks[0].untracked_count, 2);
+        assert_eq!(untracked_cache.directory_blocks[0].subdirectory_count, 0);
+        assert_eq!(untracked_cache.directory_blocks[0].directory_name, "");
+        assert_eq!(
+            untracked_cache.directory_blocks[0].untracked_names,
+            vec!["a.txt".to_owned(), "build/".to_owned()]
+        );
+        assert_eq!(untracked_cache.remaining_data, b"directory-tail");
     }
 
     #[test]
