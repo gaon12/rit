@@ -159,6 +159,7 @@ pub struct DiffPatchFile {
 impl DiffPatchFile {
     fn to_patch_text(&self) -> Result<String> {
         let mut output = String::new();
+        let is_binary = is_binary_data(&self.old_data) || is_binary_data(&self.new_data);
         output.push_str(&format!("diff --git a/{0} b/{0}\n", self.path));
         match self.status {
             'A' => {
@@ -167,8 +168,10 @@ impl DiffPatchFile {
                     "index 0000000..{}\n",
                     short_object_id(self.new_object_id)
                 ));
-                output.push_str("--- /dev/null\n");
-                output.push_str(&format!("+++ b/{}\n", self.path));
+                if !is_binary {
+                    output.push_str("--- /dev/null\n");
+                    output.push_str(&format!("+++ b/{}\n", self.path));
+                }
             }
             'D' => {
                 output.push_str(&format!("deleted file mode {:06o}\n", self.mode));
@@ -176,8 +179,10 @@ impl DiffPatchFile {
                     "index {}..0000000\n",
                     short_object_id(self.old_object_id)
                 ));
-                output.push_str(&format!("--- a/{}\n", self.path));
-                output.push_str("+++ /dev/null\n");
+                if !is_binary {
+                    output.push_str(&format!("--- a/{}\n", self.path));
+                    output.push_str("+++ /dev/null\n");
+                }
             }
             _ => {
                 output.push_str(&format!(
@@ -186,13 +191,33 @@ impl DiffPatchFile {
                     short_object_id(self.new_object_id),
                     self.mode
                 ));
-                output.push_str(&format!("--- a/{}\n", self.path));
-                output.push_str(&format!("+++ b/{}\n", self.path));
+                if !is_binary {
+                    output.push_str(&format!("--- a/{}\n", self.path));
+                    output.push_str(&format!("+++ b/{}\n", self.path));
+                }
             }
         }
-        output.push_str(&unified_hunk(&self.old_data, &self.new_data)?);
+        if is_binary {
+            output.push_str(&binary_patch_line(self));
+        } else {
+            output.push_str(&unified_hunk(&self.old_data, &self.new_data)?);
+        }
         Ok(output)
     }
+}
+
+fn binary_patch_line(file: &DiffPatchFile) -> String {
+    let old_path = if file.old_object_id.is_some() {
+        format!("a/{}", file.path)
+    } else {
+        "/dev/null".to_owned()
+    };
+    let new_path = if file.new_object_id.is_some() {
+        format!("b/{}", file.path)
+    } else {
+        "/dev/null".to_owned()
+    };
+    format!("Binary files {old_path} and {new_path} differ\n")
 }
 
 /// Per-file line statistics.
@@ -817,6 +842,25 @@ mod tests {
             hunk,
             "@@ -1 +1 @@\n-one\n\\ No newline at end of file\n+two\n\\ No newline at end of file\n"
         );
+    }
+
+    #[test]
+    fn binary_patch_output_uses_git_like_placeholder() {
+        let patch = super::DiffPatch {
+            files: vec![super::DiffPatchFile {
+                status: 'M',
+                path: "bin.dat".to_owned(),
+                old_object_id: Some(crate::hash_object(crate::ObjectKind::Blob, &[0, 1])),
+                new_object_id: Some(crate::hash_object(crate::ObjectKind::Blob, &[0, 1, 2])),
+                mode: 0o100644,
+                old_data: vec![0, 1],
+                new_data: vec![0, 1, 2],
+            }],
+        };
+
+        let text = patch.to_patch_text().expect("binary patch should render");
+
+        assert!(text.contains("Binary files a/bin.dat and b/bin.dat differ\n"));
     }
 
     #[test]

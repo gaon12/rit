@@ -64,6 +64,28 @@ fn binary_diff_summary_outputs_match_git() {
 }
 
 #[test]
+fn binary_diff_patch_outputs_match_git() {
+    let fixture = BinaryPatchFixture::new("binary-patch");
+
+    for args in [vec!["diff"], vec!["diff", "--cached"]] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "binary patch {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_patch_outputs_match_git_for_small_text_files() {
     let fixture = DiffFixture::new("patch-diff");
 
@@ -414,6 +436,44 @@ impl BinaryDiffFixture {
 }
 
 impl Drop for BinaryDiffFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct BinaryPatchFixture {
+    path: PathBuf,
+}
+
+impl BinaryPatchFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("mod.dat"), [0, 1, 2]).expect("binary file should be written");
+        fs::write(path.join("cached.dat"), [0, 8]).expect("cached file should be written");
+        run_git(&path, ["add", "mod.dat", "cached.dat"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+
+        fs::write(path.join("mod.dat"), [0, 1, 2, 3])
+            .expect("worktree binary file should be modified");
+        fs::write(path.join("cached.dat"), [0, 8, 9])
+            .expect("cached binary file should be modified");
+        run_git(&path, ["add", "cached.dat"]);
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for BinaryPatchFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }
