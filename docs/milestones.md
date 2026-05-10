@@ -174,9 +174,9 @@ Completion criteria:
 - [x] Index stat refresh compatible with Git status for clean regular files.
 - [x] Raw optional index extension preservation during status refresh.
 - [x] Delta packed object resolution.
-- [~] Semantic index extension parsing.
+- [x] Semantic index extension parsing.
   - [x] Parse extension records and classify known signatures (`TREE`,
-    `REUC`, `UNTR`, `FSMN`, `link`, `sdir`).
+    `REUC`, `UNTR`, `FSMN`, `link`, `sdir`, `EOIE`, `IEOT`).
   - [x] Parse `TREE` cache-tree payloads into depth-first node models.
   - [x] Parse `REUC` resolve-undo payloads into per-path stage models.
   - [x] Parse `FSMN` file-system-monitor headers and raw bitmap payloads.
@@ -185,6 +185,8 @@ Completion criteria:
   - [x] Parse `UNTR` untracked-cache headers and directory blocks.
   - [x] Parse EWAH bitmap, stat, hash, and null terminator tails used by
     `UNTR`.
+  - [x] Parse `EOIE` end-of-entry offsets and extension table hashes.
+  - [x] Parse `IEOT` offset-table entries.
 - [x] File mode and executable bit handling.
   - [x] Preserve `100644`/`100755` modes when writing trees from the index.
   - [x] `rit add --chmod=+x|-x` records executable-bit overrides in the index.

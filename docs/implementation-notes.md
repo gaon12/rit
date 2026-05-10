@@ -65,6 +65,9 @@
   directory blocks with untracked name lists. It also parses the three EWAH
   bitmaps in the tail, then the stat/hash arrays selected by the valid-stat
   bitmap, and validates the trailing NUL.
+- `IndexExtension::end_of_index_entry()` parses `EOIE` entry-end offsets and
+  extension table hashes. `IndexExtension::index_entry_offset_table()` parses
+  `IEOT` version 1 offset/count entries.
 - Added rit CLI integration compatibility fixtures for read-only `diff` output modes: `--name-only`, `--name-status`, `--numstat`, and `--stat`, including cached diff variants.
 - Compatibility reports now include the first differing stdout/stderr line when command text differs.
 - Added reusable `rit-testkit` local write fixture builders for nested tracked

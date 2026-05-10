@@ -79,6 +79,22 @@ impl IndexExtension {
         }
         parse_untracked_cache(&self.data).map(Some)
     }
+
+    /// Parses this extension as an end-of-index-entry extension when its signature is `EOIE`.
+    pub fn end_of_index_entry(&self) -> Result<Option<EndOfIndexEntry>> {
+        if self.kind != IndexExtensionKind::EndOfIndexEntry {
+            return Ok(None);
+        }
+        parse_end_of_index_entry(&self.data).map(Some)
+    }
+
+    /// Parses this extension as an index-entry-offset-table extension when its signature is `IEOT`.
+    pub fn index_entry_offset_table(&self) -> Result<Option<IndexEntryOffsetTable>> {
+        if self.kind != IndexExtensionKind::IndexEntryOffsetTable {
+            return Ok(None);
+        }
+        parse_index_entry_offset_table(&self.data).map(Some)
+    }
 }
 
 /// Known Git index extension signatures.
@@ -96,6 +112,10 @@ pub enum IndexExtensionKind {
     SplitIndexLink,
     /// Sparse-directory extension (`sdir`).
     SparseDirectory,
+    /// End-of-index-entry extension (`EOIE`).
+    EndOfIndexEntry,
+    /// Index-entry-offset-table extension (`IEOT`).
+    IndexEntryOffsetTable,
     /// Extension not classified by this version of rit.
     Unknown([u8; 4]),
 }
@@ -284,6 +304,33 @@ impl EwahBitmap {
     pub fn count_ones(&self) -> Result<usize> {
         count_ewah_ones(self)
     }
+}
+
+/// Parsed `EOIE` extension.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EndOfIndexEntry {
+    /// Offset to the end of the index entries.
+    pub entry_end_offset: u32,
+    /// Hash over extension types and sizes that precede `EOIE`.
+    pub extension_table_hash: ObjectId,
+}
+
+/// Parsed `IEOT` extension.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IndexEntryOffsetTable {
+    /// Offset-table version.
+    pub version: u32,
+    /// Offset entries used for parallel index loading.
+    pub entries: Vec<IndexEntryOffset>,
+}
+
+/// One entry in an `IEOT` extension.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IndexEntryOffset {
+    /// Offset from the start of the index file to the first cache entry.
+    pub offset: u32,
+    /// Number of cache entries in this block.
+    pub entry_count: u32,
 }
 
 /// One tracked path in the Git index.
@@ -766,6 +813,51 @@ fn parse_untracked_cache(bytes: &[u8]) -> Result<UntrackedCache> {
     })
 }
 
+fn parse_end_of_index_entry(bytes: &[u8]) -> Result<EndOfIndexEntry> {
+    if bytes.len() != 24 {
+        return Err(RitError::invalid_input(
+            "end-of-index-entry extension must be 24 bytes",
+        ));
+    }
+    let entry_end_offset = read_u32(bytes, 0)?;
+    let mut hash = [0_u8; 20];
+    hash.copy_from_slice(&bytes[4..24]);
+    Ok(EndOfIndexEntry {
+        entry_end_offset,
+        extension_table_hash: ObjectId::from_bytes(hash),
+    })
+}
+
+fn parse_index_entry_offset_table(bytes: &[u8]) -> Result<IndexEntryOffsetTable> {
+    if bytes.len() < 4 {
+        return Err(RitError::invalid_input(
+            "index-entry-offset-table version is truncated",
+        ));
+    }
+    let version = read_u32(bytes, 0)?;
+    if version != 1 {
+        return Err(RitError::invalid_input(format!(
+            "unsupported index-entry-offset-table version: {version}"
+        )));
+    }
+    let payload_len = bytes.len() - 4;
+    if !payload_len.is_multiple_of(8) {
+        return Err(RitError::invalid_input(
+            "index-entry-offset-table payload is truncated",
+        ));
+    }
+    let mut offset = 4;
+    let mut entries = Vec::with_capacity(payload_len / 8);
+    while offset < bytes.len() {
+        entries.push(IndexEntryOffset {
+            offset: read_u32(bytes, offset)?,
+            entry_count: read_u32(bytes, offset + 4)?,
+        });
+        offset += 8;
+    }
+    Ok(IndexEntryOffsetTable { version, entries })
+}
+
 fn read_untracked_cache_tail(bytes: &[u8], offset: &mut usize) -> Result<UntrackedCacheTail> {
     let valid_untracked_bitmap = read_ewah_bitmap(bytes, offset, "untracked-cache valid bitmap")?;
     let check_only_bitmap = read_ewah_bitmap(bytes, offset, "untracked-cache check-only bitmap")?;
@@ -986,6 +1078,8 @@ impl IndexExtensionKind {
             b"FSMN" => Self::FsMonitor,
             b"link" => Self::SplitIndexLink,
             b"sdir" => Self::SparseDirectory,
+            b"EOIE" => Self::EndOfIndexEntry,
+            b"IEOT" => Self::IndexEntryOffsetTable,
             _ => Self::Unknown(signature),
         }
     }
@@ -1559,6 +1653,72 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "untracked-cache tail is missing NUL terminator"
+        );
+    }
+
+    #[test]
+    fn end_of_index_entry_extension_parses_offset_and_hash() {
+        let hash = ObjectId::from_bytes([7; 20]);
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&123_u32.to_be_bytes());
+        payload.extend_from_slice(hash.as_bytes());
+        let index = Index {
+            entries: Vec::new(),
+            extensions: extension_record(b"EOIE", &payload),
+        };
+
+        let extensions = index.parsed_extensions().expect("extensions should parse");
+        let end = extensions[0]
+            .end_of_index_entry()
+            .expect("EOIE should parse")
+            .expect("EOIE extension should return end marker");
+
+        assert_eq!(end.entry_end_offset, 123);
+        assert_eq!(end.extension_table_hash, hash);
+    }
+
+    #[test]
+    fn index_entry_offset_table_extension_parses_entries() {
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&1_u32.to_be_bytes());
+        payload.extend_from_slice(&12_u32.to_be_bytes());
+        payload.extend_from_slice(&2_u32.to_be_bytes());
+        payload.extend_from_slice(&128_u32.to_be_bytes());
+        payload.extend_from_slice(&4_u32.to_be_bytes());
+        let index = Index {
+            entries: Vec::new(),
+            extensions: extension_record(b"IEOT", &payload),
+        };
+
+        let extensions = index.parsed_extensions().expect("extensions should parse");
+        let table = extensions[0]
+            .index_entry_offset_table()
+            .expect("IEOT should parse")
+            .expect("IEOT extension should return table");
+
+        assert_eq!(table.version, 1);
+        assert_eq!(table.entries.len(), 2);
+        assert_eq!(table.entries[0].offset, 12);
+        assert_eq!(table.entries[0].entry_count, 2);
+        assert_eq!(table.entries[1].offset, 128);
+        assert_eq!(table.entries[1].entry_count, 4);
+    }
+
+    #[test]
+    fn index_entry_offset_table_extension_rejects_unknown_versions() {
+        let index = Index {
+            entries: Vec::new(),
+            extensions: extension_record(b"IEOT", &2_u32.to_be_bytes()),
+        };
+
+        let extensions = index.parsed_extensions().expect("extensions should parse");
+        let error = extensions[0]
+            .index_entry_offset_table()
+            .expect_err("unsupported IEOT version should fail");
+
+        assert_eq!(
+            error.to_string(),
+            "unsupported index-entry-offset-table version: 2"
         );
     }
 
