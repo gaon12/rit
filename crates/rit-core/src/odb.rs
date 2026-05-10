@@ -129,7 +129,7 @@ impl LooseObjectDb {
                 continue;
             };
             let pack_path = index_path.with_extension("pack");
-            return read_pack_object_at(&pack_path, offset).map(Some);
+            return read_pack_object_at(&pack_path, offset, &self.objects_dir, 0).map(Some);
         }
 
         Ok(None)
@@ -289,25 +289,207 @@ fn parse_pack_index_header(bytes: &[u8], index_path: &Path) -> Result<(usize, us
     Ok((object_count, fanout_start + 256 * 4))
 }
 
-fn read_pack_object_at(pack_path: &Path, offset: u64) -> Result<GitObject> {
+fn read_pack_object_at(
+    pack_path: &Path,
+    offset: u64,
+    objects_dir: &Path,
+    depth: usize,
+) -> Result<GitObject> {
+    if depth > 64 {
+        return Err(RitError::invalid_input("pack delta chain is too deep"));
+    }
     let mut file = fs::File::open(pack_path).map_err(|source| RitError::io(pack_path, source))?;
     validate_pack_header(&mut file, pack_path)?;
     file.seek(SeekFrom::Start(offset))
         .map_err(|source| RitError::io(pack_path, source))?;
 
     let (kind, size) = read_pack_object_header(&mut file, pack_path)?;
+    match kind {
+        PackObjectKind::Whole(kind) => read_whole_pack_object(file, pack_path, kind, size),
+        PackObjectKind::OffsetDelta => {
+            let base_offset = read_offset_delta_base(&mut file, pack_path, offset)?;
+            let delta = read_compressed_pack_payload(file, pack_path, size)?;
+            let base = read_pack_object_at(pack_path, base_offset, objects_dir, depth + 1)?;
+            apply_delta_object(base, &delta)
+        }
+        PackObjectKind::RefDelta => {
+            let mut base_id = [0_u8; 20];
+            file.read_exact(&mut base_id)
+                .map_err(|source| RitError::io(pack_path, source))?;
+            let delta = read_compressed_pack_payload(file, pack_path, size)?;
+            let base = read_ref_delta_base(
+                pack_path,
+                objects_dir,
+                ObjectId::from_bytes(base_id),
+                depth + 1,
+            )?;
+            apply_delta_object(base, &delta)
+        }
+    }
+}
+
+fn read_whole_pack_object(
+    file: fs::File,
+    pack_path: &Path,
+    kind: ObjectKind,
+    size: usize,
+) -> Result<GitObject> {
+    let data = read_compressed_pack_payload(file, pack_path, size)?;
+    Ok(GitObject { kind, data })
+}
+
+fn read_compressed_pack_payload(
+    file: fs::File,
+    pack_path: &Path,
+    expected_size: usize,
+) -> Result<Vec<u8>> {
     let mut decoder = ZlibDecoder::new(file);
     let mut data = Vec::new();
     decoder
         .read_to_end(&mut data)
         .map_err(|source| RitError::io(pack_path, source))?;
-    if data.len() != size {
+    if data.len() != expected_size {
         return Err(RitError::invalid_input(format!(
-            "pack object size mismatch: header says {size}, payload is {}",
+            "pack object size mismatch: header says {expected_size}, payload is {}",
             data.len()
         )));
     }
-    Ok(GitObject { kind, data })
+    Ok(data)
+}
+
+fn read_ref_delta_base(
+    pack_path: &Path,
+    objects_dir: &Path,
+    base_id: ObjectId,
+    depth: usize,
+) -> Result<GitObject> {
+    let index_path = pack_path.with_extension("idx");
+    if let Some(base_offset) = find_pack_offset(&index_path, base_id)? {
+        return read_pack_object_at(pack_path, base_offset, objects_dir, depth);
+    }
+    LooseObjectDb::new(objects_dir).read_object(base_id)
+}
+
+fn read_offset_delta_base(
+    file: &mut fs::File,
+    pack_path: &Path,
+    object_offset: u64,
+) -> Result<u64> {
+    let mut byte = read_byte(file, pack_path)?;
+    let mut distance = (byte & 0x7f) as u64;
+    while byte & 0x80 != 0 {
+        byte = read_byte(file, pack_path)?;
+        distance = ((distance + 1) << 7) | (byte & 0x7f) as u64;
+    }
+    object_offset
+        .checked_sub(distance)
+        .ok_or_else(|| RitError::invalid_input("pack offset delta points before pack start"))
+}
+
+fn apply_delta_object(base: GitObject, delta: &[u8]) -> Result<GitObject> {
+    let mut position = 0;
+    let source_size = read_delta_size(delta, &mut position)?;
+    let target_size = read_delta_size(delta, &mut position)?;
+    if source_size != base.data.len() {
+        return Err(RitError::invalid_input(format!(
+            "delta source size mismatch: base is {}, delta expects {source_size}",
+            base.data.len()
+        )));
+    }
+
+    let mut output = Vec::with_capacity(target_size);
+    while position < delta.len() {
+        let instruction = delta[position];
+        position += 1;
+        if instruction & 0x80 != 0 {
+            let (copy_offset, copy_size) = read_delta_copy(delta, &mut position, instruction)?;
+            let copy_end = copy_offset
+                .checked_add(copy_size)
+                .ok_or_else(|| RitError::invalid_input("delta copy range overflows"))?;
+            let slice = base
+                .data
+                .get(copy_offset..copy_end)
+                .ok_or_else(|| RitError::invalid_input("delta copy range is outside base"))?;
+            output.extend_from_slice(slice);
+        } else if instruction != 0 {
+            let insert_size = instruction as usize;
+            let insert_end = position
+                .checked_add(insert_size)
+                .ok_or_else(|| RitError::invalid_input("delta insert range overflows"))?;
+            let slice = delta
+                .get(position..insert_end)
+                .ok_or_else(|| RitError::invalid_input("delta insert range is truncated"))?;
+            output.extend_from_slice(slice);
+            position = insert_end;
+        } else {
+            return Err(RitError::invalid_input("delta instruction 0 is invalid"));
+        }
+    }
+
+    if output.len() != target_size {
+        return Err(RitError::invalid_input(format!(
+            "delta target size mismatch: output is {}, delta expects {target_size}",
+            output.len()
+        )));
+    }
+    Ok(GitObject {
+        kind: base.kind,
+        data: output,
+    })
+}
+
+fn read_delta_size(delta: &[u8], position: &mut usize) -> Result<usize> {
+    let mut size = 0_usize;
+    let mut shift = 0;
+    loop {
+        let byte = *delta
+            .get(*position)
+            .ok_or_else(|| RitError::invalid_input("delta size is truncated"))?;
+        *position += 1;
+        size |= ((byte & 0x7f) as usize) << shift;
+        if byte & 0x80 == 0 {
+            return Ok(size);
+        }
+        shift += 7;
+    }
+}
+
+fn read_delta_copy(delta: &[u8], position: &mut usize, instruction: u8) -> Result<(usize, usize)> {
+    let mut offset = 0_usize;
+    let mut size = 0_usize;
+    if instruction & 0x01 != 0 {
+        offset |= read_delta_instruction_byte(delta, position)? as usize;
+    }
+    if instruction & 0x02 != 0 {
+        offset |= (read_delta_instruction_byte(delta, position)? as usize) << 8;
+    }
+    if instruction & 0x04 != 0 {
+        offset |= (read_delta_instruction_byte(delta, position)? as usize) << 16;
+    }
+    if instruction & 0x08 != 0 {
+        offset |= (read_delta_instruction_byte(delta, position)? as usize) << 24;
+    }
+    if instruction & 0x10 != 0 {
+        size |= read_delta_instruction_byte(delta, position)? as usize;
+    }
+    if instruction & 0x20 != 0 {
+        size |= (read_delta_instruction_byte(delta, position)? as usize) << 8;
+    }
+    if instruction & 0x40 != 0 {
+        size |= (read_delta_instruction_byte(delta, position)? as usize) << 16;
+    }
+    if size == 0 {
+        size = 0x10000;
+    }
+    Ok((offset, size))
+}
+
+fn read_delta_instruction_byte(delta: &[u8], position: &mut usize) -> Result<u8> {
+    let byte = *delta
+        .get(*position)
+        .ok_or_else(|| RitError::invalid_input("delta instruction is truncated"))?;
+    *position += 1;
+    Ok(byte)
 }
 
 fn validate_pack_header(file: &mut fs::File, pack_path: &Path) -> Result<()> {
@@ -329,7 +511,16 @@ fn validate_pack_header(file: &mut fs::File, pack_path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn read_pack_object_header(file: &mut fs::File, pack_path: &Path) -> Result<(ObjectKind, usize)> {
+enum PackObjectKind {
+    Whole(ObjectKind),
+    OffsetDelta,
+    RefDelta,
+}
+
+fn read_pack_object_header(
+    file: &mut fs::File,
+    pack_path: &Path,
+) -> Result<(PackObjectKind, usize)> {
     let mut byte = read_byte(file, pack_path)?;
     let object_type = (byte >> 4) & 0b111;
     let mut size = (byte & 0b1111) as usize;
@@ -340,15 +531,12 @@ fn read_pack_object_header(file: &mut fs::File, pack_path: &Path) -> Result<(Obj
         shift += 7;
     }
     let kind = match object_type {
-        1 => ObjectKind::Commit,
-        2 => ObjectKind::Tree,
-        3 => ObjectKind::Blob,
-        4 => ObjectKind::Tag,
-        6 | 7 => {
-            return Err(RitError::invalid_input(
-                "delta-compressed pack objects are not implemented yet",
-            ));
-        }
+        1 => PackObjectKind::Whole(ObjectKind::Commit),
+        2 => PackObjectKind::Whole(ObjectKind::Tree),
+        3 => PackObjectKind::Whole(ObjectKind::Blob),
+        4 => PackObjectKind::Whole(ObjectKind::Tag),
+        6 => PackObjectKind::OffsetDelta,
+        7 => PackObjectKind::RefDelta,
         _ => {
             return Err(RitError::invalid_input(format!(
                 "unknown pack object type: {object_type}"
@@ -396,4 +584,24 @@ fn write_new_file_atomically(path: &Path, contents: &[u8]) -> Result<()> {
     }
     fs::rename(&temp_path, path).map_err(|source| RitError::io(path, source))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apply_delta_object;
+    use crate::{GitObject, ObjectKind};
+
+    #[test]
+    fn applies_git_pack_delta_copy_and_insert_instructions() {
+        let base = GitObject {
+            kind: ObjectKind::Blob,
+            data: b"abcdef".to_vec(),
+        };
+        let delta = [6, 7, 0x90, 2, 2, b'X', b'Y', 0x91, 4, 2, 1, b'!'];
+
+        let object = apply_delta_object(base, &delta).expect("delta should apply");
+
+        assert_eq!(object.kind, ObjectKind::Blob);
+        assert_eq!(object.data, b"abXYef!");
+    }
 }

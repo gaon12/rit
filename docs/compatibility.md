@@ -19,7 +19,7 @@ short help output is used for repeatable baseline capture in this workspace.
 The current codebase implements an early local Git subset:
 
 - Repository discovery, init, bare repository detection, loose object I/O, and
-  packed object reading for non-delta objects.
+  packed object reading for whole and delta-compressed objects.
 - Linked worktree discovery reads `.git` gitdir files plus `commondir` for
   shared metadata.
 - Config reads use a shared scalar parser for repository format checks and
@@ -128,6 +128,8 @@ differ` placeholders.
 Patch compatibility tests cover splitting distant changes into multiple hunks.
 Binary diff compatibility tests cover `--name-only`, `--name-status`,
 `--numstat`, and `--stat` summary output.
+Packed object compatibility tests cover reading a delta-compressed packed blob
+created by `git gc --aggressive --prune=now` through `rit cat-file -p`.
 
 Local write compatibility tests currently cover directory pathspec behavior and
 simple wildcard/bracket-class pathspec behavior for `add`, `restore`, and

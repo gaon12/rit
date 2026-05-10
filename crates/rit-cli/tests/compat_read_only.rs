@@ -470,6 +470,38 @@ fn status_index_refresh_matches_git_state() {
 }
 
 #[test]
+fn cat_file_reads_delta_packed_blob_like_git() {
+    let fixture = DeltaPackFixture::new("delta-pack-cat-file");
+    let blob_id = run_capture("git", ["rev-parse", "HEAD:large.txt"], fixture.path())
+        .0
+        .trim()
+        .to_owned();
+
+    let git = run_capture_args(
+        "git",
+        &[
+            OsString::from("cat-file"),
+            OsString::from("-p"),
+            OsString::from(&blob_id),
+        ],
+        fixture.path(),
+    )
+    .0;
+    let rit = run_capture_args(
+        rit_binary(),
+        &[
+            OsString::from("cat-file"),
+            OsString::from("-p"),
+            OsString::from(&blob_id),
+        ],
+        fixture.path(),
+    )
+    .0;
+
+    assert_eq!(git, rit);
+}
+
+#[test]
 fn ls_files_pathspec_outputs_match_git() {
     let fixture = DiffFixture::new("pathspec-ls-files");
 
@@ -979,6 +1011,48 @@ impl Drop for StatusRefreshFixture {
     }
 }
 
+struct DeltaPackFixture {
+    path: PathBuf,
+}
+
+impl DeltaPackFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        let base = "common line\n".repeat(2000);
+        fs::write(path.join("large.txt"), &base).expect("base file should be written");
+        run_git(&path, ["add", "large.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+
+        let changed = format!("{base}changed line\n");
+        fs::write(path.join("large.txt"), changed).expect("changed file should be written");
+        run_git(&path, ["add", "large.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "change"]);
+        run_git(&path, ["gc", "--aggressive", "--prune=now"]);
+        assert!(
+            verify_pack_has_delta(&path),
+            "fixture should contain at least one delta object"
+        );
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for DeltaPackFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
 struct LogPathFixture {
     path: PathBuf,
 }
@@ -1091,6 +1165,60 @@ fn run_capture<const N: usize>(
         String::from_utf8_lossy(&output.stdout).into_owned(),
         String::from_utf8_lossy(&output.stderr).into_owned(),
     )
+}
+
+fn run_capture_args(program: impl AsRef<OsStr>, args: &[OsString], cwd: &Path) -> (String, String) {
+    let output = Command::new(program)
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .expect("command should start");
+    assert!(
+        output.status.success(),
+        "command failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    (
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+    )
+}
+
+fn verify_pack_has_delta(path: &Path) -> bool {
+    let pack_dir = path.join(".git").join("objects").join("pack");
+    for entry in fs::read_dir(&pack_dir).expect("pack directory should read") {
+        let entry = entry.expect("pack entry should read");
+        let index_path = entry.path();
+        if index_path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            != Some("idx")
+        {
+            continue;
+        }
+        let output = Command::new("git")
+            .arg("verify-pack")
+            .arg("-v")
+            .arg(&index_path)
+            .current_dir(path)
+            .output()
+            .expect("git verify-pack should start");
+        assert!(
+            output.status.success(),
+            "git verify-pack failed\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if stdout
+            .lines()
+            .any(|line| line.contains(" blob ") && line.split_whitespace().count() >= 7)
+        {
+            return true;
+        }
+    }
+    false
 }
 
 fn temp_path(name: &str) -> PathBuf {

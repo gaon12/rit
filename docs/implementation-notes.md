@@ -156,10 +156,13 @@
 ### `rit cat-file`
 
 - Baseline command checked: `git cat-file -h`
-- Supported options: `-t`, `-s`, `-p`, and `<type> <object>` for full 40-character loose object IDs.
-- Unsupported options: abbreviated object IDs, revision syntax, batch modes, filters, textconv, mailmap, packed objects.
-- Git-compatible behavior: loose object zlib decoding, header validation, object type and size output, tree pretty printing.
-- Intentional differences: packed objects and revision resolution fail clearly until the object database grows those features.
+- Supported options: `-t`, `-s`, `-p`, and `<type> <object>` for full
+  40-character object IDs.
+- Unsupported options: abbreviated object IDs, revision syntax, batch modes,
+  filters, textconv, mailmap.
+- Git-compatible behavior: loose and packed object decoding, header
+  validation, object type and size output, tree pretty printing.
+- Intentional differences: revision resolution is intentionally narrow.
 - Repository mutation: no
 - Risk: none
 
@@ -397,9 +400,12 @@
 
 - Baseline documents checked through `git help -a` developer-facing `format-pack` listing and compatibility tests against `git gc`.
 - Supported index format: pack index v2.
-- Supported pack object types: non-delta commit, tree, blob, tag.
-- Unsupported object types: OFS_DELTA and REF_DELTA are detected and reported clearly.
-- Git-compatible behavior: after `git gc --aggressive --prune=now`, `rit cat-file`, `rit ls-tree`, `rit log`, and `rit show --no-patch` can read packed non-delta objects.
+- Supported pack object types: whole commit, tree, blob, tag; OFS_DELTA;
+  REF_DELTA.
+- Git-compatible behavior: after `git gc --aggressive --prune=now`,
+  `rit cat-file`, `rit ls-tree`, `rit log`, and `rit show --no-patch` can
+  read packed whole objects. `rit cat-file` compatibility coverage also reads
+  a delta-compressed packed blob.
 - Repository mutation: no.
 
 ### Git index
