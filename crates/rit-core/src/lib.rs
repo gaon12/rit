@@ -4,6 +4,7 @@
 //! CLI crate should format these structured results instead of embedding Git
 //! behavior directly in argument handling.
 
+pub mod attributes;
 pub mod commit;
 pub mod config;
 pub mod diff;
@@ -42,6 +43,9 @@ pub use write::{
 pub fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
+pub use attributes::{
+    AttributeAssignment, AttributeMacro, AttributeRule, AttributeState, GitAttributes,
+};
 pub use commit::{Commit, Signature, parse_commit};
 pub use config::{GitConfig, GitConfigEntry};
 pub use diff::{DiffFileStat, DiffPatch, DiffPatchFile, DiffSummary};

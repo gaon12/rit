@@ -29,6 +29,7 @@
 - 2026-05-10 ignore glob slice checked: `git check-ignore -h` and direct
   Git comparisons for `*.log`, `?`, bracket classes, anchored patterns, `**`,
   negation, and `.git/info/exclude`.
+- 2026-05-10 attributes parser slice checked: `git check-attr -h`.
 
 ## Milestone Notes
 
@@ -474,3 +475,13 @@
 - Supported stat behavior: status refreshes clean tracked file mtime/size
   metadata and preserves raw optional extension bytes such as `TREE`.
 - Unsupported index behavior: conflict stages.
+
+### Git attributes
+
+- Baseline command checked: `git check-attr -h`
+- Supported parser surface: repository-level `.gitattributes` style lines with
+  ordinary path patterns, `[attr]name` macro definitions, and `name`, `-name`,
+  `name=value`, and `!name` assignment tokens.
+- Unsupported behavior: applying attributes to paths, nested attributes files,
+  quoted pattern parsing, macro expansion, and CLI `check-attr` output.
+- Repository mutation: no.

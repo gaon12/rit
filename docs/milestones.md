@@ -209,7 +209,7 @@ Completion criteria:
 - [x] Simple `.gitignore` literal and directory patterns.
 - [x] Git-compatible ignore glob rules.
 - [x] `.git/info/exclude` parity beyond simple patterns.
-- [ ] Attributes parser.
+- [x] Attributes parser.
 - [ ] Pathspec magic.
 - [ ] Case-sensitivity behavior by platform/config.
 
