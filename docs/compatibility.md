@@ -87,9 +87,10 @@ skip repository-state comparison until Git-compatible index stat refresh is
 implemented.
 
 Pathspec compatibility tests currently cover ordinary literal file/directory
-filters and simple `*`/`?` wildcard filters for `status --porcelain=v1` and
-supported `diff` summary outputs, plus `ls-files` cached and staged output.
-Git pathspec magic, bracket globs, and pathspec-file input remain unsupported.
+filters and simple `*`, `?`, and bracket-class wildcard filters for
+`status --porcelain=v1` and supported `diff` summary outputs, plus `ls-files`
+cached and staged output. Git pathspec magic and pathspec-file input remain
+unsupported.
 
 Status compatibility tests cover Git-like collapsed output for fully untracked
 directories, including directory and exact-file pathspec behavior.

@@ -3,9 +3,9 @@ use crate::{Result, RitError};
 /// A small, conservative subset of Git pathspec matching.
 ///
 /// This currently supports ordinary literal file and directory pathspecs plus
-/// simple `*` and `?` wildcard pathspecs. More advanced Git pathspec features
-/// such as magic prefixes and pathspec files are deliberately left out until
-/// they can be tested against Git behavior.
+/// simple `*`, `?`, and bracket-class wildcard pathspecs. More advanced Git
+/// pathspec features such as magic prefixes and pathspec files are deliberately
+/// left out until they can be tested against Git behavior.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PathspecSet {
     patterns: Vec<String>,
@@ -55,7 +55,7 @@ impl PathspecSet {
 }
 
 fn has_wildcard(pattern: &str) -> bool {
-    pattern.contains('*') || pattern.contains('?')
+    pattern.contains('*') || pattern.contains('?') || pattern.contains('[')
 }
 
 fn wildcard_matches(pattern: &str, path: &str) -> bool {
@@ -67,10 +67,10 @@ fn wildcard_matches(pattern: &str, path: &str) -> bool {
     let mut path_after_star = 0;
 
     while path_index < path.len() {
-        if pattern_index < pattern.len()
-            && (pattern[pattern_index] == b'?' || pattern[pattern_index] == path[path_index])
+        if let Some(next_pattern_index) =
+            match_single_pattern_item(pattern, pattern_index, path[path_index])
         {
-            pattern_index += 1;
+            pattern_index = next_pattern_index;
             path_index += 1;
         } else if pattern_index < pattern.len() && pattern[pattern_index] == b'*' {
             last_star = Some(pattern_index);
@@ -88,6 +88,57 @@ fn wildcard_matches(pattern: &str, path: &str) -> bool {
     pattern[pattern_index..]
         .iter()
         .all(|character| *character == b'*')
+}
+
+fn match_single_pattern_item(pattern: &[u8], index: usize, path_byte: u8) -> Option<usize> {
+    let pattern_byte = *pattern.get(index)?;
+    match pattern_byte {
+        b'?' => Some(index + 1),
+        b'[' => match_bracket_class(pattern, index, path_byte),
+        literal if literal == path_byte => Some(index + 1),
+        _ => None,
+    }
+}
+
+fn match_bracket_class(pattern: &[u8], index: usize, path_byte: u8) -> Option<usize> {
+    let mut cursor = index + 1;
+    let negated = matches!(pattern.get(cursor), Some(b'!' | b'^'));
+    if negated {
+        cursor += 1;
+    }
+
+    let class_start = cursor;
+    let mut matched = false;
+    while cursor < pattern.len() {
+        if pattern[cursor] == b']' && cursor > class_start {
+            return if matched != negated {
+                Some(cursor + 1)
+            } else {
+                None
+            };
+        }
+
+        if cursor + 2 < pattern.len() && pattern[cursor + 1] == b'-' && pattern[cursor + 2] != b']'
+        {
+            let start = pattern[cursor];
+            let end = pattern[cursor + 2];
+            if start <= path_byte && path_byte <= end {
+                matched = true;
+            }
+            cursor += 3;
+        } else {
+            if pattern[cursor] == path_byte {
+                matched = true;
+            }
+            cursor += 1;
+        }
+    }
+
+    if path_byte == b'[' {
+        Some(index + 1)
+    } else {
+        None
+    }
 }
 
 fn normalize_pathspec(pathspec: &str) -> Result<String> {
@@ -158,5 +209,24 @@ mod tests {
 
         assert!(pathspec.matches("nested/a.txt"));
         assert!(!pathspec.matches("nested/ab.txt"));
+    }
+
+    #[test]
+    fn bracket_pathspec_matches_like_git_simple_globs() {
+        let pathspec = PathspecSet::from_args(&["[ab].txt".to_owned()]).expect("valid pathspec");
+
+        assert!(pathspec.matches("a.txt"));
+        assert!(pathspec.matches("b.txt"));
+        assert!(!pathspec.matches("c.txt"));
+
+        let pathspec = PathspecSet::from_args(&["[a-c].txt".to_owned()]).expect("valid pathspec");
+
+        assert!(pathspec.matches("b.txt"));
+        assert!(!pathspec.matches("d.txt"));
+
+        let pathspec = PathspecSet::from_args(&["[!a].txt".to_owned()]).expect("valid pathspec");
+
+        assert!(pathspec.matches("b.txt"));
+        assert!(!pathspec.matches("a.txt"));
     }
 }

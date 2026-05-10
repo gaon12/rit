@@ -115,6 +115,8 @@ Completion criteria:
     `diff` summary modes.
   - [x] Simple `*` and `?` wildcard pathspec filters for
     `status --porcelain=v1` and `diff` summary modes.
+  - [x] Simple bracket-class wildcard pathspec filters for
+    `status --porcelain=v1` and `diff` summary modes.
   - [x] Ordinary literal pathspec filters for `ls-files`.
   - [x] Simple `*` and `?` wildcard pathspec filters for `ls-files`.
   - [x] Ordinary literal path lookup for `ls-tree`.
@@ -144,6 +146,7 @@ Completion criteria:
     `add`, `restore`, and `reset`.
   - [~] Pathspec magic, pathspec files, and glob parity.
     - [x] Shared simple `*` and `?` wildcard matcher.
+    - [x] Shared simple bracket-class wildcard matcher.
 - [ ] Hook execution for commit.
 - [ ] Commit author/date override.
 - [x] Safer branch delete merge checks.

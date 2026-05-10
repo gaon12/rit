@@ -165,6 +165,26 @@ fn diff_pathspec_outputs_match_git() {
             vec!["diff", "--cached", "--name-status", "--", "nested/*.txt"],
             vec!["diff", "--cached", "--name-status", "--", "nested/*.txt"],
         ),
+        (
+            vec!["diff", "--name-only", "--", "[ab].txt"],
+            vec!["diff", "--name-only", "--", "[ab].txt"],
+        ),
+        (
+            vec![
+                "diff",
+                "--cached",
+                "--name-status",
+                "--",
+                "nested/[ab]*.txt",
+            ],
+            vec![
+                "diff",
+                "--cached",
+                "--name-status",
+                "--",
+                "nested/[ab]*.txt",
+            ],
+        ),
     ] {
         let mut options = CompareOptions::new(
             fixture.path(),
@@ -192,6 +212,8 @@ fn status_pathspec_outputs_match_git() {
         ["status", "--porcelain=v1", "--", "nested"],
         ["status", "--porcelain=v1", "--", "*.txt"],
         ["status", "--porcelain=v1", "--", "nested/*.txt"],
+        ["status", "--porcelain=v1", "--", "[!a].txt"],
+        ["status", "--porcelain=v1", "--", "nested/[ab]*.txt"],
     ] {
         let mut options = CompareOptions::new(fixture.path(), git_command(args), rit_command(args));
         options.compare_repository_state = false;

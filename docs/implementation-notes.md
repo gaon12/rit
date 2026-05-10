@@ -12,6 +12,9 @@
   `git diff -h`, `git add -h`, `git restore -h`, and `git reset -h`.
 - 2026-05-10 simple wildcard pathspec slice checked: `git status -h` and
   `git diff -h`, plus direct Git comparisons for `*.txt` and `nested/*.txt`.
+- 2026-05-10 bracket wildcard pathspec slice checked: `git status -h` and
+  `git diff -h`, plus direct Git comparisons for `[ab]`, `[a-c]`, and `[!a]`
+  forms.
 - 2026-05-09 diff patch milestone checked: `git diff -h`.
 - 2026-05-09 detached checkout milestone checked: `git checkout -h`.
 - 2026-05-09 branch delete safety milestone checked: `git branch -h`.
@@ -67,7 +70,8 @@
 - Added `--name-status` formatting for both default and cached diff scopes.
 - Added `--numstat` formatting for both default and cached diff scopes.
 - Added a conservative `PathspecSet` model for ordinary literal file and
-  directory pathspecs, plus simple `*` and `?` wildcard pathspecs.
+  directory pathspecs, plus simple `*`, `?`, and bracket-class wildcard
+  pathspecs.
 - Added pathspec filtering for `status --porcelain=v1` and all supported
   `diff` summary modes, including `--cached`/`--staged`.
 - `status --porcelain=v1` now collapses fully untracked directories into
@@ -103,8 +107,8 @@
   insertion/deletion totals.
 - Added local write compatibility coverage that compares Git and rit porcelain
   state after directory pathspec `add`, `restore`, and `reset`.
-- Still unsupported: pathspec magic, bracket glob pathspec matching,
-  pathspec files, and `show` path filtering for patch output.
+- Still unsupported: pathspec magic, pathspec files, and `show` path filtering
+  for patch output.
 
 ## Implemented Commands
 
@@ -174,13 +178,13 @@
 
 - Baseline command checked: `git status -h`
 - Supported options: `--porcelain`, `--porcelain=v1`, `-s`, plus ordinary
-  literal file/directory pathspecs and simple `*`/`?` wildcard pathspecs after
-  `--`, and
+  literal file/directory pathspecs and simple `*`, `?`, and bracket-class
+  wildcard pathspecs after `--`, and
   `--untracked-files=no|normal|all` / `-uno|-unormal|-uall`, including
   default-all `-u`, Git 2.52's normal-mode `--no-untracked-files`, and `-z`
   NUL-terminated output, plus `-b` / `--branch` branch headers.
 - Unsupported options: long output, ignored display modes, pathspec magic,
-  bracket glob pathspecs, rename detection, submodules, sparse checkout.
+  rename detection, submodules, sparse checkout.
 - Git-compatible behavior: porcelain v1 entries for staged add/modify/delete, working tree modify/delete, and untracked files.
 - Git-compatible behavior: fully untracked directories are collapsed in the
   default porcelain output, with direct file pathspecs preserving file output.
@@ -203,9 +207,10 @@
 - Supported options: default patch output for small text files, `-p`, `-u`,
   `--name-only`, `--name-status`, `--numstat`, `--stat`, plus
   `--cached`/`--staged` with those output modes, and ordinary literal
-  file/directory plus simple `*`/`?` wildcard pathspec filters.
-- Unsupported options: commit/tree/blob arguments, pathspec magic, bracket globs,
-  rename/copy detection, and many advanced patch formatting options.
+  file/directory plus simple `*`, `?`, and bracket-class wildcard pathspec
+  filters.
+- Unsupported options: commit/tree/blob arguments, pathspec magic, rename/copy
+  detection, and many advanced patch formatting options.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files.
 - Git-compatible behavior: cached diff scope compares the index against `HEAD`.
 - Intentional differences: advanced patch formatting and custom diff drivers
