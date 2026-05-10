@@ -99,6 +99,8 @@ untracked display modes, including Git's default-all `-u` form and
 Git 2.52's normal-mode `--no-untracked-files` behavior.
 Status compatibility tests also cover `-z` NUL-terminated porcelain output,
 including raw paths with spaces.
+Status compatibility tests cover `-b` / `--branch` branch headers for simple
+local-branch and detached-HEAD repositories, including the NUL-terminated form.
 One status compatibility test intentionally documents the remaining index stat
 refresh difference: stdout/stderr/exit code match Git, but `.git/index` differs
 because Git refreshes cached stat metadata and rit currently does not.

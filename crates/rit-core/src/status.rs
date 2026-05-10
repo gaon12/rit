@@ -17,9 +17,22 @@ pub struct StatusEntry {
     pub path: String,
 }
 
+/// Porcelain branch header shown by `status -b`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StatusBranchHeader {
+    /// `HEAD` points at an unborn local branch.
+    InitialBranch(String),
+    /// `HEAD` points at a local branch with at least one commit.
+    Branch(String),
+    /// `HEAD` is detached.
+    Detached,
+}
+
 /// Status result formatted by the CLI.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PorcelainStatus {
+    /// Optional branch header requested by `status -b`.
+    pub branch: Option<StatusBranchHeader>,
     /// Ordered porcelain entries.
     pub entries: Vec<StatusEntry>,
 }
@@ -39,6 +52,10 @@ impl PorcelainStatus {
     /// Renders porcelain v1 text.
     pub fn to_porcelain_v1(&self) -> String {
         let mut output = String::new();
+        if let Some(branch) = &self.branch {
+            output.push_str(&branch.to_porcelain_v1());
+            output.push('\n');
+        }
         for entry in &self.entries {
             output.push(entry.index_status);
             output.push(entry.worktree_status);
@@ -52,6 +69,10 @@ impl PorcelainStatus {
     /// Renders porcelain v1 text with NUL-terminated raw paths.
     pub fn to_porcelain_v1_null_terminated(&self) -> String {
         let mut output = String::new();
+        if let Some(branch) = &self.branch {
+            output.push_str(&branch.to_porcelain_v1());
+            output.push('\0');
+        }
         for entry in &self.entries {
             output.push(entry.index_status);
             output.push(entry.worktree_status);
@@ -60,6 +81,16 @@ impl PorcelainStatus {
             output.push('\0');
         }
         output
+    }
+}
+
+impl StatusBranchHeader {
+    fn to_porcelain_v1(&self) -> String {
+        match self {
+            StatusBranchHeader::InitialBranch(name) => format!("## No commits yet on {name}"),
+            StatusBranchHeader::Branch(name) => format!("## {name}"),
+            StatusBranchHeader::Detached => "## HEAD (no branch)".to_owned(),
+        }
     }
 }
 
@@ -74,7 +105,7 @@ impl Repository {
         &self,
         pathspecs: &PathspecSet,
     ) -> Result<PorcelainStatus> {
-        self.status_porcelain_v1_with_options(pathspecs, UntrackedFilesMode::Normal)
+        self.status_porcelain_v1_with_options(pathspecs, UntrackedFilesMode::Normal, false)
     }
 
     /// Computes porcelain v1 status with explicit untracked-file handling.
@@ -82,6 +113,7 @@ impl Repository {
         &self,
         pathspecs: &PathspecSet,
         untracked_files: UntrackedFilesMode,
+        include_branch_header: bool,
     ) -> Result<PorcelainStatus> {
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
@@ -89,6 +121,11 @@ impl Repository {
             ));
         };
 
+        let branch = if include_branch_header {
+            Some(self.status_branch_header()?)
+        } else {
+            None
+        };
         let index = Index::read(&self.git_dir().join("index"))?;
         let index_entries = index
             .entries
@@ -153,7 +190,15 @@ impl Repository {
             }
         }
 
-        Ok(PorcelainStatus { entries })
+        Ok(PorcelainStatus { branch, entries })
+    }
+
+    fn status_branch_header(&self) -> Result<StatusBranchHeader> {
+        match (self.current_branch_name()?, self.resolve_head()?) {
+            (Some(name), Some(_)) => Ok(StatusBranchHeader::Branch(name)),
+            (Some(name), None) => Ok(StatusBranchHeader::InitialBranch(name)),
+            (None, _) => Ok(StatusBranchHeader::Detached),
+        }
     }
 
     fn head_tree_entries(&self) -> Result<BTreeMap<String, ObjectId>> {
@@ -399,8 +444,8 @@ fn read_ignore_file(path: &PathBuf, patterns: &mut Vec<String>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        IgnoreRules, PorcelainStatus, StatusEntry, UntrackedFilesMode, collapse_untracked_paths,
-        quote_porcelain_path, untracked_status_paths,
+        IgnoreRules, PorcelainStatus, StatusBranchHeader, StatusEntry, UntrackedFilesMode,
+        collapse_untracked_paths, quote_porcelain_path, untracked_status_paths,
     };
     use crate::PathspecSet;
     use std::collections::BTreeSet;
@@ -408,6 +453,7 @@ mod tests {
     #[test]
     fn porcelain_v1_renders_entries() {
         let status = PorcelainStatus {
+            branch: None,
             entries: vec![StatusEntry {
                 index_status: '?',
                 worktree_status: '?',
@@ -421,6 +467,7 @@ mod tests {
     #[test]
     fn porcelain_v1_quotes_paths_with_whitespace() {
         let status = PorcelainStatus {
+            branch: None,
             entries: vec![StatusEntry {
                 index_status: ' ',
                 worktree_status: 'M',
@@ -442,6 +489,7 @@ mod tests {
     #[test]
     fn porcelain_v1_null_terminated_uses_raw_paths() {
         let status = PorcelainStatus {
+            branch: None,
             entries: vec![StatusEntry {
                 index_status: ' ',
                 worktree_status: 'M',
@@ -452,6 +500,24 @@ mod tests {
         assert_eq!(
             status.to_porcelain_v1_null_terminated(),
             " M my dir/a b.txt\0"
+        );
+    }
+
+    #[test]
+    fn porcelain_v1_renders_branch_header() {
+        let status = PorcelainStatus {
+            branch: Some(StatusBranchHeader::Branch("main".to_owned())),
+            entries: vec![StatusEntry {
+                index_status: ' ',
+                worktree_status: 'M',
+                path: "a.txt".to_owned(),
+            }],
+        };
+
+        assert_eq!(status.to_porcelain_v1(), "## main\n M a.txt\n");
+        assert_eq!(
+            status.to_porcelain_v1_null_terminated(),
+            "## main\0 M a.txt\0"
         );
     }
 

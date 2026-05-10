@@ -172,7 +172,7 @@
   literal file and directory pathspecs after `--`, and
   `--untracked-files=no|normal|all` / `-uno|-unormal|-uall`, including
   default-all `-u`, Git 2.52's normal-mode `--no-untracked-files`, and `-z`
-  NUL-terminated output.
+  NUL-terminated output, plus `-b` / `--branch` branch headers.
 - Unsupported options: long output, branch header, ignored display modes,
   pathspec magic/globs, rename detection, submodules, sparse checkout.
 - Git-compatible behavior: porcelain v1 entries for staged add/modify/delete, working tree modify/delete, and untracked files.
@@ -184,6 +184,9 @@
   characters are quoted.
 - Git-compatible behavior: `-z` writes raw paths and terminates each entry with
   NUL instead of newline.
+- Git-compatible behavior: `-b` writes the porcelain branch header for local
+  and detached HEAD states. Upstream ahead/behind details and unborn-repository
+  status are not implemented yet.
 - Intentional differences: ignore handling supports simple literal and directory patterns first; advanced gitignore glob semantics are not complete yet.
 - Repository mutation: no
 - Risk: no repository writes.

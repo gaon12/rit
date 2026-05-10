@@ -307,6 +307,57 @@ fn status_null_terminated_output_matches_git() {
 }
 
 #[test]
+fn status_branch_header_matches_git() {
+    let fixture = DiffFixture::new("branch-header-status");
+
+    for args in [
+        vec!["status", "--porcelain=v1", "-b"],
+        vec!["status", "--porcelain=v1", "--branch"],
+        vec!["status", "--porcelain=v1", "-b", "-z"],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "branch header status {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
+fn status_detached_branch_header_matches_git() {
+    let fixture = DetachedStatusFixture::new("detached-branch-header-status");
+
+    for args in [
+        vec!["status", "--porcelain=v1", "-b"],
+        vec!["status", "--porcelain=v1", "-b", "-z"],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "detached branch header status {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn status_index_refresh_difference_is_documented() {
     let fixture = StatusRefreshFixture::new("status-refresh-difference");
     let outcome = compare(&CompareOptions::new(
@@ -700,6 +751,39 @@ impl StatusQuotedPathFixture {
 }
 
 impl Drop for StatusQuotedPathFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct DetachedStatusFixture {
+    path: PathBuf,
+}
+
+impl DetachedStatusFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("tracked.txt"), "base\n").expect("tracked file should be written");
+        run_git(&path, ["add", "tracked.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+        run_git(&path, ["checkout", "--quiet", "--detach", "HEAD"]);
+        fs::write(path.join("tracked.txt"), "changed\n").expect("tracked file should be modified");
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for DetachedStatusFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

@@ -69,7 +69,7 @@ List entries in a loose tree object.
 ";
 
 const STATUS_HELP: &str = "\
-rit status --porcelain[=v1] [-z] [-uno|-unormal|-uall] [--] [<pathspec>...]
+rit status --porcelain[=v1] [-b] [-z] [-uno|-unormal|-uall] [--] [<pathspec>...]
 
 Show a conservative porcelain v1 status.
 ";
@@ -539,7 +539,11 @@ fn status_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    match repository.status_porcelain_v1_with_options(&pathspecs, status_args.untracked_files) {
+    match repository.status_porcelain_v1_with_options(
+        &pathspecs,
+        status_args.untracked_files,
+        status_args.include_branch_header,
+    ) {
         Ok(status) => {
             if status_args.null_terminated {
                 stdout.write_all(status.to_porcelain_v1_null_terminated().as_bytes())?;
@@ -560,6 +564,7 @@ struct StatusArgs {
     pathspecs: Vec<String>,
     untracked_files: rit_core::UntrackedFilesMode,
     null_terminated: bool,
+    include_branch_header: bool,
 }
 
 fn parse_status_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Option<StatusArgs>> {
@@ -568,12 +573,14 @@ fn parse_status_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Opti
     let mut after_separator = false;
     let mut untracked_files = rit_core::UntrackedFilesMode::Normal;
     let mut null_terminated = false;
+    let mut include_branch_header = false;
 
     for arg in args {
         match arg.as_str() {
             "--" if !after_separator => after_separator = true,
             "--porcelain" | "--porcelain=v1" | "-s" if !after_separator => has_porcelain = true,
             "-z" if !after_separator => null_terminated = true,
+            "-b" | "--branch" if !after_separator => include_branch_header = true,
             "-u" | "--untracked-files" if !after_separator => {
                 untracked_files = rit_core::UntrackedFilesMode::All;
             }
@@ -602,6 +609,7 @@ fn parse_status_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Opti
             pathspecs,
             untracked_files,
             null_terminated,
+            include_branch_header,
         }))
     } else {
         writeln!(stderr, "rit: status currently supports only --porcelain=v1")?;
