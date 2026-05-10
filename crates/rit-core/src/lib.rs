@@ -22,7 +22,7 @@ pub use error::{Result, RitError};
 pub use history::LogEntry;
 pub use index::{
     CacheTree, CacheTreeNode, FsMonitor, FsMonitorToken, Index, IndexEntry, IndexExtension,
-    IndexExtensionKind, ResolveUndo, ResolveUndoEntry, ResolveUndoStage,
+    IndexExtensionKind, ResolveUndo, ResolveUndoEntry, ResolveUndoStage, SplitIndexLink,
 };
 pub use object::{GitObject, ObjectId, ObjectKind, TreeEntry, hash_object};
 pub use odb::LooseObjectDb;

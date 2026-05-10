@@ -53,6 +53,14 @@ impl IndexExtension {
         }
         parse_fs_monitor(&self.data).map(Some)
     }
+
+    /// Parses this extension as a split-index link extension when its signature is `link`.
+    pub fn split_index_link(&self) -> Result<Option<SplitIndexLink>> {
+        if self.kind != IndexExtensionKind::SplitIndexLink {
+            return Ok(None);
+        }
+        parse_split_index_link(&self.data).map(Some)
+    }
 }
 
 /// Known Git index extension signatures.
@@ -146,6 +154,15 @@ pub enum FsMonitorToken {
     Nanoseconds(u64),
     /// Version 2 opaque file-system-monitor token.
     Token(String),
+}
+
+/// Parsed `link` split-index extension header and raw bitmap payload.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SplitIndexLink {
+    /// Object ID embedded in the shared index filename.
+    pub shared_index_id: ObjectId,
+    /// Raw delete and replace EWAH bitmap bytes after the shared index ID.
+    pub bitmap_data: Vec<u8>,
 }
 
 /// One tracked path in the Git index.
@@ -557,6 +574,20 @@ fn parse_fs_monitor(bytes: &[u8]) -> Result<FsMonitor> {
         token,
         bitmap_size,
         bitmap: bytes[offset..].to_vec(),
+    })
+}
+
+fn parse_split_index_link(bytes: &[u8]) -> Result<SplitIndexLink> {
+    if bytes.len() < 20 {
+        return Err(RitError::invalid_input(
+            "split-index shared index id is truncated",
+        ));
+    }
+    let mut shared_index_id = [0_u8; 20];
+    shared_index_id.copy_from_slice(&bytes[..20]);
+    Ok(SplitIndexLink {
+        shared_index_id: ObjectId::from_bytes(shared_index_id),
+        bitmap_data: bytes[20..].to_vec(),
     })
 }
 
@@ -978,6 +1009,45 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "unsupported fsmonitor extension version: 3"
+        );
+    }
+
+    #[test]
+    fn split_index_link_extension_parses_shared_index_id() {
+        let shared_index_id = ObjectId::from_bytes([9; 20]);
+        let mut payload = Vec::new();
+        payload.extend_from_slice(shared_index_id.as_bytes());
+        payload.extend_from_slice(b"bitmap-data");
+        let index = Index {
+            entries: Vec::new(),
+            extensions: extension_record(b"link", &payload),
+        };
+
+        let extensions = index.parsed_extensions().expect("extensions should parse");
+        let link = extensions[0]
+            .split_index_link()
+            .expect("split index should parse")
+            .expect("link extension should return split index");
+
+        assert_eq!(link.shared_index_id, shared_index_id);
+        assert_eq!(link.bitmap_data, b"bitmap-data");
+    }
+
+    #[test]
+    fn split_index_link_extension_rejects_truncated_shared_index_id() {
+        let index = Index {
+            entries: Vec::new(),
+            extensions: extension_record(b"link", b"short"),
+        };
+
+        let extensions = index.parsed_extensions().expect("extensions should parse");
+        let error = extensions[0]
+            .split_index_link()
+            .expect_err("truncated shared index id should fail");
+
+        assert_eq!(
+            error.to_string(),
+            "split-index shared index id is truncated"
         );
     }
 

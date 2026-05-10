@@ -30,7 +30,8 @@ The current codebase implements an early local Git subset:
   be parsed and classified by signature while preserving raw payloads; `TREE`
   cache-tree payloads can be parsed into structured nodes and `REUC`
   resolve-undo payloads can be parsed into per-path stage records. `FSMN`
-  file-system-monitor headers are parsed while preserving raw bitmap bytes.
+  file-system-monitor headers and `link` split-index shared-index IDs are
+  parsed while preserving raw bitmap bytes.
 - Local refs, packed refs lookup, lightweight tags, and simple revision
   resolution.
 - CLI commands: `version`, `help`, `init`, `rev-parse`, `cat-file`, `ls-tree`,
