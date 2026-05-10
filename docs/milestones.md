@@ -178,6 +178,7 @@ Completion criteria:
   - [x] Parse extension records and classify known signatures (`TREE`,
     `REUC`, `UNTR`, `FSMN`, `link`, `sdir`).
   - [x] Parse `TREE` cache-tree payloads into depth-first node models.
+  - [x] Parse `REUC` resolve-undo payloads into per-path stage models.
   - [ ] Parse remaining extension-specific payload models.
 - [x] File mode and executable bit handling.
   - [x] Preserve `100644`/`100755` modes when writing trees from the index.

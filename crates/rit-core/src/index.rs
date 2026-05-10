@@ -37,6 +37,14 @@ impl IndexExtension {
         }
         parse_cache_tree(&self.data).map(Some)
     }
+
+    /// Parses this extension as a resolve-undo extension when its signature is `REUC`.
+    pub fn resolve_undo(&self) -> Result<Option<ResolveUndo>> {
+        if self.kind != IndexExtensionKind::ResolveUndo {
+            return Ok(None);
+        }
+        parse_resolve_undo(&self.data).map(Some)
+    }
 }
 
 /// Known Git index extension signatures.
@@ -83,6 +91,31 @@ impl CacheTreeNode {
     pub fn is_valid(&self) -> bool {
         self.tree_id.is_some()
     }
+}
+
+/// Parsed `REUC` index extension.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ResolveUndo {
+    /// Per-path resolve-undo records.
+    pub entries: Vec<ResolveUndoEntry>,
+}
+
+/// Resolve-undo data for one path.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ResolveUndoEntry {
+    /// Repository-relative path.
+    pub path: String,
+    /// Stage 1, 2, and 3 records saved by Git, when present.
+    pub stages: [Option<ResolveUndoStage>; 3],
+}
+
+/// One saved conflict stage in a `REUC` extension.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ResolveUndoStage {
+    /// Index mode for this stage.
+    pub mode: u32,
+    /// Object ID for this stage.
+    pub object_id: ObjectId,
 }
 
 /// One tracked path in the Git index.
@@ -414,6 +447,61 @@ fn parse_cache_tree_node(bytes: &[u8], offset: &mut usize) -> Result<CacheTreeNo
     })
 }
 
+fn parse_resolve_undo(bytes: &[u8]) -> Result<ResolveUndo> {
+    let mut offset = 0;
+    let mut entries = Vec::new();
+
+    while offset < bytes.len() {
+        let path = read_nul_terminated_text(bytes, &mut offset, "resolve-undo path")?;
+        let mut modes = [0_u32; 3];
+        for mode in &mut modes {
+            let mode_text = read_nul_terminated_text(bytes, &mut offset, "resolve-undo mode")?;
+            *mode = u32::from_str_radix(&mode_text, 8)
+                .map_err(|_| RitError::invalid_input("resolve-undo mode is invalid"))?;
+        }
+
+        let mut stages = [None; 3];
+        for (index, mode) in modes.into_iter().enumerate() {
+            if mode == 0 {
+                continue;
+            }
+            if bytes.len().saturating_sub(offset) < 20 {
+                return Err(RitError::invalid_input(
+                    "resolve-undo object id is truncated",
+                ));
+            }
+            let mut object_id = [0_u8; 20];
+            object_id.copy_from_slice(&bytes[offset..offset + 20]);
+            offset += 20;
+            stages[index] = Some(ResolveUndoStage {
+                mode,
+                object_id: ObjectId::from_bytes(object_id),
+            });
+        }
+
+        entries.push(ResolveUndoEntry { path, stages });
+    }
+
+    Ok(ResolveUndo { entries })
+}
+
+fn read_nul_terminated_text(bytes: &[u8], offset: &mut usize, label: &str) -> Result<String> {
+    let start = *offset;
+    while *offset < bytes.len() && bytes[*offset] != 0 {
+        *offset += 1;
+    }
+    if *offset == bytes.len() {
+        return Err(RitError::invalid_input(format!(
+            "{label} is not NUL terminated"
+        )));
+    }
+    let text = std::str::from_utf8(&bytes[start..*offset])
+        .map_err(|_| RitError::invalid_input(format!("{label} is not UTF-8")))?
+        .to_owned();
+    *offset += 1;
+    Ok(text)
+}
+
 impl IndexExtensionKind {
     fn from_signature(signature: [u8; 4]) -> Self {
         match &signature {
@@ -667,6 +755,71 @@ mod tests {
             .expect_err("truncated object id should fail");
 
         assert_eq!(error.to_string(), "cache-tree object id is truncated");
+    }
+
+    #[test]
+    fn resolve_undo_extension_parses_stage_modes_and_objects() {
+        let stage_one_id = ObjectId::from_bytes([1; 20]);
+        let stage_three_id = ObjectId::from_bytes([3; 20]);
+        let mut payload = Vec::new();
+        payload.extend_from_slice(b"conflict.txt\0");
+        payload.extend_from_slice(b"100644\0");
+        payload.extend_from_slice(b"0\0");
+        payload.extend_from_slice(b"100755\0");
+        payload.extend_from_slice(stage_one_id.as_bytes());
+        payload.extend_from_slice(stage_three_id.as_bytes());
+        let index = Index {
+            entries: Vec::new(),
+            extensions: extension_record(b"REUC", &payload),
+        };
+
+        let extensions = index.parsed_extensions().expect("extensions should parse");
+        let resolve_undo = extensions[0]
+            .resolve_undo()
+            .expect("resolve undo should parse")
+            .expect("REUC extension should return resolve undo");
+
+        assert_eq!(resolve_undo.entries.len(), 1);
+        let entry = &resolve_undo.entries[0];
+        assert_eq!(entry.path, "conflict.txt");
+        assert_eq!(
+            entry.stages[0].expect("stage one should exist").mode,
+            0o100644
+        );
+        assert_eq!(
+            entry.stages[0].expect("stage one should exist").object_id,
+            stage_one_id
+        );
+        assert_eq!(entry.stages[1], None);
+        assert_eq!(
+            entry.stages[2].expect("stage three should exist").mode,
+            0o100755
+        );
+        assert_eq!(
+            entry.stages[2].expect("stage three should exist").object_id,
+            stage_three_id
+        );
+    }
+
+    #[test]
+    fn resolve_undo_extension_rejects_truncated_object_ids() {
+        let mut payload = Vec::new();
+        payload.extend_from_slice(b"conflict.txt\0");
+        payload.extend_from_slice(b"100644\0");
+        payload.extend_from_slice(b"0\0");
+        payload.extend_from_slice(b"0\0");
+        payload.extend_from_slice(b"short");
+        let index = Index {
+            entries: Vec::new(),
+            extensions: extension_record(b"REUC", &payload),
+        };
+
+        let extensions = index.parsed_extensions().expect("extensions should parse");
+        let error = extensions[0]
+            .resolve_undo()
+            .expect_err("truncated object id should fail");
+
+        assert_eq!(error.to_string(), "resolve-undo object id is truncated");
     }
 
     fn extension_record(signature: &[u8; 4], payload: &[u8]) -> Vec<u8> {

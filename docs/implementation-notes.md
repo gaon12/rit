@@ -51,6 +51,8 @@
   depth-first nodes with path component, covered entry count, optional tree
   object ID, and child nodes. Invalidated cache-tree nodes use `entry_count =
   -1` and no object ID.
+- `IndexExtension::resolve_undo()` parses `REUC` payloads into per-path stage
+  records with octal mode and object ID values for stages 1 through 3.
 - Added rit CLI integration compatibility fixtures for read-only `diff` output modes: `--name-only`, `--name-status`, `--numstat`, and `--stat`, including cached diff variants.
 - Compatibility reports now include the first differing stdout/stderr line when command text differs.
 - Added reusable `rit-testkit` local write fixture builders for nested tracked

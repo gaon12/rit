@@ -28,7 +28,8 @@ The current codebase implements an early local Git subset:
   clean tracked files, raw extension-byte preservation, and committed
   `100644`/`100755` executable-bit modes. Optional index extension records can
   be parsed and classified by signature while preserving raw payloads; `TREE`
-  cache-tree payloads can be parsed into structured nodes.
+  cache-tree payloads can be parsed into structured nodes and `REUC`
+  resolve-undo payloads can be parsed into per-path stage records.
 - Local refs, packed refs lookup, lightweight tags, and simple revision
   resolution.
 - CLI commands: `version`, `help`, `init`, `rev-parse`, `cat-file`, `ls-tree`,
