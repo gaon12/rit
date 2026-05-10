@@ -29,6 +29,14 @@ impl IndexExtension {
     pub fn signature_text(&self) -> String {
         String::from_utf8_lossy(&self.signature).into_owned()
     }
+
+    /// Parses this extension as a cache-tree extension when its signature is `TREE`.
+    pub fn cache_tree(&self) -> Result<Option<CacheTree>> {
+        if self.kind != IndexExtensionKind::CacheTree {
+            return Ok(None);
+        }
+        parse_cache_tree(&self.data).map(Some)
+    }
 }
 
 /// Known Git index extension signatures.
@@ -48,6 +56,33 @@ pub enum IndexExtensionKind {
     SparseDirectory,
     /// Extension not classified by this version of rit.
     Unknown([u8; 4]),
+}
+
+/// Parsed `TREE` index extension.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CacheTree {
+    /// Root cache-tree node.
+    pub root: CacheTreeNode,
+}
+
+/// One node in Git's cache-tree extension.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CacheTreeNode {
+    /// Path component relative to the parent node. The root component is empty.
+    pub path_component: String,
+    /// Number of index entries covered by this node, or `-1` when invalidated.
+    pub entry_count: i32,
+    /// Known tree object ID for valid nodes.
+    pub tree_id: Option<ObjectId>,
+    /// Child cache-tree nodes in Git's depth-first order.
+    pub children: Vec<CacheTreeNode>,
+}
+
+impl CacheTreeNode {
+    /// Returns true when this node has a known tree object ID.
+    pub fn is_valid(&self) -> bool {
+        self.tree_id.is_some()
+    }
 }
 
 /// One tracked path in the Git index.
@@ -295,6 +330,90 @@ fn parse_index_extensions(bytes: &[u8]) -> Result<Vec<IndexExtension>> {
     Ok(extensions)
 }
 
+fn parse_cache_tree(bytes: &[u8]) -> Result<CacheTree> {
+    let mut offset = 0;
+    if bytes.is_empty() {
+        return Err(RitError::invalid_input("cache-tree extension is empty"));
+    }
+    let root = parse_cache_tree_node(bytes, &mut offset)?;
+    if offset != bytes.len() {
+        return Err(RitError::invalid_input(
+            "cache-tree extension has trailing bytes",
+        ));
+    }
+    Ok(CacheTree { root })
+}
+
+fn parse_cache_tree_node(bytes: &[u8], offset: &mut usize) -> Result<CacheTreeNode> {
+    let path_start = *offset;
+    while *offset < bytes.len() && bytes[*offset] != 0 {
+        *offset += 1;
+    }
+    if *offset == bytes.len() {
+        return Err(RitError::invalid_input(
+            "cache-tree path component is not NUL terminated",
+        ));
+    }
+    let path_component = std::str::from_utf8(&bytes[path_start..*offset])
+        .map_err(|_| RitError::invalid_input("cache-tree path component is not UTF-8"))?
+        .to_owned();
+    *offset += 1;
+
+    let header_start = *offset;
+    while *offset < bytes.len() && bytes[*offset] != b'\n' {
+        *offset += 1;
+    }
+    if *offset == bytes.len() {
+        return Err(RitError::invalid_input(
+            "cache-tree node header is not newline terminated",
+        ));
+    }
+    let header = std::str::from_utf8(&bytes[header_start..*offset])
+        .map_err(|_| RitError::invalid_input("cache-tree node header is not UTF-8"))?;
+    *offset += 1;
+
+    let mut fields = header.split(' ');
+    let entry_count = fields
+        .next()
+        .ok_or_else(|| RitError::invalid_input("cache-tree node is missing entry count"))?
+        .parse::<i32>()
+        .map_err(|_| RitError::invalid_input("cache-tree entry count is invalid"))?;
+    let subtree_count = fields
+        .next()
+        .ok_or_else(|| RitError::invalid_input("cache-tree node is missing subtree count"))?
+        .parse::<usize>()
+        .map_err(|_| RitError::invalid_input("cache-tree subtree count is invalid"))?;
+    if fields.next().is_some() {
+        return Err(RitError::invalid_input(
+            "cache-tree node header has too many fields",
+        ));
+    }
+
+    let tree_id = if entry_count < 0 {
+        None
+    } else {
+        if bytes.len().saturating_sub(*offset) < 20 {
+            return Err(RitError::invalid_input("cache-tree object id is truncated"));
+        }
+        let mut object_id = [0_u8; 20];
+        object_id.copy_from_slice(&bytes[*offset..*offset + 20]);
+        *offset += 20;
+        Some(ObjectId::from_bytes(object_id))
+    };
+
+    let mut children = Vec::with_capacity(subtree_count);
+    for _ in 0..subtree_count {
+        children.push(parse_cache_tree_node(bytes, offset)?);
+    }
+
+    Ok(CacheTreeNode {
+        path_component,
+        entry_count,
+        tree_id,
+        children,
+    })
+}
+
 impl IndexExtensionKind {
     fn from_signature(signature: [u8; 4]) -> Self {
         match &signature {
@@ -480,5 +599,81 @@ mod tests {
             .expect_err("truncated extension should fail");
 
         assert_eq!(error.to_string(), "index extension payload is truncated");
+    }
+
+    #[test]
+    fn cache_tree_extension_parses_depth_first_nodes() {
+        let root_id = ObjectId::from_bytes([1; 20]);
+        let child_id = ObjectId::from_bytes([2; 20]);
+        let mut payload = Vec::new();
+        payload.extend_from_slice(b"\0");
+        payload.extend_from_slice(b"2 1\n");
+        payload.extend_from_slice(root_id.as_bytes());
+        payload.extend_from_slice(b"src\0");
+        payload.extend_from_slice(b"1 0\n");
+        payload.extend_from_slice(child_id.as_bytes());
+        let index = Index {
+            entries: Vec::new(),
+            extensions: extension_record(b"TREE", &payload),
+        };
+
+        let extensions = index.parsed_extensions().expect("extensions should parse");
+        let cache_tree = extensions[0]
+            .cache_tree()
+            .expect("cache tree should parse")
+            .expect("TREE extension should return cache tree");
+
+        assert_eq!(cache_tree.root.path_component, "");
+        assert_eq!(cache_tree.root.entry_count, 2);
+        assert_eq!(cache_tree.root.tree_id, Some(root_id));
+        assert_eq!(cache_tree.root.children.len(), 1);
+        assert_eq!(cache_tree.root.children[0].path_component, "src");
+        assert_eq!(cache_tree.root.children[0].entry_count, 1);
+        assert_eq!(cache_tree.root.children[0].tree_id, Some(child_id));
+    }
+
+    #[test]
+    fn cache_tree_extension_parses_invalid_nodes_without_object_ids() {
+        let index = Index {
+            entries: Vec::new(),
+            extensions: extension_record(b"TREE", b"\0-1 0\n"),
+        };
+
+        let extensions = index.parsed_extensions().expect("extensions should parse");
+        let cache_tree = extensions[0]
+            .cache_tree()
+            .expect("cache tree should parse")
+            .expect("TREE extension should return cache tree");
+
+        assert_eq!(cache_tree.root.entry_count, -1);
+        assert_eq!(cache_tree.root.tree_id, None);
+        assert!(!cache_tree.root.is_valid());
+    }
+
+    #[test]
+    fn cache_tree_extension_rejects_truncated_object_ids() {
+        let mut payload = Vec::new();
+        payload.extend_from_slice(b"\0");
+        payload.extend_from_slice(b"1 0\n");
+        payload.extend_from_slice(b"short");
+        let index = Index {
+            entries: Vec::new(),
+            extensions: extension_record(b"TREE", &payload),
+        };
+
+        let extensions = index.parsed_extensions().expect("extensions should parse");
+        let error = extensions[0]
+            .cache_tree()
+            .expect_err("truncated object id should fail");
+
+        assert_eq!(error.to_string(), "cache-tree object id is truncated");
+    }
+
+    fn extension_record(signature: &[u8; 4], payload: &[u8]) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(signature);
+        bytes.extend_from_slice(&(payload.len() as u32).to_be_bytes());
+        bytes.extend_from_slice(payload);
+        bytes
     }
 }

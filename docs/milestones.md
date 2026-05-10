@@ -177,7 +177,8 @@ Completion criteria:
 - [~] Semantic index extension parsing.
   - [x] Parse extension records and classify known signatures (`TREE`,
     `REUC`, `UNTR`, `FSMN`, `link`, `sdir`).
-  - [ ] Parse extension-specific payload models.
+  - [x] Parse `TREE` cache-tree payloads into depth-first node models.
+  - [ ] Parse remaining extension-specific payload models.
 - [x] File mode and executable bit handling.
   - [x] Preserve `100644`/`100755` modes when writing trees from the index.
   - [x] `rit add --chmod=+x|-x` records executable-bit overrides in the index.

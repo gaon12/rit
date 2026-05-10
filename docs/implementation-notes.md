@@ -47,6 +47,10 @@
 - `Index::parsed_extensions()` now exposes optional extension records with
   classified signatures for `TREE`, `REUC`, `UNTR`, `FSMN`, `link`, and
   `sdir`, while preserving raw payload bytes.
+- `IndexExtension::cache_tree()` parses `TREE` cache-tree payloads into
+  depth-first nodes with path component, covered entry count, optional tree
+  object ID, and child nodes. Invalidated cache-tree nodes use `entry_count =
+  -1` and no object ID.
 - Added rit CLI integration compatibility fixtures for read-only `diff` output modes: `--name-only`, `--name-status`, `--numstat`, and `--stat`, including cached diff variants.
 - Compatibility reports now include the first differing stdout/stderr line when command text differs.
 - Added reusable `rit-testkit` local write fixture builders for nested tracked
@@ -440,5 +444,5 @@
 - Supported index format: v2/v3 entries for regular files.
 - Supported stat behavior: status refreshes clean tracked file mtime/size
   metadata and preserves raw optional extension bytes such as `TREE`.
-- Unsupported index behavior: extension-specific payload parsing, conflict
-  stages, and full `core.symlinks=false` parity.
+- Unsupported index behavior: remaining extension-specific payload parsing,
+  conflict stages, and full `core.symlinks=false` parity.
