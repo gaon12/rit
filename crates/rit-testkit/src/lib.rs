@@ -32,6 +32,13 @@ pub enum TestkitError {
         program: OsString,
         source: std::io::Error,
     },
+    /// A fixture setup command failed.
+    SetupCommandFailed {
+        program: OsString,
+        args: Vec<OsString>,
+        cwd: PathBuf,
+        output: Box<CommandOutput>,
+    },
     /// System time could not be converted to a monotonic-ish suffix.
     Clock(std::time::SystemTimeError),
 }
@@ -59,6 +66,26 @@ impl std::fmt::Display for TestkitError {
                     formatter,
                     "failed to run command {}: {source}",
                     program.to_string_lossy()
+                )
+            }
+            Self::SetupCommandFailed {
+                program,
+                args,
+                cwd,
+                output,
+            } => {
+                write!(
+                    formatter,
+                    "fixture setup command failed in {}: {} {} (exit {:?})\nstdout:\n{}\nstderr:\n{}",
+                    cwd.display(),
+                    program.to_string_lossy(),
+                    args.iter()
+                        .map(|arg| arg.to_string_lossy())
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                    output.exit_code,
+                    output.stdout,
+                    output.stderr
                 )
             }
             Self::Clock(source) => write!(formatter, "system clock error: {source}"),
@@ -101,6 +128,150 @@ impl CommandSpec {
             return Err(TestkitError::EmptyCommand { role });
         };
         Ok(Self::new(program, words.collect()))
+    }
+}
+
+/// Reusable local write fixture shapes for Git-vs-rit comparisons.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LocalWriteFixtureKind {
+    /// One committed `nested/tracked.txt` file.
+    NestedTracked,
+    /// Two commits on `master`; `base_commit` names the first commit.
+    DetachedCheckout,
+    /// `topic` exists and is already merged into `master`.
+    MergedBranch,
+    /// `topic` has a commit not reachable from `master`.
+    UnmergedBranch,
+}
+
+/// A temporary repository fixture built by the compatibility testkit.
+#[derive(Debug)]
+pub struct LocalWriteFixture {
+    path: PathBuf,
+    base_commit: Option<String>,
+}
+
+impl LocalWriteFixture {
+    /// Builds one reusable local write fixture using Git as the reference
+    /// fixture authoring tool.
+    pub fn new(name: &str, kind: LocalWriteFixtureKind) -> Result<Self> {
+        let fixture = Self {
+            path: temp_path(&format!("local-write-{name}"))?,
+            base_commit: None,
+        };
+        fs::create_dir_all(&fixture.path).map_err(|source| TestkitError::Io {
+            path: fixture.path.clone(),
+            source,
+        })?;
+        fixture.initialize_git_repository()?;
+
+        match kind {
+            LocalWriteFixtureKind::NestedTracked => fixture.build_nested_tracked(),
+            LocalWriteFixtureKind::DetachedCheckout => fixture.build_detached_checkout(),
+            LocalWriteFixtureKind::MergedBranch => fixture.build_merged_branch(),
+            LocalWriteFixtureKind::UnmergedBranch => fixture.build_unmerged_branch(),
+        }
+    }
+
+    /// Returns the fixture repository path.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Returns the first commit ID for fixtures that expose one.
+    pub fn base_commit(&self) -> Option<&str> {
+        self.base_commit.as_deref()
+    }
+
+    fn initialize_git_repository(&self) -> Result<()> {
+        self.run_git(["init", "--quiet"])?;
+        self.run_git(["config", "user.name", "Rit Test"])?;
+        self.run_git(["config", "user.email", "rit@example.test"])?;
+        self.run_git(["config", "core.autocrlf", "false"])
+    }
+
+    fn build_nested_tracked(self) -> Result<Self> {
+        self.write_file("nested/tracked.txt", "base\n")?;
+        self.run_git(["add", "nested"])?;
+        self.run_git(["commit", "--quiet", "-m", "base"])?;
+        Ok(self)
+    }
+
+    fn build_detached_checkout(mut self) -> Result<Self> {
+        self.write_file("tracked.txt", "base\n")?;
+        self.run_git(["add", "tracked.txt"])?;
+        self.run_git(["commit", "--quiet", "-m", "base"])?;
+        self.base_commit = Some(self.capture_git(["rev-parse", "HEAD"])?.trim().to_owned());
+
+        self.write_file("tracked.txt", "second\n")?;
+        self.run_git(["add", "tracked.txt"])?;
+        self.run_git(["commit", "--quiet", "-m", "second"])?;
+        Ok(self)
+    }
+
+    fn build_merged_branch(self) -> Result<Self> {
+        self.write_file("tracked.txt", "base\n")?;
+        self.run_git(["add", "tracked.txt"])?;
+        self.run_git(["commit", "--quiet", "-m", "base"])?;
+        self.run_git(["branch", "topic"])?;
+        Ok(self)
+    }
+
+    fn build_unmerged_branch(self) -> Result<Self> {
+        self.write_file("tracked.txt", "base\n")?;
+        self.run_git(["add", "tracked.txt"])?;
+        self.run_git(["commit", "--quiet", "-m", "base"])?;
+        self.run_git(["checkout", "--quiet", "-b", "topic"])?;
+        self.write_file("tracked.txt", "topic\n")?;
+        self.run_git(["add", "tracked.txt"])?;
+        self.run_git(["commit", "--quiet", "-m", "topic"])?;
+        self.run_git(["checkout", "--quiet", "master"])?;
+        Ok(self)
+    }
+
+    fn write_file(&self, relative_path: &str, contents: &str) -> Result<()> {
+        let path = self.path.join(relative_path);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|source| TestkitError::Io {
+                path: parent.to_path_buf(),
+                source,
+            })?;
+        }
+        fs::write(&path, contents).map_err(|source| TestkitError::Io { path, source })
+    }
+
+    fn run_git<const N: usize>(&self, args: [&str; N]) -> Result<()> {
+        let output = run_setup_command("git", args, &self.path)?;
+        if output.exit_code == Some(0) {
+            Ok(())
+        } else {
+            Err(TestkitError::SetupCommandFailed {
+                program: OsString::from("git"),
+                args: args.into_iter().map(OsString::from).collect(),
+                cwd: self.path.clone(),
+                output: Box::new(output),
+            })
+        }
+    }
+
+    fn capture_git<const N: usize>(&self, args: [&str; N]) -> Result<String> {
+        let output = run_setup_command("git", args, &self.path)?;
+        if output.exit_code == Some(0) {
+            Ok(output.stdout)
+        } else {
+            Err(TestkitError::SetupCommandFailed {
+                program: OsString::from("git"),
+                args: args.into_iter().map(OsString::from).collect(),
+                cwd: self.path.clone(),
+                output: Box::new(output),
+            })
+        }
+    }
+}
+
+impl Drop for LocalWriteFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
     }
 }
 
@@ -270,6 +441,26 @@ fn run_command(spec: &CommandSpec, cwd: &Path) -> Result<CommandOutput> {
     ))
 }
 
+fn run_setup_command<const N: usize>(
+    program: &str,
+    args: [&str; N],
+    cwd: &Path,
+) -> Result<CommandOutput> {
+    let output = Command::new(program)
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .map_err(|source| TestkitError::Spawn {
+            program: OsString::from(program),
+            source,
+        })?;
+    Ok(CommandOutput::from_process_output(
+        output.status,
+        output.stdout,
+        output.stderr,
+    ))
+}
+
 fn compare_state(git_repo: &Path, rit_repo: &Path) -> Result<StateComparison> {
     let git_snapshot = snapshot_directory(git_repo)?;
     let rit_snapshot = snapshot_directory(rit_repo)?;
@@ -396,17 +587,21 @@ struct TemporaryWorkspace {
 
 impl TemporaryWorkspace {
     fn new(prefix: &str) -> Result<Self> {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(TestkitError::Clock)?
-            .as_nanos();
-        let path = std::env::temp_dir().join(format!("{prefix}-{unique}"));
+        let path = temp_path(prefix)?;
         fs::create_dir_all(&path).map_err(|source| TestkitError::Io {
             path: path.clone(),
             source,
         })?;
         Ok(Self { path })
     }
+}
+
+fn temp_path(prefix: &str) -> Result<PathBuf> {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(TestkitError::Clock)?
+        .as_nanos();
+    Ok(std::env::temp_dir().join(format!("{prefix}-{unique}")))
 }
 
 impl Drop for TemporaryWorkspace {

@@ -102,6 +102,8 @@ Patch compatibility tests cover default and cached text patches for small files.
 Local write compatibility tests currently cover directory pathspec behavior for
 `add`, `restore`, and `reset` by comparing the resulting porcelain status and
 restored file contents.
+Reusable local write fixture builders live in `rit-testkit` so new write
+comparisons can share repository setup.
 
 Detached checkout compatibility tests compare detached `.git/HEAD`, branch
 state, porcelain status, and materialized file contents.

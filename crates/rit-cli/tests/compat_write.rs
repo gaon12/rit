@@ -1,3 +1,4 @@
+use rit_testkit::{LocalWriteFixture, LocalWriteFixtureKind};
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -6,7 +7,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn add_directory_pathspec_matches_git_status() {
-    let fixture = WriteFixture::new("add-directory");
+    let fixture = LocalWriteFixture::new("add-directory", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
     fs::write(
         fixture.path().join("nested").join("tracked.txt"),
         "changed\n",
@@ -28,7 +30,8 @@ fn add_directory_pathspec_matches_git_status() {
 
 #[test]
 fn restore_directory_pathspec_matches_git_status_and_files() {
-    let fixture = WriteFixture::new("restore-directory");
+    let fixture = LocalWriteFixture::new("restore-directory", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
     fs::write(
         fixture.path().join("nested").join("tracked.txt"),
         "changed\n",
@@ -54,7 +57,8 @@ fn restore_directory_pathspec_matches_git_status_and_files() {
 
 #[test]
 fn reset_directory_pathspec_matches_git_status() {
-    let fixture = WriteFixture::new("reset-directory");
+    let fixture = LocalWriteFixture::new("reset-directory", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
     fs::write(
         fixture.path().join("nested").join("tracked.txt"),
         "changed\n",
@@ -75,8 +79,13 @@ fn reset_directory_pathspec_matches_git_status() {
 
 #[test]
 fn checkout_detached_commit_matches_git_state() {
-    let fixture = DetachedCheckoutFixture::new("detached-checkout");
-    let base = fixture.base_commit.clone();
+    let fixture =
+        LocalWriteFixture::new("detached-checkout", LocalWriteFixtureKind::DetachedCheckout)
+            .expect("fixture should build");
+    let base = fixture
+        .base_commit()
+        .expect("detached checkout fixture should expose base commit")
+        .to_owned();
 
     let outcome = compare_after_command(
         fixture.path(),
@@ -114,7 +123,11 @@ fn checkout_detached_commit_matches_git_state() {
 
 #[test]
 fn branch_delete_refuses_unmerged_branch_like_git() {
-    let fixture = BranchDeleteFixture::unmerged("branch-delete-unmerged");
+    let fixture = LocalWriteFixture::new(
+        "branch-delete-unmerged",
+        LocalWriteFixtureKind::UnmergedBranch,
+    )
+    .expect("fixture should build");
     let workspace = temp_path("branch-delete-unmerged-compare");
     let git_repo = workspace.join("git");
     let rit_repo = workspace.join("rit");
@@ -151,7 +164,9 @@ fn branch_delete_refuses_unmerged_branch_like_git() {
 
 #[test]
 fn branch_delete_allows_merged_branch_like_git() {
-    let fixture = BranchDeleteFixture::merged("branch-delete-merged");
+    let fixture =
+        LocalWriteFixture::new("branch-delete-merged", LocalWriteFixtureKind::MergedBranch)
+            .expect("fixture should build");
     let outcome = compare_after_command(
         fixture.path(),
         command_words("git", ["branch", "-d", "topic"]),
@@ -286,123 +301,6 @@ fn run_capture<const N: usize>(
         String::from_utf8_lossy(&output.stdout).into_owned(),
         String::from_utf8_lossy(&output.stderr).into_owned(),
     )
-}
-
-struct WriteFixture {
-    path: PathBuf,
-}
-
-impl WriteFixture {
-    fn new(name: &str) -> Self {
-        let path = temp_path(name);
-        fs::create_dir_all(path.join("nested")).expect("fixture directory should be created");
-        run_git(&path, ["init", "--quiet"]);
-        run_git(&path, ["config", "user.name", "Rit Test"]);
-        run_git(&path, ["config", "user.email", "rit@example.test"]);
-        run_git(&path, ["config", "core.autocrlf", "false"]);
-
-        fs::write(path.join("nested").join("tracked.txt"), "base\n")
-            .expect("tracked file should be written");
-        run_git(&path, ["add", "nested"]);
-        run_git(&path, ["commit", "--quiet", "-m", "base"]);
-
-        Self { path }
-    }
-
-    fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-impl Drop for WriteFixture {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.path);
-    }
-}
-
-struct DetachedCheckoutFixture {
-    path: PathBuf,
-    base_commit: String,
-}
-
-impl DetachedCheckoutFixture {
-    fn new(name: &str) -> Self {
-        let path = temp_path(name);
-        fs::create_dir_all(&path).expect("fixture directory should be created");
-        run_git(&path, ["init", "--quiet"]);
-        run_git(&path, ["config", "user.name", "Rit Test"]);
-        run_git(&path, ["config", "user.email", "rit@example.test"]);
-        run_git(&path, ["config", "core.autocrlf", "false"]);
-
-        fs::write(path.join("tracked.txt"), "base\n").expect("tracked file should be written");
-        run_git(&path, ["add", "tracked.txt"]);
-        run_git(&path, ["commit", "--quiet", "-m", "base"]);
-        let base_commit = run_capture("git", ["rev-parse", "HEAD"], &path)
-            .0
-            .trim()
-            .to_owned();
-
-        fs::write(path.join("tracked.txt"), "second\n").expect("tracked file should be modified");
-        run_git(&path, ["add", "tracked.txt"]);
-        run_git(&path, ["commit", "--quiet", "-m", "second"]);
-
-        Self { path, base_commit }
-    }
-
-    fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-impl Drop for DetachedCheckoutFixture {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.path);
-    }
-}
-
-struct BranchDeleteFixture {
-    path: PathBuf,
-}
-
-impl BranchDeleteFixture {
-    fn merged(name: &str) -> Self {
-        let path = base_branch_delete_fixture(name);
-        run_git(&path, ["branch", "topic"]);
-        Self { path }
-    }
-
-    fn unmerged(name: &str) -> Self {
-        let path = base_branch_delete_fixture(name);
-        run_git(&path, ["checkout", "--quiet", "-b", "topic"]);
-        fs::write(path.join("tracked.txt"), "topic\n").expect("topic file should be written");
-        run_git(&path, ["add", "tracked.txt"]);
-        run_git(&path, ["commit", "--quiet", "-m", "topic"]);
-        run_git(&path, ["checkout", "--quiet", "master"]);
-        Self { path }
-    }
-
-    fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-impl Drop for BranchDeleteFixture {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.path);
-    }
-}
-
-fn base_branch_delete_fixture(name: &str) -> PathBuf {
-    let path = temp_path(name);
-    fs::create_dir_all(&path).expect("fixture directory should be created");
-    run_git(&path, ["init", "--quiet"]);
-    run_git(&path, ["config", "user.name", "Rit Test"]);
-    run_git(&path, ["config", "user.email", "rit@example.test"]);
-    run_git(&path, ["config", "core.autocrlf", "false"]);
-    fs::write(path.join("tracked.txt"), "base\n").expect("tracked file should be written");
-    run_git(&path, ["add", "tracked.txt"]);
-    run_git(&path, ["commit", "--quiet", "-m", "base"]);
-    path
 }
 
 fn run_git<const N: usize>(cwd: &Path, args: [&str; N]) {

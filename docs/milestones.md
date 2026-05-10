@@ -57,10 +57,10 @@ Completion criteria:
 - [x] Compare stdout, stderr, and exit code.
 - [x] Compare repository snapshots.
 - [x] Add reusable checked-in fixtures for common read-only commands.
-- [~] Add fixtures for local write commands.
+- [x] Add fixtures for local write commands.
   - [x] Generated Git-vs-rit compatibility scenarios for directory pathspec
     `add`, `restore`, and `reset`.
-  - [ ] Reusable checked-in local write fixtures.
+  - [x] Reusable checked-in local write fixture builders in `rit-testkit`.
 - [x] Add focused reports for first differing stdout/stderr line.
 
 Completion criteria:
@@ -280,9 +280,8 @@ Completion criteria:
 
 ## Active Queue
 
-1. Add reusable checked-in fixtures for local write commands.
-2. Expand `status --porcelain=v1` with stronger Git compatibility.
-3. Continue pathspec support for remaining read-only commands and advanced
+1. Expand `status --porcelain=v1` with stronger Git compatibility.
+2. Continue pathspec support for remaining read-only commands and advanced
    pathspec forms.
-4. Add index stat refresh or document and test the remaining difference.
-5. Expand `rit diff` patch output beyond small text files.
+3. Add index stat refresh or document and test the remaining difference.
+4. Expand `rit diff` patch output beyond small text files.

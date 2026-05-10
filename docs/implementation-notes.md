@@ -33,6 +33,10 @@
 - Known gap exposed by state comparison: `git status` refreshes `.git/index` stat data, while `rit status` currently leaves the index unchanged.
 - Added rit CLI integration compatibility fixtures for read-only `diff` output modes: `--name-only`, `--name-status`, `--numstat`, and `--stat`, including cached diff variants.
 - Compatibility reports now include the first differing stdout/stderr line when command text differs.
+- Added reusable `rit-testkit` local write fixture builders for nested tracked
+  files, detached checkout history, merged branch deletion, and unmerged branch
+  deletion. The `rit-cli` write compatibility tests now share these builders
+  instead of each test hand-writing repository setup.
 
 ### M2: Core repository model foundation
 
