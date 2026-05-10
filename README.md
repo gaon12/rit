@@ -166,4 +166,4 @@ Near-term implementation focus:
 
 ## License
 
-This workspace is configured for `MIT OR Apache-2.0`.
+This workspace is configured for `MIT`.
