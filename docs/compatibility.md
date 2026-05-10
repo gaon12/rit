@@ -33,7 +33,7 @@ The current codebase implements an early local Git subset:
   file-system-monitor headers and `link` split-index shared-index IDs are
   parsed while preserving raw bitmap bytes. `sdir` sparse-directory marker
   extensions are recognized. `UNTR` untracked-cache headers and directory
-  blocks are parsed while preserving raw tail payload bytes.
+  blocks are parsed, including EWAH bitmap/stat/hash tails.
 - Local refs, packed refs lookup, lightweight tags, and simple revision
   resolution.
 - CLI commands: `version`, `help`, `init`, `rev-parse`, `cat-file`, `ls-tree`,

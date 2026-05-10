@@ -211,8 +211,8 @@ pub struct UntrackedCache {
     pub directory_block_count: u64,
     /// Directory blocks in Git's depth-first-search order.
     pub directory_blocks: Vec<UntrackedCacheDirectoryBlock>,
-    /// Raw bitmap, stat, hash, and terminator payload after directory blocks.
-    pub remaining_data: Vec<u8>,
+    /// Parsed bitmap/stat/hash tail after directory blocks.
+    pub tail: UntrackedCacheTail,
 }
 
 /// Stat block stored by the untracked-cache extension.
@@ -251,6 +251,39 @@ pub struct UntrackedCacheDirectoryBlock {
     pub directory_name: String,
     /// Untracked file or directory names stored in this block.
     pub untracked_names: Vec<String>,
+}
+
+/// Parsed tail section of a `UNTR` untracked-cache extension.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UntrackedCacheTail {
+    /// Bitmap whose set bits indicate directories with valid untracked cache entries.
+    pub valid_untracked_bitmap: EwahBitmap,
+    /// Bitmap whose set bits indicate check-only directories.
+    pub check_only_bitmap: EwahBitmap,
+    /// Bitmap whose set bits indicate directories with following stat/hash data.
+    pub valid_stat_bitmap: EwahBitmap,
+    /// Stat data corresponding to set bits in `valid_stat_bitmap`.
+    pub directory_stats: Vec<UntrackedCacheStat>,
+    /// Hashes corresponding to set bits in `valid_stat_bitmap`.
+    pub directory_hashes: Vec<ObjectId>,
+}
+
+/// Parsed EWAH bitmap serialization used by Git index extensions.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EwahBitmap {
+    /// Number of bits in the uncompressed bitmap.
+    pub bit_size: u32,
+    /// Compressed 64-bit words.
+    pub compressed_words: Vec<u64>,
+    /// Position of the current run-length word.
+    pub rlw_position: u32,
+}
+
+impl EwahBitmap {
+    /// Counts set bits by walking the serialized EWAH words.
+    pub fn count_ones(&self) -> Result<usize> {
+        count_ewah_ones(self)
+    }
 }
 
 /// One tracked path in the Git index.
@@ -712,6 +745,13 @@ fn parse_untracked_cache(bytes: &[u8]) -> Result<UntrackedCache> {
         directory_blocks.push(read_untracked_cache_directory_block(bytes, &mut offset)?);
     }
 
+    let tail = read_untracked_cache_tail(bytes, &mut offset)?;
+    if offset != bytes.len() {
+        return Err(RitError::invalid_input(
+            "untracked-cache extension has trailing bytes",
+        ));
+    }
+
     Ok(UntrackedCache {
         environment,
         info_exclude_stat,
@@ -722,7 +762,40 @@ fn parse_untracked_cache(bytes: &[u8]) -> Result<UntrackedCache> {
         per_directory_exclude_name,
         directory_block_count,
         directory_blocks,
-        remaining_data: bytes[offset..].to_vec(),
+        tail,
+    })
+}
+
+fn read_untracked_cache_tail(bytes: &[u8], offset: &mut usize) -> Result<UntrackedCacheTail> {
+    let valid_untracked_bitmap = read_ewah_bitmap(bytes, offset, "untracked-cache valid bitmap")?;
+    let check_only_bitmap = read_ewah_bitmap(bytes, offset, "untracked-cache check-only bitmap")?;
+    let valid_stat_bitmap = read_ewah_bitmap(bytes, offset, "untracked-cache valid-stat bitmap")?;
+    let stat_count = valid_stat_bitmap.count_ones()?;
+    let mut directory_stats = Vec::with_capacity(stat_count);
+    for _ in 0..stat_count {
+        directory_stats.push(read_untracked_cache_stat(bytes, offset)?);
+    }
+    let mut directory_hashes = Vec::with_capacity(stat_count);
+    for _ in 0..stat_count {
+        directory_hashes.push(read_object_id(
+            bytes,
+            offset,
+            "untracked-cache directory hash",
+        )?);
+    }
+    if bytes.get(*offset) != Some(&0) {
+        return Err(RitError::invalid_input(
+            "untracked-cache tail is missing NUL terminator",
+        ));
+    }
+    *offset += 1;
+
+    Ok(UntrackedCacheTail {
+        valid_untracked_bitmap,
+        check_only_bitmap,
+        valid_stat_bitmap,
+        directory_stats,
+        directory_hashes,
     })
 }
 
@@ -748,6 +821,83 @@ fn read_untracked_cache_directory_block(
         directory_name,
         untracked_names,
     })
+}
+
+fn read_ewah_bitmap(bytes: &[u8], offset: &mut usize, label: &str) -> Result<EwahBitmap> {
+    if bytes.len().saturating_sub(*offset) < 8 {
+        return Err(RitError::invalid_input(format!(
+            "{label} header is truncated"
+        )));
+    }
+    let bit_size = read_u32(bytes, *offset)?;
+    let word_count = read_u32(bytes, *offset + 4)? as usize;
+    *offset += 8;
+
+    let word_bytes = word_count
+        .checked_mul(8)
+        .ok_or_else(|| RitError::invalid_input(format!("{label} word count is too large")))?;
+    if bytes.len().saturating_sub(*offset) < word_bytes + 4 {
+        return Err(RitError::invalid_input(format!(
+            "{label} payload is truncated"
+        )));
+    }
+    let mut compressed_words = Vec::with_capacity(word_count);
+    for _ in 0..word_count {
+        compressed_words.push(read_u64(bytes, *offset)?);
+        *offset += 8;
+    }
+    let rlw_position = read_u32(bytes, *offset)?;
+    *offset += 4;
+
+    Ok(EwahBitmap {
+        bit_size,
+        compressed_words,
+        rlw_position,
+    })
+}
+
+fn count_ewah_ones(bitmap: &EwahBitmap) -> Result<usize> {
+    let mut word_index = 0;
+    let mut remaining_bits = u64::from(bitmap.bit_size);
+    let mut ones = 0_usize;
+
+    while word_index < bitmap.compressed_words.len() && remaining_bits > 0 {
+        let rlw = bitmap.compressed_words[word_index];
+        word_index += 1;
+        let repeated_bit_is_one = rlw & 1 == 1;
+        let repeated_words = (rlw >> 1) & 0xffff_ffff;
+        let literal_words = (rlw >> 33) as usize;
+
+        let repeated_bits = repeated_words.saturating_mul(64).min(remaining_bits);
+        if repeated_bit_is_one {
+            ones = ones
+                .checked_add(repeated_bits as usize)
+                .ok_or_else(|| RitError::invalid_input("ewah bitmap has too many set bits"))?;
+        }
+        remaining_bits = remaining_bits.saturating_sub(repeated_bits);
+
+        if bitmap.compressed_words.len().saturating_sub(word_index) < literal_words {
+            return Err(RitError::invalid_input(
+                "ewah bitmap literal words are truncated",
+            ));
+        }
+        for _ in 0..literal_words {
+            let literal = bitmap.compressed_words[word_index];
+            word_index += 1;
+            let bits_in_word = remaining_bits.min(64) as u32;
+            let mask = if bits_in_word == 64 {
+                u64::MAX
+            } else {
+                (1_u64 << bits_in_word) - 1
+            };
+            ones = ones
+                .checked_add((literal & mask).count_ones() as usize)
+                .ok_or_else(|| RitError::invalid_input("ewah bitmap has too many set bits"))?;
+            remaining_bits = remaining_bits.saturating_sub(u64::from(bits_in_word));
+        }
+    }
+
+    Ok(ones)
 }
 
 fn read_untracked_cache_stat(bytes: &[u8], offset: &mut usize) -> Result<UntrackedCacheStat> {
@@ -1305,7 +1455,12 @@ mod tests {
         payload.extend_from_slice(b"\0");
         payload.extend_from_slice(b"a.txt\0");
         payload.extend_from_slice(b"build/\0");
-        payload.extend_from_slice(b"directory-tail");
+        payload.extend_from_slice(&ewah_bitmap_bytes(1, &literal_ewah_words(1), 0));
+        payload.extend_from_slice(&ewah_bitmap_bytes(1, &[0], 0));
+        payload.extend_from_slice(&ewah_bitmap_bytes(1, &literal_ewah_words(1), 0));
+        payload.extend_from_slice(&untracked_cache_stat_bytes(30));
+        payload.extend_from_slice(ObjectId::from_bytes([3; 20]).as_bytes());
+        payload.push(0);
         let index = Index {
             entries: Vec::new(),
             extensions: extension_record(b"UNTR", &payload),
@@ -1336,7 +1491,28 @@ mod tests {
             untracked_cache.directory_blocks[0].untracked_names,
             vec!["a.txt".to_owned(), "build/".to_owned()]
         );
-        assert_eq!(untracked_cache.remaining_data, b"directory-tail");
+        assert_eq!(
+            untracked_cache
+                .tail
+                .valid_untracked_bitmap
+                .count_ones()
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            untracked_cache.tail.check_only_bitmap.count_ones().unwrap(),
+            0
+        );
+        assert_eq!(
+            untracked_cache.tail.valid_stat_bitmap.count_ones().unwrap(),
+            1
+        );
+        assert_eq!(untracked_cache.tail.directory_stats.len(), 1);
+        assert_eq!(untracked_cache.tail.directory_stats[0].ctime_seconds, 30);
+        assert_eq!(
+            untracked_cache.tail.directory_hashes,
+            vec![ObjectId::from_bytes([3; 20])]
+        );
     }
 
     #[test]
@@ -1354,6 +1530,38 @@ mod tests {
         assert_eq!(error.to_string(), "untracked-cache stat data is truncated");
     }
 
+    #[test]
+    fn untracked_cache_extension_rejects_missing_tail_terminator() {
+        let info_hash = ObjectId::from_bytes([1; 20]);
+        let excludes_hash = ObjectId::from_bytes([2; 20]);
+        let mut payload = Vec::new();
+        payload.push(0);
+        payload.extend_from_slice(&untracked_cache_stat_bytes(10));
+        payload.extend_from_slice(&untracked_cache_stat_bytes(20));
+        payload.extend_from_slice(&0_u32.to_be_bytes());
+        payload.extend_from_slice(info_hash.as_bytes());
+        payload.extend_from_slice(excludes_hash.as_bytes());
+        payload.extend_from_slice(b".gitignore\0");
+        payload.push(0);
+        payload.extend_from_slice(&ewah_bitmap_bytes(0, &[], 0));
+        payload.extend_from_slice(&ewah_bitmap_bytes(0, &[], 0));
+        payload.extend_from_slice(&ewah_bitmap_bytes(0, &[], 0));
+        let index = Index {
+            entries: Vec::new(),
+            extensions: extension_record(b"UNTR", &payload),
+        };
+
+        let extensions = index.parsed_extensions().expect("extensions should parse");
+        let error = extensions[0]
+            .untracked_cache()
+            .expect_err("missing terminator should fail");
+
+        assert_eq!(
+            error.to_string(),
+            "untracked-cache tail is missing NUL terminator"
+        );
+    }
+
     fn extension_record(signature: &[u8; 4], payload: &[u8]) -> Vec<u8> {
         let mut bytes = Vec::new();
         bytes.extend_from_slice(signature);
@@ -1366,5 +1574,20 @@ mod tests {
         (0..10)
             .flat_map(|offset| (base + offset).to_be_bytes())
             .collect()
+    }
+
+    fn ewah_bitmap_bytes(bit_size: u32, compressed_words: &[u64], rlw_position: u32) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&bit_size.to_be_bytes());
+        bytes.extend_from_slice(&(compressed_words.len() as u32).to_be_bytes());
+        for word in compressed_words {
+            bytes.extend_from_slice(&word.to_be_bytes());
+        }
+        bytes.extend_from_slice(&rlw_position.to_be_bytes());
+        bytes
+    }
+
+    fn literal_ewah_words(literal: u64) -> [u64; 2] {
+        [1_u64 << 33, literal]
     }
 }
