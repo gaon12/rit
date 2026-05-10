@@ -135,6 +135,10 @@ simple wildcard/bracket-class pathspec behavior for `add`, `restore`, and
 Reusable local write fixture builders live in `rit-testkit` so new write
 comparisons can share repository setup.
 
+Commit compatibility tests cover `--author` and raw `--date` overrides with
+fixed committer environment variables by comparing the resulting `HEAD` object
+ID and raw commit object contents.
+
 Detached checkout compatibility tests compare detached `.git/HEAD`, branch
 state, porcelain status, and materialized file contents.
 

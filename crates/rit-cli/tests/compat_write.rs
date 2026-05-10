@@ -154,6 +154,69 @@ fn reset_wildcard_pathspec_matches_git_status() {
 }
 
 #[test]
+fn commit_author_and_date_overrides_match_git_object() {
+    let fixture =
+        LocalWriteFixture::new("commit-author-date", LocalWriteFixtureKind::NestedTracked)
+            .expect("fixture should build");
+    let workspace = temp_path("commit-author-date-compare");
+    let git_repo = workspace.join("git");
+    let rit_repo = workspace.join("rit");
+    copy_directory(fixture.path(), &git_repo);
+    copy_directory(fixture.path(), &rit_repo);
+
+    fs::write(git_repo.join("nested").join("tracked.txt"), "changed\n")
+        .expect("git file should be changed");
+    fs::write(rit_repo.join("nested").join("tracked.txt"), "changed\n")
+        .expect("rit file should be changed");
+    run_git(&git_repo, ["add", "nested/tracked.txt"]);
+    run_git(&rit_repo, ["add", "nested/tracked.txt"]);
+
+    let env = [
+        ("GIT_COMMITTER_NAME", "C O Mitter"),
+        ("GIT_COMMITTER_EMAIL", "c@example.test"),
+        ("GIT_COMMITTER_DATE", "1700000001 +0900"),
+    ];
+    run_command(
+        &command_words_with_env(
+            "git",
+            [
+                "commit",
+                "-m",
+                "authored",
+                "--author=A U Thor <a@example.test>",
+                "--date=1700000000 +0900",
+            ],
+            &env,
+        ),
+        &git_repo,
+    );
+    run_command(
+        &command_words_with_env(
+            rit_binary(),
+            [
+                "commit",
+                "-m",
+                "authored",
+                "--author=A U Thor <a@example.test>",
+                "--date=1700000000 +0900",
+            ],
+            &env,
+        ),
+        &rit_repo,
+    );
+
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &git_repo).0,
+        run_capture("git", ["rev-parse", "HEAD"], &rit_repo).0
+    );
+    assert_eq!(
+        run_capture("git", ["cat-file", "-p", "HEAD"], &git_repo).0,
+        run_capture("git", ["cat-file", "-p", "HEAD"], &rit_repo).0
+    );
+    let _ = fs::remove_dir_all(workspace);
+}
+
+#[test]
 fn checkout_detached_commit_matches_git_state() {
     let fixture =
         LocalWriteFixture::new("detached-checkout", LocalWriteFixtureKind::DetachedCheckout)
@@ -168,10 +231,12 @@ fn checkout_detached_commit_matches_git_state() {
         CommandSpec {
             program: OsString::from("git"),
             args: vec![OsString::from("checkout"), OsString::from(base.clone())],
+            env: Vec::new(),
         },
         CommandSpec {
             program: rit_binary(),
             args: vec![OsString::from("checkout"), OsString::from(base)],
+            env: Vec::new(),
         },
     );
 
@@ -272,6 +337,7 @@ fn branch_delete_allows_merged_branch_like_git() {
 struct CommandSpec {
     program: OsString,
     args: Vec<OsString>,
+    env: Vec<(OsString, OsString)>,
 }
 
 struct CommandOutcome {
@@ -321,15 +387,32 @@ fn command_words<const N: usize>(program: impl Into<OsString>, args: [&str; N]) 
     CommandSpec {
         program: program.into(),
         args: args.into_iter().map(OsString::from).collect(),
+        env: Vec::new(),
+    }
+}
+
+fn command_words_with_env<const N: usize, const M: usize>(
+    program: impl Into<OsString>,
+    args: [&str; N],
+    env: &[(&str, &str); M],
+) -> CommandSpec {
+    CommandSpec {
+        program: program.into(),
+        args: args.into_iter().map(OsString::from).collect(),
+        env: env
+            .iter()
+            .map(|(name, value)| (OsString::from(name), OsString::from(value)))
+            .collect(),
     }
 }
 
 fn run_command(spec: &CommandSpec, cwd: &Path) -> (String, String) {
-    let output = Command::new(&spec.program)
-        .args(&spec.args)
-        .current_dir(cwd)
-        .output()
-        .expect("command should start");
+    let mut command = Command::new(&spec.program);
+    command.args(&spec.args).current_dir(cwd);
+    for (name, value) in &spec.env {
+        command.env(name, value);
+    }
+    let output = command.output().expect("command should start");
     assert!(
         output.status.success(),
         "command failed\nstdout:\n{}\nstderr:\n{}",
@@ -347,11 +430,12 @@ struct CommandRun {
 }
 
 fn run_command_allow_failure(spec: &CommandSpec, cwd: &Path) -> CommandRun {
-    let output = Command::new(&spec.program)
-        .args(&spec.args)
-        .current_dir(cwd)
-        .output()
-        .expect("command should start");
+    let mut command = Command::new(&spec.program);
+    command.args(&spec.args).current_dir(cwd);
+    for (name, value) in &spec.env {
+        command.env(name, value);
+    }
+    let output = command.output().expect("command should start");
     CommandRun {
         success: output.status.success(),
     }

@@ -1009,22 +1009,32 @@ fn commit_command(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    let Some(message) = parse_commit_message(args) else {
-        writeln!(stderr, "rit: commit currently supports only -m <message>")?;
-        return Ok(ExitCode::from(129));
+    let commit_args = match parse_commit_args(args) {
+        Ok(Some(commit_args)) => commit_args,
+        Ok(None) => {
+            writeln!(
+                stderr,
+                "rit: commit currently supports -m <message>, --author, and --date"
+            )?;
+            return Ok(ExitCode::from(129));
+        }
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(129));
+        }
     };
 
     let repository = match discover_repository(stderr)? {
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    match repository.commit_index(&message) {
+    match repository.commit_index_with_options(&commit_args.message, &commit_args.options) {
         Ok(result) => {
             writeln!(
                 stdout,
                 "[{}] {}",
                 &result.commit_id.to_hex()[..7],
-                first_message_line(&message)
+                first_message_line(&commit_args.message)
             )?;
             Ok(ExitCode::SUCCESS)
         }
@@ -1355,12 +1365,48 @@ fn write_command_error(stderr: &mut dyn Write, error: rit_core::RitError) -> io:
     Ok(ExitCode::from(1))
 }
 
-fn parse_commit_message(args: &[String]) -> Option<String> {
-    match args {
-        [flag, message] if flag == "-m" || flag == "--message" => Some(message.clone()),
-        [flag] if flag.starts_with("--message=") => Some(flag["--message=".len()..].to_owned()),
-        _ => None,
+struct ParsedCommitArgs {
+    message: String,
+    options: rit_core::CommitOptions,
+}
+
+fn parse_commit_args(args: &[String]) -> rit_core::Result<Option<ParsedCommitArgs>> {
+    let mut message = None;
+    let mut options = rit_core::CommitOptions::default();
+    let mut index = 0;
+
+    while index < args.len() {
+        let arg = &args[index];
+        if arg == "-m" || arg == "--message" {
+            index += 1;
+            let Some(value) = args.get(index) else {
+                return Ok(None);
+            };
+            message = Some(value.clone());
+        } else if let Some(value) = arg.strip_prefix("--message=") {
+            message = Some(value.to_owned());
+        } else if arg == "--author" {
+            index += 1;
+            let Some(value) = args.get(index) else {
+                return Ok(None);
+            };
+            options.author = Some(rit_core::SignatureIdentity::parse_author(value)?);
+        } else if let Some(value) = arg.strip_prefix("--author=") {
+            options.author = Some(rit_core::SignatureIdentity::parse_author(value)?);
+        } else if arg == "--date" {
+            index += 1;
+            let Some(value) = args.get(index) else {
+                return Ok(None);
+            };
+            options.author_date = Some(rit_core::SignatureTime::parse_git_raw(value)?);
+        } else if let Some(value) = arg.strip_prefix("--date=") {
+            options.author_date = Some(rit_core::SignatureTime::parse_git_raw(value)?);
+        } else {
+            return Ok(None);
+        }
+        index += 1;
     }
+    Ok(message.map(|message| ParsedCommitArgs { message, options }))
 }
 
 fn first_message_line(message: &str) -> &str {

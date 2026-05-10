@@ -151,7 +151,8 @@ Completion criteria:
     - [x] Simple wildcard and bracket-class expansion for `add`, `restore`,
       and `reset`.
 - [ ] Hook execution for commit.
-- [ ] Commit author/date override.
+- [x] Commit author/date override for `--author=<name <email>>` and raw
+  `--date=<unix-seconds> <+/-HHMM>`.
 - [x] Safer branch delete merge checks.
 - [x] Detached HEAD checkout.
 

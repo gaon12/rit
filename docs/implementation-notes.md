@@ -257,10 +257,19 @@
 ### `rit commit`
 
 - Baseline command checked: `git commit -h`
-- Supported options: `-m <message>`, `--message <message>`, `--message=<message>`.
-- Unsupported options: hooks, signing, amend, templates, cleanup modes, pathspec commits, author/date override.
+- Supported options: `-m <message>`, `--message <message>`,
+  `--message=<message>`, `--author=<author>`, `--author <author>`,
+  `--date=<date>`, `--date <date>`.
+- Supported environment: `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`,
+  `GIT_AUTHOR_DATE`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`, and
+  `GIT_COMMITTER_DATE`.
+- Unsupported options: hooks, signing, amend, templates, cleanup modes,
+  pathspec commits, natural-language date parsing.
 - Git-compatible behavior: writes tree and commit loose objects, uses first parent from `HEAD`, advances symbolic `HEAD` ref.
-- Intentional differences: commit timestamps use UTC `+0000`; hooks are not run yet.
+- Git-compatible behavior: `--author` accepts `Name <email>` and `--date`
+  accepts the raw `<unix-seconds> <+/-HHMM>` date form used by commit objects.
+- Intentional differences: default commit timestamps use UTC `+0000`;
+  hooks are not run yet.
 - Repository mutation: yes, writes objects and updates the current branch ref using lock/rename.
 - Risk: moderate; implemented only for simple indexed regular files.
 

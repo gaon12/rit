@@ -29,7 +29,7 @@ pub use repository::{InitOptions, Repository};
 pub use status::{
     PorcelainStatus, StatusBranchHeader, StatusEntry, StatusOptions, UntrackedFilesMode,
 };
-pub use write::CommitResult;
+pub use write::{CommitOptions, CommitResult, SignatureIdentity, SignatureTime};
 
 /// Returns the crate version used by the CLI and tests.
 pub fn version() -> &'static str {

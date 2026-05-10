@@ -20,6 +20,91 @@ pub struct CommitResult {
     pub file_count: usize,
 }
 
+/// Options that affect commit metadata without changing the committed tree.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct CommitOptions {
+    /// Author identity supplied by `git commit --author=<author>`.
+    pub author: Option<SignatureIdentity>,
+    /// Author timestamp supplied by `git commit --date=<date>`.
+    pub author_date: Option<SignatureTime>,
+}
+
+/// Name and e-mail pair used in a commit signature.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SignatureIdentity {
+    /// Human-readable name.
+    pub name: String,
+    /// E-mail address without surrounding angle brackets.
+    pub email: String,
+}
+
+impl SignatureIdentity {
+    /// Parses Git's common `Name <email>` author override form.
+    pub fn parse_author(input: &str) -> Result<Self> {
+        let trimmed = input.trim();
+        let Some(email_end) = trimmed.rfind('>') else {
+            return Err(RitError::invalid_input(
+                "author must be formatted as Name <email>",
+            ));
+        };
+        if email_end != trimmed.len() - 1 {
+            return Err(RitError::invalid_input(
+                "author must be formatted as Name <email>",
+            ));
+        }
+        let Some(email_start) = trimmed[..email_end].rfind('<') else {
+            return Err(RitError::invalid_input(
+                "author must be formatted as Name <email>",
+            ));
+        };
+        let name = trimmed[..email_start].trim();
+        let email = trimmed[email_start + 1..email_end].trim();
+        if name.is_empty() || email.is_empty() {
+            return Err(RitError::invalid_input(
+                "author must include a name and email",
+            ));
+        }
+        Ok(Self {
+            name: name.to_owned(),
+            email: email.to_owned(),
+        })
+    }
+}
+
+/// Timestamp and numeric timezone used in a commit signature.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SignatureTime {
+    /// Seconds since the Unix epoch.
+    pub timestamp: i64,
+    /// Numeric timezone offset such as `+0000` or `-0730`.
+    pub offset: String,
+}
+
+impl SignatureTime {
+    /// Parses the raw Git date form `<unix-seconds> <+/-HHMM>`.
+    pub fn parse_git_raw(input: &str) -> Result<Self> {
+        let mut parts = input.split_whitespace();
+        let Some(timestamp_text) = parts.next() else {
+            return Err(RitError::invalid_input(
+                "date must be formatted as '<unix-seconds> <+/-HHMM>'",
+            ));
+        };
+        let timestamp = timestamp_text.parse::<i64>().map_err(|_| {
+            RitError::invalid_input("date timestamp must be a Unix timestamp in seconds")
+        })?;
+        let offset = parts.next().unwrap_or("+0000");
+        if parts.next().is_some() || !is_valid_timezone_offset(offset) {
+            return Err(RitError::invalid_input(
+                "date must be formatted as '<unix-seconds> <+/-HHMM>'",
+            ));
+        }
+        Ok(Self {
+            timestamp,
+            offset: offset.to_owned(),
+        })
+    }
+}
+
 impl Repository {
     /// Adds files matching ordinary literal pathspecs to the index.
     pub fn add_paths(&self, paths: &[String]) -> Result<usize> {
@@ -77,6 +162,15 @@ impl Repository {
 
     /// Creates a commit from the current index and advances `HEAD`.
     pub fn commit_index(&self, message: &str) -> Result<CommitResult> {
+        self.commit_index_with_options(message, &CommitOptions::default())
+    }
+
+    /// Creates a commit from the current index with explicit metadata options.
+    pub fn commit_index_with_options(
+        &self,
+        message: &str,
+        options: &CommitOptions,
+    ) -> Result<CommitResult> {
         let index = Index::read(&self.git_dir().join("index"))?;
         if index.entries.is_empty() {
             return Err(RitError::invalid_input("nothing to commit"));
@@ -91,15 +185,18 @@ impl Repository {
             }
         }
 
-        let signature = read_signature(self)?;
+        let signatures = read_commit_signatures(self, options)?;
         let mut commit = Vec::new();
         commit.extend_from_slice(format!("tree {tree_id}\n").as_bytes());
         if let Some(parent_id) = parent {
             commit.extend_from_slice(format!("parent {parent_id}\n").as_bytes());
         }
-        let identity = format_signature(&signature);
-        commit.extend_from_slice(format!("author {identity}\n").as_bytes());
-        commit.extend_from_slice(format!("committer {identity}\n\n").as_bytes());
+        commit.extend_from_slice(
+            format!("author {}\n", format_signature(&signatures.author)).as_bytes(),
+        );
+        commit.extend_from_slice(
+            format!("committer {}\n\n", format_signature(&signatures.committer)).as_bytes(),
+        );
         commit.extend_from_slice(message.trim_end_matches('\n').as_bytes());
         commit.push(b'\n');
 
@@ -591,31 +688,115 @@ impl TreeNode {
     }
 }
 
-fn read_signature(repository: &Repository) -> Result<Signature> {
+struct CommitSignatures {
+    author: Signature,
+    committer: Signature,
+}
+
+fn read_commit_signatures(
+    repository: &Repository,
+    options: &CommitOptions,
+) -> Result<CommitSignatures> {
     let config_path = repository.common_dir().join("config");
-    let name = std::env::var("GIT_AUTHOR_NAME")
-        .or_else(|_| std::env::var("GIT_COMMITTER_NAME"))
+    let default_time = current_signature_time()?;
+    let author_identity = match &options.author {
+        Some(identity) => identity.clone(),
+        None => read_identity(
+            &config_path,
+            "GIT_AUTHOR_NAME",
+            "GIT_AUTHOR_EMAIL",
+            "author",
+        )?,
+    };
+    let committer_identity = read_identity(
+        &config_path,
+        "GIT_COMMITTER_NAME",
+        "GIT_COMMITTER_EMAIL",
+        "committer",
+    )?;
+    let author_time = match &options.author_date {
+        Some(time) => time.clone(),
+        None => read_env_signature_time("GIT_AUTHOR_DATE")?.unwrap_or_else(|| default_time.clone()),
+    };
+    let committer_time = read_env_signature_time("GIT_COMMITTER_DATE")?.unwrap_or(default_time);
+
+    Ok(CommitSignatures {
+        author: Signature {
+            name: author_identity.name,
+            email: author_identity.email,
+            timestamp: author_time.timestamp,
+            offset: author_time.offset,
+        },
+        committer: Signature {
+            name: committer_identity.name,
+            email: committer_identity.email,
+            timestamp: committer_time.timestamp,
+            offset: committer_time.offset,
+        },
+    })
+}
+
+fn read_identity(
+    config_path: &Path,
+    name_env: &str,
+    email_env: &str,
+    role: &str,
+) -> Result<SignatureIdentity> {
+    let name = std::env::var(name_env)
         .ok()
-        .or_else(|| read_config_value(&config_path, "user", "name"));
-    let email = std::env::var("GIT_AUTHOR_EMAIL")
-        .or_else(|_| std::env::var("GIT_COMMITTER_EMAIL"))
+        .or_else(|| read_config_value(config_path, "user", "name"));
+    let email = std::env::var(email_env)
         .ok()
-        .or_else(|| read_config_value(&config_path, "user", "email"));
+        .or_else(|| read_config_value(config_path, "user", "email"));
+
+    Ok(SignatureIdentity {
+        name: name.ok_or_else(|| {
+            RitError::invalid_input(format!(
+                "{role} identity unknown; set user.name or {name_env}"
+            ))
+        })?,
+        email: email.ok_or_else(|| {
+            RitError::invalid_input(format!(
+                "{role} identity unknown; set user.email or {email_env}"
+            ))
+        })?,
+    })
+}
+
+fn read_env_signature_time(name: &str) -> Result<Option<SignatureTime>> {
+    match std::env::var(name) {
+        Ok(value) => SignatureTime::parse_git_raw(&value).map(Some),
+        Err(_) => Ok(None),
+    }
+}
+
+fn current_signature_time() -> Result<SignatureTime> {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| RitError::invalid_input("system time is before Unix epoch"))?
         .as_secs() as i64;
 
-    Ok(Signature {
-        name: name.ok_or_else(|| {
-            RitError::invalid_input("author identity unknown; set user.name or GIT_AUTHOR_NAME")
-        })?,
-        email: email.ok_or_else(|| {
-            RitError::invalid_input("author identity unknown; set user.email or GIT_AUTHOR_EMAIL")
-        })?,
+    Ok(SignatureTime {
         timestamp,
         offset: "+0000".to_owned(),
     })
+}
+
+fn is_valid_timezone_offset(offset: &str) -> bool {
+    if offset.len() != 5 {
+        return false;
+    }
+    let sign = &offset[..1];
+    if sign != "+" && sign != "-" {
+        return false;
+    }
+    let Ok(hours) = offset[1..3].parse::<u8>() else {
+        return false;
+    };
+    let Ok(minutes) = offset[3..5].parse::<u8>() else {
+        return false;
+    };
+    hours <= 23 && minutes <= 59
 }
 
 fn read_config_value(path: &Path, section: &str, key: &str) -> Option<String> {
@@ -676,7 +857,7 @@ fn write_worktree_file_atomically(path: &Path, contents: &[u8]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::read_config_value;
+    use super::{SignatureIdentity, SignatureTime, read_config_value};
     use crate::{Index, InitOptions, Repository};
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -707,6 +888,50 @@ mod tests {
         );
 
         fs::remove_file(path).expect("config should be removed");
+    }
+
+    #[test]
+    fn parses_author_override() {
+        assert_eq!(
+            SignatureIdentity::parse_author("A U Thor <a@example.test>")
+                .expect("author should parse"),
+            SignatureIdentity {
+                name: "A U Thor".to_owned(),
+                email: "a@example.test".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_author_override_without_email() {
+        let error =
+            SignatureIdentity::parse_author("A U Thor").expect_err("author should be rejected");
+        assert_eq!(
+            error.to_string(),
+            "author must be formatted as Name <email>"
+        );
+    }
+
+    #[test]
+    fn parses_raw_git_signature_time() {
+        assert_eq!(
+            SignatureTime::parse_git_raw("1700000000 +0900").expect("date should parse"),
+            SignatureTime {
+                timestamp: 1_700_000_000,
+                offset: "+0900".to_owned(),
+            }
+        );
+    }
+
+    #[test]
+    fn raw_git_signature_time_defaults_to_utc() {
+        assert_eq!(
+            SignatureTime::parse_git_raw("1700000000").expect("date should parse"),
+            SignatureTime {
+                timestamp: 1_700_000_000,
+                offset: "+0000".to_owned(),
+            }
+        );
     }
 
     #[test]
