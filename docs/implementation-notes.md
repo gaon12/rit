@@ -24,6 +24,8 @@
 - 2026-05-10 executable-bit slice checked: `git add -h`, `git status -h`,
   `git checkout -h`, and `git restore -h`.
 - 2026-05-10 index extension slice checked: `git update-index -h`.
+- 2026-05-10 symlink slice checked: `git add -h`, `git status -h`,
+  `git diff -h`, `git checkout -h`, and `git restore -h`.
 
 ## Milestone Notes
 
@@ -263,6 +265,8 @@
   files and committed trees preserve `100644`/`100755` modes.
 - Git-compatible behavior: existing index modes are preserved when content is
   refreshed without an explicit `--chmod` override.
+- Git-compatible behavior: symlinks are indexed as `120000` blobs containing
+  the link target text.
 - Intentional differences: pathspec magic, ignored-file checks, and
   pathspec-file inputs are not implemented yet. On Windows, worktree
   executable bits remain filemode-insensitive like Git's usual `core.filemode`
@@ -289,6 +293,8 @@
   `.git/hooks`; `--no-verify` bypasses `pre-commit` and `commit-msg`.
 - Git-compatible behavior: committed `100644`/`100755` blob modes are written
   into tree objects from the index.
+- Git-compatible behavior: committed symlink entries are written as `120000`
+  blob tree entries.
 - Intentional differences: default commit timestamps use UTC `+0000`;
   Windows hook execution looks for common Git for Windows `sh.exe` locations
   when running shebang hook scripts.
@@ -329,6 +335,8 @@
 - Unsupported options: source revisions, patch mode, merge conflict modes, sparse controls, pathspec files.
 - Git-compatible behavior: explicit tracked file restore for regular files,
   including executable worktree permissions for `100755` index entries on Unix.
+- Git-compatible behavior: symlink index entries are restored as symlinks on
+  Unix and as link-target text files on platforms without Unix symlink support.
 - Intentional differences: pathspec magic/pathspec files and conflict handling
   are not implemented.
 - Repository mutation: worktree restore writes files; staged restore writes `.git/index`.
@@ -358,7 +366,8 @@
   tracking, merge/conflict modes, submodules.
 - Git-compatible behavior: updates symbolic `HEAD`, writes index from target
   commit tree, materializes tracked worktree files, and applies executable
-  permissions for `100755` entries on Unix.
+  permissions for `100755` entries on Unix. Symlink entries are materialized
+  through the same restore path.
 - Git-compatible behavior: detached checkout writes the target commit ID
   directly to `.git/HEAD`.
 - Intentional differences: checkout requires a clean index and working tree
@@ -432,4 +441,4 @@
 - Supported stat behavior: status refreshes clean tracked file mtime/size
   metadata and preserves raw optional extension bytes such as `TREE`.
 - Unsupported index behavior: extension-specific payload parsing, conflict
-  stages, and symlink entries.
+  stages, and full `core.symlinks=false` parity.

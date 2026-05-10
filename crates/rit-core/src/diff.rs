@@ -287,8 +287,7 @@ impl Repository {
                 continue;
             }
 
-            let new_data =
-                fs::read(&worktree_path).map_err(|source| RitError::io(&worktree_path, source))?;
+            let new_data = read_worktree_entry_data(&worktree_path, entry.mode)?;
             let new_object_id = hash_object(ObjectKind::Blob, &new_data);
             if new_object_id == entry.object_id {
                 continue;
@@ -345,8 +344,7 @@ impl Repository {
                 continue;
             }
 
-            let new_data =
-                fs::read(&worktree_path).map_err(|source| RitError::io(&worktree_path, source))?;
+            let new_data = read_worktree_entry_data(&worktree_path, entry.mode)?;
             let new_object_id = hash_object(ObjectKind::Blob, &new_data);
             if new_object_id == entry.object_id {
                 continue;
@@ -738,6 +736,17 @@ fn file_delta(old_data: &[u8], new_data: &[u8]) -> Result<(usize, usize, bool)> 
 
 fn is_binary_data(data: &[u8]) -> bool {
     data.contains(&0) || std::str::from_utf8(data).is_err()
+}
+
+fn read_worktree_entry_data(path: &std::path::Path, index_mode: u32) -> Result<Vec<u8>> {
+    if index_mode == 0o120000 {
+        let metadata = fs::symlink_metadata(path).map_err(|source| RitError::io(path, source))?;
+        if metadata.file_type().is_symlink() {
+            let target = fs::read_link(path).map_err(|source| RitError::io(path, source))?;
+            return Ok(target.to_string_lossy().replace('\\', "/").into_bytes());
+        }
+    }
+    fs::read(path).map_err(|source| RitError::io(path, source))
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

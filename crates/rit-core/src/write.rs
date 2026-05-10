@@ -186,15 +186,24 @@ impl Repository {
 
         for relative_path in files_to_add {
             let full_path = join_slash_path(worktree, &relative_path);
-            let data = fs::read(&full_path).map_err(|source| RitError::io(&full_path, source))?;
-            let metadata =
-                fs::metadata(&full_path).map_err(|source| RitError::io(&full_path, source))?;
+            let metadata = fs::symlink_metadata(&full_path)
+                .map_err(|source| RitError::io(&full_path, source))?;
+            let is_symlink = metadata.file_type().is_symlink();
+            let data = if is_symlink {
+                read_symlink_target_bytes(&full_path)?
+            } else {
+                fs::read(&full_path).map_err(|source| RitError::io(&full_path, source))?
+            };
             let object_id = self.loose_objects().write_object(ObjectKind::Blob, &data)?;
-            let mode = options
-                .mode_override
-                .map(FileModeOverride::index_mode)
-                .or_else(|| entries.get(&relative_path).map(|entry| entry.mode))
-                .unwrap_or_else(|| file_mode_from_metadata(&metadata));
+            let mode = if is_symlink {
+                0o120000
+            } else {
+                options
+                    .mode_override
+                    .map(FileModeOverride::index_mode)
+                    .or_else(|| entries.get(&relative_path).map(|entry| entry.mode))
+                    .unwrap_or_else(|| file_mode_from_metadata(&metadata))
+            };
             entries.insert(
                 relative_path.clone(),
                 IndexEntry {
@@ -309,7 +318,7 @@ impl Repository {
                     entry.object_id, object.kind
                 )));
             }
-            write_worktree_file_atomically(
+            write_worktree_entry_atomically(
                 &join_slash_path(worktree, &entry.path),
                 &object.data,
                 entry.mode,
@@ -572,7 +581,7 @@ impl Repository {
                     entry.object_id, object.kind
                 )));
             }
-            write_worktree_file_atomically(&worktree_path, &object.data, entry.mode)?;
+            write_worktree_entry_atomically(&worktree_path, &object.data, entry.mode)?;
         }
 
         Index {
@@ -688,7 +697,7 @@ fn collect_regular_files(
             .map_err(|source| RitError::io(&path, source))?;
         if file_type.is_dir() {
             collect_regular_files(root, &path, output)?;
-        } else if file_type.is_file() {
+        } else if file_type.is_file() || file_type.is_symlink() {
             output.insert(relative);
         }
     }
@@ -1114,6 +1123,13 @@ fn write_text_atomically(path: &Path, contents: &str) -> Result<()> {
     Ok(())
 }
 
+fn write_worktree_entry_atomically(path: &Path, contents: &[u8], mode: u32) -> Result<()> {
+    if mode == 0o120000 {
+        return write_worktree_symlink_atomically(path, contents);
+    }
+    write_worktree_file_atomically(path, contents, mode)
+}
+
 fn write_worktree_file_atomically(path: &Path, contents: &[u8], mode: u32) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|source| RitError::io(parent, source))?;
@@ -1152,6 +1168,35 @@ fn set_worktree_file_mode(path: &Path, mode: u32) -> Result<()> {
 #[cfg(not(unix))]
 fn set_worktree_file_mode(_path: &Path, _mode: u32) -> Result<()> {
     Ok(())
+}
+
+fn read_symlink_target_bytes(path: &Path) -> Result<Vec<u8>> {
+    let target = fs::read_link(path).map_err(|source| RitError::io(path, source))?;
+    Ok(target.to_string_lossy().replace('\\', "/").into_bytes())
+}
+
+#[cfg(unix)]
+fn write_worktree_symlink_atomically(path: &Path, target: &[u8]) -> Result<()> {
+    use std::os::unix::fs::symlink;
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| RitError::io(parent, source))?;
+    }
+    let target = String::from_utf8_lossy(target);
+    let temp_path = path.with_extension(format!("rit-tmp-{}", std::process::id()));
+    if temp_path.exists() {
+        fs::remove_file(&temp_path).map_err(|source| RitError::io(&temp_path, source))?;
+    }
+    symlink(target.as_ref(), &temp_path).map_err(|source| RitError::io(&temp_path, source))?;
+    if path.exists() || fs::symlink_metadata(path).is_ok() {
+        fs::remove_file(path).map_err(|source| RitError::io(path, source))?;
+    }
+    fs::rename(&temp_path, path).map_err(|source| RitError::io(path, source))
+}
+
+#[cfg(not(unix))]
+fn write_worktree_symlink_atomically(path: &Path, target: &[u8]) -> Result<()> {
+    write_worktree_file_atomically(path, target, 0o100644)
 }
 
 #[cfg(test)]
@@ -1330,6 +1375,56 @@ mod tests {
             .expect("restore should write executable mode");
 
         assert!(is_test_executable(&script_path));
+        remove_dir_all(&temp);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn add_and_restore_symlink_entries() {
+        use std::os::unix::fs::symlink;
+
+        let temp = temp_path("add-symlink");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        fs::write(temp.join("target.txt"), "target\n").expect("target should be written");
+        symlink("target.txt", temp.join("link.txt")).expect("symlink should be written");
+        fs::write(
+            repository.git_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n[user]\n\tname = Rit Test\n\temail = rit@example.test\n",
+        )
+        .expect("config should be written");
+
+        repository
+            .add_paths(&["link.txt".to_owned()])
+            .expect("symlink should be added");
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        assert_eq!(index.entries[0].mode, 0o120000);
+        let link_object = repository
+            .read_object(index.entries[0].object_id)
+            .expect("link object should read");
+        assert_eq!(link_object.data, b"target.txt");
+
+        let commit_id = repository
+            .commit_index("add symlink")
+            .expect("commit should be created")
+            .commit_id;
+        fs::remove_file(temp.join("link.txt")).expect("link should be removed");
+        repository
+            .restore_worktree_paths(&["link.txt".to_owned()])
+            .expect("restore should recreate symlink");
+        assert_eq!(
+            fs::read_link(temp.join("link.txt")).expect("link target should read"),
+            PathBuf::from("target.txt")
+        );
+
+        let commit = repository
+            .read_object(commit_id)
+            .expect("commit object should read");
+        let parsed_commit = parse_commit(&commit.data).expect("commit should parse");
+        let tree = repository
+            .read_object(parsed_commit.tree)
+            .expect("tree object should read");
+        let entries = parse_tree_entries(&tree.data).expect("tree should parse");
+        assert_eq!(entries[0].mode, "120000");
         remove_dir_all(&temp);
     }
 

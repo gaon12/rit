@@ -195,7 +195,9 @@ impl Repository {
                     let full_path = join_slash_path(worktree, path);
                     if !full_path.exists() {
                         'D'
-                    } else if hash_worktree_file(&full_path)? != index_object.object_id {
+                    } else if hash_worktree_entry(&full_path, index_object.mode)?
+                        != index_object.object_id
+                    {
                         'M'
                     } else {
                         let metadata = fs::metadata(&full_path)
@@ -372,9 +374,23 @@ fn quote_porcelain_path(path: &str) -> String {
     output
 }
 
-fn hash_worktree_file(path: &Path) -> Result<ObjectId> {
-    let bytes = fs::read(path).map_err(|source| RitError::io(path, source))?;
+fn hash_worktree_entry(path: &Path, index_mode: u32) -> Result<ObjectId> {
+    let bytes = if index_mode == 0o120000 {
+        let metadata = fs::symlink_metadata(path).map_err(|source| RitError::io(path, source))?;
+        if metadata.file_type().is_symlink() {
+            read_symlink_target_bytes(path)?
+        } else {
+            fs::read(path).map_err(|source| RitError::io(path, source))?
+        }
+    } else {
+        fs::read(path).map_err(|source| RitError::io(path, source))?
+    };
     Ok(hash_object(ObjectKind::Blob, &bytes))
+}
+
+fn read_symlink_target_bytes(path: &Path) -> Result<Vec<u8>> {
+    let target = fs::read_link(path).map_err(|source| RitError::io(path, source))?;
+    Ok(target.to_string_lossy().replace('\\', "/").into_bytes())
 }
 
 fn collapse_untracked_paths(
@@ -536,7 +552,7 @@ fn scan_directory(
 
         if file_type.is_dir() {
             scan_directory(root, &path, ignore_rules, output)?;
-        } else if file_type.is_file() {
+        } else if file_type.is_file() || file_type.is_symlink() {
             output.files.insert(relative);
         }
     }
@@ -804,6 +820,36 @@ mod tests {
             .expect("status should be computed");
 
         assert_eq!(status.to_porcelain_v1(), " M script.sh\n");
+        remove_dir_all(&temp);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn status_hashes_symlink_targets() {
+        use std::os::unix::fs::symlink;
+
+        let temp = temp_path("status-symlink");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        symlink("target-a.txt", temp.join("link.txt")).expect("symlink should be written");
+        fs::write(
+            repository.git_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n[user]\n\tname = Rit Test\n\temail = rit@example.test\n",
+        )
+        .expect("config should be written");
+        repository
+            .add_paths(&["link.txt".to_owned()])
+            .expect("symlink should be added");
+        repository
+            .commit_index("add symlink")
+            .expect("commit should be created");
+        fs::remove_file(temp.join("link.txt")).expect("link should be removed");
+        symlink("target-b.txt", temp.join("link.txt")).expect("changed symlink should be written");
+
+        let status = repository
+            .status_porcelain_v1()
+            .expect("status should be computed");
+
+        assert_eq!(status.to_porcelain_v1(), " M link.txt\n");
         remove_dir_all(&temp);
     }
 
