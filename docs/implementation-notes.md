@@ -53,6 +53,9 @@
   -1` and no object ID.
 - `IndexExtension::resolve_undo()` parses `REUC` payloads into per-path stage
   records with octal mode and object ID values for stages 1 through 3.
+- `IndexExtension::fs_monitor()` parses `FSMN` version 1 timestamps, version 2
+  opaque tokens, bitmap size, and raw bitmap bytes. EWAH bitmap decoding is
+  still deliberately left as a later payload-specific step.
 - Added rit CLI integration compatibility fixtures for read-only `diff` output modes: `--name-only`, `--name-status`, `--numstat`, and `--stat`, including cached diff variants.
 - Compatibility reports now include the first differing stdout/stderr line when command text differs.
 - Added reusable `rit-testkit` local write fixture builders for nested tracked

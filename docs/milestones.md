@@ -179,6 +179,7 @@ Completion criteria:
     `REUC`, `UNTR`, `FSMN`, `link`, `sdir`).
   - [x] Parse `TREE` cache-tree payloads into depth-first node models.
   - [x] Parse `REUC` resolve-undo payloads into per-path stage models.
+  - [x] Parse `FSMN` file-system-monitor headers and raw bitmap payloads.
   - [ ] Parse remaining extension-specific payload models.
 - [x] File mode and executable bit handling.
   - [x] Preserve `100644`/`100755` modes when writing trees from the index.

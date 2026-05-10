@@ -45,6 +45,14 @@ impl IndexExtension {
         }
         parse_resolve_undo(&self.data).map(Some)
     }
+
+    /// Parses this extension as a file-system-monitor extension when its signature is `FSMN`.
+    pub fn fs_monitor(&self) -> Result<Option<FsMonitor>> {
+        if self.kind != IndexExtensionKind::FsMonitor {
+            return Ok(None);
+        }
+        parse_fs_monitor(&self.data).map(Some)
+    }
 }
 
 /// Known Git index extension signatures.
@@ -116,6 +124,28 @@ pub struct ResolveUndoStage {
     pub mode: u32,
     /// Object ID for this stage.
     pub object_id: ObjectId,
+}
+
+/// Parsed `FSMN` index extension header and raw bitmap payload.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FsMonitor {
+    /// File-system-monitor extension version.
+    pub version: u32,
+    /// Version-specific token.
+    pub token: FsMonitorToken,
+    /// Bitmap size field stored by Git before the EWAH bitmap payload.
+    pub bitmap_size: u32,
+    /// Raw EWAH bitmap bytes.
+    pub bitmap: Vec<u8>,
+}
+
+/// Version-specific file-system-monitor token.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum FsMonitorToken {
+    /// Version 1 timestamp in nanoseconds.
+    Nanoseconds(u64),
+    /// Version 2 opaque file-system-monitor token.
+    Token(String),
 }
 
 /// One tracked path in the Git index.
@@ -485,6 +515,51 @@ fn parse_resolve_undo(bytes: &[u8]) -> Result<ResolveUndo> {
     Ok(ResolveUndo { entries })
 }
 
+fn parse_fs_monitor(bytes: &[u8]) -> Result<FsMonitor> {
+    let mut offset = 0;
+    if bytes.len() < 4 {
+        return Err(RitError::invalid_input("fsmonitor version is truncated"));
+    }
+    let version = read_u32(bytes, offset)?;
+    offset += 4;
+
+    let token = match version {
+        1 => {
+            if bytes.len().saturating_sub(offset) < 8 {
+                return Err(RitError::invalid_input("fsmonitor timestamp is truncated"));
+            }
+            let timestamp = read_u64(bytes, offset)?;
+            offset += 8;
+            FsMonitorToken::Nanoseconds(timestamp)
+        }
+        2 => FsMonitorToken::Token(read_nul_terminated_text(
+            bytes,
+            &mut offset,
+            "fsmonitor token",
+        )?),
+        _ => {
+            return Err(RitError::invalid_input(format!(
+                "unsupported fsmonitor extension version: {version}"
+            )));
+        }
+    };
+
+    if bytes.len().saturating_sub(offset) < 4 {
+        return Err(RitError::invalid_input(
+            "fsmonitor bitmap size is truncated",
+        ));
+    }
+    let bitmap_size = read_u32(bytes, offset)?;
+    offset += 4;
+
+    Ok(FsMonitor {
+        version,
+        token,
+        bitmap_size,
+        bitmap: bytes[offset..].to_vec(),
+    })
+}
+
 fn read_nul_terminated_text(bytes: &[u8], offset: &mut usize, label: &str) -> Result<String> {
     let start = *offset;
     while *offset < bytes.len() && bytes[*offset] != 0 {
@@ -556,6 +631,22 @@ fn read_u32(bytes: &[u8], offset: usize) -> Result<u32> {
     ]))
 }
 
+fn read_u64(bytes: &[u8], offset: usize) -> Result<u64> {
+    if bytes.len().saturating_sub(offset) < 8 {
+        return Err(RitError::invalid_input("index integer is truncated"));
+    }
+    Ok(u64::from_be_bytes([
+        bytes[offset],
+        bytes[offset + 1],
+        bytes[offset + 2],
+        bytes[offset + 3],
+        bytes[offset + 4],
+        bytes[offset + 5],
+        bytes[offset + 6],
+        bytes[offset + 7],
+    ]))
+}
+
 fn read_u16(bytes: &[u8], offset: usize) -> Result<u16> {
     if bytes.len().saturating_sub(offset) < 2 {
         return Err(RitError::invalid_input("index integer is truncated"));
@@ -588,7 +679,8 @@ pub fn join_slash_path(root: &Path, path: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::{
-        Index, IndexEntry, IndexEntryStat, IndexExtensionKind, join_slash_path, relative_slash_path,
+        FsMonitorToken, Index, IndexEntry, IndexEntryStat, IndexExtensionKind, join_slash_path,
+        relative_slash_path,
     };
     use crate::ObjectId;
     use std::fs;
@@ -820,6 +912,73 @@ mod tests {
             .expect_err("truncated object id should fail");
 
         assert_eq!(error.to_string(), "resolve-undo object id is truncated");
+    }
+
+    #[test]
+    fn fsmonitor_extension_parses_version_one_timestamp() {
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&1_u32.to_be_bytes());
+        payload.extend_from_slice(&123_u64.to_be_bytes());
+        payload.extend_from_slice(&4_u32.to_be_bytes());
+        payload.extend_from_slice(b"bits");
+        let index = Index {
+            entries: Vec::new(),
+            extensions: extension_record(b"FSMN", &payload),
+        };
+
+        let extensions = index.parsed_extensions().expect("extensions should parse");
+        let fsmonitor = extensions[0]
+            .fs_monitor()
+            .expect("fsmonitor should parse")
+            .expect("FSMN extension should return fsmonitor");
+
+        assert_eq!(fsmonitor.version, 1);
+        assert_eq!(fsmonitor.token, FsMonitorToken::Nanoseconds(123));
+        assert_eq!(fsmonitor.bitmap_size, 4);
+        assert_eq!(fsmonitor.bitmap, b"bits");
+    }
+
+    #[test]
+    fn fsmonitor_extension_parses_version_two_token() {
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&2_u32.to_be_bytes());
+        payload.extend_from_slice(b"opaque-token\0");
+        payload.extend_from_slice(&0_u32.to_be_bytes());
+        let index = Index {
+            entries: Vec::new(),
+            extensions: extension_record(b"FSMN", &payload),
+        };
+
+        let extensions = index.parsed_extensions().expect("extensions should parse");
+        let fsmonitor = extensions[0]
+            .fs_monitor()
+            .expect("fsmonitor should parse")
+            .expect("FSMN extension should return fsmonitor");
+
+        assert_eq!(
+            fsmonitor.token,
+            FsMonitorToken::Token("opaque-token".to_owned())
+        );
+        assert_eq!(fsmonitor.bitmap_size, 0);
+        assert!(fsmonitor.bitmap.is_empty());
+    }
+
+    #[test]
+    fn fsmonitor_extension_rejects_unknown_versions() {
+        let index = Index {
+            entries: Vec::new(),
+            extensions: extension_record(b"FSMN", &3_u32.to_be_bytes()),
+        };
+
+        let extensions = index.parsed_extensions().expect("extensions should parse");
+        let error = extensions[0]
+            .fs_monitor()
+            .expect_err("unknown version should fail");
+
+        assert_eq!(
+            error.to_string(),
+            "unsupported fsmonitor extension version: 3"
+        );
     }
 
     fn extension_record(signature: &[u8; 4], payload: &[u8]) -> Vec<u8> {
