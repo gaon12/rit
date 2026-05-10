@@ -186,6 +186,32 @@ fn status_untracked_directory_outputs_match_git() {
 }
 
 #[test]
+fn status_quotes_paths_like_git() {
+    let fixture = StatusQuotedPathFixture::new("quoted-status");
+
+    for args in [
+        vec!["status", "--porcelain=v1"],
+        vec!["status", "--porcelain=v1", "--", "tracked space.txt"],
+        vec!["status", "--porcelain=v1", "--", "new dir"],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "quoted status {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn ls_files_pathspec_outputs_match_git() {
     let fixture = DiffFixture::new("pathspec-ls-files");
 
@@ -434,6 +460,43 @@ impl StatusUntrackedFixture {
 }
 
 impl Drop for StatusUntrackedFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct StatusQuotedPathFixture {
+    path: PathBuf,
+}
+
+impl StatusQuotedPathFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(path.join("new dir")).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("tracked space.txt"), "base\n")
+            .expect("tracked file should be written");
+        run_git(&path, ["add", "tracked space.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+
+        fs::write(path.join("tracked space.txt"), "changed\n")
+            .expect("tracked file should be modified");
+        fs::write(path.join("new dir").join("new file.txt"), "new\n")
+            .expect("untracked file should be written");
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for StatusQuotedPathFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

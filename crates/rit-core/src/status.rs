@@ -32,7 +32,7 @@ impl PorcelainStatus {
             output.push(entry.index_status);
             output.push(entry.worktree_status);
             output.push(' ');
-            output.push_str(&entry.path);
+            output.push_str(&quote_porcelain_path(&entry.path));
             output.push('\n');
         }
         output
@@ -165,6 +165,29 @@ impl Repository {
 
         Ok(())
     }
+}
+
+fn quote_porcelain_path(path: &str) -> String {
+    if !path
+        .chars()
+        .any(|character| character.is_whitespace() || matches!(character, '"' | '\\'))
+    {
+        return path.to_owned();
+    }
+
+    let mut output = String::from("\"");
+    for character in path.chars() {
+        match character {
+            '"' => output.push_str("\\\""),
+            '\\' => output.push_str("\\\\"),
+            '\n' => output.push_str("\\n"),
+            '\t' => output.push_str("\\t"),
+            '\r' => output.push_str("\\r"),
+            other => output.push(other),
+        }
+    }
+    output.push('"');
+    output
 }
 
 fn hash_worktree_file(path: &Path) -> Result<ObjectId> {
@@ -319,7 +342,9 @@ fn read_ignore_file(path: &PathBuf, patterns: &mut Vec<String>) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{IgnoreRules, PorcelainStatus, StatusEntry, collapse_untracked_paths};
+    use super::{
+        IgnoreRules, PorcelainStatus, StatusEntry, collapse_untracked_paths, quote_porcelain_path,
+    };
     use crate::PathspecSet;
     use std::collections::BTreeSet;
 
@@ -334,6 +359,27 @@ mod tests {
         };
 
         assert_eq!(status.to_porcelain_v1(), "?? new.txt\n");
+    }
+
+    #[test]
+    fn porcelain_v1_quotes_paths_with_whitespace() {
+        let status = PorcelainStatus {
+            entries: vec![StatusEntry {
+                index_status: ' ',
+                worktree_status: 'M',
+                path: "my dir/a b.txt".to_owned(),
+            }],
+        };
+
+        assert_eq!(status.to_porcelain_v1(), " M \"my dir/a b.txt\"\n");
+    }
+
+    #[test]
+    fn porcelain_path_escapes_special_characters() {
+        assert_eq!(
+            quote_porcelain_path("quote\"tab\t.txt"),
+            "\"quote\\\"tab\\t.txt\""
+        );
     }
 
     #[test]

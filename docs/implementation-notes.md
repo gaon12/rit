@@ -67,6 +67,8 @@
 - `status --porcelain=v1` now collapses fully untracked directories into
   `?? dir/` entries like Git, while exact file pathspecs keep the untracked
   file path expanded.
+- `status --porcelain=v1` now quotes paths containing whitespace, quotes, or
+  backslashes with Git-like C-style escaping.
 - Added Git comparison coverage for `status --porcelain=v1 -- <pathspec>` and
   `diff ... -- <pathspec>`.
 - Added ordinary literal file, directory, and `.` pathspec expansion for
@@ -166,6 +168,8 @@
 - Git-compatible behavior: porcelain v1 entries for staged add/modify/delete, working tree modify/delete, and untracked files.
 - Git-compatible behavior: fully untracked directories are collapsed in the
   default porcelain output, with direct file pathspecs preserving file output.
+- Git-compatible behavior: porcelain paths with whitespace or special
+  characters are quoted.
 - Intentional differences: ignore handling supports simple literal and directory patterns first; advanced gitignore glob semantics are not complete yet.
 - Repository mutation: no
 - Risk: no repository writes.

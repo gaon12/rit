@@ -93,6 +93,8 @@ matching, and pathspec-file input remain unsupported.
 
 Status compatibility tests cover Git-like collapsed output for fully untracked
 directories, including directory and exact-file pathspec behavior.
+Status compatibility tests also cover porcelain quoting for paths containing
+spaces.
 
 `ls-tree` compatibility tests cover literal directory and file path lookup with
 default, `--name-only`, and `--object-only` output.

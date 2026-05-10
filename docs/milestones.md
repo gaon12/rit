@@ -94,6 +94,8 @@ Completion criteria:
 - [x] `rit status --porcelain=v1` basic tracked/untracked state.
   - [x] Git-like collapse of fully untracked directories in default porcelain
     output.
+  - [x] Git-like porcelain path quoting for paths with whitespace or special
+    characters.
 - [x] `rit diff --name-only`
 - [x] `rit diff --name-status`
 - [x] `rit diff --stat`
