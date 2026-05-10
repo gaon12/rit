@@ -104,6 +104,8 @@ first-parent histories.
 do and do not touch the requested path.
 
 Patch compatibility tests cover default and cached text patches for small files.
+Patch compatibility tests also cover missing trailing newline markers for
+default and cached text patches.
 Binary diff compatibility tests cover `--name-only`, `--name-status`,
 `--numstat`, and `--stat` summary output.
 

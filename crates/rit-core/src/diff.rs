@@ -563,21 +563,21 @@ fn unified_hunk(old_data: &[u8], new_data: &[u8]) -> Result<String> {
     ));
     for operation in operations {
         match operation {
-            LineOperation::Context(line) => {
-                output.push(' ');
-                output.push_str(line);
-            }
-            LineOperation::Delete(line) => {
-                output.push('-');
-                output.push_str(line);
-            }
-            LineOperation::Insert(line) => {
-                output.push('+');
-                output.push_str(line);
-            }
+            LineOperation::Context(line) => push_patch_line(&mut output, ' ', line),
+            LineOperation::Delete(line) => push_patch_line(&mut output, '-', line),
+            LineOperation::Insert(line) => push_patch_line(&mut output, '+', line),
         }
     }
     Ok(output)
+}
+
+fn push_patch_line(output: &mut String, prefix: char, line: &str) {
+    output.push(prefix);
+    output.push_str(line);
+    if !line.ends_with('\n') {
+        output.push('\n');
+        output.push_str("\\ No newline at end of file\n");
+    }
 }
 
 fn line_delta(old_data: &[u8], new_data: &[u8]) -> Result<(usize, usize)> {
@@ -713,7 +713,7 @@ fn plural(count: usize, singular: &str, plural: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{DiffFileStat, DiffSummary, file_delta, line_delta};
+    use super::{DiffFileStat, DiffSummary, file_delta, line_delta, unified_hunk};
     use crate::{InitOptions, Repository};
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -807,6 +807,16 @@ mod tests {
         let delta = file_delta(&[0, 1, 2], &[0, 1, 2, 3]).expect("binary delta should work");
 
         assert_eq!(delta, (0, 0, true));
+    }
+
+    #[test]
+    fn unified_hunk_marks_missing_trailing_newlines() {
+        let hunk = unified_hunk(b"one", b"two").expect("text patch should render");
+
+        assert_eq!(
+            hunk,
+            "@@ -1 +1 @@\n-one\n\\ No newline at end of file\n+two\n\\ No newline at end of file\n"
+        );
     }
 
     #[test]

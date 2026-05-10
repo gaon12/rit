@@ -100,8 +100,8 @@ Completion criteria:
 - [x] `rit diff --numstat`
 - [~] `rit diff` patch output.
   - [x] Small text patch output for default and cached diff scopes.
-  - [ ] Binary patch accounting, no-newline markers, and multi-hunk context
-    splitting.
+  - [x] No-newline markers for default and cached text patch output.
+  - [ ] Binary patch accounting and multi-hunk context splitting.
 - [~] Pathspec support for read-only commands.
   - [x] Ordinary literal pathspec filters for `status --porcelain=v1` and
     `diff` summary modes.

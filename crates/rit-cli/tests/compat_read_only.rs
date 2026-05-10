@@ -86,6 +86,28 @@ fn diff_patch_outputs_match_git_for_small_text_files() {
 }
 
 #[test]
+fn diff_patch_marks_missing_trailing_newlines_like_git() {
+    let fixture = NoNewlineDiffFixture::new("no-newline-diff");
+
+    for args in [vec!["diff"], vec!["diff", "--cached"]] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "no-newline patch diff {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_pathspec_outputs_match_git() {
     let fixture = DiffFixture::new("pathspec-diff");
 
@@ -339,6 +361,42 @@ impl BinaryDiffFixture {
 }
 
 impl Drop for BinaryDiffFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct NoNewlineDiffFixture {
+    path: PathBuf,
+}
+
+impl NoNewlineDiffFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("a.txt"), "one").expect("base file should be written");
+        fs::write(path.join("cached.txt"), "old").expect("cached file should be written");
+        run_git(&path, ["add", "a.txt", "cached.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+
+        fs::write(path.join("a.txt"), "two").expect("worktree file should be modified");
+        fs::write(path.join("cached.txt"), "new").expect("cached file should be modified");
+        run_git(&path, ["add", "cached.txt"]);
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for NoNewlineDiffFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

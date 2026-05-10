@@ -82,6 +82,8 @@
   behavior for simple path filters.
 - Added patch output for small text files in default and cached diff scopes,
   with Git comparison coverage for default patch, `-p`, and `--cached`.
+- Patch output now emits `\ No newline at end of file` markers for missing
+  trailing newlines in default and cached text patches.
 - Added binary diff accounting for summary modes. `--numstat` reports
   `-\t-\t<path>` and `--stat` reports `Bin <old> -> <new> bytes` with zero
   insertion/deletion totals.
@@ -177,7 +179,7 @@
   directory pathspec filters.
 - Unsupported options: commit/tree/blob arguments, pathspec magic/globs,
   rename/copy detection, binary patch output, multi-hunk context splitting, and
-  no-newline patch markers.
+  many advanced patch formatting options.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files.
 - Git-compatible behavior: cached diff scope compares the index against `HEAD`.
 - Intentional differences: binary patch output reports a clear unsupported
