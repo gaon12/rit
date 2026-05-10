@@ -24,6 +24,17 @@ pub struct PorcelainStatus {
     pub entries: Vec<StatusEntry>,
 }
 
+/// Controls how porcelain status reports untracked files.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UntrackedFilesMode {
+    /// Do not report untracked files.
+    No,
+    /// Collapse fully untracked directories into one `dir/` entry.
+    Normal,
+    /// Report every untracked file individually.
+    All,
+}
+
 impl PorcelainStatus {
     /// Renders porcelain v1 text.
     pub fn to_porcelain_v1(&self) -> String {
@@ -49,6 +60,15 @@ impl Repository {
     pub fn status_porcelain_v1_with_pathspecs(
         &self,
         pathspecs: &PathspecSet,
+    ) -> Result<PorcelainStatus> {
+        self.status_porcelain_v1_with_options(pathspecs, UntrackedFilesMode::Normal)
+    }
+
+    /// Computes porcelain v1 status with explicit untracked-file handling.
+    pub fn status_porcelain_v1_with_options(
+        &self,
+        pathspecs: &PathspecSet,
+        untracked_files: UntrackedFilesMode,
     ) -> Result<PorcelainStatus> {
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
@@ -106,13 +126,17 @@ impl Repository {
             }
         }
 
-        for path in collapse_untracked_paths(&working_files, &tracked_paths, pathspecs) {
-            if !index_entries.contains_key(&path) {
-                entries.push(StatusEntry {
-                    index_status: '?',
-                    worktree_status: '?',
-                    path,
-                });
+        if untracked_files != UntrackedFilesMode::No {
+            for path in
+                untracked_status_paths(&working_files, &tracked_paths, pathspecs, untracked_files)
+            {
+                if !index_entries.contains_key(&path) {
+                    entries.push(StatusEntry {
+                        index_status: '?',
+                        worktree_status: '?',
+                        path,
+                    });
+                }
             }
         }
 
@@ -211,6 +235,25 @@ fn collapse_untracked_paths(
     }
 
     output
+}
+
+fn untracked_status_paths(
+    working_files: &BTreeSet<String>,
+    tracked_paths: &BTreeSet<String>,
+    pathspecs: &PathspecSet,
+    mode: UntrackedFilesMode,
+) -> BTreeSet<String> {
+    match mode {
+        UntrackedFilesMode::No => BTreeSet::new(),
+        UntrackedFilesMode::Normal => {
+            collapse_untracked_paths(working_files, tracked_paths, pathspecs)
+        }
+        UntrackedFilesMode::All => working_files
+            .iter()
+            .filter(|path| !tracked_paths.contains(*path) && pathspecs.matches(path))
+            .cloned()
+            .collect(),
+    }
 }
 
 fn display_untracked_path(
@@ -343,7 +386,8 @@ fn read_ignore_file(path: &PathBuf, patterns: &mut Vec<String>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        IgnoreRules, PorcelainStatus, StatusEntry, collapse_untracked_paths, quote_porcelain_path,
+        IgnoreRules, PorcelainStatus, StatusEntry, UntrackedFilesMode, collapse_untracked_paths,
+        quote_porcelain_path, untracked_status_paths,
     };
     use crate::PathspecSet;
     use std::collections::BTreeSet;
@@ -424,6 +468,38 @@ mod tests {
         let collapsed = collapse_untracked_paths(&working_files, &tracked_paths, &pathspecs);
 
         assert_eq!(collapsed, set(["dir/sub/a.txt"]));
+    }
+
+    #[test]
+    fn untracked_status_mode_all_keeps_every_file() {
+        let working_files = set(["dir/a.txt", "dir/sub/b.txt", "root.txt"]);
+        let tracked_paths = BTreeSet::new();
+        let pathspecs = PathspecSet::all();
+
+        let paths = untracked_status_paths(
+            &working_files,
+            &tracked_paths,
+            &pathspecs,
+            UntrackedFilesMode::All,
+        );
+
+        assert_eq!(paths, set(["dir/a.txt", "dir/sub/b.txt", "root.txt"]));
+    }
+
+    #[test]
+    fn untracked_status_mode_no_hides_untracked_files() {
+        let working_files = set(["dir/a.txt", "root.txt"]);
+        let tracked_paths = BTreeSet::new();
+        let pathspecs = PathspecSet::all();
+
+        let paths = untracked_status_paths(
+            &working_files,
+            &tracked_paths,
+            &pathspecs,
+            UntrackedFilesMode::No,
+        );
+
+        assert!(paths.is_empty());
     }
 
     fn set<const N: usize>(paths: [&str; N]) -> BTreeSet<String> {

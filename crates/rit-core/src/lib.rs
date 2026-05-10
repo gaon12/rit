@@ -26,7 +26,7 @@ pub use odb::LooseObjectDb;
 pub use pathspec::PathspecSet;
 pub use refs::{Branch, Tag};
 pub use repository::{InitOptions, Repository};
-pub use status::{PorcelainStatus, StatusEntry};
+pub use status::{PorcelainStatus, StatusEntry, UntrackedFilesMode};
 pub use write::CommitResult;
 
 /// Returns the crate version used by the CLI and tests.

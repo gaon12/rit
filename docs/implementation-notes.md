@@ -169,12 +169,16 @@
 
 - Baseline command checked: `git status -h`
 - Supported options: `--porcelain`, `--porcelain=v1`, `-s`, plus ordinary
-  literal file and directory pathspecs after `--`.
+  literal file and directory pathspecs after `--`, and
+  `--untracked-files=no|normal|all` / `-uno|-unormal|-uall`, including
+  default-all `-u` and Git 2.52's normal-mode `--no-untracked-files`.
 - Unsupported options: long output, branch header, ignored display modes,
   pathspec magic/globs, rename detection, submodules, sparse checkout.
 - Git-compatible behavior: porcelain v1 entries for staged add/modify/delete, working tree modify/delete, and untracked files.
 - Git-compatible behavior: fully untracked directories are collapsed in the
   default porcelain output, with direct file pathspecs preserving file output.
+- Git-compatible behavior: `--untracked-files=no` hides untracked paths,
+  `normal` collapses directories, and `all` lists each untracked file.
 - Git-compatible behavior: porcelain paths with whitespace or special
   characters are quoted.
 - Intentional differences: ignore handling supports simple literal and directory patterns first; advanced gitignore glob semantics are not complete yet.

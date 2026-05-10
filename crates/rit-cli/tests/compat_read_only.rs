@@ -223,6 +223,38 @@ fn status_untracked_directory_outputs_match_git() {
 }
 
 #[test]
+fn status_untracked_file_modes_match_git() {
+    let fixture = StatusUntrackedFixture::new("untracked-file-modes-status");
+
+    for args in [
+        vec!["status", "--porcelain=v1", "-uno"],
+        vec!["status", "--porcelain=v1", "-unormal"],
+        vec!["status", "--porcelain=v1", "-uall"],
+        vec!["status", "--porcelain=v1", "-u"],
+        vec!["status", "--porcelain=v1", "--untracked-files"],
+        vec!["status", "--porcelain=v1", "--no-untracked-files"],
+        vec!["status", "--porcelain=v1", "--untracked-files=no"],
+        vec!["status", "--porcelain=v1", "--untracked-files=normal"],
+        vec!["status", "--porcelain=v1", "--untracked-files=all"],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "untracked file mode status {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn status_quotes_paths_like_git() {
     let fixture = StatusQuotedPathFixture::new("quoted-status");
 

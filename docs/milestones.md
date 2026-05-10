@@ -96,6 +96,8 @@ Completion criteria:
     output.
   - [x] Git-like porcelain path quoting for paths with whitespace or special
     characters.
+  - [x] Git-like `--untracked-files=no|normal|all` and `-uno|-unormal|-uall`
+    modes.
 - [x] `rit diff --name-only`
 - [x] `rit diff --name-status`
 - [x] `rit diff --stat`
@@ -285,6 +287,6 @@ Completion criteria:
 
 ## Active Queue
 
-1. Expand `status --porcelain=v1` with stronger Git compatibility.
-2. Continue pathspec support for remaining read-only commands and advanced
+1. Continue pathspec support for remaining read-only commands and advanced
    pathspec forms.
+2. Start the next small `status --porcelain=v1` compatibility slice.

@@ -524,10 +524,10 @@ fn status_command(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    let Some(pathspecs) = parse_status_pathspecs(args, stderr)? else {
+    let Some(status_args) = parse_status_args(args, stderr)? else {
         return Ok(ExitCode::from(129));
     };
-    let pathspecs = match rit_core::PathspecSet::from_args(&pathspecs) {
+    let pathspecs = match rit_core::PathspecSet::from_args(&status_args.pathspecs) {
         Ok(pathspecs) => pathspecs,
         Err(error) => {
             writeln!(stderr, "rit: {error}")?;
@@ -539,7 +539,7 @@ fn status_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    match repository.status_porcelain_v1_with_pathspecs(&pathspecs) {
+    match repository.status_porcelain_v1_with_options(&pathspecs, status_args.untracked_files) {
         Ok(status) => {
             stdout.write_all(status.to_porcelain_v1().as_bytes())?;
             Ok(ExitCode::SUCCESS)
@@ -551,18 +551,37 @@ fn status_command(
     }
 }
 
-fn parse_status_pathspecs(
-    args: &[String],
-    stderr: &mut dyn Write,
-) -> io::Result<Option<Vec<String>>> {
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct StatusArgs {
+    pathspecs: Vec<String>,
+    untracked_files: rit_core::UntrackedFilesMode,
+}
+
+fn parse_status_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Option<StatusArgs>> {
     let mut has_porcelain = false;
     let mut pathspecs = Vec::new();
     let mut after_separator = false;
+    let mut untracked_files = rit_core::UntrackedFilesMode::Normal;
 
     for arg in args {
         match arg.as_str() {
             "--" if !after_separator => after_separator = true,
             "--porcelain" | "--porcelain=v1" | "-s" if !after_separator => has_porcelain = true,
+            "-u" | "--untracked-files" if !after_separator => {
+                untracked_files = rit_core::UntrackedFilesMode::All;
+            }
+            "--no-untracked-files" if !after_separator => {
+                untracked_files = rit_core::UntrackedFilesMode::Normal;
+            }
+            "-uno" | "--untracked-files=no" if !after_separator => {
+                untracked_files = rit_core::UntrackedFilesMode::No;
+            }
+            "-unormal" | "--untracked-files=normal" if !after_separator => {
+                untracked_files = rit_core::UntrackedFilesMode::Normal;
+            }
+            "-uall" | "--untracked-files=all" if !after_separator => {
+                untracked_files = rit_core::UntrackedFilesMode::All;
+            }
             unsupported if unsupported.starts_with('-') && !after_separator => {
                 writeln!(stderr, "rit: unsupported status option '{unsupported}'")?;
                 return Ok(None);
@@ -572,7 +591,10 @@ fn parse_status_pathspecs(
     }
 
     if has_porcelain {
-        Ok(Some(pathspecs))
+        Ok(Some(StatusArgs {
+            pathspecs,
+            untracked_files,
+        }))
     } else {
         writeln!(stderr, "rit: status currently supports only --porcelain=v1")?;
         Ok(None)
