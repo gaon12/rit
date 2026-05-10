@@ -82,6 +82,9 @@
   behavior for simple path filters.
 - Added patch output for small text files in default and cached diff scopes,
   with Git comparison coverage for default patch, `-p`, and `--cached`.
+- Added binary diff accounting for summary modes. `--numstat` reports
+  `-\t-\t<path>` and `--stat` reports `Bin <old> -> <new> bytes` with zero
+  insertion/deletion totals.
 - Added local write compatibility coverage that compares Git and rit porcelain
   state after directory pathspec `add`, `restore`, and `reset`.
 - Still unsupported: pathspec magic, glob pathspec matching, pathspec files,
@@ -173,11 +176,12 @@
   `--cached`/`--staged` with those output modes, and ordinary literal file and
   directory pathspec filters.
 - Unsupported options: commit/tree/blob arguments, pathspec magic/globs,
-  rename/copy detection, binary stat details, multi-hunk context splitting, and
+  rename/copy detection, binary patch output, multi-hunk context splitting, and
   no-newline patch markers.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files.
 - Git-compatible behavior: cached diff scope compares the index against `HEAD`.
-- Intentional differences: binary `--stat` reports a clear unsupported error until binary diff accounting is implemented.
+- Intentional differences: binary patch output reports a clear unsupported
+  error until binary patch accounting is implemented.
 - Repository mutation: no
 - Risk: no repository writes.
 

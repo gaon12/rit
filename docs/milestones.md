@@ -110,7 +110,7 @@ Completion criteria:
   - [x] Ordinary literal path filters for first-parent `log`.
   - [x] Ordinary literal path filters for `show --no-patch`.
 - [ ] Rename detection.
-- [ ] Binary diff accounting.
+- [x] Binary diff accounting for summary modes.
 
 Completion criteria:
 - Common read-only commands have Git comparison tests for simple repositories.

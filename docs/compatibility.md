@@ -104,6 +104,8 @@ first-parent histories.
 do and do not touch the requested path.
 
 Patch compatibility tests cover default and cached text patches for small files.
+Binary diff compatibility tests cover `--name-only`, `--name-status`,
+`--numstat`, and `--stat` summary output.
 
 Local write compatibility tests currently cover directory pathspec behavior for
 `add`, `restore`, and `reset` by comparing the resulting porcelain status and

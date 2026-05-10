@@ -35,9 +35,13 @@ impl DiffSummary {
     pub fn to_numstat_text(&self) -> String {
         let mut output = String::new();
         for file in &self.files {
-            output.push_str(&file.insertions.to_string());
-            output.push('\t');
-            output.push_str(&file.deletions.to_string());
+            if file.binary {
+                output.push_str("-\t-");
+            } else {
+                output.push_str(&file.insertions.to_string());
+                output.push('\t');
+                output.push_str(&file.deletions.to_string());
+            }
             output.push('\t');
             output.push_str(&file.path);
             output.push('\n');
@@ -66,34 +70,45 @@ impl DiffSummary {
         let mut output = String::new();
         let mut total_insertions = 0;
         let mut total_deletions = 0;
+        let has_binary_file = self.files.iter().any(|file| file.binary);
 
         for file in &self.files {
             total_insertions += file.insertions;
             total_deletions += file.deletions;
-            let mut graph = String::new();
-            graph.extend(std::iter::repeat_n('+', file.insertions));
-            graph.extend(std::iter::repeat_n('-', file.deletions));
-            output.push_str(&format!(
-                " {:path_width$} | {:change_width$} {}\n",
-                file.path,
-                file.changed_lines(),
-                graph,
-                path_width = max_path_width,
-                change_width = max_change_width
-            ));
+            if file.binary {
+                output.push_str(&format!(
+                    " {:path_width$} | Bin {} -> {} bytes\n",
+                    file.path,
+                    file.old_size,
+                    file.new_size,
+                    path_width = max_path_width
+                ));
+            } else {
+                let mut graph = String::new();
+                graph.extend(std::iter::repeat_n('+', file.insertions));
+                graph.extend(std::iter::repeat_n('-', file.deletions));
+                output.push_str(&format!(
+                    " {:path_width$} | {:change_width$} {}\n",
+                    file.path,
+                    file.changed_lines(),
+                    graph,
+                    path_width = max_path_width,
+                    change_width = max_change_width
+                ));
+            }
         }
 
         output.push_str(&format!(
             " {} changed",
             plural(self.files.len(), "file", "files")
         ));
-        if total_insertions > 0 {
+        if total_insertions > 0 || has_binary_file {
             output.push_str(&format!(
                 ", {}",
                 plural(total_insertions, "insertion(+)", "insertions(+)")
             ));
         }
-        if total_deletions > 0 {
+        if total_deletions > 0 || has_binary_file {
             output.push_str(&format!(
                 ", {}",
                 plural(total_deletions, "deletion(-)", "deletions(-)")
@@ -191,6 +206,12 @@ pub struct DiffFileStat {
     pub insertions: usize,
     /// Deleted line count.
     pub deletions: usize,
+    /// Whether the file was treated as binary for diff accounting.
+    pub binary: bool,
+    /// Old file size in bytes, used for binary stat output.
+    pub old_size: usize,
+    /// New file size in bytes, used for binary stat output.
+    pub new_size: usize,
 }
 
 impl DiffFileStat {
@@ -234,6 +255,9 @@ impl Repository {
                     path: entry.path,
                     insertions: 0,
                     deletions: count_lines(&old_object.data),
+                    binary: is_binary_data(&old_object.data),
+                    old_size: old_object.data.len(),
+                    new_size: 0,
                 });
                 continue;
             }
@@ -245,12 +269,15 @@ impl Repository {
                 continue;
             }
 
-            let (insertions, deletions) = line_delta(&old_object.data, &new_data)?;
+            let (insertions, deletions, binary) = file_delta(&old_object.data, &new_data)?;
             files.push(DiffFileStat {
                 status: 'M',
                 path: entry.path,
                 insertions,
                 deletions,
+                binary,
+                old_size: old_object.data.len(),
+                new_size: new_data.len(),
             });
         }
 
@@ -350,6 +377,9 @@ impl Repository {
                         path,
                         insertions: count_lines(&new_object.data),
                         deletions: 0,
+                        binary: is_binary_data(&new_object.data),
+                        old_size: 0,
+                        new_size: new_object.data.len(),
                     });
                 }
                 (Some(old_id), None) => {
@@ -359,17 +389,24 @@ impl Repository {
                         path,
                         insertions: 0,
                         deletions: count_lines(&old_object.data),
+                        binary: is_binary_data(&old_object.data),
+                        old_size: old_object.data.len(),
+                        new_size: 0,
                     });
                 }
                 (Some(old_id), Some(new_id)) if old_id != new_id => {
                     let old_object = self.read_blob(*old_id)?;
                     let new_object = self.read_blob(*new_id)?;
-                    let (insertions, deletions) = line_delta(&old_object.data, &new_object.data)?;
+                    let (insertions, deletions, binary) =
+                        file_delta(&old_object.data, &new_object.data)?;
                     files.push(DiffFileStat {
                         status: 'M',
                         path,
                         insertions,
                         deletions,
+                        binary,
+                        old_size: old_object.data.len(),
+                        new_size: new_object.data.len(),
                     });
                 }
                 _ => {}
@@ -554,6 +591,18 @@ fn line_delta(old_data: &[u8], new_data: &[u8]) -> Result<(usize, usize)> {
     Ok((new_lines.len() - common, old_lines.len() - common))
 }
 
+fn file_delta(old_data: &[u8], new_data: &[u8]) -> Result<(usize, usize, bool)> {
+    if is_binary_data(old_data) || is_binary_data(new_data) {
+        return Ok((0, 0, true));
+    }
+    let (insertions, deletions) = line_delta(old_data, new_data)?;
+    Ok((insertions, deletions, false))
+}
+
+fn is_binary_data(data: &[u8]) -> bool {
+    data.contains(&0) || std::str::from_utf8(data).is_err()
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LineOperation<'a> {
     Context(&'a str),
@@ -618,6 +667,9 @@ fn short_object_id(object_id: Option<ObjectId>) -> String {
 }
 
 fn count_lines(data: &[u8]) -> usize {
+    if is_binary_data(data) {
+        return 0;
+    }
     let Ok(text) = std::str::from_utf8(data) else {
         return 0;
     };
@@ -661,7 +713,7 @@ fn plural(count: usize, singular: &str, plural: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{DiffFileStat, DiffSummary, line_delta};
+    use super::{DiffFileStat, DiffSummary, file_delta, line_delta};
     use crate::{InitOptions, Repository};
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -683,6 +735,9 @@ mod tests {
                 path: "a.txt".to_owned(),
                 insertions: 1,
                 deletions: 0,
+                binary: false,
+                old_size: 0,
+                new_size: 0,
             }],
         };
 
@@ -700,6 +755,9 @@ mod tests {
                 path: "a.txt".to_owned(),
                 insertions: 1,
                 deletions: 0,
+                binary: false,
+                old_size: 0,
+                new_size: 0,
             }],
         };
 
@@ -714,10 +772,41 @@ mod tests {
                 path: "a.txt".to_owned(),
                 insertions: 2,
                 deletions: 1,
+                binary: false,
+                old_size: 0,
+                new_size: 0,
             }],
         };
 
         assert_eq!(summary.to_numstat_text(), "2\t1\ta.txt\n");
+    }
+
+    #[test]
+    fn binary_numstat_and_stat_match_small_git_shape() {
+        let summary = DiffSummary {
+            files: vec![DiffFileStat {
+                status: 'M',
+                path: "bin.dat".to_owned(),
+                insertions: 0,
+                deletions: 0,
+                binary: true,
+                old_size: 5,
+                new_size: 7,
+            }],
+        };
+
+        assert_eq!(summary.to_numstat_text(), "-\t-\tbin.dat\n");
+        assert_eq!(
+            summary.to_stat_text(),
+            " bin.dat | Bin 5 -> 7 bytes\n 1 file changed, 0 insertions(+), 0 deletions(-)\n"
+        );
+    }
+
+    #[test]
+    fn file_delta_treats_nul_bytes_as_binary() {
+        let delta = file_delta(&[0, 1, 2], &[0, 1, 2, 3]).expect("binary delta should work");
+
+        assert_eq!(delta, (0, 0, true));
     }
 
     #[test]
@@ -752,6 +841,9 @@ mod tests {
                 path: "a.txt".to_owned(),
                 insertions: 1,
                 deletions: 0,
+                binary: false,
+                old_size: 4,
+                new_size: 8,
             }]
         );
         remove_dir_all(&temp);

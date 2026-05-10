@@ -43,6 +43,27 @@ fn diff_cached_outputs_match_git() {
 }
 
 #[test]
+fn binary_diff_summary_outputs_match_git() {
+    let fixture = BinaryDiffFixture::new("binary-diff");
+
+    for option in ["--name-only", "--name-status", "--numstat", "--stat"] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command(["diff", option]),
+            rit_command(["diff", option]),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "binary diff {option}\n{}",
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_patch_outputs_match_git_for_small_text_files() {
     let fixture = DiffFixture::new("patch-diff");
 
@@ -284,6 +305,40 @@ impl DiffFixture {
 }
 
 impl Drop for DiffFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct BinaryDiffFixture {
+    path: PathBuf,
+}
+
+impl BinaryDiffFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("bin.dat"), [0, 1, 2, 0, 3]).expect("binary file should be written");
+        run_git(&path, ["add", "bin.dat"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+
+        fs::write(path.join("bin.dat"), [0, 1, 2, 0, 3, 4, 5])
+            .expect("binary file should be modified");
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for BinaryDiffFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }
