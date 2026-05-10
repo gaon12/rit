@@ -48,6 +48,27 @@ pub enum UntrackedFilesMode {
     All,
 }
 
+/// Options for porcelain status computation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StatusOptions {
+    /// How to report untracked files.
+    pub untracked_files: UntrackedFilesMode,
+    /// Include the `## ...` branch header.
+    pub include_branch_header: bool,
+    /// Include ignored paths as `!!` entries.
+    pub include_ignored: bool,
+}
+
+impl Default for StatusOptions {
+    fn default() -> Self {
+        Self {
+            untracked_files: UntrackedFilesMode::Normal,
+            include_branch_header: false,
+            include_ignored: false,
+        }
+    }
+}
+
 impl PorcelainStatus {
     /// Renders porcelain v1 text.
     pub fn to_porcelain_v1(&self) -> String {
@@ -105,15 +126,14 @@ impl Repository {
         &self,
         pathspecs: &PathspecSet,
     ) -> Result<PorcelainStatus> {
-        self.status_porcelain_v1_with_options(pathspecs, UntrackedFilesMode::Normal, false)
+        self.status_porcelain_v1_with_options(pathspecs, StatusOptions::default())
     }
 
     /// Computes porcelain v1 status with explicit untracked-file handling.
     pub fn status_porcelain_v1_with_options(
         &self,
         pathspecs: &PathspecSet,
-        untracked_files: UntrackedFilesMode,
-        include_branch_header: bool,
+        options: StatusOptions,
     ) -> Result<PorcelainStatus> {
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
@@ -121,7 +141,7 @@ impl Repository {
             ));
         };
 
-        let branch = if include_branch_header {
+        let branch = if options.include_branch_header {
             Some(self.status_branch_header()?)
         } else {
             None
@@ -134,7 +154,7 @@ impl Repository {
             .collect::<BTreeMap<_, _>>();
         let head_entries = self.head_tree_entries()?;
         let ignore_rules = IgnoreRules::read(worktree, self.common_dir())?;
-        let working_files = scan_working_files(worktree, &ignore_rules)?;
+        let working_tree = scan_working_tree(worktree, &ignore_rules)?;
 
         let mut entries = Vec::new();
         let tracked_paths = index_entries
@@ -176,14 +196,27 @@ impl Repository {
             }
         }
 
-        if untracked_files != UntrackedFilesMode::No {
-            for path in
-                untracked_status_paths(&working_files, &tracked_paths, pathspecs, untracked_files)
-            {
+        if options.untracked_files != UntrackedFilesMode::No {
+            for path in untracked_status_paths(
+                &working_tree.files,
+                &tracked_paths,
+                pathspecs,
+                options.untracked_files,
+            ) {
                 if !index_entries.contains_key(&path) {
                     entries.push(StatusEntry {
                         index_status: '?',
                         worktree_status: '?',
+                        path,
+                    });
+                }
+            }
+
+            if options.include_ignored {
+                for path in ignored_status_paths(&working_tree.ignored, &tracked_paths, pathspecs) {
+                    entries.push(StatusEntry {
+                        index_status: '!',
+                        worktree_status: '!',
                         path,
                     });
                 }
@@ -314,6 +347,36 @@ fn untracked_status_paths(
     }
 }
 
+fn ignored_status_paths(
+    ignored_paths: &BTreeSet<String>,
+    tracked_paths: &BTreeSet<String>,
+    pathspecs: &PathspecSet,
+) -> BTreeSet<String> {
+    ignored_paths
+        .iter()
+        .filter(|path| {
+            let normalized = path.trim_end_matches('/');
+            ignored_path_matches_pathspecs(path, pathspecs)
+                && !has_tracked_path_below(tracked_paths, normalized)
+        })
+        .cloned()
+        .collect()
+}
+
+fn ignored_path_matches_pathspecs(path: &str, pathspecs: &PathspecSet) -> bool {
+    if pathspecs.matches(path) {
+        return true;
+    }
+
+    let Some(directory) = path.strip_suffix('/') else {
+        return false;
+    };
+    pathspecs
+        .patterns()
+        .iter()
+        .any(|pattern| pattern.starts_with(&format!("{directory}/")))
+}
+
 fn display_untracked_path(
     path: &str,
     tracked_paths: &BTreeSet<String>,
@@ -366,33 +429,48 @@ fn has_tracked_path_below(tracked_paths: &BTreeSet<String>, directory: &str) -> 
         .any(|path| path == directory || path.starts_with(&format!("{directory}/")))
 }
 
-fn scan_working_files(root: &Path, ignore_rules: &IgnoreRules) -> Result<BTreeSet<String>> {
-    let mut files = BTreeSet::new();
-    scan_directory(root, root, ignore_rules, &mut files)?;
-    Ok(files)
+#[derive(Clone, Debug, Default)]
+struct WorkingTreeScan {
+    files: BTreeSet<String>,
+    ignored: BTreeSet<String>,
+}
+
+fn scan_working_tree(root: &Path, ignore_rules: &IgnoreRules) -> Result<WorkingTreeScan> {
+    let mut output = WorkingTreeScan::default();
+    scan_directory(root, root, ignore_rules, &mut output)?;
+    Ok(output)
 }
 
 fn scan_directory(
     root: &Path,
     directory: &Path,
     ignore_rules: &IgnoreRules,
-    output: &mut BTreeSet<String>,
+    output: &mut WorkingTreeScan,
 ) -> Result<()> {
     for entry in fs::read_dir(directory).map_err(|source| RitError::io(directory, source))? {
         let entry = entry.map_err(|source| RitError::io(directory, source))?;
         let path = entry.path();
         let relative = relative_slash_path(root, &path)?;
-        if relative == ".git" || relative.starts_with(".git/") || ignore_rules.matches(&relative) {
+        if relative == ".git" || relative.starts_with(".git/") {
             continue;
         }
 
         let file_type = entry
             .file_type()
             .map_err(|source| RitError::io(&path, source))?;
+        if ignore_rules.matches(&relative) {
+            if file_type.is_dir() {
+                output.ignored.insert(format!("{relative}/"));
+            } else if file_type.is_file() {
+                output.ignored.insert(relative);
+            }
+            continue;
+        }
+
         if file_type.is_dir() {
             scan_directory(root, &path, ignore_rules, output)?;
         } else if file_type.is_file() {
-            output.insert(relative);
+            output.files.insert(relative);
         }
     }
 
@@ -445,7 +523,8 @@ fn read_ignore_file(path: &PathBuf, patterns: &mut Vec<String>) -> Result<()> {
 mod tests {
     use super::{
         IgnoreRules, PorcelainStatus, StatusBranchHeader, StatusEntry, UntrackedFilesMode,
-        collapse_untracked_paths, quote_porcelain_path, untracked_status_paths,
+        collapse_untracked_paths, ignored_status_paths, quote_porcelain_path,
+        untracked_status_paths,
     };
     use crate::PathspecSet;
     use std::collections::BTreeSet;
@@ -595,6 +674,29 @@ mod tests {
         );
 
         assert!(paths.is_empty());
+    }
+
+    #[test]
+    fn ignored_status_keeps_untracked_ignored_paths_only() {
+        let ignored_paths = set(["ignored/", "secret.txt", "tracked.log"]);
+        let tracked_paths = set(["tracked.log"]);
+        let pathspecs = PathspecSet::all();
+
+        let paths = ignored_status_paths(&ignored_paths, &tracked_paths, &pathspecs);
+
+        assert_eq!(paths, set(["ignored/", "secret.txt"]));
+    }
+
+    #[test]
+    fn ignored_status_matches_pathspecs_below_collapsed_directories() {
+        let ignored_paths = set(["ignored/"]);
+        let tracked_paths = BTreeSet::new();
+        let pathspecs =
+            PathspecSet::from_args(&["ignored/deep/a.txt".to_owned()]).expect("valid pathspec");
+
+        let paths = ignored_status_paths(&ignored_paths, &tracked_paths, &pathspecs);
+
+        assert_eq!(paths, set(["ignored/"]));
     }
 
     fn set<const N: usize>(paths: [&str; N]) -> BTreeSet<String> {

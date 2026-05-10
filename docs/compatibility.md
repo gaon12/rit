@@ -103,6 +103,9 @@ including raw paths with spaces.
 Status compatibility tests cover `-b` / `--branch` branch headers for simple
 local-branch, unborn-branch, and detached-HEAD repositories, including the
 NUL-terminated form.
+Status compatibility tests cover `--ignored` porcelain entries for simple
+literal and directory ignore rules, including pathspec and NUL-terminated
+forms.
 One status compatibility test intentionally documents the remaining index stat
 refresh difference: stdout/stderr/exit code match Git, but `.git/index` differs
 because Git refreshes cached stat metadata and rit currently does not.

@@ -101,6 +101,7 @@ Completion criteria:
   - [x] Git-like `-z` NUL-terminated porcelain v1 output.
   - [x] Git-like `-b` / `--branch` porcelain v1 branch header for local and
     unborn/detached HEAD states.
+  - [x] Git-like `--ignored` porcelain v1 entries for simple ignore rules.
 - [x] `rit diff --name-only`
 - [x] `rit diff --name-status`
 - [x] `rit diff --stat`

@@ -287,6 +287,41 @@ fn status_untracked_file_modes_match_git() {
 }
 
 #[test]
+fn status_ignored_outputs_match_git() {
+    let fixture = StatusIgnoredFixture::new("ignored-status");
+
+    for args in [
+        vec!["status", "--porcelain=v1", "--ignored"],
+        vec!["status", "--porcelain=v1", "--ignored=traditional"],
+        vec!["status", "--porcelain=v1", "--ignored=matching"],
+        vec!["status", "--porcelain=v1", "--ignored", "-z"],
+        vec![
+            "status",
+            "--porcelain=v1",
+            "--ignored",
+            "--",
+            "ignored/deep/a.txt",
+        ],
+        vec!["status", "--porcelain=v1", "--ignored", "-uno"],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "ignored status {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn status_quotes_paths_like_git() {
     let fixture = StatusQuotedPathFixture::new("quoted-status");
 
@@ -777,6 +812,44 @@ impl StatusUntrackedFixture {
 }
 
 impl Drop for StatusUntrackedFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct StatusIgnoredFixture {
+    path: PathBuf,
+}
+
+impl StatusIgnoredFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(path.join("ignored").join("deep"))
+            .expect("ignored directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join(".gitignore"), "ignored/\nsecret.txt\n")
+            .expect("gitignore should be written");
+        run_git(&path, ["add", ".gitignore"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+
+        fs::write(path.join("ignored").join("deep").join("a.txt"), "ignored\n")
+            .expect("ignored file should be written");
+        fs::write(path.join("secret.txt"), "secret\n").expect("ignored file should be written");
+        fs::write(path.join("visible.txt"), "visible\n").expect("visible file should be written");
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for StatusIgnoredFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

@@ -69,7 +69,7 @@ List entries in a loose tree object.
 ";
 
 const STATUS_HELP: &str = "\
-rit status --porcelain[=v1] [-b] [-z] [-uno|-unormal|-uall] [--] [<pathspec>...]
+rit status --porcelain[=v1] [-b] [-z] [--ignored] [-uno|-unormal|-uall] [--] [<pathspec>...]
 
 Show a conservative porcelain v1 status.
 ";
@@ -541,8 +541,11 @@ fn status_command(
     };
     match repository.status_porcelain_v1_with_options(
         &pathspecs,
-        status_args.untracked_files,
-        status_args.include_branch_header,
+        rit_core::StatusOptions {
+            untracked_files: status_args.untracked_files,
+            include_branch_header: status_args.include_branch_header,
+            include_ignored: status_args.include_ignored,
+        },
     ) {
         Ok(status) => {
             if status_args.null_terminated {
@@ -565,6 +568,7 @@ struct StatusArgs {
     untracked_files: rit_core::UntrackedFilesMode,
     null_terminated: bool,
     include_branch_header: bool,
+    include_ignored: bool,
 }
 
 fn parse_status_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Option<StatusArgs>> {
@@ -574,6 +578,7 @@ fn parse_status_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Opti
     let mut untracked_files = rit_core::UntrackedFilesMode::Normal;
     let mut null_terminated = false;
     let mut include_branch_header = false;
+    let mut include_ignored = false;
 
     for arg in args {
         match arg.as_str() {
@@ -581,6 +586,12 @@ fn parse_status_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Opti
             "--porcelain" | "--porcelain=v1" | "-s" if !after_separator => has_porcelain = true,
             "-z" if !after_separator => null_terminated = true,
             "-b" | "--branch" if !after_separator => include_branch_header = true,
+            "--ignored" | "--ignored=traditional" | "--ignored=matching" if !after_separator => {
+                include_ignored = true;
+            }
+            "--no-ignored" | "--ignored=no" if !after_separator => {
+                include_ignored = false;
+            }
             "-u" | "--untracked-files" if !after_separator => {
                 untracked_files = rit_core::UntrackedFilesMode::All;
             }
@@ -610,6 +621,7 @@ fn parse_status_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Opti
             untracked_files,
             null_terminated,
             include_branch_header,
+            include_ignored,
         }))
     } else {
         writeln!(stderr, "rit: status currently supports only --porcelain=v1")?;
