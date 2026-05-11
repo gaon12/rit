@@ -22,6 +22,8 @@ pub mod pathspec;
 pub mod refs;
 pub mod repository;
 pub mod semantic_diff;
+#[cfg(feature = "semantic-rust")]
+pub mod semantic_rust;
 pub mod sparse;
 pub mod status;
 pub mod transport;
@@ -64,6 +66,8 @@ pub use repository::{
 #[cfg(feature = "semantic-tree-sitter")]
 pub use semantic_diff::TreeSitterSemanticParser;
 pub use semantic_diff::{WordDiff, WordDiffOperation, word_diff};
+#[cfg(feature = "semantic-rust")]
+pub use semantic_rust::{RustFunctionChange, RustSemanticSummary, summarize_rust_functions};
 pub use sparse::{SparseCheckout, SparseCheckoutMode, SparseCheckoutPattern};
 pub use status::{
     PorcelainStatus, StatusBranchHeader, StatusEntry, StatusOptions, UntrackedFilesMode,

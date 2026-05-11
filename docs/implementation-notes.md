@@ -295,7 +295,9 @@
   `Insert` operations for later semantic summaries.
 - Added optional `semantic-tree-sitter` Cargo feature and parser wrapper for
   language-specific semantic adapters.
-- Still unsupported: language-specific semantic adapters and JSON semantic
+- Added optional `semantic-rust` feature with a tree-sitter Rust adapter that
+  summarizes added, deleted, and changed functions.
+- Still unsupported: TypeScript/Python semantic adapters and JSON semantic
   output.
 
 ### `rit version`

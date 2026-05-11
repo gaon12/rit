@@ -13,6 +13,7 @@ path = "src/lib.rs"
 default = []
 large-files = ["lfs", "xet"]
 lfs = ["dep:serde", "dep:serde_json", "dep:sha2"]
+semantic-rust = ["semantic-tree-sitter", "dep:tree-sitter-rust"]
 semantic-tree-sitter = ["dep:tree-sitter"]
 xet = ["dep:serde"]
 
@@ -22,4 +23,5 @@ serde = { version = "1.0.228", features = ["derive"], optional = true }
 serde_json = { version = "1.0.147", optional = true }
 sha2 = { version = "0.10.9", optional = true }
 tree-sitter = { version = "0.26.8", optional = true }
+tree-sitter-rust = { version = "0.24.2", optional = true }
 toml = "1.1.2"
