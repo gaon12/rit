@@ -7,6 +7,17 @@ use std::{
 
 use crate::{ObjectId, Result, RitError};
 
+mod receive_pack;
+mod upload_pack;
+
+pub use receive_pack::{
+    ReceivePackCommand, ReceivePackCommandStatus, ReceivePackRequest, ReceivePackStatus,
+};
+pub use upload_pack::{
+    UploadPackAckStatus, UploadPackAcknowledgement, UploadPackRequest, UploadPackResponse,
+    UploadPackSideBand,
+};
+
 /// One simple fetch refspec, such as `refs/heads/main:refs/remotes/origin/main`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FetchRefSpec {
@@ -107,254 +118,6 @@ pub struct SmartHttpAdvertisement {
     pub refs: Vec<AdvertisedRef>,
 }
 
-/// Request body for smart HTTP `git-upload-pack`.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct UploadPackRequest {
-    wants: Vec<ObjectId>,
-    haves: Vec<ObjectId>,
-    capabilities: Vec<String>,
-    done: bool,
-}
-
-/// One receive-pack reference update command.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ReceivePackCommand {
-    /// Object ID the server currently has for the ref.
-    pub old_id: ObjectId,
-    /// Object ID the client wants the ref to point to.
-    pub new_id: ObjectId,
-    /// Full ref name to update.
-    pub name: String,
-}
-
-/// Request body for smart HTTP or SSH `git-receive-pack`.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ReceivePackRequest {
-    commands: Vec<ReceivePackCommand>,
-    capabilities: Vec<String>,
-    pack_data: Vec<u8>,
-}
-
-/// Parsed receive-pack status report.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ReceivePackStatus {
-    /// `None` means `unpack ok`; `Some` contains the unpack error message.
-    pub unpack_error: Option<String>,
-    /// Per-ref command statuses.
-    pub commands: Vec<ReceivePackCommandStatus>,
-}
-
-/// Per-ref result in a receive-pack status report.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ReceivePackCommandStatus {
-    /// Reference update succeeded.
-    Ok {
-        /// Updated ref name.
-        ref_name: String,
-    },
-    /// Reference update failed.
-    Rejected {
-        /// Ref name that failed to update.
-        ref_name: String,
-        /// Server-provided rejection reason.
-        message: String,
-    },
-}
-
-/// ACK status words used by upload-pack negotiation.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum UploadPackAckStatus {
-    /// The object is common, and negotiation should continue.
-    Continue,
-    /// The object is a common commit.
-    Common,
-    /// The server is ready to send pack data.
-    Ready,
-}
-
-/// One upload-pack negotiation response line.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum UploadPackAcknowledgement {
-    /// The server has no common object to acknowledge for this round.
-    Nak,
-    /// The server acknowledges a common object.
-    Ack {
-        /// Common object ID reported by the server.
-        object_id: ObjectId,
-        /// Optional multi_ack status word.
-        status: Option<UploadPackAckStatus>,
-    },
-    /// Server-side protocol error returned as an `ERR` pkt-line.
-    Error {
-        /// Human-readable error message without the leading `ERR ` marker.
-        message: String,
-    },
-}
-
-/// Parsed upload-pack response up to the start of pack data.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct UploadPackResponse {
-    /// ACK, NAK, or ERR records returned before pack bytes.
-    pub acknowledgements: Vec<UploadPackAcknowledgement>,
-    /// Raw non-sideband pack bytes when the response switches to `PACK...`.
-    pub pack_data: Option<Vec<u8>>,
-    /// Multiplexed side-band records when side-band capability was used.
-    pub side_bands: Vec<UploadPackSideBand>,
-}
-
-/// One side-band record returned by upload-pack.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum UploadPackSideBand {
-    /// Band 1 contains packfile bytes.
-    PackData(Vec<u8>),
-    /// Band 2 contains progress output.
-    Progress(Vec<u8>),
-    /// Band 3 contains server error output.
-    Error(Vec<u8>),
-}
-
-impl UploadPackRequest {
-    /// Creates a request with one or more wanted objects.
-    pub fn new(wants: Vec<ObjectId>) -> Result<Self> {
-        if wants.is_empty() {
-            return Err(RitError::invalid_input(
-                "upload-pack request requires at least one want",
-            ));
-        }
-        Ok(Self {
-            wants,
-            haves: Vec::new(),
-            capabilities: Vec::new(),
-            done: true,
-        })
-    }
-
-    /// Adds capabilities sent on the first `want` line.
-    pub fn with_capabilities(mut self, capabilities: Vec<String>) -> Self {
-        self.capabilities = capabilities;
-        self
-    }
-
-    /// Adds existing local objects as `have` lines.
-    pub fn with_haves(mut self, haves: Vec<ObjectId>) -> Self {
-        self.haves = haves;
-        self
-    }
-
-    /// Serializes the request as pkt-lines.
-    pub fn to_pkt_lines(&self) -> Vec<u8> {
-        let mut output = Vec::new();
-        for (index, object_id) in self.wants.iter().enumerate() {
-            let mut line = format!("want {object_id}");
-            if index == 0 && !self.capabilities.is_empty() {
-                line.push(' ');
-                line.push_str(&self.capabilities.join(" "));
-            }
-            line.push('\n');
-            write_pkt_line(&mut output, line.as_bytes());
-        }
-        for object_id in &self.haves {
-            write_pkt_line(&mut output, format!("have {object_id}\n").as_bytes());
-        }
-        if self.done {
-            write_pkt_line(&mut output, b"done\n");
-        } else {
-            output.extend_from_slice(b"0000");
-        }
-        output
-    }
-}
-
-impl ReceivePackCommand {
-    /// Creates a reference update command.
-    pub fn new(old_id: ObjectId, new_id: ObjectId, name: impl Into<String>) -> Result<Self> {
-        let name = name.into();
-        if name.is_empty() {
-            return Err(RitError::invalid_input(
-                "receive-pack command requires a ref name",
-            ));
-        }
-        Ok(Self {
-            old_id,
-            new_id,
-            name,
-        })
-    }
-}
-
-impl ReceivePackRequest {
-    /// Creates a receive-pack request with one or more ref update commands.
-    pub fn new(commands: Vec<ReceivePackCommand>) -> Result<Self> {
-        if commands.is_empty() {
-            return Err(RitError::invalid_input(
-                "receive-pack request requires at least one command",
-            ));
-        }
-        Ok(Self {
-            commands,
-            capabilities: Vec::new(),
-            pack_data: Vec::new(),
-        })
-    }
-
-    /// Adds capabilities sent on the first command line.
-    pub fn with_capabilities(mut self, capabilities: Vec<String>) -> Self {
-        self.capabilities = capabilities;
-        self
-    }
-
-    /// Adds raw packfile bytes after the command list flush.
-    pub fn with_pack_data(mut self, pack_data: Vec<u8>) -> Self {
-        self.pack_data = pack_data;
-        self
-    }
-
-    /// Serializes the receive-pack request body.
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut output = Vec::new();
-        for (index, command) in self.commands.iter().enumerate() {
-            let mut line = format!("{} {} {}", command.old_id, command.new_id, command.name);
-            if index == 0 {
-                line.push('\0');
-                line.push_str(&self.capabilities.join(" "));
-            }
-            line.push('\n');
-            write_pkt_line(&mut output, line.as_bytes());
-        }
-        output.extend_from_slice(b"0000");
-        output.extend_from_slice(&self.pack_data);
-        output
-    }
-}
-
-impl ReceivePackStatus {
-    /// Parses a receive-pack `report-status` response.
-    pub fn parse(bytes: &[u8]) -> Result<Self> {
-        let lines = parse_pkt_lines(bytes)?;
-        let mut iter = lines.into_iter();
-        let Some(unpack_line) = iter.next() else {
-            return Err(RitError::invalid_input("empty receive-pack status"));
-        };
-        let unpack_error = parse_receive_pack_unpack_status(&unpack_line)?;
-        let mut commands = Vec::new();
-        for line in iter {
-            if line.is_empty() {
-                break;
-            }
-            commands.push(parse_receive_pack_command_status(&line)?);
-        }
-        if commands.is_empty() {
-            return Err(RitError::invalid_input(
-                "receive-pack status has no command results",
-            ));
-        }
-        Ok(Self {
-            unpack_error,
-            commands,
-        })
-    }
-}
-
 impl SmartHttpResponse {
     /// Returns a header value with case-insensitive name matching.
     pub fn header(&self, name: &str) -> Option<&str> {
@@ -362,71 +125,6 @@ impl SmartHttpResponse {
             .iter()
             .find(|(header_name, _)| header_name.eq_ignore_ascii_case(name))
             .map(|(_, value)| value.as_str())
-    }
-}
-
-impl UploadPackResponse {
-    /// Parses upload-pack ACK/NAK pkt-lines and raw `PACK` data.
-    ///
-    /// Side-band pack data is still handled by future transport work; this
-    /// parser intentionally rejects unknown pkt-line payloads so callers do not
-    /// accidentally treat multiplexed progress or errors as pack data.
-    pub fn parse(bytes: &[u8]) -> Result<Self> {
-        let mut acknowledgements = Vec::new();
-        let mut pack_data = None;
-        let mut side_bands = Vec::new();
-        let mut position = 0;
-
-        while position < bytes.len() {
-            if bytes[position..].starts_with(b"PACK") {
-                pack_data = Some(bytes[position..].to_vec());
-                break;
-            }
-
-            let (payload, next_position) = read_pkt_line_at(bytes, position)?;
-            position = next_position;
-            if payload.is_empty() {
-                continue;
-            }
-            if let Some(side_band) = parse_upload_pack_side_band(&payload)? {
-                side_bands.push(side_band);
-            } else {
-                acknowledgements.push(parse_upload_pack_acknowledgement(&payload)?);
-            }
-        }
-
-        Ok(Self {
-            acknowledgements,
-            pack_data,
-            side_bands,
-        })
-    }
-
-    /// Returns raw pack bytes from either non-sideband or side-band data.
-    pub fn pack_bytes(&self) -> Result<Option<Vec<u8>>> {
-        if let Some(pack_data) = &self.pack_data {
-            return Ok(Some(pack_data.clone()));
-        }
-
-        let mut pack = Vec::new();
-        let mut saw_pack_side_band = false;
-        for side_band in &self.side_bands {
-            match side_band {
-                UploadPackSideBand::PackData(data) => {
-                    saw_pack_side_band = true;
-                    pack.extend_from_slice(data);
-                }
-                UploadPackSideBand::Progress(_) => {}
-                UploadPackSideBand::Error(data) => {
-                    let message = String::from_utf8_lossy(data).trim().to_owned();
-                    return Err(RitError::invalid_input(format!(
-                        "upload-pack side-band error: {message}"
-                    )));
-                }
-            }
-        }
-
-        Ok(saw_pack_side_band.then_some(pack))
     }
 }
 
@@ -626,7 +324,7 @@ impl FetchRefSpec {
     }
 }
 
-fn parse_pkt_lines(bytes: &[u8]) -> Result<Vec<Vec<u8>>> {
+pub(super) fn parse_pkt_lines(bytes: &[u8]) -> Result<Vec<Vec<u8>>> {
     let mut lines = Vec::new();
     let mut position = 0;
     while position < bytes.len() {
@@ -637,7 +335,7 @@ fn parse_pkt_lines(bytes: &[u8]) -> Result<Vec<Vec<u8>>> {
     Ok(lines)
 }
 
-fn read_pkt_line_at(bytes: &[u8], position: usize) -> Result<(Vec<u8>, usize)> {
+pub(super) fn read_pkt_line_at(bytes: &[u8], position: usize) -> Result<(Vec<u8>, usize)> {
     let length_end = position + 4;
     let Some(length_bytes) = bytes.get(position..length_end) else {
         return Err(RitError::invalid_input("truncated pkt-line length"));
@@ -664,7 +362,7 @@ fn read_pkt_line_at(bytes: &[u8], position: usize) -> Result<(Vec<u8>, usize)> {
     Ok((payload.to_vec(), payload_end))
 }
 
-fn write_pkt_line(output: &mut Vec<u8>, payload: &[u8]) {
+pub(super) fn write_pkt_line(output: &mut Vec<u8>, payload: &[u8]) {
     let length = payload.len() + 4;
     output.extend_from_slice(format!("{length:04x}").as_bytes());
     output.extend_from_slice(payload);
@@ -706,113 +404,6 @@ fn parse_advertised_ref_line(
         },
         capabilities,
     ))
-}
-
-fn parse_upload_pack_acknowledgement(line: &[u8]) -> Result<UploadPackAcknowledgement> {
-    let line = line.strip_suffix(b"\n").unwrap_or(line);
-    let line_text = std::str::from_utf8(line)
-        .map_err(|_| RitError::invalid_input("upload-pack response is not UTF-8"))?;
-    if line_text == "NAK" {
-        return Ok(UploadPackAcknowledgement::Nak);
-    }
-    if let Some(message) = line_text.strip_prefix("ERR ") {
-        return Ok(UploadPackAcknowledgement::Error {
-            message: message.to_owned(),
-        });
-    }
-
-    let parts = line_text.split_whitespace().collect::<Vec<_>>();
-    match parts.as_slice() {
-        ["ACK", object_id] => Ok(UploadPackAcknowledgement::Ack {
-            object_id: ObjectId::from_hex(object_id)?,
-            status: None,
-        }),
-        ["ACK", object_id, status] => Ok(UploadPackAcknowledgement::Ack {
-            object_id: ObjectId::from_hex(object_id)?,
-            status: Some(parse_upload_pack_ack_status(status)?),
-        }),
-        _ => Err(RitError::invalid_input(
-            "unsupported upload-pack response line",
-        )),
-    }
-}
-
-fn parse_upload_pack_ack_status(status: &str) -> Result<UploadPackAckStatus> {
-    match status {
-        "continue" => Ok(UploadPackAckStatus::Continue),
-        "common" => Ok(UploadPackAckStatus::Common),
-        "ready" => Ok(UploadPackAckStatus::Ready),
-        _ => Err(RitError::invalid_input(format!(
-            "unsupported upload-pack ACK status: {status}"
-        ))),
-    }
-}
-
-fn parse_receive_pack_unpack_status(line: &[u8]) -> Result<Option<String>> {
-    let line = line.strip_suffix(b"\n").unwrap_or(line);
-    let line_text = std::str::from_utf8(line)
-        .map_err(|_| RitError::invalid_input("receive-pack status is not UTF-8"))?;
-    let Some(result) = line_text.strip_prefix("unpack ") else {
-        return Err(RitError::invalid_input(
-            "receive-pack status is missing unpack result",
-        ));
-    };
-    if result == "ok" {
-        Ok(None)
-    } else if result.is_empty() {
-        Err(RitError::invalid_input(
-            "receive-pack unpack result is empty",
-        ))
-    } else {
-        Ok(Some(result.to_owned()))
-    }
-}
-
-fn parse_receive_pack_command_status(line: &[u8]) -> Result<ReceivePackCommandStatus> {
-    let line = line.strip_suffix(b"\n").unwrap_or(line);
-    let line_text = std::str::from_utf8(line)
-        .map_err(|_| RitError::invalid_input("receive-pack command status is not UTF-8"))?;
-    if let Some(ref_name) = line_text.strip_prefix("ok ") {
-        if ref_name.is_empty() {
-            return Err(RitError::invalid_input(
-                "receive-pack ok status is missing ref name",
-            ));
-        }
-        return Ok(ReceivePackCommandStatus::Ok {
-            ref_name: ref_name.to_owned(),
-        });
-    }
-    if let Some(rest) = line_text.strip_prefix("ng ") {
-        let Some((ref_name, message)) = rest.split_once(' ') else {
-            return Err(RitError::invalid_input(
-                "receive-pack rejection is missing message",
-            ));
-        };
-        if ref_name.is_empty() || message.is_empty() {
-            return Err(RitError::invalid_input(
-                "receive-pack rejection is missing ref name or message",
-            ));
-        }
-        return Ok(ReceivePackCommandStatus::Rejected {
-            ref_name: ref_name.to_owned(),
-            message: message.to_owned(),
-        });
-    }
-    Err(RitError::invalid_input(
-        "unsupported receive-pack command status",
-    ))
-}
-
-fn parse_upload_pack_side_band(payload: &[u8]) -> Result<Option<UploadPackSideBand>> {
-    let Some((&band, data)) = payload.split_first() else {
-        return Ok(None);
-    };
-    match band {
-        1 => Ok(Some(UploadPackSideBand::PackData(data.to_vec()))),
-        2 => Ok(Some(UploadPackSideBand::Progress(data.to_vec()))),
-        3 => Ok(Some(UploadPackSideBand::Error(data.to_vec()))),
-        _ => Ok(None),
-    }
 }
 
 /// Transport protocol family inferred from a repository location.

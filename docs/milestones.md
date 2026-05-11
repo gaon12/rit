@@ -375,6 +375,8 @@ Completion criteria:
 1. Keep M6 case-sensitivity parity under verification as new path lookup
    surfaces are added.
 2. Continue M7 with HTTP transport planning and fetch negotiation boundaries.
+3. Keep large implementation files moving toward focused modules before adding
+   more transport or command surface area.
 
 ## Implementation Notes
 
@@ -441,3 +443,12 @@ Completion criteria:
   - Implemented: pack ingest helper that stores the pack, writes the index, and
     applies supported objects as loose objects.
   - Still open: using negotiated remote pack results in `rit fetch`.
+- 2026-05-11, M7 transport module hygiene:
+  - Verified large-file state before continuing: `transport.rs` had grown to
+    roughly 1955 lines after the pack ingest work.
+  - Implemented: moved upload-pack request/response parsing and receive-pack
+    request/status parsing into focused `transport/upload_pack.rs` and
+    `transport/receive_pack.rs` modules while keeping the public transport API
+    names re-exported from `transport`.
+  - Result: `transport.rs` is now roughly 1546 lines, with upload-pack and
+    receive-pack protocol logic isolated for easier review and future M7 work.

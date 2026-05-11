@@ -607,3 +607,18 @@
   attributes patterns, quoted pattern parsing, macro expansion, and CLI
   `check-attr` output.
 - Repository mutation: no.
+
+## Code Organization
+
+### Transport protocol modules
+
+- 2026-05-11 hygiene pass: `crates/rit-core/src/transport.rs` had grown past
+  1900 lines during M7 pack ingestion work.
+- Split focused upload-pack request/response parsing into
+  `crates/rit-core/src/transport/upload_pack.rs`.
+- Split focused receive-pack request/status parsing into
+  `crates/rit-core/src/transport/receive_pack.rs`.
+- Public API compatibility: `transport` still re-exports the same
+  `UploadPack*` and `ReceivePack*` types.
+- Behavior change: none intended; this is a readability/module-boundary change
+  before more remote fetch and push workflow work.
