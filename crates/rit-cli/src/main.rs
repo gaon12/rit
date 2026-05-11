@@ -371,7 +371,14 @@ fn clone_command(
         return Ok(ExitCode::from(129));
     }
 
-    let source = std::path::PathBuf::from(&positional[0]);
+    let source_location = rit_core::TransportLocation::parse(&positional[0]);
+    let Some(source) = source_location.local_path() else {
+        writeln!(
+            stderr,
+            "rit: clone --local requires a local repository path"
+        )?;
+        return Ok(ExitCode::from(129));
+    };
     let directory = positional
         .get(1)
         .map(std::path::PathBuf::from)
@@ -430,11 +437,20 @@ fn fetch_command(
         return Ok(ExitCode::from(129));
     }
 
+    let source_location = rit_core::TransportLocation::parse(&positional[0]);
+    let Some(source) = source_location.local_path() else {
+        writeln!(
+            stderr,
+            "rit: fetch currently supports only local repository paths"
+        )?;
+        return Ok(ExitCode::from(129));
+    };
+
     let repository = match discover_repository(stderr)? {
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    let options = rit_core::LocalFetchOptions::new(&positional[0]);
+    let options = rit_core::LocalFetchOptions::new(source);
     match repository.fetch_local(&options) {
         Ok(result) => {
             if !quiet {
@@ -1909,6 +1925,29 @@ mod tests {
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit fetch"));
         assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn clone_local_rejects_remote_locations() {
+        let (code, stdout, stderr) = run_with(&[
+            "clone",
+            "--local",
+            "--no-checkout",
+            "https://example.test/repo.git",
+        ]);
+
+        assert_eq!(code, ExitCode::from(129));
+        assert_eq!(stdout, "");
+        assert!(stderr.contains("requires a local repository path"));
+    }
+
+    #[test]
+    fn fetch_rejects_remote_locations() {
+        let (code, stdout, stderr) = run_with(&["fetch", "git@example.test:org/repo.git"]);
+
+        assert_eq!(code, ExitCode::from(129));
+        assert_eq!(stdout, "");
+        assert!(stderr.contains("only local repository paths"));
     }
 
     #[test]

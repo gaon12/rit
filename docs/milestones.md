@@ -233,7 +233,7 @@ Completion criteria:
     calling external `git` in production code.
   - [x] `fetch <local-repository>` copies objects into an existing repository
     and writes `FETCH_HEAD` without updating refs.
-- [ ] Protocol model.
+- [x] Protocol model for local, HTTP(S), and SSH location classification.
 - [ ] HTTP transport.
 - [ ] SSH transport.
 - [ ] Fetch refs negotiation.
@@ -346,5 +346,4 @@ Completion criteria:
 
 1. Keep M6 case-sensitivity parity under verification as new path lookup
    surfaces are added.
-2. Continue M7 with a small protocol model for local/HTTP/SSH transport
-   boundaries.
+2. Continue M7 with HTTP transport planning and fetch negotiation boundaries.

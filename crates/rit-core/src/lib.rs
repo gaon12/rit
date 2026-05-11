@@ -17,6 +17,7 @@ pub mod pathspec;
 pub mod refs;
 pub mod repository;
 pub mod status;
+pub mod transport;
 pub mod write;
 
 pub use error::{Result, RitError};
@@ -37,6 +38,7 @@ pub use repository::{
 pub use status::{
     PorcelainStatus, StatusBranchHeader, StatusEntry, StatusOptions, UntrackedFilesMode,
 };
+pub use transport::{TransportLocation, TransportProtocol};
 pub use write::{
     AddOptions, CommitOptions, CommitResult, FileModeOverride, SignatureIdentity, SignatureTime,
 };

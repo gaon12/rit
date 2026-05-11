@@ -24,6 +24,8 @@ The current codebase implements an early local Git subset:
   shared metadata.
 - Config reads use a shared scalar parser for repository format checks and
   user identity lookup.
+- Transport locations are classified as local, HTTP(S), or SSH before command
+  implementations choose the supported transfer path.
 - Index v2 read/write for regular files, including status stat refresh for
   clean tracked files, raw extension-byte preservation, and committed
   `100644`/`100755` executable-bit modes. Optional index extension records can

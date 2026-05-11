@@ -47,6 +47,9 @@
   direct Git comparison for `clone --local --no-checkout`.
 - 2026-05-11 local fetch object-transfer slice checked `git fetch -h` and a
   direct Git comparison for `fetch <local-repository>`.
+- 2026-05-11 transport protocol model slice checked `git clone -h` and
+  `git fetch -h`; implemented classification for local paths, HTTP(S), SSH
+  URLs, and scp-like SSH locations.
 
 ## Milestone Notes
 
@@ -490,6 +493,18 @@
   mode is used for compatibility coverage.
 - Repository mutation: writes object files and `.git/FETCH_HEAD`.
 - Risk: moderate; fetch mutates only the destination repository.
+
+### Transport model
+
+- Baseline commands checked: `git clone -h`, `git fetch -h`
+- Supported protocol classification: local filesystem paths, `http://`,
+  `https://`, `ssh://`, and scp-like `user@host:path` locations.
+- Unsupported behavior: no HTTP, HTTPS, or SSH network transfer is implemented
+  yet. Remote-looking locations are classified and rejected by commands whose
+  current implementation only supports local paths.
+- Repository mutation: no direct mutation; command implementations decide how
+  to act on a classified location.
+- Risk: low; this is routing metadata for future transports.
 
 ### `rit rev-parse` revision support
 
