@@ -111,6 +111,24 @@ cargo run -p rit-cli -- status --porcelain=v1
 cargo run -p rit-cli -- diff --cached --name-status
 ```
 
+## Release Builds
+
+`rit-min` is the default single-binary release profile:
+
+```bash
+cargo build -p rit-cli --release --locked
+```
+
+`rit-full` enables the optional model and adapter features currently intended
+for full releases:
+
+```bash
+cargo build -p rit-cli --release --locked --features rit-core/large-files,rit-core/semantic-json,rit-core/semantic-rust,rit-core/semantic-typescript,rit-core/semantic-python,rit-core/vfs
+```
+
+Release archive names, contents, and target triples are defined in
+`docs/release.md`.
+
 ## Compatibility Workflow
 
 Before implementing or expanding a command, refresh the local Git baseline:

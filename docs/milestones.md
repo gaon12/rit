@@ -421,7 +421,7 @@ Completion criteria:
 - [x] Feature matrix for `rit-min` and `rit-full`.
 - [x] CI build matrix.
 - [x] Release archive layout.
-- [ ] README release instructions.
+- [x] README release instructions.
 - [ ] License and attribution audit.
 
 Completion criteria:
