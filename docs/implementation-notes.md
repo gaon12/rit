@@ -663,3 +663,11 @@
 - Behavior change: none intended; this keeps the CLI entrypoint focused on
   argument dispatch and command execution while preserving the existing help
   output tested by the CLI suite.
+
+### CLI remote module
+
+- 2026-05-12 hygiene pass: moved `clone`, `fetch`, and `push` command handling
+  from `crates/rit-cli/src/main.rs` into `crates/rit-cli/src/remote.rs`.
+- Behavior change: none intended; this keeps remote command parsing and
+  dispatch together while reducing the CLI entrypoint after the plain HTTP push
+  workflow landed.

@@ -511,3 +511,10 @@ Completion criteria:
     `rit-cli/src/help.rs`.
   - Result: `rit-cli/src/main.rs` is now roughly 1909 lines, with help output
     covered by the existing CLI tests.
+- 2026-05-12, CLI remote module hygiene:
+  - Verified large-file state after plain HTTP push: `rit-cli/src/main.rs`
+    had grown back to roughly 2000 lines.
+  - Implemented: moved `clone`, `fetch`, and `push` command handling into
+    `rit-cli/src/remote.rs`.
+  - Result: `rit-cli/src/main.rs` is now roughly 1755 lines, with remote command
+    behavior covered by the existing CLI and compatibility tests.
