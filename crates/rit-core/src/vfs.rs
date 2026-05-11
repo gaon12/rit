@@ -1,7 +1,9 @@
 use crate::LazyMaterializationPolicy;
 
+mod materialize;
 mod platform;
 
+pub use materialize::{VfsMaterializeRequest, VfsMaterializeResult, VfsMaterializeStatus};
 pub use platform::{VfsPlatformBackend, VfsPlatformBackendPlan};
 
 /// Requested VFS backend.

@@ -364,10 +364,14 @@
 - Added platform backend planning for Windows Projected File System, macOS FUSE,
   and Linux FUSE candidates without claiming that OS-specific drivers are
   implemented.
+- Added `Repository::materialize_vfs_blob` for safe on-demand blob
+  materialization into a worktree path; it rejects path traversal, writes via a
+  temporary file, does not overwrite existing files, and verifies the object is
+  a blob.
 - VFS availability now reports a clear message when a binary is built without
   the `vfs` feature.
-- Still unsupported: fallback backend execution, platform backend selection,
-  lazy materialization I/O, and background prefetch execution.
+- Still unsupported: platform backend execution and background prefetch
+  execution.
 
 ### `rit version`
 

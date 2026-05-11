@@ -1,7 +1,10 @@
 use crate::{
-    FallbackMaterializedAction, FallbackMaterializedBackend, LazyMaterializationPolicy,
-    VfsAvailability, VfsBackendPreference, VfsPlan, VfsPlatformBackend, VfsPlatformBackendPlan,
+    FallbackMaterializedAction, FallbackMaterializedBackend, InitOptions,
+    LazyMaterializationPolicy, ObjectKind, Repository, VfsAvailability, VfsBackendPreference,
+    VfsMaterializeRequest, VfsMaterializeStatus, VfsPlan, VfsPlatformBackend,
+    VfsPlatformBackendPlan,
 };
+use std::fs;
 
 #[test]
 fn disabled_plan_uses_fallback_materialized_backend() {
@@ -91,6 +94,79 @@ fn platform_backend_plan_matches_build_availability() {
     }
 }
 
+#[test]
+fn materialize_vfs_blob_writes_missing_file() {
+    let root = temp_path("vfs-materialize");
+    let repository = Repository::init(&InitOptions::new(&root)).expect("repo should init");
+    let object_id = repository
+        .loose_objects()
+        .write_object(ObjectKind::Blob, b"hello\n")
+        .expect("blob should write");
+
+    let result = repository
+        .materialize_vfs_blob(&VfsMaterializeRequest {
+            path: "src/hello.txt".to_owned(),
+            object_id,
+            executable: false,
+        })
+        .expect("blob should materialize");
+
+    assert_eq!(result.status, VfsMaterializeStatus::Materialized);
+    assert_eq!(result.bytes_written, 6);
+    assert_eq!(
+        fs::read_to_string(root.join("src").join("hello.txt")).expect("file should read"),
+        "hello\n"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn materialize_vfs_blob_keeps_existing_file() {
+    let root = temp_path("vfs-existing");
+    let repository = Repository::init(&InitOptions::new(&root)).expect("repo should init");
+    fs::write(root.join("existing.txt"), "worktree").expect("file should write");
+    let object_id = repository
+        .loose_objects()
+        .write_object(ObjectKind::Blob, b"object")
+        .expect("blob should write");
+
+    let result = repository
+        .materialize_vfs_blob(&VfsMaterializeRequest {
+            path: "existing.txt".to_owned(),
+            object_id,
+            executable: false,
+        })
+        .expect("existing file should be kept");
+
+    assert_eq!(result.status, VfsMaterializeStatus::AlreadyMaterialized);
+    assert_eq!(
+        fs::read_to_string(root.join("existing.txt")).expect("file should read"),
+        "worktree"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn materialize_vfs_blob_rejects_path_escape() {
+    let root = temp_path("vfs-escape");
+    let repository = Repository::init(&InitOptions::new(&root)).expect("repo should init");
+    let object_id = repository
+        .loose_objects()
+        .write_object(ObjectKind::Blob, b"hello")
+        .expect("blob should write");
+
+    let error = repository
+        .materialize_vfs_blob(&VfsMaterializeRequest {
+            path: "../outside.txt".to_owned(),
+            object_id,
+            executable: false,
+        })
+        .expect_err("path escape should fail");
+
+    assert!(error.to_string().contains("cannot escape"));
+    let _ = fs::remove_dir_all(root);
+}
+
 fn lazy_policy() -> LazyMaterializationPolicy {
     LazyMaterializationPolicy {
         workspace: "mobile".to_owned(),
@@ -98,4 +174,11 @@ fn lazy_policy() -> LazyMaterializationPolicy {
         include: vec!["apps/mobile".to_owned(), "packages/ui".to_owned()],
         requires_partial_clone: true,
     }
+}
+
+fn temp_path(name: &str) -> std::path::PathBuf {
+    let suffix = std::process::id();
+    let path = std::env::temp_dir().join(format!("rit-{name}-{suffix}"));
+    let _ = fs::remove_dir_all(&path);
+    path
 }
