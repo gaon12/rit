@@ -10,6 +10,8 @@ use std::fs;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
+mod pack_write;
+
 /// Reader for Git loose objects under `.git/objects`.
 #[derive(Clone, Debug)]
 pub struct LooseObjectDb {

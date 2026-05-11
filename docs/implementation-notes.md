@@ -589,6 +589,9 @@
 - Supported index format: pack index v2.
 - Supported pack object types: whole commit, tree, blob, tag; OFS_DELTA;
   REF_DELTA.
+- Supported pack writing: whole-object pack v2 generation from existing object
+  IDs, using Git object type codes, variable-length object sizes, zlib payloads,
+  and a trailing SHA-1 pack checksum.
 - Git-compatible behavior: after `git gc --aggressive --prune=now`,
   `rit cat-file`, `rit ls-tree`, `rit log`, and `rit show --no-patch` can
   read packed whole objects. `rit cat-file` compatibility coverage also reads

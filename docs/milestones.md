@@ -267,7 +267,10 @@ Completion criteria:
   - [x] receive-pack reference update request body model.
   - [x] receive-pack `report-status` parser.
   - [x] Smart HTTP receive-pack POST wiring.
-  - [ ] Push pack generation and ref update workflow.
+  - [~] Push pack generation and ref update workflow.
+    - [x] Whole-object pack generation from existing object IDs.
+    - [ ] Client push workflow to choose objects, send receive-pack, and update
+      refs.
 
 Completion criteria:
 - Transport code does not live in core command formatting and does not depend on
@@ -478,3 +481,13 @@ Completion criteria:
     HTTP path while keeping HTTPS and SSH rejected until those transports exist.
   - Still open: HTTPS/TLS, SSH sessions, named remote config, multiple
     refspecs, multi-round negotiation, and thin-pack fixups.
+- 2026-05-11, M7 push pack generation:
+  - Reference Git: `git version 2.52.0.windows.1`.
+  - Reference docs checked: local `gitformat-pack(5)` and
+    `gitprotocol-pack(5)`.
+  - Implemented: pure Rust whole-object packfile generation from existing
+    object IDs in `LooseObjectDb`, with pack v2 header, object type/size
+    headers, zlib-compressed payloads, and trailing pack checksum.
+  - Still open: deciding the object set for push, thin-pack/delta generation,
+    sending the generated pack through receive-pack, and interpreting remote
+    ref update results as a full push workflow.
