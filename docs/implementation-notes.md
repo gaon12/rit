@@ -47,7 +47,7 @@
   comparisons for `diff --cached -M` exact rename output.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
-  `--pathspec-file-nul`.
+  `--pathspec-file-nul`, including a quoted pathspec entry.
 - 2026-05-11 local clone object-transfer slice checked `git clone -h` and a
   direct Git comparison for `clone --local --no-checkout`.
 - 2026-05-11 local fetch object-transfer slice checked `git fetch -h` and a
@@ -187,7 +187,8 @@
   bracket-class pathspecs in `add`, `restore`, and `reset`.
 - Added `--pathspec-from-file` and `--pathspec-file-nul` CLI parsing for
   `add`, `restore`, and `reset`, backed by the existing pathspec expansion.
-- Still unsupported: full Git pathspec-file quoting, similarity-threshold
+- Added C-style quoted pathspec-file entry parsing for common escapes.
+- Still unsupported: full Git pathspec-file edge cases, similarity-threshold
   rename scoring, copy detection, and `show` path filtering for patch output.
 
 ## Implemented Commands
@@ -339,7 +340,7 @@
   `:(top)`, `:/`, and `:(icase)` pathspec magic, plus `--chmod=+x`, `--chmod=-x`,
   `--chmod +x`, `--chmod -x`, `--pathspec-from-file`, and
   `--pathspec-file-nul`.
-- Unsupported options: full Git pathspec-file quoting, update/all modes,
+- Unsupported options: full Git pathspec-file edge cases, update/all modes,
   patch/interactive mode, sparse mode, ignored-file override.
 - Git-compatible behavior: writes blob loose objects and Git index v2 entries
   for regular files; directory pathspecs recursively add regular files and
@@ -424,7 +425,7 @@
   `:(glob)`, `:(top)`, `:/`, and `:(icase)` pathspec magic, plus
   `--pathspec-from-file` and `--pathspec-file-nul`.
 - Unsupported options: source revisions, patch mode, merge conflict modes,
-  sparse controls, full Git pathspec-file quoting.
+  sparse controls, full Git pathspec-file edge cases.
 - Git-compatible behavior: explicit tracked file restore for regular files,
   including executable worktree permissions for `100755` index entries on Unix.
 - Git-compatible behavior: symlink index entries are restored as symlinks on
@@ -445,7 +446,7 @@
   `:(top)`, `:/`, and `:(icase)` pathspec magic, equivalent to unstaging matching paths
   from `HEAD`, plus `--pathspec-from-file` and `--pathspec-file-nul`.
 - Unsupported options: commit-moving resets, soft/mixed/hard/merge/keep modes,
-  patch mode, full Git pathspec-file quoting.
+  patch mode, full Git pathspec-file edge cases.
 - Git-compatible behavior: unstages explicit paths and reports remaining unstaged modifications.
 - Git-compatible behavior: clean tracked paths refresh cached index stat
   metadata during `status --porcelain=v1`.
