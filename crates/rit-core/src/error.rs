@@ -20,6 +20,11 @@ pub enum RitError {
         path: PathBuf,
         source: std::io::Error,
     },
+    /// A transport I/O operation failed.
+    TransportIo {
+        location: String,
+        source: std::io::Error,
+    },
     /// The caller supplied invalid command or object input.
     InvalidInput { message: String },
 }
@@ -29,6 +34,14 @@ impl RitError {
     pub fn io(path: impl Into<PathBuf>, source: std::io::Error) -> Self {
         Self::Io {
             path: path.into(),
+            source,
+        }
+    }
+
+    /// Wraps an I/O error with the transport location that caused it.
+    pub fn transport_io(location: impl Into<String>, source: std::io::Error) -> Self {
+        Self::TransportIo {
+            location: location.into(),
             source,
         }
     }
@@ -70,6 +83,9 @@ impl Display for RitError {
                     path.display()
                 )
             }
+            Self::TransportIo { location, source } => {
+                write!(formatter, "transport I/O error at {location}: {source}")
+            }
             Self::InvalidInput { message } => formatter.write_str(message),
         }
     }
@@ -79,6 +95,7 @@ impl std::error::Error for RitError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Io { source, .. } => Some(source),
+            Self::TransportIo { source, .. } => Some(source),
             _ => None,
         }
     }

@@ -1,4 +1,9 @@
-use std::path::PathBuf;
+use std::{
+    io::{Read, Write},
+    net::TcpStream,
+    path::PathBuf,
+    time::Duration,
+};
 
 use crate::{ObjectId, Result, RitError};
 
@@ -41,6 +46,30 @@ pub struct SmartHttpRequest {
     pub info_refs_url: String,
     /// Expected advertisement content type.
     pub advertisement_content_type: String,
+}
+
+/// Request metadata for a smart HTTP upload-pack POST.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SmartHttpPostRequest {
+    /// URL for the `git-upload-pack` request.
+    pub url: String,
+    /// Request content type.
+    pub content_type: String,
+    /// Expected response content type.
+    pub response_content_type: String,
+    /// Serialized pkt-line body.
+    pub body: Vec<u8>,
+}
+
+/// Minimal HTTP response returned by the smart HTTP client.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SmartHttpResponse {
+    /// Numeric HTTP status code.
+    pub status_code: u16,
+    /// Response headers in received order.
+    pub headers: Vec<(String, String)>,
+    /// Raw response body.
+    pub body: Vec<u8>,
 }
 
 /// One reference advertised by a smart HTTP service.
@@ -176,6 +205,16 @@ impl UploadPackRequest {
     }
 }
 
+impl SmartHttpResponse {
+    /// Returns a header value with case-insensitive name matching.
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(header_name, _)| header_name.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+    }
+}
+
 impl UploadPackResponse {
     /// Parses upload-pack ACK/NAK pkt-lines and raw `PACK` data.
     ///
@@ -211,6 +250,85 @@ impl UploadPackResponse {
             pack_data,
             side_bands,
         })
+    }
+}
+
+/// Small blocking HTTP client for the first smart HTTP implementation.
+#[derive(Clone, Debug)]
+pub struct BlockingSmartHttpClient {
+    timeout: Duration,
+}
+
+impl Default for BlockingSmartHttpClient {
+    fn default() -> Self {
+        Self {
+            timeout: Duration::from_secs(30),
+        }
+    }
+}
+
+impl BlockingSmartHttpClient {
+    /// Builds a client with a custom connect/read/write timeout.
+    pub fn new(timeout: Duration) -> Self {
+        Self { timeout }
+    }
+
+    /// Performs smart HTTP reference discovery with a GET request.
+    pub fn get_info_refs(
+        &self,
+        location: &TransportLocation,
+        service: SmartHttpService,
+    ) -> Result<SmartHttpResponse> {
+        let request = location.smart_http_info_refs(service)?;
+        self.send_http_request("GET", &request.info_refs_url, None, &[])
+    }
+
+    /// Performs a smart HTTP upload-pack POST request.
+    pub fn post_upload_pack(
+        &self,
+        location: &TransportLocation,
+        request: &UploadPackRequest,
+    ) -> Result<SmartHttpResponse> {
+        let post_request = location.smart_http_upload_pack(request)?;
+        self.send_http_request(
+            "POST",
+            &post_request.url,
+            Some(post_request.content_type.as_str()),
+            &post_request.body,
+        )
+    }
+
+    fn send_http_request(
+        &self,
+        method: &str,
+        url: &str,
+        content_type: Option<&str>,
+        body: &[u8],
+    ) -> Result<SmartHttpResponse> {
+        let parsed_url = PlainHttpUrl::parse(url)?;
+        let address = format!("{}:{}", parsed_url.host, parsed_url.port);
+        let mut stream = TcpStream::connect(address)
+            .map_err(|source| RitError::transport_io(url.to_owned(), source))?;
+        stream
+            .set_read_timeout(Some(self.timeout))
+            .map_err(|source| RitError::transport_io(url.to_owned(), source))?;
+        stream
+            .set_write_timeout(Some(self.timeout))
+            .map_err(|source| RitError::transport_io(url.to_owned(), source))?;
+
+        let request = build_http_request(method, &parsed_url, content_type, body);
+        stream
+            .write_all(&request)
+            .map_err(|source| RitError::transport_io(url.to_owned(), source))?;
+        stream
+            .flush()
+            .map_err(|source| RitError::transport_io(url.to_owned(), source))?;
+
+        let mut response = Vec::new();
+        stream
+            .read_to_end(&mut response)
+            .map_err(|source| RitError::transport_io(url.to_owned(), source))?;
+        parse_http_response(&response)
     }
 }
 
@@ -498,6 +616,162 @@ impl TransportLocation {
             ))),
         }
     }
+
+    /// Builds the smart HTTP upload-pack POST request metadata.
+    pub fn smart_http_upload_pack(
+        &self,
+        request: &UploadPackRequest,
+    ) -> Result<SmartHttpPostRequest> {
+        match self.protocol {
+            TransportProtocol::Http | TransportProtocol::Https => {
+                let base = self.original.trim_end_matches('/');
+                let service_name = SmartHttpService::UploadPack.name();
+                Ok(SmartHttpPostRequest {
+                    url: format!("{base}/{service_name}"),
+                    content_type: format!("application/x-{service_name}-request"),
+                    response_content_type: format!("application/x-{service_name}-result"),
+                    body: request.to_pkt_lines(),
+                })
+            }
+            _ => Err(RitError::invalid_input(format!(
+                "smart HTTP requires an HTTP(S) location: {}",
+                self.original
+            ))),
+        }
+    }
+}
+
+struct PlainHttpUrl {
+    host: String,
+    port: u16,
+    path_and_query: String,
+}
+
+impl PlainHttpUrl {
+    fn parse(url: &str) -> Result<Self> {
+        let Some(rest) = url.strip_prefix("http://") else {
+            return Err(RitError::invalid_input(format!(
+                "blocking smart HTTP client currently supports only plain http:// URLs: {url}"
+            )));
+        };
+        let (host_port, path_and_query) = match rest.split_once('/') {
+            Some((host_port, path)) => (host_port, format!("/{path}")),
+            None => (rest, "/".to_owned()),
+        };
+        if host_port.is_empty() {
+            return Err(RitError::invalid_input(format!(
+                "HTTP URL is missing a host: {url}"
+            )));
+        }
+        let (host, port) = match host_port.rsplit_once(':') {
+            Some((host, port)) if !host.is_empty() => {
+                let port = port.parse::<u16>().map_err(|_| {
+                    RitError::invalid_input(format!("HTTP URL has invalid port: {url}"))
+                })?;
+                (host.to_owned(), port)
+            }
+            _ => (host_port.to_owned(), 80),
+        };
+        Ok(Self {
+            host,
+            port,
+            path_and_query,
+        })
+    }
+
+    fn host_header(&self) -> String {
+        if self.port == 80 {
+            self.host.clone()
+        } else {
+            format!("{}:{}", self.host, self.port)
+        }
+    }
+}
+
+fn build_http_request(
+    method: &str,
+    url: &PlainHttpUrl,
+    content_type: Option<&str>,
+    body: &[u8],
+) -> Vec<u8> {
+    let mut request = format!(
+        "{method} {} HTTP/1.1\r\nHost: {}\r\nUser-Agent: rit/{}\r\nAccept: */*\r\nConnection: close\r\n",
+        url.path_and_query,
+        url.host_header(),
+        crate::version()
+    )
+    .into_bytes();
+    if let Some(content_type) = content_type {
+        request.extend_from_slice(format!("Content-Type: {content_type}\r\n").as_bytes());
+        request.extend_from_slice(format!("Content-Length: {}\r\n", body.len()).as_bytes());
+    }
+    request.extend_from_slice(b"\r\n");
+    request.extend_from_slice(body);
+    request
+}
+
+fn parse_http_response(bytes: &[u8]) -> Result<SmartHttpResponse> {
+    let Some(header_end) = bytes.windows(4).position(|window| window == b"\r\n\r\n") else {
+        return Err(RitError::invalid_input(
+            "HTTP response is missing header terminator",
+        ));
+    };
+    let header_bytes = &bytes[..header_end];
+    let body = bytes[header_end + 4..].to_vec();
+    let header_text = std::str::from_utf8(header_bytes)
+        .map_err(|_| RitError::invalid_input("HTTP response headers are not UTF-8"))?;
+    let mut lines = header_text.split("\r\n");
+    let Some(status_line) = lines.next() else {
+        return Err(RitError::invalid_input("HTTP response is empty"));
+    };
+    let status_code = parse_http_status_code(status_line)?;
+    let mut headers = Vec::new();
+    for line in lines {
+        if line.is_empty() {
+            continue;
+        }
+        let Some((name, value)) = line.split_once(':') else {
+            return Err(RitError::invalid_input("malformed HTTP response header"));
+        };
+        headers.push((name.trim().to_owned(), value.trim().to_owned()));
+    }
+
+    if matches!(
+        headers
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("Transfer-Encoding"))
+            .map(|(_, value)| value.to_ascii_lowercase()),
+        Some(value) if value.contains("chunked")
+    ) {
+        return Err(RitError::invalid_input(
+            "chunked smart HTTP responses are not implemented yet",
+        ));
+    }
+
+    Ok(SmartHttpResponse {
+        status_code,
+        headers,
+        body,
+    })
+}
+
+fn parse_http_status_code(status_line: &str) -> Result<u16> {
+    let mut parts = status_line.split_whitespace();
+    let Some(version) = parts.next() else {
+        return Err(RitError::invalid_input("HTTP response is missing version"));
+    };
+    if !version.starts_with("HTTP/") {
+        return Err(RitError::invalid_input(
+            "HTTP response has invalid status line",
+        ));
+    }
+    let Some(code) = parts.next() else {
+        return Err(RitError::invalid_input(
+            "HTTP response is missing status code",
+        ));
+    };
+    code.parse::<u16>()
+        .map_err(|_| RitError::invalid_input("HTTP response has invalid status code"))
 }
 
 fn looks_like_scp_location(input: &str) -> bool {
@@ -522,11 +796,17 @@ fn is_windows_drive_path(input: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        FetchRefSpec, SmartHttpAdvertisement, SmartHttpService, TransportLocation,
-        TransportProtocol, UploadPackAckStatus, UploadPackAcknowledgement, UploadPackResponse,
-        UploadPackSideBand,
+        BlockingSmartHttpClient, FetchRefSpec, SmartHttpAdvertisement, SmartHttpService,
+        TransportLocation, TransportProtocol, UploadPackAckStatus, UploadPackAcknowledgement,
+        UploadPackResponse, UploadPackSideBand,
     };
     use crate::ObjectId;
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        thread,
+        time::Duration,
+    };
 
     #[test]
     fn classifies_local_paths() {
@@ -596,6 +876,86 @@ mod tests {
                 .smart_http_info_refs(SmartHttpService::UploadPack)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn builds_smart_http_upload_pack_requests() {
+        let want = ObjectId::from_hex("0a53e9ddeaddad63ad106860237bbf53411d11a7").expect("want");
+        let upload_pack = super::UploadPackRequest::new(vec![want]).expect("request");
+        let location = TransportLocation::parse("https://example.test/repo.git/");
+        let request = location
+            .smart_http_upload_pack(&upload_pack)
+            .expect("https supports smart http metadata");
+
+        assert_eq!(request.url, "https://example.test/repo.git/git-upload-pack");
+        assert_eq!(
+            request.content_type,
+            "application/x-git-upload-pack-request"
+        );
+        assert_eq!(
+            request.response_content_type,
+            "application/x-git-upload-pack-result"
+        );
+        assert_eq!(request.body, upload_pack.to_pkt_lines());
+    }
+
+    #[test]
+    fn blocking_http_client_gets_info_refs() {
+        let (base_url, request_handle) = serve_one_http_request(
+            b"HTTP/1.1 200 OK\r\nContent-Type: application/x-git-upload-pack-advertisement\r\nContent-Length: 4\r\nConnection: close\r\n\r\nbody",
+        );
+        let location = TransportLocation::parse(&format!("{base_url}/repo.git"));
+        let client = BlockingSmartHttpClient::new(Duration::from_secs(2));
+        let response = client
+            .get_info_refs(&location, SmartHttpService::UploadPack)
+            .expect("GET should succeed");
+        let request = String::from_utf8(request_handle.join().expect("server thread"))
+            .expect("request is UTF-8");
+
+        assert!(
+            request.starts_with("GET /repo.git/info/refs?service=git-upload-pack HTTP/1.1\r\n")
+        );
+        assert!(request.contains("\r\nHost: 127.0.0.1:"));
+        assert_eq!(response.status_code, 200);
+        assert_eq!(
+            response.header("content-type"),
+            Some("application/x-git-upload-pack-advertisement")
+        );
+        assert_eq!(response.body, b"body");
+    }
+
+    #[test]
+    fn blocking_http_client_posts_upload_pack() {
+        let (base_url, request_handle) =
+            serve_one_http_request(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\n0008NAK\n");
+        let location = TransportLocation::parse(&format!("{base_url}/repo.git"));
+        let want = ObjectId::from_hex("0a53e9ddeaddad63ad106860237bbf53411d11a7").expect("want");
+        let upload_pack = super::UploadPackRequest::new(vec![want]).expect("request");
+        let client = BlockingSmartHttpClient::new(Duration::from_secs(2));
+        let response = client
+            .post_upload_pack(&location, &upload_pack)
+            .expect("POST should succeed");
+        let request = request_handle.join().expect("server thread");
+        let request_text =
+            String::from_utf8(request.clone()).expect("request headers and body are UTF-8");
+
+        assert!(request_text.starts_with("POST /repo.git/git-upload-pack HTTP/1.1\r\n"));
+        assert!(
+            request_text.contains("\r\nContent-Type: application/x-git-upload-pack-request\r\n")
+        );
+        assert!(request.ends_with(&upload_pack.to_pkt_lines()));
+        assert_eq!(response.body, b"0008NAK\n");
+    }
+
+    #[test]
+    fn blocking_http_client_rejects_https_until_tls_exists() {
+        let location = TransportLocation::parse("https://example.test/repo.git");
+        let client = BlockingSmartHttpClient::new(Duration::from_secs(2));
+        let error = client
+            .get_info_refs(&location, SmartHttpService::UploadPack)
+            .expect_err("https needs TLS support");
+
+        assert!(error.to_string().contains("plain http://"));
     }
 
     #[test]
@@ -733,5 +1093,48 @@ mod tests {
             UploadPackResponse::parse(b"000dprogress\n").expect_err("line should be rejected");
 
         assert!(error.to_string().contains("unsupported upload-pack"));
+    }
+
+    fn serve_one_http_request(response: &'static [u8]) -> (String, thread::JoinHandle<Vec<u8>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let address = listener.local_addr().expect("local address");
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("accept connection");
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 1024];
+            loop {
+                let bytes_read = stream.read(&mut buffer).expect("read request");
+                if bytes_read == 0 {
+                    break;
+                }
+                request.extend_from_slice(&buffer[..bytes_read]);
+                if request_is_complete(&request) {
+                    break;
+                }
+            }
+            stream.write_all(response).expect("write response");
+            request
+        });
+        (format!("http://127.0.0.1:{}", address.port()), handle)
+    }
+
+    fn request_is_complete(request: &[u8]) -> bool {
+        let Some(header_end) = request
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .map(|index| index + 4)
+        else {
+            return false;
+        };
+        let header_text = String::from_utf8_lossy(&request[..header_end]);
+        let Some(content_length) = header_text.lines().find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("Content-Length")
+                .then(|| value.trim().parse::<usize>().ok())
+                .flatten()
+        }) else {
+            return true;
+        };
+        request.len() >= header_end + content_length
     }
 }

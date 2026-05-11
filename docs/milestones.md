@@ -237,7 +237,9 @@ Completion criteria:
 - [~] HTTP transport.
   - [x] Smart HTTP `info/refs?service=...` request model.
   - [x] Smart HTTP advertised refs response parser.
-  - [ ] HTTP client I/O.
+  - [~] HTTP client I/O.
+    - [x] Blocking plain HTTP GET discovery and POST upload-pack requests.
+    - [ ] HTTPS/TLS and chunked response decoding.
 - [ ] SSH transport.
 - [~] Fetch refs negotiation.
   - [x] Single local fetch refspec updates a destination ref after copying
@@ -370,5 +372,15 @@ Completion criteria:
     non-sideband raw `PACK` data.
   - Implemented: pure Rust parsing for side-band records 1 (pack data), 2
     (progress), and 3 (server error).
-  - Still open: HTTP client I/O, applying received packfiles into the object
+  - Still open: HTTP fetch wiring, applying received packfiles into the object
     database, and full remote negotiation.
+- 2026-05-11, M7 smart HTTP client I/O:
+  - Reference Git: `git version 2.52.0.windows.1`.
+  - Reference docs checked: local `gitprotocol-http(5)` smart HTTP
+    `info/refs?service=git-upload-pack`, upload-pack POST content type, and
+    upload-pack result content type.
+  - Implemented: `BlockingSmartHttpClient` for plain `http://` GET discovery
+    and POST upload-pack requests using Rust `TcpStream`, plus raw HTTP
+    response parsing and transport I/O errors.
+  - Still open: TLS for `https://`, chunked transfer decoding, status/content
+    type validation policy, and wiring the client into `rit fetch`.
