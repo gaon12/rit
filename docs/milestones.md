@@ -243,7 +243,9 @@ Completion criteria:
     - [x] Smart HTTP status, content-type, and advertisement prefix
       validation.
     - [ ] HTTPS/TLS.
-- [ ] SSH transport.
+- [~] SSH transport.
+  - [x] SSH/scp-like upload-pack and receive-pack command model.
+  - [ ] SSH process/session I/O.
 - [~] Fetch refs negotiation.
   - [x] Single local fetch refspec updates a destination ref after copying
     objects.
@@ -393,3 +395,12 @@ Completion criteria:
     and advertisement parser.
   - Still open: TLS for `https://`, pack negotiation, pack application, and
     wiring the client into `rit fetch`.
+- 2026-05-11, M7 SSH command model:
+  - Reference Git: `git version 2.52.0.windows.1`.
+  - Reference docs checked: local `gitprotocol-pack(5)` SSH transport examples
+    for `git-upload-pack` and repository path quoting.
+  - Implemented: pure Rust parsing for `ssh://user@host/path` and
+    `user@host:path` locations plus remote `git-upload-pack` /
+    `git-receive-pack` command construction.
+  - Still open: starting an SSH session, pkt-line I/O over that session,
+    authentication, and pack negotiation.

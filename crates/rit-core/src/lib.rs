@@ -40,9 +40,9 @@ pub use status::{
 };
 pub use transport::{
     AdvertisedRef, BlockingSmartHttpClient, FetchRefSpec, SmartHttpAdvertisement,
-    SmartHttpPostRequest, SmartHttpRequest, SmartHttpResponse, SmartHttpService, TransportLocation,
-    TransportProtocol, UploadPackAckStatus, UploadPackAcknowledgement, UploadPackRequest,
-    UploadPackResponse, UploadPackSideBand,
+    SmartHttpPostRequest, SmartHttpRequest, SmartHttpResponse, SmartHttpService, SshServiceCommand,
+    TransportLocation, TransportProtocol, UploadPackAckStatus, UploadPackAcknowledgement,
+    UploadPackRequest, UploadPackResponse, UploadPackSideBand,
 };
 pub use write::{
     AddOptions, CommitOptions, CommitResult, FileModeOverride, SignatureIdentity, SignatureTime,
