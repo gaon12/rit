@@ -717,7 +717,7 @@ fn parse_http_response(bytes: &[u8]) -> Result<SmartHttpResponse> {
         ));
     };
     let header_bytes = &bytes[..header_end];
-    let body = bytes[header_end + 4..].to_vec();
+    let raw_body = &bytes[header_end + 4..];
     let header_text = std::str::from_utf8(header_bytes)
         .map_err(|_| RitError::invalid_input("HTTP response headers are not UTF-8"))?;
     let mut lines = header_text.split("\r\n");
@@ -736,23 +736,79 @@ fn parse_http_response(bytes: &[u8]) -> Result<SmartHttpResponse> {
         headers.push((name.trim().to_owned(), value.trim().to_owned()));
     }
 
-    if matches!(
-        headers
-            .iter()
-            .find(|(name, _)| name.eq_ignore_ascii_case("Transfer-Encoding"))
-            .map(|(_, value)| value.to_ascii_lowercase()),
-        Some(value) if value.contains("chunked")
-    ) {
-        return Err(RitError::invalid_input(
-            "chunked smart HTTP responses are not implemented yet",
-        ));
-    }
+    let body = if http_response_is_chunked(&headers) {
+        decode_chunked_body(raw_body)?
+    } else {
+        raw_body.to_vec()
+    };
 
     Ok(SmartHttpResponse {
         status_code,
         headers,
         body,
     })
+}
+
+fn http_response_is_chunked(headers: &[(String, String)]) -> bool {
+    headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("Transfer-Encoding"))
+        .map(|(_, value)| value.to_ascii_lowercase().contains("chunked"))
+        .unwrap_or(false)
+}
+
+fn decode_chunked_body(bytes: &[u8]) -> Result<Vec<u8>> {
+    let mut output = Vec::new();
+    let mut position = 0;
+    loop {
+        let size_line_end = find_crlf(bytes, position)
+            .ok_or_else(|| RitError::invalid_input("chunked response is missing chunk size"))?;
+        let size_line = std::str::from_utf8(&bytes[position..size_line_end])
+            .map_err(|_| RitError::invalid_input("chunked response size is not UTF-8"))?;
+        let size_text = size_line.split(';').next().unwrap_or(size_line).trim();
+        let chunk_size = usize::from_str_radix(size_text, 16)
+            .map_err(|_| RitError::invalid_input("chunked response has invalid chunk size"))?;
+        position = size_line_end + 2;
+
+        if chunk_size == 0 {
+            return consume_chunked_trailers(bytes, position).map(|_| output);
+        }
+
+        let chunk_end = position + chunk_size;
+        let Some(chunk) = bytes.get(position..chunk_end) else {
+            return Err(RitError::invalid_input(
+                "chunked response body is truncated",
+            ));
+        };
+        output.extend_from_slice(chunk);
+        position = chunk_end;
+
+        if bytes.get(position..position + 2) != Some(b"\r\n") {
+            return Err(RitError::invalid_input(
+                "chunked response chunk is missing terminator",
+            ));
+        }
+        position += 2;
+    }
+}
+
+fn consume_chunked_trailers(bytes: &[u8], mut position: usize) -> Result<usize> {
+    loop {
+        let line_end = find_crlf(bytes, position)
+            .ok_or_else(|| RitError::invalid_input("chunked response trailers are truncated"))?;
+        if line_end == position {
+            return Ok(line_end + 2);
+        }
+        position = line_end + 2;
+    }
+}
+
+fn find_crlf(bytes: &[u8], start: usize) -> Option<usize> {
+    bytes
+        .get(start..)?
+        .windows(2)
+        .position(|window| window == b"\r\n")
+        .map(|offset| start + offset)
 }
 
 fn parse_http_status_code(status_line: &str) -> Result<u16> {
@@ -945,6 +1001,32 @@ mod tests {
         );
         assert!(request.ends_with(&upload_pack.to_pkt_lines()));
         assert_eq!(response.body, b"0008NAK\n");
+    }
+
+    #[test]
+    fn blocking_http_client_decodes_chunked_responses() {
+        let (base_url, request_handle) = serve_one_http_request(
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n4\r\nbody\r\n0\r\n\r\n",
+        );
+        let location = TransportLocation::parse(&format!("{base_url}/repo.git"));
+        let client = BlockingSmartHttpClient::new(Duration::from_secs(2));
+        let response = client
+            .get_info_refs(&location, SmartHttpService::UploadPack)
+            .expect("GET should succeed");
+
+        request_handle.join().expect("server thread");
+        assert_eq!(response.status_code, 200);
+        assert_eq!(response.body, b"body");
+    }
+
+    #[test]
+    fn rejects_truncated_chunked_responses() {
+        let error = super::parse_http_response(
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4\r\nbo",
+        )
+        .expect_err("chunk is truncated");
+
+        assert!(error.to_string().contains("truncated"));
     }
 
     #[test]

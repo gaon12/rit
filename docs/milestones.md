@@ -239,7 +239,8 @@ Completion criteria:
   - [x] Smart HTTP advertised refs response parser.
   - [~] HTTP client I/O.
     - [x] Blocking plain HTTP GET discovery and POST upload-pack requests.
-    - [ ] HTTPS/TLS and chunked response decoding.
+    - [x] Chunked response decoding.
+    - [ ] HTTPS/TLS.
 - [ ] SSH transport.
 - [~] Fetch refs negotiation.
   - [x] Single local fetch refspec updates a destination ref after copying
@@ -382,5 +383,6 @@ Completion criteria:
   - Implemented: `BlockingSmartHttpClient` for plain `http://` GET discovery
     and POST upload-pack requests using Rust `TcpStream`, plus raw HTTP
     response parsing and transport I/O errors.
-  - Still open: TLS for `https://`, chunked transfer decoding, status/content
-    type validation policy, and wiring the client into `rit fetch`.
+  - Implemented: chunked transfer decoding for smart HTTP responses.
+  - Still open: TLS for `https://`, status/content type validation policy, and
+    wiring the client into `rit fetch`.
