@@ -368,7 +368,9 @@ Completion criteria:
   - [x] Agent protocol identity lookup and signing.
 - [~] OS keychain adapters.
   - [x] Model platform default keychain adapter selection.
-  - [ ] Read/write credential implementations for each OS keychain.
+  - [x] Windows Credential Manager read/write implementation.
+  - [ ] macOS Keychain read/write implementation.
+  - [ ] freedesktop Secret Service/libsecret read/write implementation.
 - [x] CI non-interactive mode.
   - [x] Disable auth prompts for CI-like environments and
     `GIT_TERMINAL_PROMPT=0`.

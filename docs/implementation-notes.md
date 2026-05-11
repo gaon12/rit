@@ -278,10 +278,12 @@
   read/write streams, plus Unix-domain socket connection from `SSH_AUTH_SOCK`.
 - Added platform default OS keychain adapter selection models for Windows
   Credential Manager, macOS Keychain, and freedesktop Secret Service/libsecret.
+- Added `SystemKeychainProvider` with Windows Credential Manager read/write and
+  erase support through the native Credential Manager API.
 - Added CI/non-interactive prompt policy for `CI`, `GITHUB_ACTIONS`,
   `RIT_NONINTERACTIVE`, and `GIT_TERMINAL_PROMPT=0`.
-- Still unsupported: Windows named-pipe SSH agent connections, OS keychain
-  read/write implementations, and using auth policies inside transport
+- Still unsupported: Windows named-pipe SSH agent connections, macOS Keychain
+  read/write, libsecret read/write, and using auth policies inside transport
   execution.
 
 ### `rit version`

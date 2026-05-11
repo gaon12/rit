@@ -91,7 +91,7 @@ pub use auth::{
     GitCredentialHelperExecutor, GitCredentialHelperOperation, GitCredentialHelperProvider,
     GitCredentialMessage, KeychainProviderKind, ProcessGitCredentialHelperExecutor, SecretString,
     SshAgentClient, SshAgentConfig, SshAgentIdentity, SshAgentSignFlags, SshAgentSignature,
-    SystemKeychainConfig,
+    SystemKeychainConfig, SystemKeychainProvider,
 };
 pub use commit::{Commit, Signature, parse_commit};
 pub use config::{GitConfig, GitConfigEntry};
