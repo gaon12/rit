@@ -26,6 +26,31 @@ pub struct LocalCloneOptions {
     pub directory: PathBuf,
 }
 
+/// Options for fetching objects from a local repository.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LocalFetchOptions {
+    /// Existing local repository to copy objects from.
+    pub source: PathBuf,
+}
+
+impl LocalFetchOptions {
+    /// Builds local fetch options for `source`.
+    pub fn new(source: impl Into<PathBuf>) -> Self {
+        Self {
+            source: source.into(),
+        }
+    }
+}
+
+/// Summary of a local fetch operation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LocalFetchResult {
+    /// Commit recorded in `FETCH_HEAD`.
+    pub fetch_head: ObjectId,
+    /// Human-readable source path recorded in `FETCH_HEAD`.
+    pub source: String,
+}
+
 impl LocalCloneOptions {
     /// Builds local clone options for `source` and `directory`.
     pub fn new(source: impl Into<PathBuf>, directory: impl Into<PathBuf>) -> Self {
@@ -188,6 +213,31 @@ impl Repository {
         Ok(target)
     }
 
+    /// Fetches the source repository's `HEAD` objects into this repository.
+    ///
+    /// The first supported shape mirrors `git fetch <local-repo>` without a
+    /// refspec: objects are copied and `FETCH_HEAD` is overwritten, while local
+    /// refs are left untouched.
+    pub fn fetch_local(&self, options: &LocalFetchOptions) -> Result<LocalFetchResult> {
+        let source = Repository::open(&options.source)?;
+        let fetch_head = source.resolve_head()?.ok_or_else(|| {
+            RitError::invalid_input("local fetch from an unborn branch is not implemented")
+        })?;
+        copy_directory_contents(
+            &source.common_dir().join("objects"),
+            &self.common_dir().join("objects"),
+        )?;
+        let source_name = options.source.display().to_string();
+        write_file(
+            &self.git_dir().join("FETCH_HEAD"),
+            format!("{fetch_head}\t\t{source_name}\n").as_bytes(),
+        )?;
+        Ok(LocalFetchResult {
+            fetch_head,
+            source: source_name,
+        })
+    }
+
     /// Returns the path to the repository metadata directory.
     pub fn git_dir(&self) -> &Path {
         &self.git_dir
@@ -256,6 +306,16 @@ impl Repository {
             return self
                 .resolve_head()?
                 .ok_or_else(|| RitError::invalid_input("HEAD does not point at a commit yet"));
+        }
+        if revision == "FETCH_HEAD" {
+            let path = self.git_dir.join("FETCH_HEAD");
+            let contents =
+                fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
+            let object_id = contents
+                .split_whitespace()
+                .next()
+                .ok_or_else(|| RitError::invalid_input("FETCH_HEAD is empty"))?;
+            return ObjectId::from_hex(object_id);
         }
 
         if revision.len() == 40

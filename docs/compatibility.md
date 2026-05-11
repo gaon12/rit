@@ -43,7 +43,7 @@ The current codebase implements an early local Git subset:
   `diff --cached --name-only`, `diff --cached --name-status`,
   `diff --cached --numstat`, `diff --cached --stat`, `log`, `add`, `commit`,
   `branch`, `tag`, `restore`, `reset`, `checkout`, `switch`, and
-  `clone --local --no-checkout`.
+  `clone --local --no-checkout`, plus local-path `fetch`.
 - Small text patch output is supported for default `diff`, `diff -p`, and
   `diff --cached`.
 - Ordinary literal file and directory pathspec filtering is supported for
@@ -169,6 +169,8 @@ created by `git gc --aggressive --prune=now` through `rit cat-file -p`.
 Local clone compatibility tests cover `clone --local --no-checkout` by
 comparing the cloned `HEAD` object and ensuring no checkout file is
 materialized.
+Local fetch compatibility tests cover `fetch <local-repository>` in quiet mode
+by comparing `FETCH_HEAD` and the fetched commit contents.
 
 Local write compatibility tests currently cover directory pathspec behavior and
 simple wildcard/bracket-class pathspec behavior for `add`, `restore`, and

@@ -13,6 +13,7 @@ Core commands:
   help          Display help for rit or a command
   init          Create an empty Git repository
   clone         Clone a local repository without checkout
+  fetch         Fetch objects from a local repository
   rev-parse     Inspect the current repository paths
   cat-file      Inspect loose objects
   ls-tree       List entries in a tree object
@@ -55,6 +56,12 @@ const CLONE_HELP: &str = "\
 rit clone [-q|--quiet] --local --no-checkout <source> [<directory>]
 
 Clone a local repository by copying objects and refs. Checkout is not implemented yet.
+";
+
+const FETCH_HELP: &str = "\
+rit fetch [-q|--quiet] <local-repository>
+
+Fetch objects from a local repository and write FETCH_HEAD. Refspecs are not implemented yet.
 ";
 
 const REV_PARSE_HELP: &str = "\
@@ -191,6 +198,7 @@ fn run(
         [command] if command == "version" => print_version(stdout),
         [command, rest @ ..] if command == "init" => init_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "clone" => clone_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "fetch" => fetch_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "rev-parse" => rev_parse_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "cat-file" => cat_file_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ls-tree" => ls_tree_command(rest, stdout, stderr),
@@ -235,6 +243,7 @@ fn print_command_help(
         "help" => stdout.write_all(HELP_HELP.as_bytes())?,
         "init" => stdout.write_all(INIT_HELP.as_bytes())?,
         "clone" => stdout.write_all(CLONE_HELP.as_bytes())?,
+        "fetch" => stdout.write_all(FETCH_HELP.as_bytes())?,
         "rev-parse" => stdout.write_all(REV_PARSE_HELP.as_bytes())?,
         "cat-file" => stdout.write_all(CAT_FILE_HELP.as_bytes())?,
         "ls-tree" => stdout.write_all(LS_TREE_HELP.as_bytes())?,
@@ -393,6 +402,52 @@ fn default_clone_directory(source: &std::path::Path) -> std::path::PathBuf {
         .filter(|name| !name.is_empty())
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::path::PathBuf::from("repository"))
+}
+
+fn fetch_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let mut quiet = false;
+    let mut positional = Vec::new();
+    let mut after_separator = false;
+
+    for arg in args {
+        match arg.as_str() {
+            "--" if !after_separator => after_separator = true,
+            "-q" | "--quiet" if !after_separator => quiet = true,
+            unsupported if unsupported.starts_with('-') && !after_separator => {
+                writeln!(stderr, "rit: unsupported fetch option '{unsupported}'")?;
+                return Ok(ExitCode::from(129));
+            }
+            value => positional.push(value.to_owned()),
+        }
+    }
+
+    if positional.len() != 1 {
+        writeln!(stderr, "rit: fetch expects exactly one local repository")?;
+        return Ok(ExitCode::from(129));
+    }
+
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    let options = rit_core::LocalFetchOptions::new(&positional[0]);
+    match repository.fetch_local(&options) {
+        Ok(result) => {
+            if !quiet {
+                writeln!(stdout, "From {}", result.source)?;
+                writeln!(stdout, " * branch            HEAD       -> FETCH_HEAD")?;
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            Ok(ExitCode::from(1))
+        }
+    }
 }
 
 fn rev_parse_command(
@@ -1844,6 +1899,15 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit clone"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn fetch_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "fetch"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit fetch"));
         assert_eq!(stderr, "");
     }
 

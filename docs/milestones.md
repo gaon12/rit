@@ -231,7 +231,8 @@ Completion criteria:
 - [~] Local clone/fetch object transfer.
   - [x] `clone --local --no-checkout` copies objects and local refs without
     calling external `git` in production code.
-  - [ ] Local fetch into an existing repository.
+  - [x] `fetch <local-repository>` copies objects into an existing repository
+    and writes `FETCH_HEAD` without updating refs.
 - [ ] Protocol model.
 - [ ] HTTP transport.
 - [ ] SSH transport.
@@ -345,5 +346,5 @@ Completion criteria:
 
 1. Keep M6 case-sensitivity parity under verification as new path lookup
    surfaces are added.
-2. Begin M7 with local clone/fetch object transfer that does not call the
-   external `git` binary in production code.
+2. Continue M7 with a small protocol model for local/HTTP/SSH transport
+   boundaries.

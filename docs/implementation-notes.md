@@ -45,6 +45,8 @@
   in `status`, `diff`, `ls-files`, and `add`.
 - 2026-05-11 local clone object-transfer slice checked `git clone -h` and a
   direct Git comparison for `clone --local --no-checkout`.
+- 2026-05-11 local fetch object-transfer slice checked `git fetch -h` and a
+  direct Git comparison for `fetch <local-repository>`.
 
 ## Milestone Notes
 
@@ -472,10 +474,28 @@
 - Risk: moderate; object/ref transfer is copy-based and does not mutate the
   source repository.
 
+### `rit fetch`
+
+- Baseline command checked: `git fetch -h`
+- Supported options: `--quiet`/`-q` with one local repository path and no
+  refspec.
+- Unsupported options: named remotes, refspec updates, append/atomic/force,
+  tags, prune, shallow/partial fetch, submodules, protocol options, stdin, and
+  maintenance hooks.
+- Git-compatible behavior: `fetch <local-repository>` copies source objects
+  into the current repository and overwrites `.git/FETCH_HEAD` with the source
+  `HEAD` commit. Local refs and remote-tracking refs are not updated, matching
+  Git's no-refspec local fetch shape.
+- Intentional differences: default progress/status text is simplified; quiet
+  mode is used for compatibility coverage.
+- Repository mutation: writes object files and `.git/FETCH_HEAD`.
+- Risk: moderate; fetch mutates only the destination repository.
+
 ### `rit rev-parse` revision support
 
 - Baseline command checked: `git rev-parse -h`
-- Added support: full object IDs, unambiguous abbreviated object IDs, `HEAD`, local branch names, lightweight tag names.
+- Added support: full object IDs, unambiguous abbreviated object IDs, `HEAD`,
+  `FETCH_HEAD`, local branch names, lightweight tag names.
 - Unsupported revision syntax: ancestry operators, ranges, path suffixes, reflog selectors.
 - Repository mutation: no.
 
