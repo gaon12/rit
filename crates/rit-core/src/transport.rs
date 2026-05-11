@@ -14,6 +14,35 @@ pub struct FetchRefSpec {
     pub destination: String,
 }
 
+/// Git smart HTTP service endpoints.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SmartHttpService {
+    /// Fetch/clone service.
+    UploadPack,
+    /// Push service.
+    ReceivePack,
+}
+
+impl SmartHttpService {
+    /// Returns the service name used in Git HTTP query parameters and MIME
+    /// types.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::UploadPack => "git-upload-pack",
+            Self::ReceivePack => "git-receive-pack",
+        }
+    }
+}
+
+/// Request metadata for Git smart HTTP reference discovery.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SmartHttpRequest {
+    /// URL for `GET` reference discovery.
+    pub info_refs_url: String,
+    /// Expected advertisement content type.
+    pub advertisement_content_type: String,
+}
+
 impl FetchRefSpec {
     /// Parses one fetch refspec.
     pub fn parse(input: &str) -> Result<Self> {
@@ -98,6 +127,27 @@ impl TransportLocation {
     pub fn local_path(&self) -> Option<PathBuf> {
         self.is_local().then(|| PathBuf::from(&self.original))
     }
+
+    /// Builds the smart HTTP `info/refs` discovery request for HTTP(S)
+    /// locations.
+    pub fn smart_http_info_refs(&self, service: SmartHttpService) -> Result<SmartHttpRequest> {
+        match self.protocol {
+            TransportProtocol::Http | TransportProtocol::Https => {
+                let base = self.original.trim_end_matches('/');
+                let service_name = service.name();
+                Ok(SmartHttpRequest {
+                    info_refs_url: format!("{base}/info/refs?service={service_name}"),
+                    advertisement_content_type: format!(
+                        "application/x-{service_name}-advertisement"
+                    ),
+                })
+            }
+            _ => Err(RitError::invalid_input(format!(
+                "smart HTTP requires an HTTP(S) location: {}",
+                self.original
+            ))),
+        }
+    }
 }
 
 fn looks_like_scp_location(input: &str) -> bool {
@@ -121,7 +171,7 @@ fn is_windows_drive_path(input: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{FetchRefSpec, TransportLocation, TransportProtocol};
+    use super::{FetchRefSpec, SmartHttpService, TransportLocation, TransportProtocol};
 
     #[test]
     fn classifies_local_paths() {
@@ -169,5 +219,27 @@ mod tests {
 
         assert!(FetchRefSpec::parse("refs/heads/main").is_err());
         assert!(FetchRefSpec::parse(":refs/heads/main").is_err());
+    }
+
+    #[test]
+    fn builds_smart_http_discovery_requests() {
+        let location = TransportLocation::parse("https://example.test/repo.git/");
+        let request = location
+            .smart_http_info_refs(SmartHttpService::UploadPack)
+            .expect("https supports smart http");
+        assert_eq!(
+            request.info_refs_url,
+            "https://example.test/repo.git/info/refs?service=git-upload-pack"
+        );
+        assert_eq!(
+            request.advertisement_content_type,
+            "application/x-git-upload-pack-advertisement"
+        );
+
+        assert!(
+            TransportLocation::parse("../repo")
+                .smart_http_info_refs(SmartHttpService::UploadPack)
+                .is_err()
+        );
     }
 }

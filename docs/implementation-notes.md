@@ -52,6 +52,9 @@
   URLs, and scp-like SSH locations.
 - 2026-05-11 local fetch refspec slice checked `git fetch -h` and direct Git
   comparisons for `fetch <local-repository> <src>:<dst>`.
+- 2026-05-11 smart HTTP request-model slice checked `git help protocol-http`;
+  modeled `info/refs?service=git-upload-pack` and `git-receive-pack`
+  discovery URLs and expected advertisement content types.
 
 ## Milestone Notes
 
@@ -504,6 +507,8 @@
 - Baseline commands checked: `git clone -h`, `git fetch -h`
 - Supported protocol classification: local filesystem paths, `http://`,
   `https://`, `ssh://`, and scp-like `user@host:path` locations.
+- Supported HTTP model: smart HTTP reference-discovery request metadata for
+  `git-upload-pack` and `git-receive-pack`.
 - Unsupported behavior: no HTTP, HTTPS, or SSH network transfer is implemented
   yet. Remote-looking locations are classified and rejected by commands whose
   current implementation only supports local paths.
