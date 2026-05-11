@@ -1,5 +1,6 @@
 use super::{Credential, CredentialRequest, SecretString};
 use crate::GitConfig;
+use std::path::Path;
 
 /// Git credential helper line-protocol message.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -14,6 +15,8 @@ pub struct GitCredentialMessage {
     pub username: Option<String>,
     /// Password or token.
     pub password: Option<SecretString>,
+    /// Whether helpers should stop without consulting later providers.
+    pub quit: bool,
 }
 
 /// Configured Git credential helper command.
@@ -47,6 +50,20 @@ impl GitCredentialHelper {
         }
         helpers
     }
+
+    /// Builds the shell command line Git would use for a helper operation,
+    /// without routing through the `git` executable for named helpers.
+    pub fn command_line_for_operation(&self, operation: &str) -> String {
+        let command = self.command.trim();
+        let command = if let Some(shell_snippet) = command.strip_prefix('!') {
+            shell_snippet.to_owned()
+        } else if helper_starts_with_absolute_path(command) {
+            command.to_owned()
+        } else {
+            format!("git-credential-{command}")
+        };
+        format!("{command} {operation}")
+    }
 }
 
 impl GitCredentialMessage {
@@ -58,6 +75,7 @@ impl GitCredentialMessage {
             path: request.path.clone(),
             username: request.username.clone(),
             password: None,
+            quit: false,
         }
     }
 
@@ -69,6 +87,7 @@ impl GitCredentialMessage {
             path: None,
             username: credential.username.clone(),
             password: Some(credential.secret.clone()),
+            quit: false,
         }
     }
 
@@ -84,6 +103,9 @@ impl GitCredentialMessage {
             "password",
             self.password.as_ref().map(SecretString::expose_secret),
         );
+        if self.quit {
+            push_protocol_field(&mut output, "quit", Some("true"));
+        }
         output.push('\n');
         output
     }
@@ -104,6 +126,7 @@ impl GitCredentialMessage {
                 "path" => message.path = Some(value.to_owned()),
                 "username" => message.username = Some(value.to_owned()),
                 "password" => message.password = Some(SecretString::new(value)),
+                "quit" => message.quit = matches!(value, "true" | "1"),
                 _ => {}
             }
         }
@@ -118,6 +141,11 @@ fn push_protocol_field(output: &mut String, key: &str, value: Option<&str>) {
         output.push_str(value);
         output.push('\n');
     }
+}
+
+fn helper_starts_with_absolute_path(command: &str) -> bool {
+    let first_word = command.split_whitespace().next().unwrap_or_default();
+    Path::new(first_word).is_absolute()
 }
 
 #[cfg(test)]
@@ -141,6 +169,7 @@ mod tests {
         );
 
         assert_eq!(response.username.as_deref(), Some("alice"));
+        assert!(!response.quit);
         assert_eq!(
             response
                 .password
@@ -194,5 +223,31 @@ mod tests {
                 },
             ]
         );
+    }
+
+    #[test]
+    fn git_credential_helper_builds_operation_command_lines() {
+        assert_eq!(
+            GitCredentialHelper {
+                command: "cache --timeout=60".to_owned(),
+            }
+            .command_line_for_operation("get"),
+            "git-credential-cache --timeout=60 get"
+        );
+
+        assert_eq!(
+            GitCredentialHelper {
+                command: "!f() { echo username=alice; }; f".to_owned(),
+            }
+            .command_line_for_operation("get"),
+            "f() { echo username=alice; }; f get"
+        );
+    }
+
+    #[test]
+    fn git_credential_protocol_parses_quit() {
+        let response = GitCredentialMessage::parse_protocol_text("quit=true\n\n");
+
+        assert!(response.quit);
     }
 }
