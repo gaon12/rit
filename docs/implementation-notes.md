@@ -383,6 +383,8 @@
 - Added `.github/workflows/ci.yml` with stable Rust format, clippy, test, and
   release build matrices across Ubuntu, macOS, and Windows for `rit-min` and
   `rit-full`.
+- Documented release archive naming, target triples, and archive contents in
+  `docs/release.md`.
 
 ### `rit version`
 

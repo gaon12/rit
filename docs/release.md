@@ -28,3 +28,46 @@ Current `rit-core` feature flags:
 
 Release builds must keep working with no feature flags. Feature-gated code must
 return clear unsupported-feature messages instead of silently changing behavior.
+
+## Archive Layout
+
+Release archives use this name format:
+
+```text
+rit-<version>-<profile>-<target>.<ext>
+```
+
+Examples:
+
+```text
+rit-0.1.0-rit-min-x86_64-unknown-linux-gnu.tar.gz
+rit-0.1.0-rit-full-x86_64-pc-windows-msvc.zip
+```
+
+Archive contents:
+
+```text
+rit-<version>-<profile>-<target>/
+  rit or rit.exe
+  README.md
+  LICENSE-MIT
+  LICENSE-APACHE
+  THIRD-PARTY-NOTICES.md
+  docs/
+    compatibility.md
+    implementation-notes.md
+    release.md
+```
+
+The binary must live at the archive root after extracting the top-level
+directory. Release archives should not include `target/`, `.git/`, test
+fixtures, or local configuration files.
+
+Recommended target triples for the first release matrix:
+
+| Target | Archive extension |
+| --- | --- |
+| `x86_64-unknown-linux-gnu` | `.tar.gz` |
+| `x86_64-apple-darwin` | `.tar.gz` |
+| `aarch64-apple-darwin` | `.tar.gz` |
+| `x86_64-pc-windows-msvc` | `.zip` |
