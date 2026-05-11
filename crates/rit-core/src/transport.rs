@@ -109,6 +109,19 @@ pub struct UploadPackResponse {
     pub acknowledgements: Vec<UploadPackAcknowledgement>,
     /// Raw non-sideband pack bytes when the response switches to `PACK...`.
     pub pack_data: Option<Vec<u8>>,
+    /// Multiplexed side-band records when side-band capability was used.
+    pub side_bands: Vec<UploadPackSideBand>,
+}
+
+/// One side-band record returned by upload-pack.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum UploadPackSideBand {
+    /// Band 1 contains packfile bytes.
+    PackData(Vec<u8>),
+    /// Band 2 contains progress output.
+    Progress(Vec<u8>),
+    /// Band 3 contains server error output.
+    Error(Vec<u8>),
 }
 
 impl UploadPackRequest {
@@ -172,6 +185,7 @@ impl UploadPackResponse {
     pub fn parse(bytes: &[u8]) -> Result<Self> {
         let mut acknowledgements = Vec::new();
         let mut pack_data = None;
+        let mut side_bands = Vec::new();
         let mut position = 0;
 
         while position < bytes.len() {
@@ -185,12 +199,17 @@ impl UploadPackResponse {
             if payload.is_empty() {
                 continue;
             }
-            acknowledgements.push(parse_upload_pack_acknowledgement(&payload)?);
+            if let Some(side_band) = parse_upload_pack_side_band(&payload)? {
+                side_bands.push(side_band);
+            } else {
+                acknowledgements.push(parse_upload_pack_acknowledgement(&payload)?);
+            }
         }
 
         Ok(Self {
             acknowledgements,
             pack_data,
+            side_bands,
         })
     }
 }
@@ -388,6 +407,18 @@ fn parse_upload_pack_ack_status(status: &str) -> Result<UploadPackAckStatus> {
     }
 }
 
+fn parse_upload_pack_side_band(payload: &[u8]) -> Result<Option<UploadPackSideBand>> {
+    let Some((&band, data)) = payload.split_first() else {
+        return Ok(None);
+    };
+    match band {
+        1 => Ok(Some(UploadPackSideBand::PackData(data.to_vec()))),
+        2 => Ok(Some(UploadPackSideBand::Progress(data.to_vec()))),
+        3 => Ok(Some(UploadPackSideBand::Error(data.to_vec()))),
+        _ => Ok(None),
+    }
+}
+
 /// Transport protocol family inferred from a repository location.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TransportProtocol {
@@ -493,6 +524,7 @@ mod tests {
     use super::{
         FetchRefSpec, SmartHttpAdvertisement, SmartHttpService, TransportLocation,
         TransportProtocol, UploadPackAckStatus, UploadPackAcknowledgement, UploadPackResponse,
+        UploadPackSideBand,
     };
     use crate::ObjectId;
 
@@ -634,6 +666,7 @@ mod tests {
             response.pack_data,
             Some(b"PACK\x00\x00\x00\x02payload".to_vec())
         );
+        assert!(response.side_bands.is_empty());
     }
 
     #[test]
@@ -659,6 +692,7 @@ mod tests {
             ]
         );
         assert_eq!(response.pack_data, None);
+        assert!(response.side_bands.is_empty());
     }
 
     #[test]
@@ -671,6 +705,26 @@ mod tests {
                 message: "unknown ref".to_owned(),
             }]
         );
+        assert!(response.side_bands.is_empty());
+    }
+
+    #[test]
+    fn parses_upload_pack_side_band_packets() {
+        let response = UploadPackResponse::parse(
+            b"0008NAK\n000d\x01PACKdata000e\x02Counting\n000b\x03fatal\n0000",
+        )
+        .expect("response");
+
+        assert_eq!(response.acknowledgements, [UploadPackAcknowledgement::Nak]);
+        assert_eq!(
+            response.side_bands,
+            [
+                UploadPackSideBand::PackData(b"PACKdata".to_vec()),
+                UploadPackSideBand::Progress(b"Counting\n".to_vec()),
+                UploadPackSideBand::Error(b"fatal\n".to_vec()),
+            ]
+        );
+        assert_eq!(response.pack_data, None);
     }
 
     #[test]

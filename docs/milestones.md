@@ -245,6 +245,7 @@ Completion criteria:
   - [x] Smart HTTP upload-pack `want`/`have`/`done` request model.
   - [x] Smart HTTP upload-pack ACK/NAK/ERR response parser and raw pack
     classifier.
+  - [x] Upload-pack side-band pack/progress/error response parser.
   - [ ] Remote advertised refs and pack negotiation.
 - [ ] Push basics.
 
@@ -367,5 +368,7 @@ Completion criteria:
   - Implemented: pure Rust parsing for upload-pack `NAK`, `ACK <object>`,
     `ACK <object> continue|common|ready`, `ERR <message>`, and detection of
     non-sideband raw `PACK` data.
-  - Still open: HTTP client I/O, side-band/side-band-64k unpacking, applying
-    received packfiles into the object database, and full remote negotiation.
+  - Implemented: pure Rust parsing for side-band records 1 (pack data), 2
+    (progress), and 3 (server error).
+  - Still open: HTTP client I/O, applying received packfiles into the object
+    database, and full remote negotiation.

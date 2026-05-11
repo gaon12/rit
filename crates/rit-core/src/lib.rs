@@ -41,7 +41,7 @@ pub use status::{
 pub use transport::{
     AdvertisedRef, FetchRefSpec, SmartHttpAdvertisement, SmartHttpRequest, SmartHttpService,
     TransportLocation, TransportProtocol, UploadPackAckStatus, UploadPackAcknowledgement,
-    UploadPackRequest, UploadPackResponse,
+    UploadPackRequest, UploadPackResponse, UploadPackSideBand,
 };
 pub use write::{
     AddOptions, CommitOptions, CommitResult, FileModeOverride, SignatureIdentity, SignatureTime,
