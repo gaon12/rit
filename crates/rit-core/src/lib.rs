@@ -29,7 +29,7 @@ pub use index::{
     UntrackedCache, UntrackedCacheDirectoryBlock, UntrackedCacheStat, UntrackedCacheTail,
 };
 pub use object::{GitObject, ObjectId, ObjectKind, TreeEntry, hash_object};
-pub use odb::{LooseObjectDb, StoredPack, StoredPackIndex};
+pub use odb::{IngestedPack, LooseObjectDb, StoredPack, StoredPackIndex};
 pub use pathspec::PathspecSet;
 pub use refs::{Branch, Tag};
 pub use repository::{

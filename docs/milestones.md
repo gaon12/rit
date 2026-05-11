@@ -258,6 +258,7 @@ Completion criteria:
   - [x] Whole, offset-delta, and ref-delta received pack application to loose
     objects.
   - [x] Pack index v2 generation for received packs.
+  - [x] Received pack ingest helper for store, index, and loose application.
   - [x] Remote advertised refs discovery through the smart HTTP client.
   - [ ] Remote pack negotiation.
 - [~] Push basics.
@@ -437,4 +438,6 @@ Completion criteria:
     loose objects.
   - Implemented: pack index v2 generation with fanout, sorted object names,
     CRC32 table, offsets, pack checksum, and index checksum.
+  - Implemented: pack ingest helper that stores the pack, writes the index, and
+    applies supported objects as loose objects.
   - Still open: using negotiated remote pack results in `rit fetch`.

@@ -162,6 +162,18 @@ impl LooseObjectDb {
         })
     }
 
+    /// Stores, indexes, and applies a received packfile.
+    pub fn ingest_pack(&self, pack_bytes: &[u8]) -> Result<IngestedPack> {
+        let stored_pack = self.store_pack(pack_bytes)?;
+        let stored_index = self.write_pack_index(pack_bytes)?;
+        let object_ids = self.unpack_pack_as_loose(pack_bytes)?;
+        Ok(IngestedPack {
+            stored_pack,
+            stored_index,
+            object_ids,
+        })
+    }
+
     /// Unpacks supported pack entries into loose objects.
     ///
     /// Whole objects and deltas whose base has already appeared in the same
@@ -419,6 +431,17 @@ impl LooseObjectDb {
         }
         Ok((pack_checksum, object_count, entries))
     }
+}
+
+/// Result of ingesting a received packfile.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IngestedPack {
+    /// Stored `.pack` metadata.
+    pub stored_pack: StoredPack,
+    /// Stored `.idx` metadata.
+    pub stored_index: StoredPackIndex,
+    /// Object IDs applied as loose objects.
+    pub object_ids: Vec<ObjectId>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1074,6 +1097,30 @@ mod tests {
             .expect("packed delta object");
         assert_eq!(object.kind, ObjectKind::Blob);
         assert_eq!(object.data, b"hello!");
+    }
+
+    #[test]
+    fn ingests_received_pack_end_to_end() {
+        let objects_dir = temp_path("ingest-pack").join("objects");
+        let database = LooseObjectDb::new(&objects_dir);
+        let pack = pack_with_offset_delta_blob();
+
+        let ingested = database.ingest_pack(&pack).expect("pack should ingest");
+
+        let base_id = hash_object(ObjectKind::Blob, b"hello");
+        let delta_id = hash_object(ObjectKind::Blob, b"hello!");
+        assert_eq!(ingested.stored_pack.object_count, 2);
+        assert_eq!(ingested.stored_index.object_count, 2);
+        assert_eq!(ingested.object_ids, [base_id, delta_id]);
+        assert!(ingested.stored_pack.path.is_file());
+        assert!(ingested.stored_index.path.is_file());
+        assert_eq!(
+            database
+                .read_object(delta_id)
+                .expect("ingested object")
+                .data,
+            b"hello!"
+        );
     }
 
     #[test]
