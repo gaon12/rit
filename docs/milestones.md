@@ -228,7 +228,7 @@ Completion criteria:
 
 ## M7: Transport Foundation
 
-- [~] Local clone/fetch object transfer.
+- [x] Local clone/fetch object transfer.
   - [x] `clone --local --no-checkout` copies objects and local refs without
     calling external `git` in production code.
   - [x] `fetch <local-repository>` copies objects into an existing repository
@@ -263,7 +263,9 @@ Completion criteria:
   - [x] Single-round remote pack negotiation for an advertised ref through the
     smart HTTP client.
   - [x] Wire negotiated plain HTTP pack ingestion into `rit fetch`.
-- [~] Push basics.
+  - [ ] Multi-round negotiation, thin-pack fixups, and advanced capability
+    parity.
+- [x] Push basics.
   - [x] receive-pack reference update request body model.
   - [x] receive-pack `report-status` parser.
   - [x] Smart HTTP receive-pack POST wiring.
