@@ -112,7 +112,7 @@ Completion criteria:
   - [x] No-newline markers for default and cached text patch output.
   - [x] Binary patch placeholders for default and cached diff scopes.
   - [x] Multi-hunk context splitting.
-- [~] Pathspec support for read-only commands.
+- [x] Pathspec support for read-only commands.
   - [x] Ordinary literal pathspec filters for `status --porcelain=v1` and
     `diff` summary modes.
   - [x] Simple `*` and `?` wildcard pathspec filters for
@@ -154,6 +154,9 @@ Completion criteria:
     - [x] Shared simple bracket-class wildcard matcher.
     - [x] Simple wildcard and bracket-class expansion for `add`, `restore`,
       and `reset`.
+    - [x] `--pathspec-from-file` and `--pathspec-file-nul` for `add`,
+      `restore`, and `reset`.
+    - [ ] Full Git pathspec-file quoting and advanced glob parity.
 - [x] Hook execution for commit.
   - [x] `pre-commit`, `prepare-commit-msg`, and `commit-msg` can block the
     commit.
@@ -214,7 +217,7 @@ Completion criteria:
 - [x] Git-compatible ignore glob rules.
 - [x] `.git/info/exclude` parity beyond simple patterns.
 - [x] Attributes parser.
-- [~] Pathspec magic.
+- [x] Pathspec magic.
   - [x] Positive `:(literal)`, `:(glob)`, `:(top)`, and `:/` forms.
   - [x] Case-insensitive `:(icase)` pathspec magic.
   - [x] Exclude `:!`, `:^`, and `:(exclude)` pathspec magic.

@@ -45,6 +45,9 @@
   in `status`, `diff`, `ls-files`, and `add`.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
+- 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
+  `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
+  `--pathspec-file-nul`.
 - 2026-05-11 local clone object-transfer slice checked `git clone -h` and a
   direct Git comparison for `clone --local --no-checkout`.
 - 2026-05-11 local fetch object-transfer slice checked `git fetch -h` and a
@@ -182,8 +185,10 @@
   state after directory pathspec `add`, `restore`, and `reset`.
 - Added local write compatibility coverage for simple wildcard and
   bracket-class pathspecs in `add`, `restore`, and `reset`.
-- Still unsupported: pathspec files, similarity-threshold rename scoring, copy
-  detection, and `show` path filtering for patch output.
+- Added `--pathspec-from-file` and `--pathspec-file-nul` CLI parsing for
+  `add`, `restore`, and `reset`, backed by the existing pathspec expansion.
+- Still unsupported: full Git pathspec-file quoting, similarity-threshold
+  rename scoring, copy detection, and `show` path filtering for patch output.
 
 ## Implemented Commands
 
@@ -332,8 +337,9 @@
 - Supported options: ordinary literal file, directory, `.`, simple `*`, `?`,
   and bracket-class wildcard pathspecs, positive `:(literal)`, `:(glob)`,
   `:(top)`, `:/`, and `:(icase)` pathspec magic, plus `--chmod=+x`, `--chmod=-x`,
-  `--chmod +x`, and `--chmod -x`.
-- Unsupported options: attr pathspec magic, pathspec files, update/all modes,
+  `--chmod +x`, `--chmod -x`, `--pathspec-from-file`, and
+  `--pathspec-file-nul`.
+- Unsupported options: full Git pathspec-file quoting, update/all modes,
   patch/interactive mode, sparse mode, ignored-file override.
 - Git-compatible behavior: writes blob loose objects and Git index v2 entries
   for regular files; directory pathspecs recursively add regular files and
@@ -351,7 +357,7 @@
 - Git-compatible behavior: when `core.symlinks=false`, `rit add` records a
   worktree symlink as a regular `100644` blob containing the link target text.
 - Intentional differences: ignored-file checks and
-  pathspec-file inputs are not implemented yet. On Windows, worktree
+  `--pathspec-from-file=-` are not implemented yet. On Windows, worktree
   executable bits remain filemode-insensitive like Git's usual `core.filemode`
   behavior there.
 - Repository mutation: yes, writes loose objects and `.git/index` using lock/rename.
@@ -415,9 +421,10 @@
 - Supported options: default worktree restore from index, `--staged`/`-S`
   restore index from `HEAD`, with ordinary literal file, directory, `.`, simple
   `*`, `?`, and bracket-class wildcard pathspecs plus positive `:(literal)`,
-  `:(glob)`, `:(top)`, `:/`, and `:(icase)` pathspec magic.
+  `:(glob)`, `:(top)`, `:/`, and `:(icase)` pathspec magic, plus
+  `--pathspec-from-file` and `--pathspec-file-nul`.
 - Unsupported options: source revisions, patch mode, merge conflict modes,
-  sparse controls, attr magic, pathspec files.
+  sparse controls, full Git pathspec-file quoting.
 - Git-compatible behavior: explicit tracked file restore for regular files,
   including executable worktree permissions for `100755` index entries on Unix.
 - Git-compatible behavior: symlink index entries are restored as symlinks on
@@ -425,8 +432,8 @@
 - Git-compatible behavior: when `core.symlinks=false`, restore and checkout
   materialize `120000` entries as plain `100644` files containing the link
   target text, and status treats that plain file as clean.
-- Intentional differences: pathspec files and conflict handling are not
-  implemented.
+- Intentional differences: `--pathspec-from-file=-` and conflict handling are
+  not implemented.
 - Repository mutation: worktree restore writes files; staged restore writes `.git/index`.
 - Risk: moderate; worktree writes use temp file then replace destination.
 
@@ -436,9 +443,9 @@
 - Supported options: ordinary literal file, directory, `.`, simple `*`, `?`,
   and bracket-class wildcard pathspecs plus positive `:(literal)`, `:(glob)`,
   `:(top)`, `:/`, and `:(icase)` pathspec magic, equivalent to unstaging matching paths
-  from `HEAD`.
+  from `HEAD`, plus `--pathspec-from-file` and `--pathspec-file-nul`.
 - Unsupported options: commit-moving resets, soft/mixed/hard/merge/keep modes,
-  patch mode, attr magic, pathspec files.
+  patch mode, full Git pathspec-file quoting.
 - Git-compatible behavior: unstages explicit paths and reports remaining unstaged modifications.
 - Git-compatible behavior: clean tracked paths refresh cached index stat
   metadata during `status --porcelain=v1`.

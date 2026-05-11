@@ -3,6 +3,7 @@ use std::io::{self, Write};
 use std::process::ExitCode;
 
 mod help;
+mod pathspec_args;
 mod remote;
 
 fn main() -> ExitCode {
@@ -860,6 +861,8 @@ struct ParsedAddArgs {
 fn parse_add_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Option<ParsedAddArgs>> {
     let mut paths = Vec::new();
     let mut options = rit_core::AddOptions::default();
+    let mut pathspec_file = None;
+    let mut pathspec_file_nul = false;
     let mut after_separator = false;
     let mut index = 0;
 
@@ -867,6 +870,13 @@ fn parse_add_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Option<
         let arg = &args[index];
         if arg == "--" && !after_separator {
             after_separator = true;
+        } else if pathspec_args::handle_pathspec_file_option(
+            args,
+            &mut index,
+            after_separator,
+            &mut pathspec_file,
+            &mut pathspec_file_nul,
+        )? {
         } else if arg == "--chmod" && !after_separator {
             index += 1;
             let Some(value) = args.get(index) else {
@@ -891,6 +901,15 @@ fn parse_add_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Option<
             paths.push(arg.clone());
         }
         index += 1;
+    }
+
+    if let Some(file_name) = pathspec_file {
+        let Some(file_pathspecs) =
+            pathspec_args::read_pathspecs_from_file(&file_name, pathspec_file_nul, "add", stderr)?
+        else {
+            return Ok(None);
+        };
+        paths.extend(file_pathspecs);
     }
 
     Ok(Some(ParsedAddArgs { paths, options }))
@@ -1081,10 +1100,21 @@ fn parse_restore_args(
 ) -> io::Result<Option<(bool, Vec<String>)>> {
     let mut staged = false;
     let mut paths = Vec::new();
+    let mut pathspec_file = None;
+    let mut pathspec_file_nul = false;
     let mut after_separator = false;
-    for arg in args {
+    let mut index = 0;
+    while index < args.len() {
+        let arg = &args[index];
         if arg == "--" && !after_separator {
             after_separator = true;
+        } else if pathspec_args::handle_pathspec_file_option(
+            args,
+            &mut index,
+            after_separator,
+            &mut pathspec_file,
+            &mut pathspec_file_nul,
+        )? {
         } else if (arg == "--staged" || arg == "-S") && !after_separator {
             staged = true;
         } else if arg.starts_with('-') && !after_separator {
@@ -1093,6 +1123,19 @@ fn parse_restore_args(
         } else {
             paths.push(arg.clone());
         }
+        index += 1;
+    }
+    if let Some(file_name) = pathspec_file {
+        let Some(file_pathspecs) = pathspec_args::read_pathspecs_from_file(
+            &file_name,
+            pathspec_file_nul,
+            "restore",
+            stderr,
+        )?
+        else {
+            return Ok(None);
+        };
+        paths.extend(file_pathspecs);
     }
     Ok(Some((staged, paths)))
 }
@@ -1136,16 +1179,40 @@ fn parse_plain_path_args(
     stderr: &mut dyn Write,
 ) -> io::Result<Option<Vec<String>>> {
     let mut paths = Vec::new();
+    let mut pathspec_file = None;
+    let mut pathspec_file_nul = false;
     let mut after_separator = false;
-    for arg in args {
+    let mut index = 0;
+    while index < args.len() {
+        let arg = &args[index];
         if arg == "--" && !after_separator {
             after_separator = true;
+        } else if pathspec_args::handle_pathspec_file_option(
+            args,
+            &mut index,
+            after_separator,
+            &mut pathspec_file,
+            &mut pathspec_file_nul,
+        )? {
         } else if arg.starts_with('-') && !after_separator {
             writeln!(stderr, "rit: unsupported {command} option '{arg}'")?;
             return Ok(None);
         } else {
             paths.push(arg.clone());
         }
+        index += 1;
+    }
+    if let Some(file_name) = pathspec_file {
+        let Some(file_pathspecs) = pathspec_args::read_pathspecs_from_file(
+            &file_name,
+            pathspec_file_nul,
+            command,
+            stderr,
+        )?
+        else {
+            return Ok(None);
+        };
+        paths.extend(file_pathspecs);
     }
     Ok(Some(paths))
 }
