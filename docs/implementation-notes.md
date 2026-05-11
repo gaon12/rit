@@ -509,18 +509,27 @@
 
 ### Transport model
 
-- Baseline commands checked: `git clone -h`, `git fetch -h`
+- Baseline commands checked: `git clone -h`, `git fetch -h`, `git push -h`
 - Supported protocol classification: local filesystem paths, `http://`,
   `https://`, `ssh://`, and scp-like `user@host:path` locations.
 - Supported HTTP model: smart HTTP reference-discovery request metadata for
   `git-upload-pack` and `git-receive-pack`, plus pkt-line advertised-ref
-  response parsing.
+  response parsing. A small blocking plain-HTTP client can perform GET
+  discovery and POST `git-upload-pack` / `git-receive-pack` requests; it
+  validates smart status codes, content types, discovery prefixes, and decodes
+  chunked responses.
 - Supported negotiation model: smart HTTP `git-upload-pack` request bodies with
   at least one `want`, optional first-want capabilities, optional `have` lines,
-  and a terminal `done`.
-- Unsupported behavior: no HTTP, HTTPS, or SSH network transfer is implemented
-  yet. Remote-looking locations are classified and rejected by commands whose
-  current implementation only supports local paths.
+  and a terminal `done`; upload-pack ACK/NAK/ERR, raw pack, and side-band
+  response parsing; receive-pack command/request bodies and `report-status`
+  parsing.
+- Supported SSH model: parse `ssh://user@host/path` and `user@host:path`
+  locations and build quoted `git-upload-pack` / `git-receive-pack` remote
+  commands.
+- Unsupported behavior: HTTPS/TLS, SSH process/session I/O, remote pack
+  negotiation/application, push pack generation, and CLI remote fetch/push
+  wiring are not implemented yet. Remote-looking locations are classified and
+  rejected by commands whose current implementation only supports local paths.
 - Repository mutation: no direct mutation; command implementations decide how
   to act on a classified location.
 - Risk: low; this is routing metadata for future transports.

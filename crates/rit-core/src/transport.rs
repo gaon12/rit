@@ -48,10 +48,10 @@ pub struct SmartHttpRequest {
     pub advertisement_content_type: String,
 }
 
-/// Request metadata for a smart HTTP upload-pack POST.
+/// Request metadata for a smart HTTP service POST.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SmartHttpPostRequest {
-    /// URL for the `git-upload-pack` request.
+    /// URL for the service request.
     pub url: String,
     /// Request content type.
     pub content_type: String,
@@ -472,6 +472,28 @@ impl BlockingSmartHttpClient {
         Ok(response)
     }
 
+    /// Performs a smart HTTP receive-pack POST request and parses report-status.
+    pub fn post_receive_pack(
+        &self,
+        location: &TransportLocation,
+        request: &ReceivePackRequest,
+    ) -> Result<ReceivePackStatus> {
+        let post_request = location.smart_http_receive_pack(request)?;
+        let response = self.send_http_request(
+            "POST",
+            &post_request.url,
+            Some(post_request.content_type.as_str()),
+            &post_request.body,
+        )?;
+        validate_smart_http_response(
+            &response,
+            &post_request.response_content_type,
+            &[200],
+            SmartHttpBodyCheck::None,
+        )?;
+        ReceivePackStatus::parse(&response.body)
+    }
+
     fn send_http_request(
         &self,
         method: &str,
@@ -851,15 +873,31 @@ impl TransportLocation {
         &self,
         request: &UploadPackRequest,
     ) -> Result<SmartHttpPostRequest> {
+        self.smart_http_post_request(SmartHttpService::UploadPack, request.to_pkt_lines())
+    }
+
+    /// Builds the smart HTTP receive-pack POST request metadata.
+    pub fn smart_http_receive_pack(
+        &self,
+        request: &ReceivePackRequest,
+    ) -> Result<SmartHttpPostRequest> {
+        self.smart_http_post_request(SmartHttpService::ReceivePack, request.to_bytes())
+    }
+
+    fn smart_http_post_request(
+        &self,
+        service: SmartHttpService,
+        body: Vec<u8>,
+    ) -> Result<SmartHttpPostRequest> {
         match self.protocol {
             TransportProtocol::Http | TransportProtocol::Https => {
                 let base = self.original.trim_end_matches('/');
-                let service_name = SmartHttpService::UploadPack.name();
+                let service_name = service.name();
                 Ok(SmartHttpPostRequest {
                     url: format!("{base}/{service_name}"),
                     content_type: format!("application/x-{service_name}-request"),
                     response_content_type: format!("application/x-{service_name}-result"),
-                    body: request.to_pkt_lines(),
+                    body,
                 })
             }
             _ => Err(RitError::invalid_input(format!(
@@ -1384,6 +1422,33 @@ mod tests {
     }
 
     #[test]
+    fn builds_smart_http_receive_pack_requests() {
+        let old_id = ObjectId::from_bytes([0; 20]);
+        let new_id = ObjectId::from_hex("0a53e9ddeaddad63ad106860237bbf53411d11a7").expect("new");
+        let command =
+            super::ReceivePackCommand::new(old_id, new_id, "refs/heads/main").expect("command");
+        let receive_pack = super::ReceivePackRequest::new(vec![command]).expect("request");
+        let location = TransportLocation::parse("https://example.test/repo.git/");
+        let request = location
+            .smart_http_receive_pack(&receive_pack)
+            .expect("https supports smart http metadata");
+
+        assert_eq!(
+            request.url,
+            "https://example.test/repo.git/git-receive-pack"
+        );
+        assert_eq!(
+            request.content_type,
+            "application/x-git-receive-pack-request"
+        );
+        assert_eq!(
+            request.response_content_type,
+            "application/x-git-receive-pack-result"
+        );
+        assert_eq!(request.body, receive_pack.to_bytes());
+    }
+
+    #[test]
     fn blocking_http_client_gets_info_refs() {
         let (base_url, request_handle) = serve_one_http_request(
             b"HTTP/1.1 200 OK\r\nContent-Type: application/x-git-upload-pack-advertisement\r\nContent-Length: 34\r\nConnection: close\r\n\r\n001e# service=git-upload-pack\n0000",
@@ -1429,6 +1494,41 @@ mod tests {
         );
         assert!(request.ends_with(&upload_pack.to_pkt_lines()));
         assert_eq!(response.body, b"0008NAK\n");
+    }
+
+    #[test]
+    fn blocking_http_client_posts_receive_pack_and_parses_status() {
+        let (base_url, request_handle) = serve_one_http_request(
+            b"HTTP/1.1 200 OK\r\nContent-Type: application/x-git-receive-pack-result\r\nConnection: close\r\n\r\n000eunpack ok\n0017ok refs/heads/main\n0000",
+        );
+        let location = TransportLocation::parse(&format!("{base_url}/repo.git"));
+        let old_id = ObjectId::from_bytes([0; 20]);
+        let new_id = ObjectId::from_hex("0a53e9ddeaddad63ad106860237bbf53411d11a7").expect("new");
+        let command =
+            super::ReceivePackCommand::new(old_id, new_id, "refs/heads/main").expect("command");
+        let receive_pack = super::ReceivePackRequest::new(vec![command])
+            .expect("request")
+            .with_capabilities(vec!["report-status".to_owned()]);
+        let client = BlockingSmartHttpClient::new(Duration::from_secs(2));
+        let status = client
+            .post_receive_pack(&location, &receive_pack)
+            .expect("POST should succeed");
+        let request = request_handle.join().expect("server thread");
+        let request_text =
+            String::from_utf8(request.clone()).expect("request headers and body are UTF-8");
+
+        assert!(request_text.starts_with("POST /repo.git/git-receive-pack HTTP/1.1\r\n"));
+        assert!(
+            request_text.contains("\r\nContent-Type: application/x-git-receive-pack-request\r\n")
+        );
+        assert!(request.ends_with(&receive_pack.to_bytes()));
+        assert_eq!(status.unpack_error, None);
+        assert_eq!(
+            status.commands,
+            [super::ReceivePackCommandStatus::Ok {
+                ref_name: "refs/heads/main".to_owned(),
+            }]
+        );
     }
 
     #[test]

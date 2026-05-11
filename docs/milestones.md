@@ -258,6 +258,7 @@ Completion criteria:
 - [~] Push basics.
   - [x] receive-pack reference update request body model.
   - [x] receive-pack `report-status` parser.
+  - [x] Smart HTTP receive-pack POST wiring.
   - [ ] Push pack generation and ref update workflow.
 
 Completion criteria:
@@ -415,5 +416,7 @@ Completion criteria:
     first-command capabilities, command-list flush, and trailing raw pack data.
   - Implemented: pure Rust receive-pack `report-status` parsing for unpack
     results and per-ref `ok` / `ng` statuses.
-  - Still open: pack generation, server-side status handling, and CLI
-    `rit push`.
+  - Implemented: smart HTTP `git-receive-pack` POST request wiring and
+    response parsing through the blocking HTTP client.
+  - Still open: pack generation, server-side status handling beyond
+    `report-status`, and CLI `rit push`.
