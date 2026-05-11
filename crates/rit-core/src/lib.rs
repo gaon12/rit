@@ -21,6 +21,7 @@ pub mod partial_clone;
 pub mod pathspec;
 pub mod refs;
 pub mod repository;
+pub mod semantic_diff;
 pub mod sparse;
 pub mod status;
 pub mod transport;
@@ -60,6 +61,7 @@ pub use repository::{
     InitOptions, LocalCloneOptions, LocalFetchOptions, LocalFetchResult, RemoteFetchOptions,
     RemoteFetchResult, RemotePushOptions, RemotePushResult, Repository,
 };
+pub use semantic_diff::{WordDiff, WordDiffOperation, word_diff};
 pub use sparse::{SparseCheckout, SparseCheckoutMode, SparseCheckoutPattern};
 pub use status::{
     PorcelainStatus, StatusBranchHeader, StatusEntry, StatusOptions, UntrackedFilesMode,

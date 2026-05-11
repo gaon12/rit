@@ -286,6 +286,16 @@
   read/write, libsecret read/write, and using auth policies inside transport
   execution.
 
+### M12: Semantic Diff
+
+- Existing text diff foundation includes unified patch output, hunk splitting,
+  missing-newline markers, binary placeholders/stat accounting, and exact
+  staged rename detection.
+- Added a standalone word-level diff model with stable `Equal`, `Delete`, and
+  `Insert` operations for later semantic summaries.
+- Still unsupported: tree-sitter feature gate, language-specific semantic
+  adapters, and JSON semantic output.
+
 ### `rit version`
 
 - Baseline command checked: `git version`

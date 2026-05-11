@@ -380,8 +380,8 @@ Completion criteria:
 
 ## M12: Semantic Diff
 
-- [ ] Text diff foundation complete.
-- [ ] Word diff.
+- [x] Text diff foundation complete.
+- [x] Word diff.
 - [ ] Tree-sitter feature gate.
 - [ ] Rust semantic adapter.
 - [ ] TypeScript semantic adapter.
