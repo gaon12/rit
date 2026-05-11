@@ -11,6 +11,7 @@ pub mod diff;
 pub mod error;
 pub mod history;
 pub mod index;
+pub mod merge_state;
 pub mod object;
 pub mod odb;
 pub mod pathspec;
@@ -28,6 +29,7 @@ pub use index::{
     ResolveUndo, ResolveUndoEntry, ResolveUndoStage, SparseDirectory, SplitIndexLink,
     UntrackedCache, UntrackedCacheDirectoryBlock, UntrackedCacheStat, UntrackedCacheTail,
 };
+pub use merge_state::{MergeState, RebaseState};
 pub use object::{GitObject, ObjectId, ObjectKind, TreeEntry, hash_object};
 pub use odb::{IngestedPack, LooseObjectDb, StoredPack, StoredPackIndex};
 pub use pathspec::PathspecSet;

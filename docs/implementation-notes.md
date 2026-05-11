@@ -48,6 +48,8 @@
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
   `--pathspec-file-nul`, including a quoted pathspec entry.
+- 2026-05-12 merge-state model slice checked `git merge -h`,
+  `git cherry-pick -h`, `git rebase -h`, and `git stash -h`.
 - 2026-05-11 local clone object-transfer slice checked `git clone -h` and a
   direct Git comparison for `clone --local --no-checkout`.
 - 2026-05-11 local fetch object-transfer slice checked `git fetch -h` and a
@@ -190,6 +192,17 @@
 - Added C-style quoted pathspec-file entry parsing for common escapes.
 - Still unsupported: full Git pathspec-file edge cases, similarity-threshold
   rename scoring, copy detection, and `show` path filtering for patch output.
+
+### M8: Merge-state local workflows
+
+- Added `Repository::merge_state()` and structured `MergeState`/
+  `RebaseState` models.
+- Reads `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `MERGE_MSG`,
+  `SQUASH_MSG`, `rebase-apply`, and `rebase-merge` from the repository
+  operation state directory.
+- Still unsupported: the `rit merge`, `rit cherry-pick`, `rit rebase`, and
+  `rit stash` commands themselves, conflict stage generation, and
+  continue/abort/skip workflows.
 
 ## Implemented Commands
 

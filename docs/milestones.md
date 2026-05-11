@@ -287,7 +287,9 @@ Completion criteria:
 
 ## M8: Merge-State Local Workflows
 
-- [ ] Merge state model.
+- [x] Merge state model.
+  - [x] Read `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `MERGE_MSG`,
+    `SQUASH_MSG`, `rebase-apply`, and `rebase-merge` state.
 - [ ] `rit merge`
 - [ ] `rit cherry-pick`
 - [ ] `rit rebase`
