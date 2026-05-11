@@ -24,6 +24,8 @@ pub mod repository;
 pub mod semantic_diff;
 #[cfg(feature = "semantic-rust")]
 pub mod semantic_rust;
+#[cfg(feature = "semantic-typescript")]
+pub mod semantic_typescript;
 pub mod sparse;
 pub mod status;
 pub mod transport;
@@ -68,6 +70,10 @@ pub use semantic_diff::TreeSitterSemanticParser;
 pub use semantic_diff::{WordDiff, WordDiffOperation, word_diff};
 #[cfg(feature = "semantic-rust")]
 pub use semantic_rust::{RustFunctionChange, RustSemanticSummary, summarize_rust_functions};
+#[cfg(feature = "semantic-typescript")]
+pub use semantic_typescript::{
+    TypeScriptFunctionChange, TypeScriptSemanticSummary, summarize_typescript_functions,
+};
 pub use sparse::{SparseCheckout, SparseCheckoutMode, SparseCheckoutPattern};
 pub use status::{
     PorcelainStatus, StatusBranchHeader, StatusEntry, StatusOptions, UntrackedFilesMode,

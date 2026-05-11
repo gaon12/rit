@@ -384,7 +384,7 @@ Completion criteria:
 - [x] Word diff.
 - [x] Tree-sitter feature gate.
 - [x] Rust semantic adapter.
-- [ ] TypeScript semantic adapter.
+- [x] TypeScript semantic adapter.
 - [ ] Python semantic adapter.
 - [ ] JSON output model.
 

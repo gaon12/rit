@@ -297,8 +297,9 @@
   language-specific semantic adapters.
 - Added optional `semantic-rust` feature with a tree-sitter Rust adapter that
   summarizes added, deleted, and changed functions.
-- Still unsupported: TypeScript/Python semantic adapters and JSON semantic
-  output.
+- Added optional `semantic-typescript` feature with a tree-sitter TypeScript
+  adapter that summarizes added, deleted, and changed function declarations.
+- Still unsupported: Python semantic adapter and JSON semantic output.
 
 ### `rit version`
 
