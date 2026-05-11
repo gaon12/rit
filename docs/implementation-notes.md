@@ -353,6 +353,16 @@
 - Risk: medium-low; it creates directories but does not overwrite existing
   files or refs.
 
+### M14: VFS
+
+- Added optional Cargo feature `vfs`, disabled by default.
+- Added common VFS model types: `VfsBackendPreference`, `VfsAvailability`,
+  `VfsLazyMaterialization`, and `VfsPlan`.
+- VFS availability now reports a clear message when a binary is built without
+  the `vfs` feature.
+- Still unsupported: fallback backend execution, platform backend selection,
+  lazy materialization I/O, and background prefetch execution.
+
 ### `rit version`
 
 - Baseline command checked: `git version`

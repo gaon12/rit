@@ -18,6 +18,7 @@ semantic-rust = ["semantic-tree-sitter", "dep:tree-sitter-rust"]
 semantic-tree-sitter = ["dep:tree-sitter"]
 semantic-typescript = ["semantic-tree-sitter", "dep:tree-sitter-typescript"]
 semantic-python = ["semantic-tree-sitter", "dep:tree-sitter-python"]
+vfs = []
 xet = ["dep:serde"]
 
 [dependencies]
