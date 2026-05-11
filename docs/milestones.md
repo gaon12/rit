@@ -419,7 +419,7 @@ Completion criteria:
 ## M15: Release Packaging
 
 - [x] Feature matrix for `rit-min` and `rit-full`.
-- [ ] CI build matrix.
+- [x] CI build matrix.
 - [ ] Release archive layout.
 - [ ] README release instructions.
 - [ ] License and attribution audit.

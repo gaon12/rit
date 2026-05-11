@@ -380,6 +380,9 @@
 
 - Added `docs/release.md` with the first `rit-min` / `rit-full` feature matrix
   and the current `rit-core` feature flag inventory.
+- Added `.github/workflows/ci.yml` with stable Rust format, clippy, test, and
+  release build matrices across Ubuntu, macOS, and Windows for `rit-min` and
+  `rit-full`.
 
 ### `rit version`
 
