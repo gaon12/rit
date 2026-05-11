@@ -302,7 +302,9 @@ Completion criteria:
 
 ## M9: Large File Backends
 
-- [ ] Large-file backend trait.
+- [x] Large-file backend trait.
+  - [x] Backend kind, track rule, pointer metadata, and object-safe backend
+    interface.
 - [ ] LFS pointer parse/write.
 - [ ] LFS local cache.
 - [ ] LFS batch API.

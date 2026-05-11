@@ -11,6 +11,7 @@ pub mod diff;
 pub mod error;
 pub mod history;
 pub mod index;
+pub mod large_files;
 pub mod merge_state;
 pub mod object;
 pub mod odb;
@@ -28,6 +29,9 @@ pub use index::{
     IndexEntry, IndexEntryOffset, IndexEntryOffsetTable, IndexExtension, IndexExtensionKind,
     ResolveUndo, ResolveUndoEntry, ResolveUndoStage, SparseDirectory, SplitIndexLink,
     UntrackedCache, UntrackedCacheDirectoryBlock, UntrackedCacheStat, UntrackedCacheTail,
+};
+pub use large_files::{
+    LargeFileBackend, LargeFileBackendKind, LargeFilePointer, LargeFileTrackRule,
 };
 pub use merge_state::{MergeState, RebaseState};
 pub use object::{GitObject, ObjectId, ObjectKind, TreeEntry, hash_object};
