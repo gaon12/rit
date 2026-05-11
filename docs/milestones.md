@@ -314,7 +314,9 @@ Completion criteria:
 - [x] LFS batch API.
   - [x] Batch request/response models and JSON encoding/parsing for basic
     transfer actions.
-- [ ] Xet detection.
+- [x] Xet detection.
+  - [x] Explicit `filter=xet` attribute rules and Xet pointer hash extension
+    hints.
 - [ ] Xet chunk/cache model.
 
 Completion criteria:

@@ -220,8 +220,11 @@
   storage with streaming writes and SHA-256/size verification.
 - Added Git LFS Batch API request/response models and JSON codecs for the
   `basic` transfer adapter, including per-object actions and errors.
-- Still unsupported: LFS Batch API HTTP client execution, Xet detection, and
-  chunk/cache reconstruction.
+- Added conservative Xet detection from explicit `filter=xet` attributes and
+  Xet pointer hash extension lines, while preserving LFS-compatible attribute
+  rules as separate hints.
+- Still unsupported: LFS Batch API HTTP client execution and Xet chunk/cache
+  reconstruction.
 
 ## Implemented Commands
 

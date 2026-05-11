@@ -1,4 +1,4 @@
-use crate::{Result, RitError};
+use crate::{AttributeState, GitAttributes, Result, RitError};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{Read, Write};
@@ -83,6 +83,39 @@ impl LargeFilePointer {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LfsLocalCache {
     objects_dir: PathBuf,
+}
+
+/// Conservative Xet storage detection hints.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct XetDetection {
+    /// Path rules that explicitly select Xet through attributes.
+    pub explicit_xet_rules: Vec<LargeFileTrackRule>,
+    /// LFS-compatible rules that may still be used by Xet-backed hosts.
+    pub lfs_compatible_rules: Vec<LargeFileTrackRule>,
+    /// Xet-backed hash found in a pointer blob extension line.
+    pub pointer_hash: Option<String>,
+}
+
+impl XetDetection {
+    /// Returns true only for explicit Xet signals.
+    pub fn is_xet_backed(&self) -> bool {
+        !self.explicit_xet_rules.is_empty() || self.pointer_hash.is_some()
+    }
+
+    /// Returns true when the repository has LFS-style large-file rules that a
+    /// Xet-backed host may interpret through backwards compatibility.
+    pub fn has_lfs_compatible_rules(&self) -> bool {
+        !self.lfs_compatible_rules.is_empty()
+    }
+}
+
+/// Detects Xet-related hints from root `.gitattributes` and optional pointer data.
+pub fn detect_xet_storage(attributes: &GitAttributes, pointer_data: Option<&[u8]>) -> XetDetection {
+    XetDetection {
+        explicit_xet_rules: xet_rules_for_filter(attributes, "xet"),
+        lfs_compatible_rules: xet_rules_for_filter(attributes, "lfs"),
+        pointer_hash: pointer_data.and_then(parse_xet_pointer_hash),
+    }
 }
 
 impl LfsLocalCache {
@@ -334,6 +367,33 @@ fn verify_lfs_object(pointer: &LargeFilePointer, data: &[u8]) -> Result<()> {
     Ok(())
 }
 
+fn xet_rules_for_filter(attributes: &GitAttributes, filter: &str) -> Vec<LargeFileTrackRule> {
+    attributes
+        .rules()
+        .iter()
+        .filter(|rule| {
+            rule.assignments.iter().any(|assignment| {
+                assignment.name == "filter"
+                    && matches!(&assignment.state, AttributeState::Value(value) if value == filter)
+            })
+        })
+        .map(|rule| LargeFileTrackRule::new(rule.pattern.clone(), LargeFileBackendKind::Xet))
+        .collect()
+}
+
+/// Extracts a Xet-backed hash from a pointer extension line when present.
+pub fn parse_xet_pointer_hash(data: &[u8]) -> Option<String> {
+    let text = std::str::from_utf8(data).ok()?;
+    for line in text.lines() {
+        let (key, value) = line.split_once(' ')?;
+        let normalized_key = key.to_ascii_lowercase().replace(['-', '_'], "");
+        if normalized_key.contains("xet") && normalized_key.contains("hash") && !value.is_empty() {
+            return Some(value.to_owned());
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -507,6 +567,36 @@ mod tests {
                 .exists()
         );
         remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn detects_explicit_xet_attribute_rules() {
+        let attributes =
+            GitAttributes::parse("*.safetensors filter=xet diff=xet merge=xet -text\n*.zip filter=lfs diff=lfs merge=lfs -text\n")
+                .expect("attributes should parse");
+
+        let detection = detect_xet_storage(&attributes, None);
+
+        assert!(detection.is_xet_backed());
+        assert_eq!(
+            detection.explicit_xet_rules,
+            vec![LargeFileTrackRule::new(
+                "*.safetensors",
+                LargeFileBackendKind::Xet
+            )]
+        );
+        assert!(detection.has_lfs_compatible_rules());
+        assert_eq!(
+            detection.lfs_compatible_rules,
+            vec![LargeFileTrackRule::new("*.zip", LargeFileBackendKind::Xet)]
+        );
+    }
+
+    #[test]
+    fn detects_xet_pointer_hash_extension() {
+        let pointer = b"version https://git-lfs.github.com/spec/v1\noid sha256:4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393\nsize 123\nxet-backed-hash abcdef\n";
+
+        assert_eq!(parse_xet_pointer_hash(pointer), Some("abcdef".to_owned()));
     }
 
     fn temp_path(name: &str) -> PathBuf {
