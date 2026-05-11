@@ -1,4 +1,4 @@
-use crate::{Result, RitError};
+use crate::{PartialClonePolicy, Result, RitError};
 use std::fs;
 use std::path::{Path, PathBuf};
 use toml::{Table, Value};
@@ -35,6 +35,20 @@ impl WorkspaceProfile {
             requires_partial_clone: self.lazy_files && self.partial_clone,
         }
     }
+
+    /// Builds a prefetch plan shape without performing network I/O.
+    pub fn prefetch_plan(&self, partial_clone: &PartialClonePolicy) -> WorkspacePrefetchPlan {
+        let promisor_remote = partial_clone.promisor_remotes.first();
+        WorkspacePrefetchPlan {
+            workspace: self.name.clone(),
+            include: self.include.clone(),
+            lazy_files: self.lazy_files,
+            partial_clone: self.partial_clone || partial_clone.is_enabled(),
+            promisor_remote: promisor_remote.map(|remote| remote.name.clone()),
+            partial_clone_filter: promisor_remote
+                .and_then(|remote| remote.partial_clone_filter.clone()),
+        }
+    }
 }
 
 /// User-facing lazy materialization policy derived from a workspace profile.
@@ -48,6 +62,23 @@ pub struct LazyMaterializationPolicy {
     pub include: Vec<String>,
     /// Whether missing file content is expected to come from partial clone.
     pub requires_partial_clone: bool,
+}
+
+/// Dry-run shape for a future workspace prefetch operation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkspacePrefetchPlan {
+    /// Workspace profile to prefetch.
+    pub workspace: String,
+    /// Repository-relative paths that should be prefetched.
+    pub include: Vec<String>,
+    /// Whether lazy materialization is enabled for this workspace.
+    pub lazy_files: bool,
+    /// Whether partial clone is part of this prefetch plan.
+    pub partial_clone: bool,
+    /// Promisor remote selected for missing objects, when known.
+    pub promisor_remote: Option<String>,
+    /// Partial clone filter selected by the promisor remote, when known.
+    pub partial_clone_filter: Option<String>,
 }
 
 impl RitConfig {
@@ -202,6 +233,20 @@ mod tests {
                 enabled: true,
                 include: vec!["apps/mobile".to_owned(), "packages/ui".to_owned()],
                 requires_partial_clone: true,
+            }
+        );
+        assert_eq!(
+            config
+                .workspace_profile("mobile")
+                .expect("mobile should exist")
+                .prefetch_plan(&PartialClonePolicy::default()),
+            WorkspacePrefetchPlan {
+                workspace: "mobile".to_owned(),
+                include: vec!["apps/mobile".to_owned(), "packages/ui".to_owned()],
+                lazy_files: true,
+                partial_clone: true,
+                promisor_remote: None,
+                partial_clone_filter: None,
             }
         );
         assert_eq!(

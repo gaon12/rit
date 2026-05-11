@@ -54,6 +54,7 @@ fn run(
         [command, rest @ ..] if command == "switch" => switch_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "show" => show_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ls-files" => ls_files_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "workspace" => workspace_command(rest, stdout, stderr),
         [command] if command == "help" => {
             stdout.write_all(help::GENERAL_HELP.as_bytes())?;
             Ok(ExitCode::SUCCESS)
@@ -69,6 +70,71 @@ fn run(
 
 fn print_version(stdout: &mut dyn Write) -> io::Result<ExitCode> {
     writeln!(stdout, "rit version {}", rit_core::version())?;
+    Ok(ExitCode::SUCCESS)
+}
+
+fn workspace_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let profile_name = match args {
+        [subcommand, profile] if subcommand == "prefetch" && !profile.starts_with('-') => profile,
+        [subcommand] if subcommand == "prefetch" => {
+            writeln!(stderr, "rit: workspace prefetch requires a profile name")?;
+            return Ok(ExitCode::from(129));
+        }
+        [subcommand, ..] => {
+            writeln!(
+                stderr,
+                "rit: unsupported workspace subcommand '{subcommand}'"
+            )?;
+            return Ok(ExitCode::from(129));
+        }
+        [] => {
+            writeln!(stderr, "rit: workspace requires a subcommand")?;
+            return Ok(ExitCode::from(129));
+        }
+    };
+
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    let config = match repository.rit_config() {
+        Ok(config) => config,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(1));
+        }
+    };
+    let Some(profile) = config.workspace_profile(profile_name) else {
+        writeln!(stderr, "rit: workspace profile not found: {profile_name}")?;
+        return Ok(ExitCode::from(1));
+    };
+    let partial_clone = match repository.partial_clone_policy() {
+        Ok(policy) => policy,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(1));
+        }
+    };
+    let plan = profile.prefetch_plan(&partial_clone);
+
+    writeln!(stdout, "workspace: {}", plan.workspace)?;
+    writeln!(stdout, "prefetch: planned")?;
+    writeln!(stdout, "partial-clone: {}", plan.partial_clone)?;
+    writeln!(stdout, "lazy-files: {}", plan.lazy_files)?;
+    if let Some(remote) = plan.promisor_remote {
+        writeln!(stdout, "promisor-remote: {remote}")?;
+    }
+    if let Some(filter) = plan.partial_clone_filter {
+        writeln!(stdout, "partial-clone-filter: {filter}")?;
+    }
+    for path in plan.include {
+        writeln!(stdout, "include: {path}")?;
+    }
+
     Ok(ExitCode::SUCCESS)
 }
 
@@ -1813,6 +1879,24 @@ mod tests {
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit ls-files"));
         assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn workspace_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "workspace"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit workspace prefetch"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn workspace_prefetch_requires_profile_name() {
+        let (code, stdout, stderr) = run_with(&["workspace", "prefetch"]);
+
+        assert_eq!(code, ExitCode::from(129));
+        assert_eq!(stdout, "");
+        assert!(stderr.contains("requires a profile name"));
     }
 
     #[test]

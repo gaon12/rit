@@ -342,11 +342,13 @@ Completion criteria:
 - [x] Lazy file materialization policy.
   - [x] Derive a lazy materialization policy from workspace profile
     `partial_clone` and `lazy_files` settings.
-- [ ] Prefetch command shape.
+- [x] Prefetch command shape.
+  - [x] Add a dry-run workspace prefetch plan model and
+    `rit workspace prefetch <profile>` command shape.
 
 Completion criteria:
-- Users can work with a named workspace without needing to understand Git sparse
-  internals.
+- Users can read named workspace profiles and inspect sparse, lazy, partial,
+  and prefetch plans without needing to understand Git sparse internals.
 
 ## M11: Auth
 

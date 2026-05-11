@@ -70,7 +70,9 @@ pub use transport::{
     SmartHttpService, SshServiceCommand, TransportLocation, TransportProtocol, UploadPackAckStatus,
     UploadPackAcknowledgement, UploadPackRequest, UploadPackResponse, UploadPackSideBand,
 };
-pub use workspace_profile::{LazyMaterializationPolicy, RitConfig, WorkspaceProfile};
+pub use workspace_profile::{
+    LazyMaterializationPolicy, RitConfig, WorkspacePrefetchPlan, WorkspaceProfile,
+};
 pub use write::{
     AddOptions, CommitOptions, CommitResult, FileModeOverride, SignatureIdentity, SignatureTime,
 };

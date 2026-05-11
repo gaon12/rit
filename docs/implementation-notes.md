@@ -243,9 +243,11 @@
   `remote.*.partialCloneFilter`, and `objects/pack/*.promisor` markers.
 - Added workspace-profile `partial_clone` / `lazy_files` flags and a derived
   lazy materialization policy model.
-- Still unsupported: sparse-checkout write commands, named workspace profiles,
-  partial clone object policy, lazy materialization, and prefetch command
-  execution.
+- Added a dry-run workspace prefetch plan model and
+  `rit workspace prefetch <profile>` command shape.
+- Still unsupported: sparse-checkout write commands, applying named workspace
+  profiles, fetching missing partial-clone objects, lazy materialization file
+  I/O, and prefetch command execution.
 
 ## Implemented Commands
 
