@@ -39,7 +39,8 @@ pub use status::{
     PorcelainStatus, StatusBranchHeader, StatusEntry, StatusOptions, UntrackedFilesMode,
 };
 pub use transport::{
-    FetchRefSpec, SmartHttpRequest, SmartHttpService, TransportLocation, TransportProtocol,
+    AdvertisedRef, FetchRefSpec, SmartHttpAdvertisement, SmartHttpRequest, SmartHttpService,
+    TransportLocation, TransportProtocol,
 };
 pub use write::{
     AddOptions, CommitOptions, CommitResult, FileModeOverride, SignatureIdentity, SignatureTime,

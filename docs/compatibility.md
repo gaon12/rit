@@ -26,8 +26,8 @@ The current codebase implements an early local Git subset:
   user identity lookup.
 - Transport locations are classified as local, HTTP(S), or SSH before command
   implementations choose the supported transfer path. Smart HTTP discovery
-  request URLs and expected advertisement content types are modeled, but HTTP
-  network I/O is not implemented yet.
+  request URLs, expected advertisement content types, and advertised-ref
+  response parsing are modeled, but HTTP network I/O is not implemented yet.
 - Index v2 read/write for regular files, including status stat refresh for
   clean tracked files, raw extension-byte preservation, and committed
   `100644`/`100755` executable-bit modes. Optional index extension records can

@@ -55,6 +55,9 @@
 - 2026-05-11 smart HTTP request-model slice checked `git help protocol-http`;
   modeled `info/refs?service=git-upload-pack` and `git-receive-pack`
   discovery URLs and expected advertisement content types.
+- 2026-05-11 smart HTTP advertisement parser slice checked
+  `git help protocol-http`; implemented pkt-line service-header validation,
+  first-ref capability parsing, and advertised ref parsing.
 
 ## Milestone Notes
 
@@ -508,7 +511,8 @@
 - Supported protocol classification: local filesystem paths, `http://`,
   `https://`, `ssh://`, and scp-like `user@host:path` locations.
 - Supported HTTP model: smart HTTP reference-discovery request metadata for
-  `git-upload-pack` and `git-receive-pack`.
+  `git-upload-pack` and `git-receive-pack`, plus pkt-line advertised-ref
+  response parsing.
 - Unsupported behavior: no HTTP, HTTPS, or SSH network transfer is implemented
   yet. Remote-looking locations are classified and rejected by commands whose
   current implementation only supports local paths.

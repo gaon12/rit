@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::{Result, RitError};
+use crate::{ObjectId, Result, RitError};
 
 /// One simple fetch refspec, such as `refs/heads/main:refs/remotes/origin/main`.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -43,6 +43,71 @@ pub struct SmartHttpRequest {
     pub advertisement_content_type: String,
 }
 
+/// One reference advertised by a smart HTTP service.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AdvertisedRef {
+    /// Object ID currently stored in the advertised ref.
+    pub object_id: ObjectId,
+    /// Full ref name, such as `refs/heads/main`.
+    pub name: String,
+}
+
+/// Parsed smart HTTP reference advertisement.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SmartHttpAdvertisement {
+    /// Service that produced the advertisement.
+    pub service: SmartHttpService,
+    /// Capabilities listed on the first ref record.
+    pub capabilities: Vec<String>,
+    /// Advertised refs in stream order.
+    pub refs: Vec<AdvertisedRef>,
+}
+
+impl SmartHttpAdvertisement {
+    /// Parses the pkt-line response body returned by smart HTTP `info/refs`.
+    pub fn parse(service: SmartHttpService, bytes: &[u8]) -> Result<Self> {
+        let lines = parse_pkt_lines(bytes)?;
+        let mut iter = lines.into_iter();
+        let Some(service_line) = iter.next() else {
+            return Err(RitError::invalid_input("empty smart HTTP advertisement"));
+        };
+        let expected = format!("# service={}\n", service.name());
+        if service_line != expected.as_bytes() {
+            return Err(RitError::invalid_input(
+                "smart HTTP service header mismatch",
+            ));
+        }
+        match iter.next() {
+            Some(line) if line.is_empty() => {}
+            _ => {
+                return Err(RitError::invalid_input(
+                    "smart HTTP advertisement missing service flush",
+                ));
+            }
+        }
+
+        let mut capabilities = Vec::new();
+        let mut refs = Vec::new();
+        for line in iter {
+            if line.is_empty() {
+                break;
+            }
+            let (advertised_ref, advertised_capabilities) =
+                parse_advertised_ref_line(&line, refs.is_empty())?;
+            if let Some(advertised_capabilities) = advertised_capabilities {
+                capabilities = advertised_capabilities;
+            }
+            refs.push(advertised_ref);
+        }
+
+        Ok(Self {
+            service,
+            capabilities,
+            refs,
+        })
+    }
+}
+
 impl FetchRefSpec {
     /// Parses one fetch refspec.
     pub fn parse(input: &str) -> Result<Self> {
@@ -67,6 +132,79 @@ impl FetchRefSpec {
             destination: destination.to_owned(),
         })
     }
+}
+
+fn parse_pkt_lines(bytes: &[u8]) -> Result<Vec<Vec<u8>>> {
+    let mut lines = Vec::new();
+    let mut position = 0;
+    while position < bytes.len() {
+        let length_end = position + 4;
+        let Some(length_bytes) = bytes.get(position..length_end) else {
+            return Err(RitError::invalid_input("truncated pkt-line length"));
+        };
+        let length_text = std::str::from_utf8(length_bytes)
+            .map_err(|_| RitError::invalid_input("pkt-line length is not UTF-8"))?;
+        let length = u16::from_str_radix(length_text, 16)
+            .map_err(|_| RitError::invalid_input("invalid pkt-line length"))?
+            as usize;
+        position = length_end;
+
+        if length == 0 {
+            lines.push(Vec::new());
+            continue;
+        }
+        if length < 4 {
+            return Err(RitError::invalid_input(
+                "pkt-line length is smaller than header",
+            ));
+        }
+        let payload_len = length - 4;
+        let payload_end = position + payload_len;
+        let Some(payload) = bytes.get(position..payload_end) else {
+            return Err(RitError::invalid_input("truncated pkt-line payload"));
+        };
+        lines.push(payload.to_vec());
+        position = payload_end;
+    }
+    Ok(lines)
+}
+
+fn parse_advertised_ref_line(
+    line: &[u8],
+    first_ref: bool,
+) -> Result<(AdvertisedRef, Option<Vec<String>>)> {
+    let line = line.strip_suffix(b"\n").unwrap_or(line);
+    let line_text = std::str::from_utf8(line)
+        .map_err(|_| RitError::invalid_input("advertised ref is not UTF-8"))?;
+    let (record, capabilities) = if first_ref {
+        match line_text.split_once('\0') {
+            Some((record, capabilities)) => (
+                record,
+                Some(
+                    capabilities
+                        .split_whitespace()
+                        .map(ToOwned::to_owned)
+                        .collect::<Vec<_>>(),
+                ),
+            ),
+            None => (line_text, Some(Vec::new())),
+        }
+    } else {
+        (line_text, None)
+    };
+    let Some((object_id, name)) = record.split_once(' ') else {
+        return Err(RitError::invalid_input("malformed advertised ref"));
+    };
+    if name.is_empty() {
+        return Err(RitError::invalid_input("advertised ref has empty name"));
+    }
+    Ok((
+        AdvertisedRef {
+            object_id: ObjectId::from_hex(object_id)?,
+            name: name.to_owned(),
+        },
+        capabilities,
+    ))
 }
 
 /// Transport protocol family inferred from a repository location.
@@ -171,7 +309,10 @@ fn is_windows_drive_path(input: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{FetchRefSpec, SmartHttpService, TransportLocation, TransportProtocol};
+    use super::{
+        FetchRefSpec, SmartHttpAdvertisement, SmartHttpService, TransportLocation,
+        TransportProtocol,
+    };
 
     #[test]
     fn classifies_local_paths() {
@@ -241,5 +382,35 @@ mod tests {
                 .smart_http_info_refs(SmartHttpService::UploadPack)
                 .is_err()
         );
+    }
+
+    #[test]
+    fn parses_smart_http_advertisements() {
+        let body = concat!(
+            "001e# service=git-upload-pack\n",
+            "0000",
+            "005295dcfa3633004da0049d3d0fa03f80589cbcaf31 refs/heads/maint\0multi_ack thin-pack\n",
+            "003fd049f6c27a2244e12041955e262a404c7faba355 refs/heads/master\n",
+            "0000"
+        );
+
+        let advertisement =
+            SmartHttpAdvertisement::parse(SmartHttpService::UploadPack, body.as_bytes())
+                .expect("advertisement should parse");
+
+        assert_eq!(advertisement.service, SmartHttpService::UploadPack);
+        assert_eq!(advertisement.capabilities, ["multi_ack", "thin-pack"]);
+        assert_eq!(advertisement.refs.len(), 2);
+        assert_eq!(advertisement.refs[0].name, "refs/heads/maint");
+        assert_eq!(advertisement.refs[1].name, "refs/heads/master");
+    }
+
+    #[test]
+    fn rejects_wrong_smart_http_service_header() {
+        let body = "001e# service=git-upload-pack\n0000";
+        let error = SmartHttpAdvertisement::parse(SmartHttpService::ReceivePack, body.as_bytes())
+            .expect_err("service should be checked");
+
+        assert!(error.to_string().contains("service header"));
     }
 }

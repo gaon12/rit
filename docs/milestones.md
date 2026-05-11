@@ -236,7 +236,8 @@ Completion criteria:
 - [x] Protocol model for local, HTTP(S), and SSH location classification.
 - [~] HTTP transport.
   - [x] Smart HTTP `info/refs?service=...` request model.
-  - [ ] HTTP client and response parsing.
+  - [x] Smart HTTP advertised refs response parser.
+  - [ ] HTTP client I/O.
 - [ ] SSH transport.
 - [~] Fetch refs negotiation.
   - [x] Single local fetch refspec updates a destination ref after copying
