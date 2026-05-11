@@ -312,9 +312,11 @@
   `enforcement = "warn" | "block"`.
 - Added regular blob size policy findings with warning-by-default and explicit
   blocking severity.
+- Added conservative secret-pattern policy findings for private key blocks and
+  common token prefixes without including matched secret values in messages.
 - Policy defaults warn and do not block writes; blocking requires explicit
   `enforcement = "block"`.
-- Still unsupported: evaluating secret/branch policies, `rit doctor`, and
+- Still unsupported: evaluating protected branch policies, `rit doctor`, and
   `rit repair`.
 
 ### `rit version`

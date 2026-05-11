@@ -396,7 +396,7 @@ Completion criteria:
 
 - [x] Policy config model.
 - [x] Blob size warning/check.
-- [ ] Secret pattern warning/check.
+- [x] Secret pattern warning/check.
 - [ ] Protected branch policy.
 - [ ] `rit doctor`
 - [ ] `rit repair`
