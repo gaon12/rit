@@ -135,6 +135,32 @@ pub struct ReceivePackRequest {
     pack_data: Vec<u8>,
 }
 
+/// Parsed receive-pack status report.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReceivePackStatus {
+    /// `None` means `unpack ok`; `Some` contains the unpack error message.
+    pub unpack_error: Option<String>,
+    /// Per-ref command statuses.
+    pub commands: Vec<ReceivePackCommandStatus>,
+}
+
+/// Per-ref result in a receive-pack status report.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ReceivePackCommandStatus {
+    /// Reference update succeeded.
+    Ok {
+        /// Updated ref name.
+        ref_name: String,
+    },
+    /// Reference update failed.
+    Rejected {
+        /// Ref name that failed to update.
+        ref_name: String,
+        /// Server-provided rejection reason.
+        message: String,
+    },
+}
+
 /// ACK status words used by upload-pack negotiation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UploadPackAckStatus {
@@ -298,6 +324,34 @@ impl ReceivePackRequest {
         output.extend_from_slice(b"0000");
         output.extend_from_slice(&self.pack_data);
         output
+    }
+}
+
+impl ReceivePackStatus {
+    /// Parses a receive-pack `report-status` response.
+    pub fn parse(bytes: &[u8]) -> Result<Self> {
+        let lines = parse_pkt_lines(bytes)?;
+        let mut iter = lines.into_iter();
+        let Some(unpack_line) = iter.next() else {
+            return Err(RitError::invalid_input("empty receive-pack status"));
+        };
+        let unpack_error = parse_receive_pack_unpack_status(&unpack_line)?;
+        let mut commands = Vec::new();
+        for line in iter {
+            if line.is_empty() {
+                break;
+            }
+            commands.push(parse_receive_pack_command_status(&line)?);
+        }
+        if commands.is_empty() {
+            return Err(RitError::invalid_input(
+                "receive-pack status has no command results",
+            ));
+        }
+        Ok(Self {
+            unpack_error,
+            commands,
+        })
     }
 }
 
@@ -643,6 +697,61 @@ fn parse_upload_pack_ack_status(status: &str) -> Result<UploadPackAckStatus> {
             "unsupported upload-pack ACK status: {status}"
         ))),
     }
+}
+
+fn parse_receive_pack_unpack_status(line: &[u8]) -> Result<Option<String>> {
+    let line = line.strip_suffix(b"\n").unwrap_or(line);
+    let line_text = std::str::from_utf8(line)
+        .map_err(|_| RitError::invalid_input("receive-pack status is not UTF-8"))?;
+    let Some(result) = line_text.strip_prefix("unpack ") else {
+        return Err(RitError::invalid_input(
+            "receive-pack status is missing unpack result",
+        ));
+    };
+    if result == "ok" {
+        Ok(None)
+    } else if result.is_empty() {
+        Err(RitError::invalid_input(
+            "receive-pack unpack result is empty",
+        ))
+    } else {
+        Ok(Some(result.to_owned()))
+    }
+}
+
+fn parse_receive_pack_command_status(line: &[u8]) -> Result<ReceivePackCommandStatus> {
+    let line = line.strip_suffix(b"\n").unwrap_or(line);
+    let line_text = std::str::from_utf8(line)
+        .map_err(|_| RitError::invalid_input("receive-pack command status is not UTF-8"))?;
+    if let Some(ref_name) = line_text.strip_prefix("ok ") {
+        if ref_name.is_empty() {
+            return Err(RitError::invalid_input(
+                "receive-pack ok status is missing ref name",
+            ));
+        }
+        return Ok(ReceivePackCommandStatus::Ok {
+            ref_name: ref_name.to_owned(),
+        });
+    }
+    if let Some(rest) = line_text.strip_prefix("ng ") {
+        let Some((ref_name, message)) = rest.split_once(' ') else {
+            return Err(RitError::invalid_input(
+                "receive-pack rejection is missing message",
+            ));
+        };
+        if ref_name.is_empty() || message.is_empty() {
+            return Err(RitError::invalid_input(
+                "receive-pack rejection is missing ref name or message",
+            ));
+        }
+        return Ok(ReceivePackCommandStatus::Rejected {
+            ref_name: ref_name.to_owned(),
+            message: message.to_owned(),
+        });
+    }
+    Err(RitError::invalid_input(
+        "unsupported receive-pack command status",
+    ))
 }
 
 fn parse_upload_pack_side_band(payload: &[u8]) -> Result<Option<UploadPackSideBand>> {
@@ -1514,6 +1623,52 @@ mod tests {
             super::ReceivePackCommand::new(old_id, new_id, "").expect_err("ref is required");
 
         assert!(error.to_string().contains("ref name"));
+    }
+
+    #[test]
+    fn parses_receive_pack_status_reports() {
+        let status = super::ReceivePackStatus::parse(
+            concat!(
+                "000eunpack ok\n",
+                "0018ok refs/heads/debug\n",
+                "002ang refs/heads/master non-fast-forward\n",
+                "0000"
+            )
+            .as_bytes(),
+        )
+        .expect("status");
+
+        assert_eq!(status.unpack_error, None);
+        assert_eq!(
+            status.commands,
+            [
+                super::ReceivePackCommandStatus::Ok {
+                    ref_name: "refs/heads/debug".to_owned(),
+                },
+                super::ReceivePackCommandStatus::Rejected {
+                    ref_name: "refs/heads/master".to_owned(),
+                    message: "non-fast-forward".to_owned(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn parses_receive_pack_unpack_errors() {
+        let status = super::ReceivePackStatus::parse(
+            b"001dunpack index-pack failed\n0017ok refs/heads/main\n0000",
+        )
+        .expect("status");
+
+        assert_eq!(status.unpack_error, Some("index-pack failed".to_owned()));
+    }
+
+    #[test]
+    fn rejects_receive_pack_status_without_command_results() {
+        let error =
+            super::ReceivePackStatus::parse(b"000eunpack ok\n0000").expect_err("command required");
+
+        assert!(error.to_string().contains("no command results"));
     }
 
     #[test]

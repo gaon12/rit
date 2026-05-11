@@ -257,7 +257,8 @@ Completion criteria:
   - [ ] Remote pack negotiation and pack application.
 - [~] Push basics.
   - [x] receive-pack reference update request body model.
-  - [ ] Push pack generation, status parsing, and ref update workflow.
+  - [x] receive-pack `report-status` parser.
+  - [ ] Push pack generation and ref update workflow.
 
 Completion criteria:
 - Transport code does not live in core command formatting and does not depend on
@@ -412,5 +413,7 @@ Completion criteria:
     request and packfile transfer grammar, plus `git push -h`.
   - Implemented: pure Rust receive-pack command/request serialization with
     first-command capabilities, command-list flush, and trailing raw pack data.
-  - Still open: pack generation, push-status parsing, server-side status
-    handling, and CLI `rit push`.
+  - Implemented: pure Rust receive-pack `report-status` parsing for unpack
+    results and per-ref `ok` / `ng` statuses.
+  - Still open: pack generation, server-side status handling, and CLI
+    `rit push`.
