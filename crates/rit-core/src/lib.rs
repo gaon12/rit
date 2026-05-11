@@ -32,7 +32,7 @@ pub use index::{
 };
 pub use large_files::{
     GitLfsBackend, LargeFileBackend, LargeFileBackendKind, LargeFilePointer, LargeFileTrackRule,
-    encode_lfs_pointer, parse_lfs_pointer,
+    LfsLocalCache, encode_lfs_pointer, parse_lfs_pointer,
 };
 pub use merge_state::{MergeState, RebaseState};
 pub use object::{GitObject, ObjectId, ObjectKind, TreeEntry, hash_object};

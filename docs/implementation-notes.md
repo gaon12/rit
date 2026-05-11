@@ -216,8 +216,10 @@
   backend pointer blobs without depending on external `git-lfs`.
 - Added `GitLfsBackend`, `parse_lfs_pointer`, and `encode_lfs_pointer` for Git
   LFS v1 pointer blobs with `version`, `oid sha256`, and `size` fields.
-- Still unsupported: LFS local object cache and batch API, Xet detection, and
-  chunk/cache reconstruction.
+- Added `LfsLocalCache` for sharded `.git/lfs/objects/<aa>/<bb>/<sha256>`
+  storage with streaming writes and SHA-256/size verification.
+- Still unsupported: LFS batch API, Xet detection, and chunk/cache
+  reconstruction.
 
 ## Implemented Commands
 

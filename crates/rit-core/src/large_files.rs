@@ -1,4 +1,8 @@
-use crate::Result;
+use crate::{Result, RitError};
+use sha2::{Digest, Sha256};
+use std::fs;
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 
 const GIT_LFS_POINTER_VERSION: &str = "https://git-lfs.github.com/spec/v1";
 
@@ -65,6 +69,127 @@ impl LargeFilePointer {
             object_id: object_id.into(),
             size,
         }
+    }
+}
+
+/// Git LFS local object cache rooted at `.git/lfs/objects`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LfsLocalCache {
+    objects_dir: PathBuf,
+}
+
+impl LfsLocalCache {
+    /// Creates a cache using the repository `.git` directory.
+    pub fn new(git_dir: impl AsRef<Path>) -> Self {
+        Self {
+            objects_dir: git_dir.as_ref().join("lfs").join("objects"),
+        }
+    }
+
+    /// Creates a cache from an explicit objects directory.
+    pub fn from_objects_dir(objects_dir: impl Into<PathBuf>) -> Self {
+        Self {
+            objects_dir: objects_dir.into(),
+        }
+    }
+
+    /// Returns the root cache directory.
+    pub fn objects_dir(&self) -> &Path {
+        &self.objects_dir
+    }
+
+    /// Returns the sharded cache path for a Git LFS pointer.
+    pub fn path_for_pointer(&self, pointer: &LargeFilePointer) -> Result<PathBuf> {
+        self.path_for_oid(&pointer.object_id)
+    }
+
+    /// Returns true when the object exists at the expected cache path.
+    pub fn contains(&self, pointer: &LargeFilePointer) -> Result<bool> {
+        Ok(self.path_for_pointer(pointer)?.is_file())
+    }
+
+    /// Reads an object after validating its SHA-256 and size.
+    pub fn read_object(&self, pointer: &LargeFilePointer) -> Result<Vec<u8>> {
+        let path = self.path_for_pointer(pointer)?;
+        let data = fs::read(&path).map_err(|source| RitError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        verify_lfs_object(pointer, &data)?;
+        Ok(data)
+    }
+
+    /// Streams an object into the cache and verifies it against the pointer.
+    pub fn write_object_from_reader(
+        &self,
+        pointer: &LargeFilePointer,
+        mut reader: impl Read,
+    ) -> Result<PathBuf> {
+        let path = self.path_for_pointer(pointer)?;
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|source| RitError::Io {
+                path: parent.to_path_buf(),
+                source,
+            })?;
+        }
+
+        let temp_path = path.with_extension("tmp");
+        let mut file = fs::File::create(&temp_path).map_err(|source| RitError::Io {
+            path: temp_path.clone(),
+            source,
+        })?;
+        let mut hasher = Sha256::new();
+        let mut size = 0_u64;
+        let mut buffer = [0_u8; 8192];
+        loop {
+            let read = reader.read(&mut buffer).map_err(|source| RitError::Io {
+                path: temp_path.clone(),
+                source,
+            })?;
+            if read == 0 {
+                break;
+            }
+            file.write_all(&buffer[..read])
+                .map_err(|source| RitError::Io {
+                    path: temp_path.clone(),
+                    source,
+                })?;
+            hasher.update(&buffer[..read]);
+            size += read as u64;
+        }
+        file.flush().map_err(|source| RitError::Io {
+            path: temp_path.clone(),
+            source,
+        })?;
+        drop(file);
+
+        let actual_oid = format!("{:x}", hasher.finalize());
+        if actual_oid != pointer.object_id || size != pointer.size {
+            let _ = fs::remove_file(&temp_path);
+            return Err(RitError::invalid_input(format!(
+                "LFS object verification failed: expected sha256:{} size {}, got sha256:{actual_oid} size {size}",
+                pointer.object_id, pointer.size
+            )));
+        }
+
+        fs::rename(&temp_path, &path).map_err(|source| RitError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        Ok(path)
+    }
+
+    fn path_for_oid(&self, object_id: &str) -> Result<PathBuf> {
+        if !is_lower_hex_sha256(object_id) {
+            return Err(RitError::invalid_input(format!(
+                "invalid Git LFS sha256 object id: {object_id}"
+            )));
+        }
+        Ok(self
+            .objects_dir
+            .join(&object_id[0..2])
+            .join(&object_id[2..4])
+            .join(object_id))
     }
 }
 
@@ -178,9 +303,37 @@ fn is_lower_hex_sha256(value: &str) -> bool {
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
+fn verify_lfs_object(pointer: &LargeFilePointer, data: &[u8]) -> Result<()> {
+    if pointer.backend != LargeFileBackendKind::Lfs {
+        return Err(RitError::invalid_input(format!(
+            "cannot verify {} pointer as Git LFS",
+            pointer.backend.as_str()
+        )));
+    }
+    if data.len() as u64 != pointer.size {
+        return Err(RitError::invalid_input(format!(
+            "LFS object size mismatch: expected {}, got {}",
+            pointer.size,
+            data.len()
+        )));
+    }
+    let actual_oid = format!("{:x}", Sha256::digest(data));
+    if actual_oid != pointer.object_id {
+        return Err(RitError::invalid_input(format!(
+            "LFS object sha256 mismatch: expected {}, got {actual_oid}",
+            pointer.object_id
+        )));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use std::io::Cursor;
+    use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     struct EchoBackend;
 
@@ -295,5 +448,69 @@ mod tests {
             .expect("parse should succeed"),
             None
         );
+    }
+
+    #[test]
+    fn lfs_cache_writes_and_reads_verified_object() {
+        let temp = temp_path("lfs-cache");
+        let cache = LfsLocalCache::from_objects_dir(temp.join("objects"));
+        let data = b"large file contents";
+        let pointer = LargeFilePointer::new(
+            LargeFileBackendKind::Lfs,
+            format!("{:x}", Sha256::digest(data)),
+            data.len() as u64,
+        );
+
+        let path = cache
+            .write_object_from_reader(&pointer, Cursor::new(data))
+            .expect("object should write");
+
+        assert_eq!(
+            path,
+            temp.join("objects")
+                .join(&pointer.object_id[0..2])
+                .join(&pointer.object_id[2..4])
+                .join(&pointer.object_id)
+        );
+        assert!(cache.contains(&pointer).expect("contains should work"));
+        assert_eq!(
+            cache.read_object(&pointer).expect("object should read"),
+            data
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn lfs_cache_rejects_bad_hash_or_size() {
+        let temp = temp_path("lfs-cache-bad");
+        let cache = LfsLocalCache::from_objects_dir(temp.join("objects"));
+        let pointer = LargeFilePointer::new(
+            LargeFileBackendKind::Lfs,
+            "4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393",
+            12345,
+        );
+
+        let result = cache.write_object_from_reader(&pointer, Cursor::new(b"wrong"));
+
+        assert!(result.is_err());
+        assert!(
+            !cache
+                .path_for_pointer(&pointer)
+                .expect("path should build")
+                .exists()
+        );
+        remove_dir_all(&temp);
+    }
+
+    fn temp_path(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("rit-{name}-{unique}"))
+    }
+
+    fn remove_dir_all(path: &Path) {
+        let _ = fs::remove_dir_all(path);
     }
 }

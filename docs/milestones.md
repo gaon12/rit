@@ -308,7 +308,9 @@ Completion criteria:
 - [x] LFS pointer parse/write.
   - [x] Git LFS v1 pointer parser and encoder for `version`, `oid sha256`,
     and `size`.
-- [ ] LFS local cache.
+- [x] LFS local cache.
+  - [x] Sharded `.git/lfs/objects/<aa>/<bb>/<sha256>` storage with SHA-256
+    and size verification.
 - [ ] LFS batch API.
 - [ ] Xet detection.
 - [ ] Xet chunk/cache model.
