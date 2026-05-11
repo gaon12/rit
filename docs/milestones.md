@@ -257,8 +257,9 @@ Completion criteria:
   - [x] Received packfile checksum validation and `.pack` storage.
   - [x] Whole, offset-delta, and ref-delta received pack application to loose
     objects.
+  - [x] Pack index v2 generation for received packs.
   - [x] Remote advertised refs discovery through the smart HTTP client.
-  - [ ] Remote pack negotiation and pack index generation.
+  - [ ] Remote pack negotiation.
 - [~] Push basics.
   - [x] receive-pack reference update request body model.
   - [x] receive-pack `report-status` parser.
@@ -434,5 +435,6 @@ Completion criteria:
     and atomic `.git/objects/pack/pack-<checksum>.pack` storage.
   - Implemented: whole, offset-delta, and ref-delta pack object application to
     loose objects.
-  - Still open: building a pack index, and using the resulting objects in
-    remote fetch.
+  - Implemented: pack index v2 generation with fanout, sorted object names,
+    CRC32 table, offsets, pack checksum, and index checksum.
+  - Still open: using negotiated remote pack results in `rit fetch`.

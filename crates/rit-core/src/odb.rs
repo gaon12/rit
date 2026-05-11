@@ -27,6 +27,17 @@ pub struct StoredPack {
     pub path: PathBuf,
 }
 
+/// Stored pack index metadata.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StoredPackIndex {
+    /// Pack checksum copied into the index trailer.
+    pub pack_checksum: ObjectId,
+    /// Number of indexed objects.
+    pub object_count: u32,
+    /// Path of the stored `.idx` file.
+    pub path: PathBuf,
+}
+
 impl LooseObjectDb {
     /// Creates a loose object reader rooted at an `objects` directory.
     pub fn new(objects_dir: impl Into<PathBuf>) -> Self {
@@ -100,6 +111,52 @@ impl LooseObjectDb {
         }
         Ok(StoredPack {
             checksum,
+            object_count,
+            path,
+        })
+    }
+
+    /// Builds and stores a Git pack index v2 for a received packfile.
+    pub fn write_pack_index(&self, pack_bytes: &[u8]) -> Result<StoredPackIndex> {
+        let (pack_checksum, object_count, mut entries) =
+            self.collect_pack_index_entries(pack_bytes)?;
+        entries.sort_by(|left, right| left.object_id.as_bytes().cmp(right.object_id.as_bytes()));
+
+        let mut index = Vec::new();
+        index.extend_from_slice(b"\xfftOc");
+        index.extend_from_slice(&2_u32.to_be_bytes());
+        write_pack_index_fanout(&mut index, &entries);
+        for entry in &entries {
+            index.extend_from_slice(entry.object_id.as_bytes());
+        }
+        for entry in &entries {
+            index.extend_from_slice(&entry.crc32.to_be_bytes());
+        }
+        let mut large_offsets = Vec::new();
+        for entry in &entries {
+            if entry.offset <= 0x7fff_ffff {
+                index.extend_from_slice(&(entry.offset as u32).to_be_bytes());
+            } else {
+                let large_index = large_offsets.len() as u32;
+                index.extend_from_slice(&(0x8000_0000 | large_index).to_be_bytes());
+                large_offsets.push(entry.offset);
+            }
+        }
+        for offset in large_offsets {
+            index.extend_from_slice(&offset.to_be_bytes());
+        }
+        index.extend_from_slice(pack_checksum.as_bytes());
+        let index_checksum = sha1_bytes(&index);
+        index.extend_from_slice(&index_checksum);
+
+        let pack_dir = self.objects_dir.join("pack");
+        fs::create_dir_all(&pack_dir).map_err(|source| RitError::io(&pack_dir, source))?;
+        let path = pack_dir.join(format!("pack-{}.idx", pack_checksum.to_hex()));
+        if !path.exists() {
+            write_new_file_atomically(&path, &index)?;
+        }
+        Ok(StoredPackIndex {
+            pack_checksum,
             object_count,
             path,
         })
@@ -283,6 +340,92 @@ impl LooseObjectDb {
         }
         Ok(matches)
     }
+
+    fn collect_pack_index_entries(
+        &self,
+        pack_bytes: &[u8],
+    ) -> Result<(ObjectId, u32, Vec<PackIndexBuildEntry>)> {
+        let (pack_checksum, object_count) = validate_pack_bytes(pack_bytes)?;
+        let trailer_start = pack_bytes.len() - 20;
+        let mut position = 12;
+        let mut objects_by_offset: HashMap<u64, GitObject> = HashMap::new();
+        let mut objects_by_id: HashMap<ObjectId, GitObject> = HashMap::new();
+        let mut entries = Vec::new();
+
+        for _ in 0..object_count {
+            let object_offset = position;
+            let (kind, size) = read_pack_object_header_from_bytes(pack_bytes, &mut position)?;
+            let object = match kind {
+                PackObjectKind::Whole(kind) => {
+                    let (data, consumed) = read_compressed_pack_payload_from_bytes(
+                        pack_bytes,
+                        position,
+                        trailer_start,
+                        size,
+                    )?;
+                    position += consumed;
+                    GitObject { kind, data }
+                }
+                PackObjectKind::OffsetDelta => {
+                    let base_offset = read_offset_delta_base_from_bytes(
+                        pack_bytes,
+                        &mut position,
+                        object_offset,
+                    )?;
+                    let (delta, consumed) = read_compressed_pack_payload_from_bytes(
+                        pack_bytes,
+                        position,
+                        trailer_start,
+                        size,
+                    )?;
+                    position += consumed;
+                    let base = objects_by_offset
+                        .get(&base_offset)
+                        .cloned()
+                        .ok_or_else(|| RitError::invalid_input("offset delta base is missing"))?;
+                    apply_delta_object(base, &delta)?
+                }
+                PackObjectKind::RefDelta => {
+                    let base_id = read_ref_delta_base_from_bytes(pack_bytes, &mut position)?;
+                    let (delta, consumed) = read_compressed_pack_payload_from_bytes(
+                        pack_bytes,
+                        position,
+                        trailer_start,
+                        size,
+                    )?;
+                    position += consumed;
+                    let base = match objects_by_id.get(&base_id) {
+                        Some(base) => base.clone(),
+                        None => self.read_object(base_id)?,
+                    };
+                    apply_delta_object(base, &delta)?
+                }
+            };
+            let object_id = hash_object(object.kind, &object.data);
+            let offset = object_offset as u64;
+            entries.push(PackIndexBuildEntry {
+                object_id,
+                offset,
+                crc32: crc32(&pack_bytes[object_offset..position]),
+            });
+            objects_by_offset.insert(offset, object.clone());
+            objects_by_id.insert(object_id, object);
+        }
+
+        if position != trailer_start {
+            return Err(RitError::invalid_input(
+                "packfile has trailing data before checksum",
+            ));
+        }
+        Ok((pack_checksum, object_count, entries))
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PackIndexBuildEntry {
+    object_id: ObjectId,
+    offset: u64,
+    crc32: u32,
 }
 
 fn validate_pack_bytes(pack_bytes: &[u8]) -> Result<(ObjectId, u32)> {
@@ -509,6 +652,30 @@ fn parse_pack_index_header(bytes: &[u8], index_path: &Path) -> Result<(usize, us
     let fanout_start = 8;
     let object_count = read_u32(bytes, fanout_start + 255 * 4)? as usize;
     Ok((object_count, fanout_start + 256 * 4))
+}
+
+fn write_pack_index_fanout(output: &mut Vec<u8>, entries: &[PackIndexBuildEntry]) {
+    let mut counts = [0_u32; 256];
+    for entry in entries {
+        counts[entry.object_id.as_bytes()[0] as usize] += 1;
+    }
+    let mut total = 0_u32;
+    for count in counts {
+        total += count;
+        output.extend_from_slice(&total.to_be_bytes());
+    }
+}
+
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = 0xffff_ffff_u32;
+    for byte in bytes {
+        crc ^= *byte as u32;
+        for _ in 0..8 {
+            let mask = 0_u32.wrapping_sub(crc & 1);
+            crc = (crc >> 1) ^ (0xedb8_8320 & mask);
+        }
+    }
+    !crc
 }
 
 fn read_pack_object_at(
@@ -865,6 +1032,48 @@ mod tests {
 
         assert!(error.to_string().contains("checksum"));
         assert!(!objects_dir.join("pack").exists());
+    }
+
+    #[test]
+    fn writes_pack_index_for_received_pack() {
+        let objects_dir = temp_path("write-pack-index").join("objects");
+        let database = LooseObjectDb::new(&objects_dir);
+        let pack = pack_with_one_blob(b"hello");
+        let stored = database.store_pack(&pack).expect("pack should store");
+        let index = database
+            .write_pack_index(&pack)
+            .expect("index should write");
+
+        assert_eq!(index.pack_checksum, stored.checksum);
+        assert_eq!(index.object_count, 1);
+        assert!(index.path.is_file());
+        let expected_name = format!("pack-{}.idx", stored.checksum);
+        assert_eq!(
+            index.path.file_name().and_then(|name| name.to_str()),
+            Some(expected_name.as_str())
+        );
+        let object_id = hash_object(ObjectKind::Blob, b"hello");
+        let object = database.read_object(object_id).expect("packed object");
+        assert_eq!(object.kind, ObjectKind::Blob);
+        assert_eq!(object.data, b"hello");
+    }
+
+    #[test]
+    fn writes_pack_index_for_delta_pack() {
+        let objects_dir = temp_path("write-delta-pack-index").join("objects");
+        let database = LooseObjectDb::new(&objects_dir);
+        let pack = pack_with_offset_delta_blob();
+        database.store_pack(&pack).expect("pack should store");
+        database
+            .write_pack_index(&pack)
+            .expect("index should write");
+
+        let object_id = hash_object(ObjectKind::Blob, b"hello!");
+        let object = database
+            .read_object(object_id)
+            .expect("packed delta object");
+        assert_eq!(object.kind, ObjectKind::Blob);
+        assert_eq!(object.data, b"hello!");
     }
 
     #[test]
