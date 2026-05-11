@@ -1,3 +1,4 @@
+use crate::object::sha1_bytes;
 use crate::{
     GitObject, ObjectId, ObjectKind, Result, RitError, hash_object, object::parse_loose_object,
 };
@@ -12,6 +13,17 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Debug)]
 pub struct LooseObjectDb {
     objects_dir: PathBuf,
+}
+
+/// Stored packfile metadata.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StoredPack {
+    /// Pack checksum stored in the pack trailer.
+    pub checksum: ObjectId,
+    /// Number of objects declared by the pack header.
+    pub object_count: u32,
+    /// Path of the stored `.pack` file.
+    pub path: PathBuf,
 }
 
 impl LooseObjectDb {
@@ -71,6 +83,25 @@ impl LooseObjectDb {
         write_new_file_atomically(&path, &compressed)
             .or_else(|error| if path.exists() { Ok(()) } else { Err(error) })?;
         Ok(object_id)
+    }
+
+    /// Validates and stores a received packfile.
+    ///
+    /// This writes only the `.pack` file. A later transport step must build the
+    /// matching `.idx` file before normal object lookup can read from it.
+    pub fn store_pack(&self, pack_bytes: &[u8]) -> Result<StoredPack> {
+        let (checksum, object_count) = validate_pack_bytes(pack_bytes)?;
+        let pack_dir = self.objects_dir.join("pack");
+        fs::create_dir_all(&pack_dir).map_err(|source| RitError::io(&pack_dir, source))?;
+        let path = pack_dir.join(format!("pack-{}.pack", checksum.to_hex()));
+        if !path.exists() {
+            write_new_file_atomically(&path, pack_bytes)?;
+        }
+        Ok(StoredPack {
+            checksum,
+            object_count,
+            path,
+        })
     }
 
     /// Returns the path where a loose object should live.
@@ -175,6 +206,30 @@ impl LooseObjectDb {
         }
         Ok(matches)
     }
+}
+
+fn validate_pack_bytes(pack_bytes: &[u8]) -> Result<(ObjectId, u32)> {
+    if pack_bytes.len() < 32 {
+        return Err(RitError::invalid_input("packfile is too short"));
+    }
+    if &pack_bytes[..4] != b"PACK" {
+        return Err(RitError::invalid_input(
+            "packfile is missing PACK signature",
+        ));
+    }
+    let version = read_u32(pack_bytes, 4)?;
+    if version != 2 && version != 3 {
+        return Err(RitError::invalid_input(format!(
+            "unsupported pack version: {version}"
+        )));
+    }
+    let object_count = read_u32(pack_bytes, 8)?;
+    let trailer_start = pack_bytes.len() - 20;
+    let expected_checksum = sha1_bytes(&pack_bytes[..trailer_start]);
+    if pack_bytes[trailer_start..] != expected_checksum {
+        return Err(RitError::invalid_input("packfile checksum mismatch"));
+    }
+    Ok((ObjectId::from_bytes(expected_checksum), object_count))
 }
 
 fn remember_unique_object_id(
@@ -588,8 +643,13 @@ fn write_new_file_atomically(path: &Path, contents: &[u8]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::apply_delta_object;
-    use crate::{GitObject, ObjectKind};
+    use super::{LooseObjectDb, apply_delta_object};
+    use crate::{GitObject, ObjectKind, object::sha1_bytes};
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     #[test]
     fn applies_git_pack_delta_copy_and_insert_instructions() {
@@ -603,5 +663,56 @@ mod tests {
 
         assert_eq!(object.kind, ObjectKind::Blob);
         assert_eq!(object.data, b"abXYef!");
+    }
+
+    #[test]
+    fn stores_received_pack_by_trailer_checksum() {
+        let objects_dir = temp_path("store-pack").join("objects");
+        let database = LooseObjectDb::new(&objects_dir);
+        let pack = empty_pack();
+        let stored = database.store_pack(&pack).expect("pack should store");
+
+        assert_eq!(stored.object_count, 0);
+        assert!(stored.path.is_file());
+        assert_eq!(fs::read(&stored.path).expect("pack bytes"), pack);
+        let expected_name = format!("pack-{}.pack", stored.checksum);
+        assert_eq!(
+            stored.path.file_name().and_then(|name| name.to_str()),
+            Some(expected_name.as_str())
+        );
+    }
+
+    #[test]
+    fn rejects_received_pack_with_bad_checksum() {
+        let objects_dir = temp_path("bad-pack").join("objects");
+        let database = LooseObjectDb::new(&objects_dir);
+        let mut pack = empty_pack();
+        let last = pack.last_mut().expect("trailer byte exists");
+        *last ^= 1;
+
+        let error = database
+            .store_pack(&pack)
+            .expect_err("checksum should fail");
+
+        assert!(error.to_string().contains("checksum"));
+        assert!(!objects_dir.join("pack").exists());
+    }
+
+    fn empty_pack() -> Vec<u8> {
+        let mut pack = Vec::new();
+        pack.extend_from_slice(b"PACK");
+        pack.extend_from_slice(&2_u32.to_be_bytes());
+        pack.extend_from_slice(&0_u32.to_be_bytes());
+        let checksum = sha1_bytes(&pack);
+        pack.extend_from_slice(&checksum);
+        pack
+    }
+
+    fn temp_path(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("rit-odb-{name}-{unique}"))
     }
 }

@@ -254,8 +254,9 @@ Completion criteria:
     classifier.
   - [x] Upload-pack side-band pack/progress/error response parser.
   - [x] Upload-pack raw/side-band pack byte extraction.
+  - [x] Received packfile checksum validation and `.pack` storage.
   - [x] Remote advertised refs discovery through the smart HTTP client.
-  - [ ] Remote pack negotiation and pack application.
+  - [ ] Remote pack negotiation and pack index/application.
 - [~] Push basics.
   - [x] receive-pack reference update request body model.
   - [x] receive-pack `report-status` parser.
@@ -427,5 +428,7 @@ Completion criteria:
     data section.
   - Implemented: API to extract raw pack bytes from non-sideband responses or
     concatenate side-band band 1 pack data while surfacing band 3 errors.
-  - Still open: storing received pack bytes, building a pack index, and using
-    the resulting objects in remote fetch.
+  - Implemented: packfile `PACK` header/version/trailer checksum validation
+    and atomic `.git/objects/pack/pack-<checksum>.pack` storage.
+  - Still open: building a pack index, and using the resulting objects in
+    remote fetch.
