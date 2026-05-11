@@ -261,8 +261,11 @@
   call `expose_secret()` to authenticate.
 - Added `EnvironmentTokenProvider` for `RIT_TOKEN`, `GIT_TOKEN`,
   `GITHUB_TOKEN`, `GITLAB_TOKEN`, and `HF_TOKEN`.
-- Still unsupported: Git credential helper subprocess compatibility, SSH agent
-  integration, OS keychain adapters, and CI non-interactive policy.
+- Added Git credential helper line-protocol encode/decode for request and
+  response-shaped messages.
+- Still unsupported: Git credential helper subprocess execution/configured
+  helper lookup, SSH agent integration, OS keychain adapters, and CI
+  non-interactive policy.
 
 ### `rit version`
 

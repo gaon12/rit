@@ -87,7 +87,7 @@ pub use attributes::{
 };
 pub use auth::{
     Credential, CredentialKind, CredentialProvider, CredentialRequest, DEFAULT_TOKEN_ENV_VARS,
-    EnvironmentToken, EnvironmentTokenProvider, SecretString,
+    EnvironmentToken, EnvironmentTokenProvider, GitCredentialMessage, SecretString,
 };
 pub use commit::{Commit, Signature, parse_commit};
 pub use config::{GitConfig, GitConfigEntry};

@@ -358,7 +358,9 @@ Completion criteria:
 - [x] Environment token provider.
   - [x] Read default token environment variables into redacted credential
     providers without mutating process environment in tests.
-- [ ] Git credential helper compatibility.
+- [~] Git credential helper compatibility.
+  - [x] Encode and parse Git credential helper line-protocol messages.
+  - [ ] Helper subprocess execution and configured helper lookup.
 - [ ] SSH agent integration.
 - [ ] OS keychain adapters.
 - [ ] CI non-interactive mode.
