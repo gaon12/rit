@@ -236,7 +236,10 @@ Completion criteria:
 - [x] Protocol model for local, HTTP(S), and SSH location classification.
 - [ ] HTTP transport.
 - [ ] SSH transport.
-- [ ] Fetch refs negotiation.
+- [~] Fetch refs negotiation.
+  - [x] Single local fetch refspec updates a destination ref after copying
+    objects.
+  - [ ] Remote advertised refs and pack negotiation.
 - [ ] Push basics.
 
 Completion criteria:

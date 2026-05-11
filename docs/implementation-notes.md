@@ -50,6 +50,8 @@
 - 2026-05-11 transport protocol model slice checked `git clone -h` and
   `git fetch -h`; implemented classification for local paths, HTTP(S), SSH
   URLs, and scp-like SSH locations.
+- 2026-05-11 local fetch refspec slice checked `git fetch -h` and direct Git
+  comparisons for `fetch <local-repository> <src>:<dst>`.
 
 ## Milestone Notes
 
@@ -480,15 +482,18 @@
 ### `rit fetch`
 
 - Baseline command checked: `git fetch -h`
-- Supported options: `--quiet`/`-q` with one local repository path and no
-  refspec.
-- Unsupported options: named remotes, refspec updates, append/atomic/force,
-  tags, prune, shallow/partial fetch, submodules, protocol options, stdin, and
-  maintenance hooks.
+- Supported options: `--quiet`/`-q` with one local repository path and either no
+  refspec or one simple `<src>:<dst>` refspec.
+- Unsupported options: named remotes, multiple refspecs, append/atomic/force
+  semantics, tags, prune, shallow/partial fetch, submodules, protocol options,
+  stdin, and maintenance hooks.
 - Git-compatible behavior: `fetch <local-repository>` copies source objects
   into the current repository and overwrites `.git/FETCH_HEAD` with the source
   `HEAD` commit. Local refs and remote-tracking refs are not updated, matching
   Git's no-refspec local fetch shape.
+- Git-compatible behavior: `fetch <local-repository> <src>:<dst>` resolves the
+  source ref, copies objects, writes `FETCH_HEAD`, and updates the destination
+  full ref.
 - Intentional differences: default progress/status text is simplified; quiet
   mode is used for compatibility coverage.
 - Repository mutation: writes object files and `.git/FETCH_HEAD`.

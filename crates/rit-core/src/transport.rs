@@ -1,5 +1,45 @@
 use std::path::PathBuf;
 
+use crate::{Result, RitError};
+
+/// One simple fetch refspec, such as `refs/heads/main:refs/remotes/origin/main`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FetchRefSpec {
+    /// Allow non-fast-forward updates. The first implementation records this
+    /// bit but does not yet perform ancestry checks.
+    pub force: bool,
+    /// Source ref or revision in the remote repository.
+    pub source: String,
+    /// Destination ref to update in the local repository.
+    pub destination: String,
+}
+
+impl FetchRefSpec {
+    /// Parses one fetch refspec.
+    pub fn parse(input: &str) -> Result<Self> {
+        let (force, body) = if let Some(rest) = input.strip_prefix('+') {
+            (true, rest)
+        } else {
+            (false, input)
+        };
+        let Some((source, destination)) = body.split_once(':') else {
+            return Err(RitError::invalid_input(format!(
+                "unsupported fetch refspec: {input}"
+            )));
+        };
+        if source.is_empty() || destination.is_empty() {
+            return Err(RitError::invalid_input(format!(
+                "invalid fetch refspec: {input}"
+            )));
+        }
+        Ok(Self {
+            force,
+            source: source.to_owned(),
+            destination: destination.to_owned(),
+        })
+    }
+}
+
 /// Transport protocol family inferred from a repository location.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TransportProtocol {
@@ -81,7 +121,7 @@ fn is_windows_drive_path(input: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{TransportLocation, TransportProtocol};
+    use super::{FetchRefSpec, TransportLocation, TransportProtocol};
 
     #[test]
     fn classifies_local_paths() {
@@ -117,5 +157,17 @@ mod tests {
             TransportLocation::parse("git@example.test:org/repo.git").protocol(),
             TransportProtocol::Ssh
         );
+    }
+
+    #[test]
+    fn parses_simple_fetch_refspecs() {
+        let refspec =
+            FetchRefSpec::parse("+refs/heads/main:refs/remotes/origin/main").expect("valid");
+        assert!(refspec.force);
+        assert_eq!(refspec.source, "refs/heads/main");
+        assert_eq!(refspec.destination, "refs/remotes/origin/main");
+
+        assert!(FetchRefSpec::parse("refs/heads/main").is_err());
+        assert!(FetchRefSpec::parse(":refs/heads/main").is_err());
     }
 }

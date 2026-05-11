@@ -1,4 +1,6 @@
-use crate::{GitAttributes, GitConfig, GitObject, LooseObjectDb, ObjectId, Result, RitError};
+use crate::{
+    FetchRefSpec, GitAttributes, GitConfig, GitObject, LooseObjectDb, ObjectId, Result, RitError,
+};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -31,6 +33,8 @@ pub struct LocalCloneOptions {
 pub struct LocalFetchOptions {
     /// Existing local repository to copy objects from.
     pub source: PathBuf,
+    /// Optional refspec to update after objects are copied.
+    pub refspec: Option<FetchRefSpec>,
 }
 
 impl LocalFetchOptions {
@@ -38,7 +42,14 @@ impl LocalFetchOptions {
     pub fn new(source: impl Into<PathBuf>) -> Self {
         Self {
             source: source.into(),
+            refspec: None,
         }
+    }
+
+    /// Adds one source-to-destination refspec.
+    pub fn with_refspec(mut self, refspec: FetchRefSpec) -> Self {
+        self.refspec = Some(refspec);
+        self
     }
 }
 
@@ -220,17 +231,31 @@ impl Repository {
     /// refs are left untouched.
     pub fn fetch_local(&self, options: &LocalFetchOptions) -> Result<LocalFetchResult> {
         let source = Repository::open(&options.source)?;
-        let fetch_head = source.resolve_head()?.ok_or_else(|| {
-            RitError::invalid_input("local fetch from an unborn branch is not implemented")
-        })?;
+        let fetch_head = match &options.refspec {
+            Some(refspec) => source.resolve_fetch_source(&refspec.source)?,
+            None => source.resolve_head()?.ok_or_else(|| {
+                RitError::invalid_input("local fetch from an unborn branch is not implemented")
+            })?,
+        };
         copy_directory_contents(
             &source.common_dir().join("objects"),
             &self.common_dir().join("objects"),
         )?;
         let source_name = options.source.display().to_string();
+        let fetch_head_line = match &options.refspec {
+            Some(refspec) => {
+                validate_full_ref_name(&refspec.destination)?;
+                write_full_ref(self, &refspec.destination, fetch_head)?;
+                format!(
+                    "{fetch_head}\t\t{} of {source_name}\n",
+                    fetch_head_description(&refspec.source)
+                )
+            }
+            None => format!("{fetch_head}\t\t{source_name}\n"),
+        };
         write_file(
             &self.git_dir().join("FETCH_HEAD"),
-            format!("{fetch_head}\t\t{source_name}\n").as_bytes(),
+            fetch_head_line.as_bytes(),
         )?;
         Ok(LocalFetchResult {
             fetch_head,
@@ -317,6 +342,9 @@ impl Repository {
                 .ok_or_else(|| RitError::invalid_input("FETCH_HEAD is empty"))?;
             return ObjectId::from_hex(object_id);
         }
+        if revision.starts_with("refs/") {
+            return self.resolve_full_ref(revision);
+        }
 
         if revision.len() == 40
             && revision
@@ -345,6 +373,24 @@ impl Repository {
         Err(RitError::invalid_input(format!(
             "unknown revision or object: {revision}"
         )))
+    }
+
+    fn resolve_fetch_source(&self, source: &str) -> Result<ObjectId> {
+        if source.starts_with("refs/") {
+            return self.resolve_full_ref(source);
+        }
+        self.resolve_revision(source)
+    }
+
+    fn resolve_full_ref(&self, full_name: &str) -> Result<ObjectId> {
+        validate_full_ref_name(full_name)?;
+        let path = self.common_dir.join(full_name);
+        if path.exists() {
+            let target = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
+            return ObjectId::from_hex(target.trim());
+        }
+        self.packed_ref(full_name)?
+            .ok_or_else(|| RitError::invalid_input(format!("ref not found: {full_name}")))
     }
 
     /// Returns the working tree root, or `None` for bare repositories.
@@ -547,6 +593,43 @@ fn copy_file_if_exists(source: &Path, target: &Path) -> Result<()> {
     }
     fs::copy(source, target).map_err(|error| RitError::io(target, error))?;
     Ok(())
+}
+
+fn write_full_ref(repository: &Repository, full_name: &str, target: ObjectId) -> Result<()> {
+    validate_full_ref_name(full_name)?;
+    let path = repository.common_dir().join(full_name);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| RitError::io(parent, source))?;
+    }
+    write_file(&path, format!("{target}\n").as_bytes())
+}
+
+fn validate_full_ref_name(full_name: &str) -> Result<()> {
+    if !full_name.starts_with("refs/")
+        || full_name.ends_with('/')
+        || full_name.contains('\\')
+        || full_name.contains("..")
+        || full_name.contains("//")
+        || full_name.ends_with(".lock")
+        || full_name
+            .chars()
+            .any(|character| character.is_control() || character.is_whitespace())
+    {
+        return Err(RitError::invalid_input(format!(
+            "invalid ref name: {full_name}"
+        )));
+    }
+    Ok(())
+}
+
+fn fetch_head_description(source_ref: &str) -> String {
+    if let Some(name) = source_ref.strip_prefix("refs/heads/") {
+        format!("branch '{name}'")
+    } else if let Some(name) = source_ref.strip_prefix("refs/tags/") {
+        format!("tag '{name}'")
+    } else {
+        format!("ref '{source_ref}'")
+    }
 }
 
 fn append_clone_remote_config(

@@ -59,9 +59,9 @@ Clone a local repository by copying objects and refs. Checkout is not implemente
 ";
 
 const FETCH_HELP: &str = "\
-rit fetch [-q|--quiet] <local-repository>
+rit fetch [-q|--quiet] <local-repository> [<src>:<dst>]
 
-Fetch objects from a local repository and write FETCH_HEAD. Refspecs are not implemented yet.
+Fetch objects from a local repository and write FETCH_HEAD.
 ";
 
 const REV_PARSE_HELP: &str = "\
@@ -432,8 +432,11 @@ fn fetch_command(
         }
     }
 
-    if positional.len() != 1 {
-        writeln!(stderr, "rit: fetch expects exactly one local repository")?;
+    if positional.is_empty() || positional.len() > 2 {
+        writeln!(
+            stderr,
+            "rit: fetch expects <local-repository> and optional <src>:<dst>"
+        )?;
         return Ok(ExitCode::from(129));
     }
 
@@ -450,7 +453,16 @@ fn fetch_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    let options = rit_core::LocalFetchOptions::new(source);
+    let mut options = rit_core::LocalFetchOptions::new(source);
+    if let Some(refspec) = positional.get(1) {
+        match rit_core::FetchRefSpec::parse(refspec) {
+            Ok(refspec) => options = options.with_refspec(refspec),
+            Err(error) => {
+                writeln!(stderr, "rit: {error}")?;
+                return Ok(ExitCode::from(129));
+            }
+        }
+    }
     match repository.fetch_local(&options) {
         Ok(result) => {
             if !quiet {

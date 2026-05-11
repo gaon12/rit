@@ -851,6 +851,95 @@ fn fetch_local_copies_objects_and_writes_fetch_head() {
     let _ = fs::remove_dir_all(workspace);
 }
 
+#[test]
+fn fetch_local_refspec_updates_destination_ref() {
+    let workspace = temp_path("fetch-local-refspec");
+    let source = workspace.join("source");
+    let git_target = workspace.join("git-target");
+    let rit_target = workspace.join("rit-target");
+    fs::create_dir_all(&source).expect("source should be created");
+    fs::create_dir_all(&git_target).expect("git target should be created");
+    fs::create_dir_all(&rit_target).expect("rit target should be created");
+    run_git(&source, ["init", "--quiet"]);
+    run_git(&source, ["config", "user.name", "Rit Test"]);
+    run_git(&source, ["config", "user.email", "rit@example.test"]);
+    run_git(&source, ["config", "core.autocrlf", "false"]);
+    fs::write(source.join("a.txt"), "base\n").expect("source file should be written");
+    run_git(&source, ["add", "a.txt"]);
+    run_git(&source, ["commit", "--quiet", "-m", "base"]);
+    run_git(&git_target, ["init", "--quiet"]);
+    run_git(&rit_target, ["init", "--quiet"]);
+    let refspec = "refs/heads/master:refs/remotes/origin/master";
+
+    let git_output = Command::new("git")
+        .arg("fetch")
+        .arg("-q")
+        .arg(&source)
+        .arg(refspec)
+        .current_dir(&git_target)
+        .output()
+        .expect("git fetch should start");
+    assert!(
+        git_output.status.success(),
+        "git fetch failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&git_output.stdout),
+        String::from_utf8_lossy(&git_output.stderr)
+    );
+
+    let rit_output = Command::new(rit_binary())
+        .arg("fetch")
+        .arg("-q")
+        .arg(&source)
+        .arg(refspec)
+        .current_dir(&rit_target)
+        .output()
+        .expect("rit fetch should start");
+    assert!(
+        rit_output.status.success(),
+        "rit fetch failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&rit_output.stdout),
+        String::from_utf8_lossy(&rit_output.stderr)
+    );
+    assert_eq!(git_output.stdout, rit_output.stdout);
+    assert_eq!(git_output.stderr, rit_output.stderr);
+
+    let git_fetch_head =
+        fs::read_to_string(git_target.join(".git").join("FETCH_HEAD")).expect("git FETCH_HEAD");
+    let rit_fetch_head =
+        fs::read_to_string(rit_target.join(".git").join("FETCH_HEAD")).expect("rit FETCH_HEAD");
+    assert_eq!(git_fetch_head, rit_fetch_head);
+
+    let git_ref = run_capture(
+        "git",
+        ["rev-parse", "refs/remotes/origin/master"],
+        &git_target,
+    )
+    .0;
+    let rit_ref = run_capture(
+        rit_binary(),
+        ["rev-parse", "refs/remotes/origin/master"],
+        &rit_target,
+    )
+    .0;
+    assert_eq!(git_ref, rit_ref);
+
+    let git_commit = run_capture(
+        "git",
+        ["cat-file", "-p", "refs/remotes/origin/master"],
+        &git_target,
+    )
+    .0;
+    let rit_commit = run_capture(
+        rit_binary(),
+        ["cat-file", "-p", "refs/remotes/origin/master"],
+        &rit_target,
+    )
+    .0;
+    assert_eq!(git_commit, rit_commit);
+
+    let _ = fs::remove_dir_all(workspace);
+}
+
 struct CommandSpec {
     program: OsString,
     args: Vec<OsString>,
