@@ -219,12 +219,14 @@
 - Added `LfsLocalCache` for sharded `.git/lfs/objects/<aa>/<bb>/<sha256>`
   storage with streaming writes and SHA-256/size verification.
 - Added Git LFS Batch API request/response models and JSON codecs for the
-  `basic` transfer adapter, including per-object actions and errors.
+  `basic` transfer adapter, including per-object actions and errors. Batch
+  request ref context serializes with the Git LFS protocol key `ref`.
 - Added conservative Xet detection from explicit `filter=xet` attributes and
   Xet pointer hash extension lines, while preserving LFS-compatible attribute
   rules as separate hints.
 - Added Xet hash, xorb chunk range, reconstruction term/file, and local cache
   path models for future CAS integration.
+- Added `rit-core` Cargo feature gates: `lfs`, `xet`, and `large-files`.
 - Still unsupported: LFS Batch API HTTP client execution, Xet CAS API
   execution, content-defined chunking, and xorb/shard binary parsing.
 

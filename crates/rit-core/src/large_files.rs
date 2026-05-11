@@ -1,20 +1,33 @@
-use crate::{AttributeState, GitAttributes, Result, RitError};
+use crate::Result;
+#[cfg(feature = "lfs")]
+use crate::RitError;
+#[cfg(feature = "xet")]
+use crate::{AttributeState, GitAttributes};
+#[cfg(feature = "lfs")]
 use sha2::{Digest, Sha256};
+#[cfg(feature = "lfs")]
 use std::fs;
+#[cfg(feature = "lfs")]
 use std::io::{Read, Write};
+#[cfg(feature = "lfs")]
 use std::path::{Path, PathBuf};
 
+#[cfg(feature = "lfs")]
 mod batch;
+#[cfg(feature = "xet")]
 mod xet;
 
+#[cfg(feature = "lfs")]
 pub use batch::{
     LFS_BATCH_MEDIA_TYPE, LfsBatchAction, LfsBatchObject, LfsBatchObjectError,
     LfsBatchObjectResponse, LfsBatchOperation, LfsBatchRef, LfsBatchRequest, LfsBatchResponse,
 };
+#[cfg(feature = "xet")]
 pub use xet::{
     XetChunkRange, XetFileReconstruction, XetHash, XetLocalCache, XetReconstructionTerm,
 };
 
+#[cfg(feature = "lfs")]
 const GIT_LFS_POINTER_VERSION: &str = "https://git-lfs.github.com/spec/v1";
 
 /// Well-known large-file storage backends.
@@ -84,12 +97,14 @@ impl LargeFilePointer {
 }
 
 /// Git LFS local object cache rooted at `.git/lfs/objects`.
+#[cfg(feature = "lfs")]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LfsLocalCache {
     objects_dir: PathBuf,
 }
 
 /// Conservative Xet storage detection hints.
+#[cfg(feature = "xet")]
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct XetDetection {
     /// Path rules that explicitly select Xet through attributes.
@@ -100,6 +115,7 @@ pub struct XetDetection {
     pub pointer_hash: Option<String>,
 }
 
+#[cfg(feature = "xet")]
 impl XetDetection {
     /// Returns true only for explicit Xet signals.
     pub fn is_xet_backed(&self) -> bool {
@@ -114,6 +130,7 @@ impl XetDetection {
 }
 
 /// Detects Xet-related hints from root `.gitattributes` and optional pointer data.
+#[cfg(feature = "xet")]
 pub fn detect_xet_storage(attributes: &GitAttributes, pointer_data: Option<&[u8]>) -> XetDetection {
     XetDetection {
         explicit_xet_rules: xet_rules_for_filter(attributes, "xet"),
@@ -122,6 +139,7 @@ pub fn detect_xet_storage(attributes: &GitAttributes, pointer_data: Option<&[u8]
     }
 }
 
+#[cfg(feature = "lfs")]
 impl LfsLocalCache {
     /// Creates a cache using the repository `.git` directory.
     pub fn new(git_dir: impl AsRef<Path>) -> Self {
@@ -250,9 +268,11 @@ pub trait LargeFileBackend {
 }
 
 /// Git LFS pointer parser and encoder.
+#[cfg(feature = "lfs")]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct GitLfsBackend;
 
+#[cfg(feature = "lfs")]
 impl LargeFileBackend for GitLfsBackend {
     fn kind(&self) -> LargeFileBackendKind {
         LargeFileBackendKind::Lfs
@@ -268,6 +288,7 @@ impl LargeFileBackend for GitLfsBackend {
 }
 
 /// Parses a Git LFS v1 pointer blob.
+#[cfg(feature = "lfs")]
 pub fn parse_lfs_pointer(data: &[u8]) -> Result<Option<LargeFilePointer>> {
     if data.is_empty() || data.len() >= 1024 {
         return Ok(None);
@@ -320,6 +341,7 @@ pub fn parse_lfs_pointer(data: &[u8]) -> Result<Option<LargeFilePointer>> {
 }
 
 /// Encodes Git LFS v1 pointer metadata.
+#[cfg(feature = "lfs")]
 pub fn encode_lfs_pointer(pointer: &LargeFilePointer) -> Result<Vec<u8>> {
     if pointer.backend != LargeFileBackendKind::Lfs {
         return Err(crate::RitError::invalid_input(format!(
@@ -340,6 +362,7 @@ pub fn encode_lfs_pointer(pointer: &LargeFilePointer) -> Result<Vec<u8>> {
     .into_bytes())
 }
 
+#[cfg(feature = "lfs")]
 fn is_lower_hex_sha256(value: &str) -> bool {
     value.len() == 64
         && value
@@ -347,6 +370,7 @@ fn is_lower_hex_sha256(value: &str) -> bool {
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
+#[cfg(feature = "lfs")]
 fn verify_lfs_object(pointer: &LargeFilePointer, data: &[u8]) -> Result<()> {
     if pointer.backend != LargeFileBackendKind::Lfs {
         return Err(RitError::invalid_input(format!(
@@ -371,6 +395,7 @@ fn verify_lfs_object(pointer: &LargeFilePointer, data: &[u8]) -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "xet")]
 fn xet_rules_for_filter(attributes: &GitAttributes, filter: &str) -> Vec<LargeFileTrackRule> {
     attributes
         .rules()
@@ -386,6 +411,7 @@ fn xet_rules_for_filter(attributes: &GitAttributes, filter: &str) -> Vec<LargeFi
 }
 
 /// Extracts a Xet-backed hash from a pointer extension line when present.
+#[cfg(feature = "xet")]
 pub fn parse_xet_pointer_hash(data: &[u8]) -> Option<String> {
     let text = std::str::from_utf8(data).ok()?;
     for line in text.lines() {
@@ -398,7 +424,7 @@ pub fn parse_xet_pointer_hash(data: &[u8]) -> Option<String> {
     None
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "lfs", feature = "xet"))]
 mod tests {
     use super::*;
     use std::fs;

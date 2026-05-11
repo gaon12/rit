@@ -11,6 +11,7 @@ pub mod diff;
 pub mod error;
 pub mod history;
 pub mod index;
+#[cfg(any(feature = "lfs", feature = "xet"))]
 pub mod large_files;
 pub mod merge_state;
 pub mod object;
@@ -30,13 +31,20 @@ pub use index::{
     ResolveUndo, ResolveUndoEntry, ResolveUndoStage, SparseDirectory, SplitIndexLink,
     UntrackedCache, UntrackedCacheDirectoryBlock, UntrackedCacheStat, UntrackedCacheTail,
 };
+#[cfg(feature = "lfs")]
 pub use large_files::{
-    GitLfsBackend, LFS_BATCH_MEDIA_TYPE, LargeFileBackend, LargeFileBackendKind, LargeFilePointer,
-    LargeFileTrackRule, LfsBatchAction, LfsBatchObject, LfsBatchObjectError,
+    GitLfsBackend, LFS_BATCH_MEDIA_TYPE, LfsBatchAction, LfsBatchObject, LfsBatchObjectError,
     LfsBatchObjectResponse, LfsBatchOperation, LfsBatchRef, LfsBatchRequest, LfsBatchResponse,
-    LfsLocalCache, XetChunkRange, XetDetection, XetFileReconstruction, XetHash, XetLocalCache,
-    XetReconstructionTerm, detect_xet_storage, encode_lfs_pointer, parse_lfs_pointer,
-    parse_xet_pointer_hash,
+    LfsLocalCache, encode_lfs_pointer, parse_lfs_pointer,
+};
+#[cfg(any(feature = "lfs", feature = "xet"))]
+pub use large_files::{
+    LargeFileBackend, LargeFileBackendKind, LargeFilePointer, LargeFileTrackRule,
+};
+#[cfg(feature = "xet")]
+pub use large_files::{
+    XetChunkRange, XetDetection, XetFileReconstruction, XetHash, XetLocalCache,
+    XetReconstructionTerm, detect_xet_storage, parse_xet_pointer_hash,
 };
 pub use merge_state::{MergeState, RebaseState};
 pub use object::{GitObject, ObjectId, ObjectKind, TreeEntry, hash_object};

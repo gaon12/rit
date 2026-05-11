@@ -63,7 +63,7 @@ pub struct LfsBatchRequest {
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub transfers: Vec<String>,
     /// Optional server ref context.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "ref", skip_serializing_if = "Option::is_none")]
     pub ref_property: Option<LfsBatchRef>,
     /// Objects participating in the transfer.
     pub objects: Vec<LfsBatchObject>,
@@ -182,7 +182,7 @@ mod tests {
 
         assert!(json.contains("\"operation\":\"download\""));
         assert!(json.contains("\"transfers\":[\"basic\"]"));
-        assert!(json.contains("\"ref_property\":{\"name\":\"refs/heads/main\"}"));
+        assert!(json.contains("\"ref\":{\"name\":\"refs/heads/main\"}"));
         assert!(json.contains(
             "\"oid\":\"4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393\""
         ));

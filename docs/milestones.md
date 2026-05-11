@@ -320,6 +320,9 @@ Completion criteria:
 - [x] Xet chunk/cache model.
   - [x] Xet hash, xorb chunk range, reconstruction term/file models, and
     sharded local cache paths.
+- [x] LFS/Xet Cargo feature gates.
+  - [x] `rit-core` builds without LFS/Xet by default and exposes them through
+    `lfs`, `xet`, and `large-files` features.
 
 Completion criteria:
 - LFS/Xet features are feature-gated and never require external `git-lfs` in
