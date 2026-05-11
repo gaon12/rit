@@ -61,6 +61,8 @@ pub use repository::{
     InitOptions, LocalCloneOptions, LocalFetchOptions, LocalFetchResult, RemoteFetchOptions,
     RemoteFetchResult, RemotePushOptions, RemotePushResult, Repository,
 };
+#[cfg(feature = "semantic-tree-sitter")]
+pub use semantic_diff::TreeSitterSemanticParser;
 pub use semantic_diff::{WordDiff, WordDiffOperation, word_diff};
 pub use sparse::{SparseCheckout, SparseCheckoutMode, SparseCheckoutPattern};
 pub use status::{

@@ -382,7 +382,7 @@ Completion criteria:
 
 - [x] Text diff foundation complete.
 - [x] Word diff.
-- [ ] Tree-sitter feature gate.
+- [x] Tree-sitter feature gate.
 - [ ] Rust semantic adapter.
 - [ ] TypeScript semantic adapter.
 - [ ] Python semantic adapter.

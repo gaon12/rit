@@ -62,6 +62,34 @@ pub fn word_diff(old_text: &str, new_text: &str) -> WordDiff {
     WordDiff { operations }
 }
 
+/// Tree-sitter parser wrapper enabled only for semantic builds.
+#[cfg(feature = "semantic-tree-sitter")]
+pub struct TreeSitterSemanticParser {
+    parser: tree_sitter::Parser,
+}
+
+#[cfg(feature = "semantic-tree-sitter")]
+impl TreeSitterSemanticParser {
+    /// Creates a parser wrapper without selecting a language yet.
+    pub fn new() -> Self {
+        Self {
+            parser: tree_sitter::Parser::new(),
+        }
+    }
+
+    /// Returns mutable access for language adapters.
+    pub fn parser_mut(&mut self) -> &mut tree_sitter::Parser {
+        &mut self.parser
+    }
+}
+
+#[cfg(feature = "semantic-tree-sitter")]
+impl Default for TreeSitterSemanticParser {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 fn word_tokens(text: &str) -> Vec<&str> {
     let mut tokens = Vec::new();
     let mut token_start = None;

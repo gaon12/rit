@@ -293,8 +293,10 @@
   staged rename detection.
 - Added a standalone word-level diff model with stable `Equal`, `Delete`, and
   `Insert` operations for later semantic summaries.
-- Still unsupported: tree-sitter feature gate, language-specific semantic
-  adapters, and JSON semantic output.
+- Added optional `semantic-tree-sitter` Cargo feature and parser wrapper for
+  language-specific semantic adapters.
+- Still unsupported: language-specific semantic adapters and JSON semantic
+  output.
 
 ### `rit version`
 
