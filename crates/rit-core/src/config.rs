@@ -96,6 +96,35 @@ impl GitConfig {
         }
     }
 
+    /// Returns a boolean value from a named subsection.
+    pub fn get_bool_in_subsection(
+        &self,
+        section: &str,
+        subsection: &str,
+        key: &str,
+        default: bool,
+    ) -> Result<bool> {
+        match self.get_in_subsection(section, Some(subsection), key) {
+            Some(value) => parse_git_bool(value, &format!("{section}.{subsection}.{key}")),
+            None => Ok(default),
+        }
+    }
+
+    /// Returns subsections used under one section in first-seen order.
+    pub fn subsections_in_section(&self, section: &str) -> Vec<&str> {
+        let section = section.to_ascii_lowercase();
+        let mut subsections = Vec::new();
+        for entry in &self.entries {
+            if entry.section == section
+                && let Some(subsection) = entry.subsection.as_deref()
+                && !subsections.contains(&subsection)
+            {
+                subsections.push(subsection);
+            }
+        }
+        subsections
+    }
+
     /// Returns all keys present in one section, preserving file order.
     pub fn keys_in_section(&self, section: &str) -> Vec<&str> {
         let section = section.to_ascii_lowercase();

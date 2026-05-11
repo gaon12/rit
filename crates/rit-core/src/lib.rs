@@ -16,6 +16,7 @@ pub mod large_files;
 pub mod merge_state;
 pub mod object;
 pub mod odb;
+pub mod partial_clone;
 pub mod pathspec;
 pub mod refs;
 pub mod repository;
@@ -51,6 +52,7 @@ pub use large_files::{
 pub use merge_state::{MergeState, RebaseState};
 pub use object::{GitObject, ObjectId, ObjectKind, TreeEntry, hash_object};
 pub use odb::{IngestedPack, LooseObjectDb, StoredPack, StoredPackIndex};
+pub use partial_clone::{PartialClonePolicy, PromisorRemote};
 pub use pathspec::PathspecSet;
 pub use refs::{Branch, Tag};
 pub use repository::{

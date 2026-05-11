@@ -1,9 +1,9 @@
 use crate::object::parse_tree_entries;
 use crate::{
     BlockingSmartHttpClient, FetchRefSpec, GitAttributes, GitConfig, GitObject, LooseObjectDb,
-    ObjectId, ObjectKind, ReceivePackCommand, ReceivePackCommandStatus, ReceivePackRequest,
-    ReceivePackStatus, Result, RitConfig, RitError, SmartHttpAdvertisement, SmartHttpService,
-    SparseCheckout, TransportLocation, TransportProtocol, parse_commit,
+    ObjectId, ObjectKind, PartialClonePolicy, ReceivePackCommand, ReceivePackCommandStatus,
+    ReceivePackRequest, ReceivePackStatus, Result, RitConfig, RitError, SmartHttpAdvertisement,
+    SmartHttpService, SparseCheckout, TransportLocation, TransportProtocol, parse_commit,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -498,6 +498,17 @@ impl Repository {
             return Ok(RitConfig::default());
         };
         RitConfig::read_from_worktree(worktree)
+    }
+
+    /// Reads partial-clone promisor remotes and pack markers.
+    pub fn partial_clone_policy(&self) -> Result<PartialClonePolicy> {
+        let config_path = self.common_dir.join("config");
+        let config = if config_path.exists() {
+            GitConfig::read(&config_path)?
+        } else {
+            GitConfig::default()
+        };
+        PartialClonePolicy::read(&config, &self.common_dir.join("objects"))
     }
 
     /// Returns a loose object database reader for this repository.
@@ -1173,6 +1184,35 @@ mod tests {
             .expect("mobile profile should exist");
 
         assert_eq!(mobile.include, vec!["apps/mobile", "packages/ui"]);
+
+        remove_dir_all(&root);
+    }
+
+    #[test]
+    fn reads_partial_clone_policy_from_config_and_promisor_markers() {
+        let root = temp_path("repository-partial-clone");
+        let repository = Repository::init(&InitOptions::new(&root)).expect("repo should init");
+        let config_path = repository.common_dir().join("config");
+        let mut config = fs::read_to_string(&config_path).expect("config should be readable");
+        config.push_str(
+            "\n[remote \"origin\"]\n\tpromisor = true\n\tpartialCloneFilter = blob:none\n",
+        );
+        fs::write(&config_path, config).expect("config should be updated");
+        let pack_dir = repository.common_dir().join("objects").join("pack");
+        fs::create_dir_all(&pack_dir).expect("pack dir should exist");
+        fs::write(pack_dir.join("pack-test.promisor"), "").expect("marker should be written");
+
+        let policy = repository
+            .partial_clone_policy()
+            .expect("partial clone policy should read");
+
+        assert!(policy.is_enabled());
+        assert_eq!(policy.promisor_remotes[0].name, "origin");
+        assert_eq!(
+            policy.promisor_remotes[0].partial_clone_filter.as_deref(),
+            Some("blob:none")
+        );
+        assert_eq!(policy.promisor_pack_markers.len(), 1);
 
         remove_dir_all(&root);
     }

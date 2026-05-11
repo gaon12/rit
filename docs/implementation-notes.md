@@ -239,6 +239,8 @@
 - Added `Repository::sparse_checkout()` as the public reader entry point.
 - Added optional `rit.toml` / `.rit.toml` workspace profile parsing for
   `[workspace.<name>] include = [...]` and `Repository::rit_config()`.
+- Added read-only partial clone policy discovery for `remote.*.promisor`,
+  `remote.*.partialCloneFilter`, and `objects/pack/*.promisor` markers.
 - Still unsupported: sparse-checkout write commands, named workspace profiles,
   partial clone object policy, lazy materialization, and prefetch command
   execution.

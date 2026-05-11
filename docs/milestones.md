@@ -336,7 +336,9 @@ Completion criteria:
 - [x] Workspace profile config.
   - [x] Read optional `rit.toml` / `.rit.toml` workspace profile includes from
     `[workspace.<name>]` tables.
-- [ ] Partial clone object policy.
+- [x] Partial clone object policy.
+  - [x] Read promisor remotes, partial clone filters, and `.promisor` pack
+    markers without fetching missing objects.
 - [ ] Lazy file materialization policy.
 - [ ] Prefetch command shape.
 
