@@ -267,10 +267,10 @@ Completion criteria:
   - [x] receive-pack reference update request body model.
   - [x] receive-pack `report-status` parser.
   - [x] Smart HTTP receive-pack POST wiring.
-  - [~] Push pack generation and ref update workflow.
+  - [x] Push pack generation and ref update workflow.
     - [x] Whole-object pack generation from existing object IDs.
-    - [ ] Client push workflow to choose objects, send receive-pack, and update
-      refs.
+    - [x] Plain HTTP client push workflow to choose reachable objects, send
+      receive-pack, and validate ref status.
 
 Completion criteria:
 - Transport code does not live in core command formatting and does not depend on
@@ -491,6 +491,19 @@ Completion criteria:
   - Still open: deciding the object set for push, thin-pack/delta generation,
     sending the generated pack through receive-pack, and interpreting remote
     ref update results as a full push workflow.
+- 2026-05-12, M7 plain HTTP push workflow:
+  - Reference Git: `git version 2.52.0.windows.1`.
+  - Reference docs checked: `git push -h`, local `gitprotocol-http(5)`, and
+    local `gitprotocol-pack(5)`.
+  - Implemented: `Repository::push_remote_http` discovers receive-pack refs,
+    resolves one local source revision, walks reachable commit/tree/blob
+    objects, builds a whole-object pack, sends a receive-pack update request,
+    and validates `report-status` for the destination ref.
+  - Implemented: `rit push http://... <src>:<dst>` CLI dispatch for this plain
+    HTTP subset.
+  - Still open: HTTPS/TLS, SSH sessions, named remotes, multiple refspecs,
+    force/lease semantics, hooks, thin-pack/delta generation, and full object
+    minimization against remote history.
 - 2026-05-11, CLI module hygiene:
   - Verified large-file state before continuing: `rit-cli/src/main.rs` had
     grown past 2100 lines.

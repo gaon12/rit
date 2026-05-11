@@ -513,6 +513,27 @@
 - Repository mutation: writes object files and `.git/FETCH_HEAD`.
 - Risk: moderate; fetch mutates only the destination repository.
 
+### `rit push`
+
+- Baseline command checked: `git push -h`
+- Supported options: `--quiet`/`-q` with one plain `http://` smart HTTP
+  repository and one simple `<src>:<dst>` refspec.
+- Unsupported options: HTTPS/TLS, SSH, named remotes, multiple refspecs,
+  delete/mirror/all/tags, dry-run, force/lease semantics, upstream config,
+  hooks, signed/atomic pushes, push options, and submodule behavior.
+- Implemented smart HTTP behavior: discovers receive-pack refs, resolves the
+  local source revision, walks reachable commit/tree/blob objects, sends a
+  whole-object pack through receive-pack, and validates `report-status` for the
+  destination ref.
+- Intentional differences: default progress/status text is simplified; the
+  object set is conservative and may send more objects than Git because
+  thin-pack/delta generation and remote-history minimization are not implemented
+  yet.
+- Repository mutation: no local mutation; remote mutation is requested through
+  receive-pack.
+- Risk: moderate; the first push path is protocol-limited and avoids external
+  `git`.
+
 ### Transport model
 
 - Baseline commands checked: `git clone -h`, `git fetch -h`, `git push -h`
@@ -534,9 +555,10 @@
   locations and build quoted `git-upload-pack` / `git-receive-pack` remote
   commands.
 - Unsupported behavior: HTTPS/TLS, SSH process/session I/O, multi-round
-  negotiation, thin-pack fixups, push pack generation, and CLI remote push
-  wiring are not implemented yet. `rit fetch` accepts local paths and plain
-  `http://` smart HTTP remotes; HTTPS and SSH are rejected with clear errors.
+  negotiation, thin-pack fixups, push object minimization, and advanced push
+  options are not implemented yet. `rit fetch` accepts local paths and plain
+  `http://` smart HTTP remotes; `rit push` accepts plain `http://` smart HTTP
+  remotes; HTTPS and SSH are rejected with clear errors.
 - Repository mutation: plain HTTP fetch ingests received packs and writes
   `FETCH_HEAD`; other transport APIs remain request/response models.
 - Risk: moderate for fetch ingestion, low for request/response-only transport

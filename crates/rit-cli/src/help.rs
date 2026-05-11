@@ -13,6 +13,7 @@ Core commands:
   init          Create an empty Git repository
   clone         Clone a local repository without checkout
   fetch         Fetch objects from a local or plain HTTP repository
+  push          Push one ref to a plain HTTP repository
   rev-parse     Inspect the current repository paths
   cat-file      Inspect loose objects
   ls-tree       List entries in a tree object
@@ -61,6 +62,12 @@ const FETCH_HELP: &str = "\
 rit fetch [-q|--quiet] <repository> [<src>:<dst>]
 
 Fetch objects from a local or plain smart HTTP repository and write FETCH_HEAD.
+";
+
+const PUSH_HELP: &str = "\
+rit push [-q|--quiet] <http-repository> <src>:<dst>
+
+Push one local source ref or revision to a plain smart HTTP repository.
 ";
 
 const REV_PARSE_HELP: &str = "\
@@ -178,6 +185,7 @@ pub fn print_command_help(
         "init" => stdout.write_all(INIT_HELP.as_bytes())?,
         "clone" => stdout.write_all(CLONE_HELP.as_bytes())?,
         "fetch" => stdout.write_all(FETCH_HELP.as_bytes())?,
+        "push" => stdout.write_all(PUSH_HELP.as_bytes())?,
         "rev-parse" => stdout.write_all(REV_PARSE_HELP.as_bytes())?,
         "cat-file" => stdout.write_all(CAT_FILE_HELP.as_bytes())?,
         "ls-tree" => stdout.write_all(LS_TREE_HELP.as_bytes())?,

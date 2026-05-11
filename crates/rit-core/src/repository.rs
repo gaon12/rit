@@ -1,7 +1,11 @@
+use crate::object::parse_tree_entries;
 use crate::{
     BlockingSmartHttpClient, FetchRefSpec, GitAttributes, GitConfig, GitObject, LooseObjectDb,
-    ObjectId, Result, RitError, TransportLocation, TransportProtocol,
+    ObjectId, ObjectKind, ReceivePackCommand, ReceivePackCommandStatus, ReceivePackRequest,
+    ReceivePackStatus, Result, RitError, SmartHttpAdvertisement, SmartHttpService,
+    TransportLocation, TransportProtocol, parse_commit,
 };
+use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -47,6 +51,15 @@ pub struct RemoteFetchOptions {
     pub refspec: Option<FetchRefSpec>,
 }
 
+/// Options for pushing one ref to a smart HTTP remote.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RemotePushOptions {
+    /// Remote repository location.
+    pub location: TransportLocation,
+    /// Source-to-destination refspec to push.
+    pub refspec: FetchRefSpec,
+}
+
 impl LocalFetchOptions {
     /// Builds local fetch options for `source`.
     pub fn new(source: impl Into<PathBuf>) -> Self {
@@ -79,6 +92,13 @@ impl RemoteFetchOptions {
     }
 }
 
+impl RemotePushOptions {
+    /// Builds remote push options for one source-to-destination refspec.
+    pub fn new(location: TransportLocation, refspec: FetchRefSpec) -> Self {
+        Self { location, refspec }
+    }
+}
+
 /// Summary of a local fetch operation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LocalFetchResult {
@@ -97,6 +117,19 @@ pub struct RemoteFetchResult {
     pub source: String,
     /// Number of objects unpacked from the received pack.
     pub object_count: usize,
+}
+
+/// Summary of a smart HTTP push operation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RemotePushResult {
+    /// Ref updated on the remote side.
+    pub destination: String,
+    /// Object ID sent as the new ref target.
+    pub new_id: ObjectId,
+    /// Number of local objects included in the generated pack.
+    pub object_count: usize,
+    /// Parsed receive-pack status returned by the remote.
+    pub status: ReceivePackStatus,
 }
 
 impl LocalCloneOptions {
@@ -345,6 +378,75 @@ impl Repository {
             source: source_name,
             object_count: ingested.object_ids.len(),
         })
+    }
+
+    /// Pushes one source ref or revision to a plain smart HTTP remote.
+    pub fn push_remote_http(&self, options: &RemotePushOptions) -> Result<RemotePushResult> {
+        if options.location.protocol() != TransportProtocol::Http {
+            return Err(RitError::invalid_input(
+                "remote push currently supports only plain http:// smart HTTP remotes",
+            ));
+        }
+        validate_full_ref_name(&options.refspec.destination)?;
+
+        let client = BlockingSmartHttpClient::default();
+        let advertisement =
+            client.discover_refs(&options.location, SmartHttpService::ReceivePack)?;
+        let old_id = advertised_ref_id(&advertisement, &options.refspec.destination)
+            .unwrap_or_else(zero_object_id);
+        let new_id = self.resolve_revision(&options.refspec.source)?;
+        let object_ids = self.collect_reachable_object_ids(new_id)?;
+        let pack_data = self.loose_objects().build_pack_from_objects(&object_ids)?;
+        let command = ReceivePackCommand::new(old_id, new_id, options.refspec.destination.clone())?;
+        let request = ReceivePackRequest::new(vec![command])?
+            .with_capabilities(receive_pack_capabilities(&advertisement.capabilities))
+            .with_pack_data(pack_data);
+        let status = client.post_receive_pack(&options.location, &request)?;
+        validate_receive_pack_status(&status, &options.refspec.destination)?;
+
+        Ok(RemotePushResult {
+            destination: options.refspec.destination.clone(),
+            new_id,
+            object_count: object_ids.len(),
+            status,
+        })
+    }
+
+    /// Collects objects reachable from one object ID in a simple deterministic order.
+    pub fn collect_reachable_object_ids(&self, root: ObjectId) -> Result<Vec<ObjectId>> {
+        let mut seen = HashSet::new();
+        let mut ordered = Vec::new();
+        self.collect_reachable_object_ids_inner(root, &mut seen, &mut ordered)?;
+        Ok(ordered)
+    }
+
+    fn collect_reachable_object_ids_inner(
+        &self,
+        object_id: ObjectId,
+        seen: &mut HashSet<ObjectId>,
+        ordered: &mut Vec<ObjectId>,
+    ) -> Result<()> {
+        if !seen.insert(object_id) {
+            return Ok(());
+        }
+        ordered.push(object_id);
+        let object = self.read_object(object_id)?;
+        match object.kind {
+            ObjectKind::Commit => {
+                let commit = parse_commit(&object.data)?;
+                self.collect_reachable_object_ids_inner(commit.tree, seen, ordered)?;
+                for parent in commit.parents {
+                    self.collect_reachable_object_ids_inner(parent, seen, ordered)?;
+                }
+            }
+            ObjectKind::Tree => {
+                for entry in parse_tree_entries(&object.data)? {
+                    self.collect_reachable_object_ids_inner(entry.object_id, seen, ordered)?;
+                }
+            }
+            ObjectKind::Blob | ObjectKind::Tag => {}
+        }
+        Ok(())
     }
 
     /// Returns the path to the repository metadata directory.
@@ -716,6 +818,56 @@ fn fetch_head_description(source_ref: &str) -> String {
     }
 }
 
+fn advertised_ref_id(advertisement: &SmartHttpAdvertisement, ref_name: &str) -> Option<ObjectId> {
+    advertisement
+        .refs
+        .iter()
+        .find(|advertised_ref| advertised_ref.name == ref_name)
+        .map(|advertised_ref| advertised_ref.object_id)
+}
+
+fn zero_object_id() -> ObjectId {
+    ObjectId::from_bytes([0; 20])
+}
+
+fn receive_pack_capabilities(advertised: &[String]) -> Vec<String> {
+    if advertised
+        .iter()
+        .any(|capability| capability == "report-status")
+    {
+        vec!["report-status".to_owned()]
+    } else {
+        Vec::new()
+    }
+}
+
+fn validate_receive_pack_status(status: &ReceivePackStatus, ref_name: &str) -> Result<()> {
+    if let Some(error) = &status.unpack_error {
+        return Err(RitError::invalid_input(format!(
+            "receive-pack unpack failed: {error}"
+        )));
+    }
+    for command in &status.commands {
+        match command {
+            ReceivePackCommandStatus::Ok { ref_name: ok_ref } if ok_ref == ref_name => {
+                return Ok(());
+            }
+            ReceivePackCommandStatus::Rejected {
+                ref_name: rejected_ref,
+                message,
+            } if rejected_ref == ref_name => {
+                return Err(RitError::invalid_input(format!(
+                    "receive-pack rejected {ref_name}: {message}"
+                )));
+            }
+            _ => {}
+        }
+    }
+    Err(RitError::invalid_input(format!(
+        "receive-pack did not report status for {ref_name}"
+    )))
+}
+
 fn append_clone_remote_config(
     target: &Repository,
     source: &Repository,
@@ -799,7 +951,7 @@ fn validate_branch_name(branch_name: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{InitOptions, RemoteFetchOptions, Repository};
+    use super::{InitOptions, RemoteFetchOptions, RemotePushOptions, Repository};
     use crate::{FetchRefSpec, ObjectKind, TransportLocation, hash_object, object::sha1_bytes};
     use flate2::{Compression, write::ZlibEncoder};
     use std::fs;
@@ -1027,6 +1179,48 @@ mod tests {
         remove_dir_all(&temp);
     }
 
+    #[test]
+    fn push_remote_http_sends_pack_and_checks_status() {
+        let temp = temp_path("remote-http-push");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        let object_id = repository
+            .loose_objects()
+            .write_object(ObjectKind::Blob, b"hello")
+            .expect("source object");
+        let advertisement = receive_pack_advertisement();
+        let status = receive_pack_status("refs/heads/main");
+        let (base_url, request_handle) = serve_http_requests(vec![
+            http_response(
+                "application/x-git-receive-pack-advertisement",
+                &advertisement,
+            ),
+            http_response("application/x-git-receive-pack-result", &status),
+        ]);
+        let refspec =
+            FetchRefSpec::parse(&format!("{object_id}:refs/heads/main")).expect("refspec");
+        let options = RemotePushOptions::new(
+            TransportLocation::parse(&format!("{base_url}/repo.git")),
+            refspec,
+        );
+
+        let result = repository
+            .push_remote_http(&options)
+            .expect("remote push should succeed");
+        let requests = request_handle.join().expect("server thread");
+        let post_request = String::from_utf8_lossy(&requests[1]);
+
+        assert_eq!(result.destination, "refs/heads/main");
+        assert_eq!(result.new_id, object_id);
+        assert_eq!(result.object_count, 1);
+        assert!(post_request.starts_with("POST /repo.git/git-receive-pack HTTP/1.1\r\n"));
+        assert!(post_request.contains(&format!(
+            "0000000000000000000000000000000000000000 {object_id} refs/heads/main"
+        )));
+        assert!(requests[1].windows(4).any(|window| window == b"PACK"));
+
+        remove_dir_all(&temp);
+    }
+
     fn upload_pack_advertisement(object_id: crate::ObjectId) -> Vec<u8> {
         let mut body = Vec::new();
         test_pkt_line(&mut body, b"# service=git-upload-pack\n");
@@ -1044,6 +1238,22 @@ mod tests {
         let mut body = Vec::new();
         test_pkt_line(&mut body, b"NAK\n");
         body.extend_from_slice(pack);
+        body
+    }
+
+    fn receive_pack_advertisement() -> Vec<u8> {
+        let mut body = Vec::new();
+        test_pkt_line(&mut body, b"# service=git-receive-pack\n");
+        body.extend_from_slice(b"0000");
+        body.extend_from_slice(b"0000");
+        body
+    }
+
+    fn receive_pack_status(ref_name: &str) -> Vec<u8> {
+        let mut body = Vec::new();
+        test_pkt_line(&mut body, b"unpack ok\n");
+        test_pkt_line(&mut body, format!("ok {ref_name}\n").as_bytes());
+        body.extend_from_slice(b"0000");
         body
     }
 

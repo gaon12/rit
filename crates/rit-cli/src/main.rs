@@ -35,6 +35,7 @@ fn run(
         [command, rest @ ..] if command == "init" => init_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "clone" => clone_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "fetch" => fetch_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "push" => push_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "rev-parse" => rev_parse_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "cat-file" => cat_file_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ls-tree" => ls_tree_command(rest, stdout, stderr),
@@ -305,6 +306,74 @@ fn fetch_command(
                 "rit: fetch currently supports only local paths and plain http:// smart HTTP remotes"
             )?;
             Ok(ExitCode::from(129))
+        }
+    }
+}
+
+fn push_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let mut quiet = false;
+    let mut positional = Vec::new();
+    let mut after_separator = false;
+
+    for arg in args {
+        match arg.as_str() {
+            "--" if !after_separator => after_separator = true,
+            "-q" | "--quiet" if !after_separator => quiet = true,
+            unsupported if unsupported.starts_with('-') && !after_separator => {
+                writeln!(stderr, "rit: unsupported push option '{unsupported}'")?;
+                return Ok(ExitCode::from(129));
+            }
+            value => positional.push(value.to_owned()),
+        }
+    }
+
+    if positional.len() != 2 {
+        writeln!(
+            stderr,
+            "rit: push expects <http-repository> and <src>:<dst>"
+        )?;
+        return Ok(ExitCode::from(129));
+    }
+
+    let location = rit_core::TransportLocation::parse(&positional[0]);
+    if location.protocol() != rit_core::TransportProtocol::Http {
+        writeln!(
+            stderr,
+            "rit: push currently supports only plain http:// smart HTTP remotes"
+        )?;
+        return Ok(ExitCode::from(129));
+    }
+    let refspec = match rit_core::FetchRefSpec::parse(&positional[1]) {
+        Ok(refspec) => refspec,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(129));
+        }
+    };
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    let options = rit_core::RemotePushOptions::new(location, refspec);
+    match repository.push_remote_http(&options) {
+        Ok(result) => {
+            if !quiet {
+                writeln!(stdout, "To {}", options.location.original())?;
+                writeln!(
+                    stdout,
+                    " * pushed            {} objects",
+                    result.object_count
+                )?;
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            Ok(ExitCode::from(1))
         }
     }
 }
@@ -1771,6 +1840,15 @@ mod tests {
     }
 
     #[test]
+    fn push_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "push"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit push"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
     fn clone_local_rejects_remote_locations() {
         let (code, stdout, stderr) = run_with(&[
             "clone",
@@ -1791,6 +1869,19 @@ mod tests {
         assert_eq!(code, ExitCode::from(129));
         assert_eq!(stdout, "");
         assert!(stderr.contains("local paths and plain http:// smart HTTP remotes"));
+    }
+
+    #[test]
+    fn push_rejects_non_http_locations() {
+        let (code, stdout, stderr) = run_with(&[
+            "push",
+            "git@example.test:org/repo.git",
+            "HEAD:refs/heads/main",
+        ]);
+
+        assert_eq!(code, ExitCode::from(129));
+        assert_eq!(stdout, "");
+        assert!(stderr.contains("only plain http:// smart HTTP remotes"));
     }
 
     #[test]

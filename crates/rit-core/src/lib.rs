@@ -34,7 +34,7 @@ pub use pathspec::PathspecSet;
 pub use refs::{Branch, Tag};
 pub use repository::{
     InitOptions, LocalCloneOptions, LocalFetchOptions, LocalFetchResult, RemoteFetchOptions,
-    RemoteFetchResult, Repository,
+    RemoteFetchResult, RemotePushOptions, RemotePushResult, Repository,
 };
 pub use status::{
     PorcelainStatus, StatusBranchHeader, StatusEntry, StatusOptions, UntrackedFilesMode,
