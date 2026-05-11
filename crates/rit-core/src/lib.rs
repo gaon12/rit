@@ -19,6 +19,7 @@ pub mod odb;
 pub mod pathspec;
 pub mod refs;
 pub mod repository;
+pub mod sparse;
 pub mod status;
 pub mod transport;
 pub mod write;
@@ -55,6 +56,7 @@ pub use repository::{
     InitOptions, LocalCloneOptions, LocalFetchOptions, LocalFetchResult, RemoteFetchOptions,
     RemoteFetchResult, RemotePushOptions, RemotePushResult, Repository,
 };
+pub use sparse::{SparseCheckout, SparseCheckoutMode, SparseCheckoutPattern};
 pub use status::{
     PorcelainStatus, StatusBranchHeader, StatusEntry, StatusOptions, UntrackedFilesMode,
 };

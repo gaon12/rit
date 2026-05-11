@@ -88,6 +88,14 @@ impl GitConfig {
             .map(|entry| entry.value.as_str())
     }
 
+    /// Returns a boolean config value using Git's common true/false spellings.
+    pub fn get_bool(&self, section: &str, key: &str, default: bool) -> Result<bool> {
+        match self.get(section, key) {
+            Some(value) => parse_git_bool(value, &format!("{section}.{key}")),
+            None => Ok(default),
+        }
+    }
+
     /// Returns all keys present in one section, preserving file order.
     pub fn keys_in_section(&self, section: &str) -> Vec<&str> {
         let section = section.to_ascii_lowercase();
@@ -206,6 +214,16 @@ fn unquote_value(value: &str, line_number: usize) -> Result<String> {
     Ok(output)
 }
 
+fn parse_git_bool(value: &str, name: &str) -> Result<bool> {
+    match value.to_ascii_lowercase().as_str() {
+        "true" | "yes" | "on" | "1" => Ok(true),
+        "false" | "no" | "off" | "0" => Ok(false),
+        _ => Err(RitError::invalid_input(format!(
+            "invalid boolean config value for {name}: {value}"
+        ))),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::GitConfig;
@@ -261,6 +279,34 @@ mod tests {
         assert_eq!(
             config.keys_in_section("extensions"),
             vec!["worktreeconfig", "objectformat"]
+        );
+    }
+
+    #[test]
+    fn parses_git_bool_values() {
+        let config = GitConfig::parse(
+            r#"
+            [core]
+                sparseCheckout = true
+                ignorecase = off
+            "#,
+        )
+        .expect("config should parse");
+
+        assert!(
+            config
+                .get_bool("core", "sparsecheckout", false)
+                .expect("bool should parse")
+        );
+        assert!(
+            !config
+                .get_bool("core", "ignorecase", true)
+                .expect("bool should parse")
+        );
+        assert!(
+            config
+                .get_bool("core", "missing", true)
+                .expect("default should be returned")
         );
     }
 }

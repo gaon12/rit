@@ -2,7 +2,7 @@ use crate::object::parse_tree_entries;
 use crate::{
     BlockingSmartHttpClient, FetchRefSpec, GitAttributes, GitConfig, GitObject, LooseObjectDb,
     ObjectId, ObjectKind, ReceivePackCommand, ReceivePackCommandStatus, ReceivePackRequest,
-    ReceivePackStatus, Result, RitError, SmartHttpAdvertisement, SmartHttpService,
+    ReceivePackStatus, Result, RitError, SmartHttpAdvertisement, SmartHttpService, SparseCheckout,
     TransportLocation, TransportProtocol, parse_commit,
 };
 use std::collections::HashSet;
@@ -481,6 +481,17 @@ impl Repository {
         GitAttributes::read(&attributes_path)
     }
 
+    /// Reads sparse-checkout config and pattern state for this worktree.
+    pub fn sparse_checkout(&self) -> Result<SparseCheckout> {
+        let config_path = self.common_dir.join("config");
+        let config = if config_path.exists() {
+            GitConfig::read(&config_path)?
+        } else {
+            GitConfig::default()
+        };
+        SparseCheckout::read_from_git_dir(&config, &self.git_dir)
+    }
+
     /// Returns a loose object database reader for this repository.
     pub fn loose_objects(&self) -> LooseObjectDb {
         LooseObjectDb::new(self.common_dir.join("objects"))
@@ -632,10 +643,7 @@ impl Repository {
             return Ok(default);
         }
         let config = GitConfig::read(&config_path)?;
-        match config.get("core", key) {
-            Some(value) => parse_git_bool(value, &format!("core.{key}")),
-            None => Ok(default),
-        }
+        config.get_bool("core", key, default)
     }
 }
 
@@ -657,16 +665,6 @@ fn default_core_ignorecase() -> bool {
 #[cfg(not(windows))]
 fn default_core_ignorecase() -> bool {
     false
-}
-
-fn parse_git_bool(value: &str, name: &str) -> Result<bool> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "true" | "yes" | "on" | "1" => Ok(true),
-        "false" | "no" | "off" | "0" => Ok(false),
-        _ => Err(RitError::invalid_input(format!(
-            "invalid boolean config value for {name}: {value}"
-        ))),
-    }
 }
 
 fn create_repository_directories(git_dir: &Path) -> Result<()> {
@@ -1125,6 +1123,30 @@ mod tests {
             "linked worktree should read objects from the common directory"
         );
         remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn reads_sparse_checkout_state_from_worktree_git_dir() {
+        let root = temp_path("repository-sparse");
+        let repository = Repository::init(&InitOptions::new(&root)).expect("repo should init");
+        let config_path = repository.common_dir().join("config");
+        let mut config = fs::read_to_string(&config_path).expect("config should be readable");
+        config.push_str("\n[core]\n\tsparseCheckout = true\n\tsparseCheckoutCone = true\n");
+        fs::write(&config_path, config).expect("config should be updated");
+        let info_dir = repository.git_dir().join("info");
+        fs::create_dir_all(&info_dir).expect("info dir should exist");
+        fs::write(info_dir.join("sparse-checkout"), "/*\n!/*/\n/src/\n")
+            .expect("sparse file should be written");
+
+        let sparse = repository
+            .sparse_checkout()
+            .expect("sparse checkout should read");
+
+        assert!(sparse.enabled);
+        assert_eq!(sparse.mode, crate::SparseCheckoutMode::Cone);
+        assert_eq!(sparse.cone_directories(), vec!["src"]);
+
+        remove_dir_all(&root);
     }
 
     #[test]

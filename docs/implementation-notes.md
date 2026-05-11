@@ -230,6 +230,17 @@
 - Still unsupported: LFS Batch API HTTP client execution, Xet CAS API
   execution, content-defined chunking, and xorb/shard binary parsing.
 
+### M10: Sparse, partial clone, workspace
+
+- Baseline checked: `git version 2.52.0.windows.1`, `git help -a`, and
+  `git sparse-checkout -h`.
+- Added a read-only sparse-checkout state model for `core.sparseCheckout`,
+  `core.sparseCheckoutCone`, and `.git/info/sparse-checkout` patterns.
+- Added `Repository::sparse_checkout()` as the public reader entry point.
+- Still unsupported: sparse-checkout write commands, named workspace profiles,
+  partial clone object policy, lazy materialization, and prefetch command
+  execution.
+
 ## Implemented Commands
 
 ### `rit version`

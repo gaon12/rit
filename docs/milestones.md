@@ -330,7 +330,9 @@ Completion criteria:
 
 ## M10: Sparse, Partial Clone, Workspace
 
-- [ ] Sparse checkout reader.
+- [x] Sparse checkout reader.
+  - [x] Read `core.sparseCheckout`, `core.sparseCheckoutCone`, and
+    `.git/info/sparse-checkout` pattern state without mutating the repository.
 - [ ] Workspace profile config.
 - [ ] Partial clone object policy.
 - [ ] Lazy file materialization policy.
