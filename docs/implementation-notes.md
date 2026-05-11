@@ -305,6 +305,16 @@
   including path classification for code, tests, docs, and other files.
 - M12 still does not wire semantic summaries into the `rit diff` CLI.
 
+### M13: Policy, Doctor, Repair
+
+- Added `[policy]` config model in `rit.toml` / `.rit.toml` with optional
+  `max_regular_blob_size`, `deny_secrets`, `protect_branches`, and explicit
+  `enforcement = "warn" | "block"`.
+- Policy defaults warn and do not block writes; blocking requires explicit
+  `enforcement = "block"`.
+- Still unsupported: evaluating blob size/secret/branch policies, `rit doctor`,
+  and `rit repair`.
+
 ### `rit version`
 
 - Baseline command checked: `git version`

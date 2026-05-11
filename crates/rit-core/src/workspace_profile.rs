@@ -1,4 +1,4 @@
-use crate::{PartialClonePolicy, Result, RitError};
+use crate::{PartialClonePolicy, PolicyConfig, Result, RitError};
 use std::fs;
 use std::path::{Path, PathBuf};
 use toml::{Table, Value};
@@ -10,6 +10,8 @@ pub struct RitConfig {
     pub path: Option<PathBuf>,
     /// Named workspace profiles.
     pub workspace_profiles: Vec<WorkspaceProfile>,
+    /// Repository policy configuration.
+    pub policy: PolicyConfig,
 }
 
 /// A named user-facing workspace profile.
@@ -104,9 +106,11 @@ impl RitConfig {
             RitError::invalid_input(format!("failed to parse rit config TOML: {error}"))
         })?;
         let workspace_profiles = parse_workspace_profiles(&table)?;
+        let policy = PolicyConfig::parse_from_table(&table)?;
         Ok(Self {
             path: None,
             workspace_profiles,
+            policy,
         })
     }
 
@@ -256,6 +260,7 @@ mod tests {
                 .include,
             vec!["services/api"]
         );
+        assert_eq!(config.policy, PolicyConfig::default());
     }
 
     #[test]
@@ -269,6 +274,24 @@ mod tests {
         .expect_err("invalid include should fail");
 
         assert!(error.to_string().contains("workspace.mobile.include"));
+    }
+
+    #[test]
+    fn parses_policy_config() {
+        let config = RitConfig::parse(
+            r#"
+            [policy]
+            max_regular_blob_size = "10 MiB"
+            deny_secrets = true
+            protect_branches = ["main"]
+            "#,
+        )
+        .expect("config should parse");
+
+        assert_eq!(config.policy.max_regular_blob_size, Some(10 * 1024 * 1024));
+        assert!(config.policy.deny_secrets);
+        assert_eq!(config.policy.protect_branches, vec!["main"]);
+        assert!(!config.policy.blocks_writes());
     }
 
     #[test]
