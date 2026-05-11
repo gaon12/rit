@@ -19,6 +19,35 @@ pub struct WorkspaceProfile {
     pub name: String,
     /// Repository-relative paths included by this workspace.
     pub include: Vec<String>,
+    /// Whether this workspace prefers partial clone object fetching.
+    pub partial_clone: bool,
+    /// Whether files may be materialized lazily.
+    pub lazy_files: bool,
+}
+
+impl WorkspaceProfile {
+    /// Returns the file materialization policy for this workspace.
+    pub fn lazy_materialization_policy(&self) -> LazyMaterializationPolicy {
+        LazyMaterializationPolicy {
+            workspace: self.name.clone(),
+            enabled: self.lazy_files,
+            include: self.include.clone(),
+            requires_partial_clone: self.lazy_files && self.partial_clone,
+        }
+    }
+}
+
+/// User-facing lazy materialization policy derived from a workspace profile.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LazyMaterializationPolicy {
+    /// Workspace name the policy came from.
+    pub workspace: String,
+    /// Whether lazy materialization is enabled.
+    pub enabled: bool,
+    /// Paths that may be materialized for this workspace.
+    pub include: Vec<String>,
+    /// Whether missing file content is expected to come from partial clone.
+    pub requires_partial_clone: bool,
 }
 
 impl RitConfig {
@@ -88,9 +117,21 @@ fn parse_workspace_profiles(table: &Table) -> Result<Vec<WorkspaceProfile>> {
             }
             None => Vec::new(),
         };
+        let partial_clone = parse_optional_bool(
+            profile_table.get("partial_clone"),
+            &format!("workspace.{name}.partial_clone"),
+        )?
+        .unwrap_or(false);
+        let lazy_files = parse_optional_bool(
+            profile_table.get("lazy_files"),
+            &format!("workspace.{name}.lazy_files"),
+        )?
+        .unwrap_or(false);
         profiles.push(WorkspaceProfile {
             name: name.to_owned(),
             include,
+            partial_clone,
+            lazy_files,
         });
     }
     Ok(profiles)
@@ -113,6 +154,16 @@ fn parse_string_array(value: &Value, field_name: &str) -> Result<Vec<String>> {
         .collect()
 }
 
+fn parse_optional_bool(value: Option<&Value>, field_name: &str) -> Result<Option<bool>> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    value
+        .as_bool()
+        .map(Some)
+        .ok_or_else(|| RitError::invalid_input(format!("`{field_name}` must be a boolean")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -124,6 +175,8 @@ mod tests {
             r#"
             [workspace.mobile]
             include = ["apps/mobile", "packages/ui"]
+            partial_clone = true
+            lazy_files = true
 
             [workspace.backend]
             include = ["services/api"]
@@ -138,6 +191,18 @@ mod tests {
                 .expect("mobile should exist")
                 .include,
             vec!["apps/mobile", "packages/ui"]
+        );
+        assert_eq!(
+            config
+                .workspace_profile("mobile")
+                .expect("mobile should exist")
+                .lazy_materialization_policy(),
+            LazyMaterializationPolicy {
+                workspace: "mobile".to_owned(),
+                enabled: true,
+                include: vec!["apps/mobile".to_owned(), "packages/ui".to_owned()],
+                requires_partial_clone: true,
+            }
         );
         assert_eq!(
             config

@@ -339,7 +339,9 @@ Completion criteria:
 - [x] Partial clone object policy.
   - [x] Read promisor remotes, partial clone filters, and `.promisor` pack
     markers without fetching missing objects.
-- [ ] Lazy file materialization policy.
+- [x] Lazy file materialization policy.
+  - [x] Derive a lazy materialization policy from workspace profile
+    `partial_clone` and `lazy_files` settings.
 - [ ] Prefetch command shape.
 
 Completion criteria:

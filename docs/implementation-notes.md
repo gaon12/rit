@@ -241,6 +241,8 @@
   `[workspace.<name>] include = [...]` and `Repository::rit_config()`.
 - Added read-only partial clone policy discovery for `remote.*.promisor`,
   `remote.*.partialCloneFilter`, and `objects/pack/*.promisor` markers.
+- Added workspace-profile `partial_clone` / `lazy_files` flags and a derived
+  lazy materialization policy model.
 - Still unsupported: sparse-checkout write commands, named workspace profiles,
   partial clone object policy, lazy materialization, and prefetch command
   execution.
