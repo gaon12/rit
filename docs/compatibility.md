@@ -27,8 +27,8 @@ The current codebase implements an early local Git subset:
 - Transport locations are classified as local, HTTP(S), or SSH before command
   implementations choose the supported transfer path. Smart HTTP discovery
   request URLs, expected advertisement content types, and advertised-ref
-  response parsing are modeled. Smart HTTP upload-pack request bodies can be
-  serialized as pkt-lines, but HTTP network I/O is not implemented yet.
+  response parsing are modeled. Smart HTTP upload-pack and receive-pack
+  requests can be sent over plain HTTP or platform-verified HTTPS.
 - Index v2 read/write for regular files, including status stat refresh for
   clean tracked files, raw extension-byte preservation, and committed
   `100644`/`100755` executable-bit modes. Optional index extension records can
@@ -48,7 +48,7 @@ The current codebase implements an early local Git subset:
   `diff --cached --name-only`, `diff --cached --name-status`,
   `diff --cached --numstat`, `diff --cached --stat`, `log`, `add`, `commit`,
   `branch`, `tag`, `restore`, `reset`, `checkout`, `switch`, and
-  `clone --local --no-checkout`, plus local-path `fetch`.
+  `clone --local --no-checkout`, plus local-path and smart HTTP(S) `fetch`.
 - Small text patch output is supported for default `diff`, `diff -p`, and
   `diff --cached`.
 - Cached diff supports staged rename/copy detection with `-M[<n>]`,

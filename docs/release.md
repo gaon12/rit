@@ -9,7 +9,7 @@ profiles, not separate source trees.
 
 | Build | Cargo command | Included feature intent | Excluded by default |
 | --- | --- | --- | --- |
-| `rit-min` | `cargo build -p rit-cli --release --locked` | Core CLI, local repository operations, plain HTTP transport, policy/doctor/repair models, fallback VFS model | LFS, Xet, semantic tree-sitter adapters, semantic JSON, platform VFS |
+| `rit-min` | `cargo build -p rit-cli --release --locked` | Core CLI, local repository operations, HTTP(S) transport, policy/doctor/repair models, fallback VFS model | LFS, Xet, semantic tree-sitter adapters, semantic JSON, platform VFS |
 | `rit-full` | `cargo build -p rit-cli --release --locked --features rit-core/large-files,rit-core/semantic-json,rit-core/semantic-rust,rit-core/semantic-typescript,rit-core/semantic-python,rit-core/vfs` | Everything in `rit-min` plus LFS/Xet models, semantic JSON, Rust/TypeScript/Python semantic adapters, VFS planning APIs | Platform VFS drivers and network/promisor VFS fetching remain planned, not implemented |
 
 Current `rit-core` feature flags:

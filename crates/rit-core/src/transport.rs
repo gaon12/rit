@@ -5,6 +5,8 @@ use std::{
     time::Duration,
 };
 
+use native_tls::TlsConnector;
+
 use crate::{ObjectId, Result, RitError};
 
 mod receive_pack;
@@ -277,9 +279,9 @@ impl BlockingSmartHttpClient {
         content_type: Option<&str>,
         body: &[u8],
     ) -> Result<SmartHttpResponse> {
-        let parsed_url = PlainHttpUrl::parse(url)?;
+        let parsed_url = HttpUrl::parse(url)?;
         let address = format!("{}:{}", parsed_url.host, parsed_url.port);
-        let mut stream = TcpStream::connect(address)
+        let stream = TcpStream::connect(address)
             .map_err(|source| RitError::transport_io(url.to_owned(), source))?;
         stream
             .set_read_timeout(Some(self.timeout))
@@ -289,19 +291,52 @@ impl BlockingSmartHttpClient {
             .map_err(|source| RitError::transport_io(url.to_owned(), source))?;
 
         let request = build_http_request(method, &parsed_url, content_type, body);
-        stream
-            .write_all(&request)
-            .map_err(|source| RitError::transport_io(url.to_owned(), source))?;
-        stream
-            .flush()
-            .map_err(|source| RitError::transport_io(url.to_owned(), source))?;
+        if parsed_url.scheme == HttpScheme::Https {
+            let connector = TlsConnector::new()
+                .map_err(|source| transport_tls_error(url, "TLS initialization", source))?;
+            let mut stream = connector
+                .connect(&parsed_url.host, stream)
+                .map_err(|source| transport_tls_error(url, "TLS handshake", source))?;
+            return send_http_request_bytes(url, &request, &mut stream);
+        }
 
-        let mut response = Vec::new();
-        stream
-            .read_to_end(&mut response)
-            .map_err(|source| RitError::transport_io(url.to_owned(), source))?;
-        parse_http_response(&response)
+        let mut stream = stream;
+        send_http_request_bytes(url, &request, &mut stream)
     }
+}
+
+fn send_http_request_bytes(
+    url: &str,
+    request: &[u8],
+    stream: &mut impl ReadWrite,
+) -> Result<SmartHttpResponse> {
+    stream
+        .write_all(request)
+        .map_err(|source| RitError::transport_io(url.to_owned(), source))?;
+    stream
+        .flush()
+        .map_err(|source| RitError::transport_io(url.to_owned(), source))?;
+
+    let mut response = Vec::new();
+    stream
+        .read_to_end(&mut response)
+        .map_err(|source| RitError::transport_io(url.to_owned(), source))?;
+    parse_http_response(&response)
+}
+
+trait ReadWrite: Read + Write {}
+
+impl<T: Read + Write> ReadWrite for T {}
+
+fn transport_tls_error(
+    location: &str,
+    context: &str,
+    source: impl std::error::Error + Send + Sync + 'static,
+) -> RitError {
+    RitError::transport_io(
+        location.to_owned(),
+        std::io::Error::other(format!("{context} failed: {source}")),
+    )
 }
 
 impl SmartHttpAdvertisement {
@@ -706,17 +741,28 @@ fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
-struct PlainHttpUrl {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HttpScheme {
+    Http,
+    Https,
+}
+
+struct HttpUrl {
+    scheme: HttpScheme,
     host: String,
     port: u16,
     path_and_query: String,
 }
 
-impl PlainHttpUrl {
+impl HttpUrl {
     fn parse(url: &str) -> Result<Self> {
-        let Some(rest) = url.strip_prefix("http://") else {
+        let (scheme, default_port, rest) = if let Some(rest) = url.strip_prefix("http://") {
+            (HttpScheme::Http, 80, rest)
+        } else if let Some(rest) = url.strip_prefix("https://") {
+            (HttpScheme::Https, 443, rest)
+        } else {
             return Err(RitError::invalid_input(format!(
-                "blocking smart HTTP client currently supports only plain http:// URLs: {url}"
+                "blocking smart HTTP client supports only http:// and https:// URLs: {url}"
             )));
         };
         let (host_port, path_and_query) = match rest.split_once('/') {
@@ -735,9 +781,10 @@ impl PlainHttpUrl {
                 })?;
                 (host.to_owned(), port)
             }
-            _ => (host_port.to_owned(), 80),
+            _ => (host_port.to_owned(), default_port),
         };
         Ok(Self {
+            scheme,
             host,
             port,
             path_and_query,
@@ -745,7 +792,11 @@ impl PlainHttpUrl {
     }
 
     fn host_header(&self) -> String {
-        if self.port == 80 {
+        let default_port = match self.scheme {
+            HttpScheme::Http => 80,
+            HttpScheme::Https => 443,
+        };
+        if self.port == default_port {
             self.host.clone()
         } else {
             format!("{}:{}", self.host, self.port)
@@ -755,7 +806,7 @@ impl PlainHttpUrl {
 
 fn build_http_request(
     method: &str,
-    url: &PlainHttpUrl,
+    url: &HttpUrl,
     content_type: Option<&str>,
     body: &[u8],
 ) -> Vec<u8> {
@@ -1368,14 +1419,15 @@ mod tests {
     }
 
     #[test]
-    fn blocking_http_client_rejects_https_until_tls_exists() {
-        let location = TransportLocation::parse("https://example.test/repo.git");
-        let client = BlockingSmartHttpClient::new(Duration::from_secs(2));
-        let error = client
-            .get_info_refs(&location, SmartHttpService::UploadPack)
-            .expect_err("https needs TLS support");
+    fn http_url_parses_https_with_tls_default_port() {
+        let url = super::HttpUrl::parse("https://example.test/repo.git/info/refs?service=x")
+            .expect("https URL should parse");
 
-        assert!(error.to_string().contains("plain http://"));
+        assert_eq!(url.scheme, super::HttpScheme::Https);
+        assert_eq!(url.host, "example.test");
+        assert_eq!(url.port, 443);
+        assert_eq!(url.host_header(), "example.test");
+        assert_eq!(url.path_and_query, "/repo.git/info/refs?service=x");
     }
 
     #[test]

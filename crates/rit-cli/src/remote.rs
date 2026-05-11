@@ -147,7 +147,7 @@ pub fn fetch_command(
                 }
             }
         }
-        rit_core::TransportProtocol::Http => {
+        rit_core::TransportProtocol::Http | rit_core::TransportProtocol::Https => {
             let mut options = rit_core::RemoteFetchOptions::new(source_location);
             if let Some(refspec) = refspec {
                 options = options.with_refspec(refspec);
@@ -166,10 +166,10 @@ pub fn fetch_command(
                 }
             }
         }
-        rit_core::TransportProtocol::Https | rit_core::TransportProtocol::Ssh => {
+        rit_core::TransportProtocol::Ssh => {
             writeln!(
                 stderr,
-                "rit: fetch currently supports only local paths and plain http:// smart HTTP remotes"
+                "rit: fetch currently supports only local paths and http:// or https:// smart remotes"
             )?;
             Ok(ExitCode::from(129))
         }
@@ -206,10 +206,13 @@ pub fn push_command(
     }
 
     let location = rit_core::TransportLocation::parse(&positional[0]);
-    if location.protocol() != rit_core::TransportProtocol::Http {
+    if !matches!(
+        location.protocol(),
+        rit_core::TransportProtocol::Http | rit_core::TransportProtocol::Https
+    ) {
         writeln!(
             stderr,
-            "rit: push currently supports only plain http:// smart HTTP remotes"
+            "rit: push currently supports only http:// or https:// smart remotes"
         )?;
         return Ok(ExitCode::from(129));
     }

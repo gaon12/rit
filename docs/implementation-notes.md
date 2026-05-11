@@ -48,6 +48,9 @@
 - 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M`, `-M79%`, `--find-renames=79`, `-C`,
   `-C79%`, and `--find-copies=79`.
+- 2026-05-12 HTTPS/TLS transport slice checked `git fetch -h`, `git push -h`,
+  and the existing smart HTTP tests; TLS uses platform certificate
+  verification through `native-tls`.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
   `--pathspec-file-nul`, including a quoted pathspec entry.
@@ -706,12 +709,12 @@
 ### `rit fetch`
 
 - Baseline command checked: `git fetch -h`
-- Supported options: `--quiet`/`-q` with one local repository path or plain
-  `http://` smart HTTP repository and either no refspec or one simple
+- Supported options: `--quiet`/`-q` with one local repository path or
+  `http://`/`https://` smart HTTP repository and either no refspec or one simple
   `<src>:<dst>` refspec.
 - Unsupported options: named remotes, multiple refspecs, append/atomic/force
-  semantics, HTTPS/TLS, SSH sessions, tags, prune, shallow/partial fetch,
-  submodules, protocol options, stdin, and maintenance hooks.
+  semantics, SSH sessions, tags, prune, shallow/partial fetch, submodules,
+  protocol options, stdin, and maintenance hooks.
 - Git-compatible behavior: `fetch <local-repository>` copies source objects
   into the current repository and overwrites `.git/FETCH_HEAD` with the source
   `HEAD` commit. Local refs and remote-tracking refs are not updated, matching
@@ -732,11 +735,11 @@
 ### `rit push`
 
 - Baseline command checked: `git push -h`
-- Supported options: `--quiet`/`-q` with one plain `http://` smart HTTP
-  repository and one simple `<src>:<dst>` refspec.
-- Unsupported options: HTTPS/TLS, SSH, named remotes, multiple refspecs,
-  delete/mirror/all/tags, dry-run, force/lease semantics, upstream config,
-  hooks, signed/atomic pushes, push options, and submodule behavior.
+- Supported options: `--quiet`/`-q` with one `http://` or `https://` smart
+  HTTP repository and one simple `<src>:<dst>` refspec.
+- Unsupported options: SSH, named remotes, multiple refspecs, delete/mirror/all
+  /tags, dry-run, force/lease semantics, upstream config, hooks,
+  signed/atomic pushes, push options, and submodule behavior.
 - Implemented smart HTTP behavior: discovers receive-pack refs, resolves the
   local source revision, walks reachable commit/tree/blob objects, sends a
   whole-object pack through receive-pack, and validates `report-status` for the
@@ -757,10 +760,11 @@
   `https://`, `ssh://`, and scp-like `user@host:path` locations.
 - Supported HTTP model: smart HTTP reference-discovery request metadata for
   `git-upload-pack` and `git-receive-pack`, plus pkt-line advertised-ref
-  response parsing. A small blocking plain-HTTP client can perform GET
-  discovery and POST `git-upload-pack` / `git-receive-pack` requests; it
-  validates smart status codes, content types, discovery prefixes, and decodes
-  chunked responses.
+  response parsing. A small blocking HTTP/HTTPS client can perform GET
+  discovery and POST `git-upload-pack` / `git-receive-pack` requests using
+  plain TCP for `http://` and platform-verified TLS for `https://`; it validates
+  smart status codes, content types, discovery prefixes, and decodes chunked
+  responses.
 - Supported negotiation model: smart HTTP `git-upload-pack` request bodies with
   at least one `want`, optional first-want capabilities, optional `have` lines,
   and a terminal `done`; upload-pack ACK/NAK/ERR, raw pack, and side-band
@@ -770,12 +774,12 @@
 - Supported SSH model: parse `ssh://user@host/path` and `user@host:path`
   locations and build quoted `git-upload-pack` / `git-receive-pack` remote
   commands.
-- Unsupported behavior: HTTPS/TLS, SSH process/session I/O, multi-round
-  negotiation, thin-pack fixups, push object minimization, and advanced push
-  options are not implemented yet. `rit fetch` accepts local paths and plain
-  `http://` smart HTTP remotes; `rit push` accepts plain `http://` smart HTTP
-  remotes; HTTPS and SSH are rejected with clear errors.
-- Repository mutation: plain HTTP fetch ingests received packs and writes
+- Unsupported behavior: SSH process/session I/O, multi-round negotiation,
+  thin-pack fixups, push object minimization, and advanced push options are not
+  implemented yet. `rit fetch` accepts local paths plus `http://` and
+  `https://` smart HTTP remotes; `rit push` accepts `http://` and `https://`
+  smart HTTP remotes; SSH is rejected with a clear error.
+- Repository mutation: HTTP/HTTPS fetch ingests received packs and writes
   `FETCH_HEAD`; other transport APIs remain request/response models.
 - Risk: moderate for fetch ingestion, low for request/response-only transport
   models.

@@ -1825,7 +1825,7 @@ mod tests {
 
         assert_eq!(code, ExitCode::from(129));
         assert_eq!(stdout, "");
-        assert!(stderr.contains("local paths and plain http:// smart HTTP remotes"));
+        assert!(stderr.contains("local paths and http:// or https:// smart remotes"));
     }
 
     #[test]
@@ -1838,7 +1838,7 @@ mod tests {
 
         assert_eq!(code, ExitCode::from(129));
         assert_eq!(stdout, "");
-        assert!(stderr.contains("only plain http:// smart HTTP remotes"));
+        assert!(stderr.contains("only http:// or https:// smart remotes"));
     }
 
     #[test]

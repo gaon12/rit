@@ -333,16 +333,19 @@ impl Repository {
         })
     }
 
-    /// Fetches one advertised ref from a plain smart HTTP remote.
+    /// Fetches one advertised ref from a smart HTTP or HTTPS remote.
     ///
     /// This first remote implementation uses one upload-pack negotiation round,
     /// ingests the returned pack into the object database, and updates
-    /// `FETCH_HEAD`. HTTPS, SSH, and multi-round negotiation are intentionally
-    /// left to later transport milestones.
+    /// `FETCH_HEAD`. SSH and multi-round negotiation are intentionally left to
+    /// later transport milestones.
     pub fn fetch_remote_http(&self, options: &RemoteFetchOptions) -> Result<RemoteFetchResult> {
-        if options.location.protocol() != TransportProtocol::Http {
+        if !matches!(
+            options.location.protocol(),
+            TransportProtocol::Http | TransportProtocol::Https
+        ) {
             return Err(RitError::invalid_input(
-                "remote fetch currently supports only plain http:// smart HTTP remotes",
+                "remote fetch currently supports only http:// and https:// smart remotes",
             ));
         }
 
@@ -380,11 +383,14 @@ impl Repository {
         })
     }
 
-    /// Pushes one source ref or revision to a plain smart HTTP remote.
+    /// Pushes one source ref or revision to a smart HTTP or HTTPS remote.
     pub fn push_remote_http(&self, options: &RemotePushOptions) -> Result<RemotePushResult> {
-        if options.location.protocol() != TransportProtocol::Http {
+        if !matches!(
+            options.location.protocol(),
+            TransportProtocol::Http | TransportProtocol::Https
+        ) {
             return Err(RitError::invalid_input(
-                "remote push currently supports only plain http:// smart HTTP remotes",
+                "remote push currently supports only http:// and https:// smart remotes",
             ));
         }
         validate_full_ref_name(&options.refspec.destination)?;

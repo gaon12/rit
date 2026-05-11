@@ -12,8 +12,8 @@ Core commands:
   help          Display help for rit or a command
   init          Create an empty Git repository
   clone         Clone a local repository without checkout
-  fetch         Fetch objects from a local or plain HTTP repository
-  push          Push one ref to a plain HTTP repository
+  fetch         Fetch objects from a local or HTTP(S) repository
+  push          Push one ref to an HTTP(S) repository
   rev-parse     Inspect the current repository paths
   cat-file      Inspect loose objects
   ls-tree       List entries in a tree object

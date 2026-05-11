@@ -252,7 +252,7 @@ Completion criteria:
     - [x] Chunked response decoding.
     - [x] Smart HTTP status, content-type, and advertisement prefix
       validation.
-    - [ ] HTTPS/TLS.
+    - [x] HTTPS/TLS via platform certificate verification.
 - [~] SSH transport.
   - [x] SSH/scp-like upload-pack and receive-pack command model.
   - [ ] SSH process/session I/O.
@@ -450,8 +450,8 @@ Completion criteria:
     non-sideband raw `PACK` data.
   - Implemented: pure Rust parsing for side-band records 1 (pack data), 2
     (progress), and 3 (server error).
-  - Later slices completed plain HTTP pack storage/application and one-round
-    fetch negotiation. Still open: HTTPS/TLS and full multi-round negotiation.
+  - Later slices completed HTTP(S) pack storage/application and one-round
+    fetch negotiation. Still open: full multi-round negotiation.
 - 2026-05-11, M7 smart HTTP client I/O:
   - Reference Git: `git version 2.52.0.windows.1`.
   - Reference docs checked: local `gitprotocol-http(5)` smart HTTP
@@ -465,8 +465,8 @@ Completion criteria:
     and `info/refs` advertisement prefix validation.
   - Implemented: smart HTTP advertised ref discovery using the blocking client
     and advertisement parser.
-  - Later slices completed plain HTTP pack negotiation/application and
-    `rit fetch` wiring. Still open: TLS for `https://`.
+  - Later slices completed HTTP(S) pack negotiation/application and `rit fetch`
+    wiring.
 - 2026-05-11, M7 SSH command model:
   - Reference Git: `git version 2.52.0.windows.1`.
   - Reference docs checked: local `gitprotocol-pack(5)` SSH transport examples
@@ -502,8 +502,8 @@ Completion criteria:
     CRC32 table, offsets, pack checksum, and index checksum.
   - Implemented: pack ingest helper that stores the pack, writes the index, and
     applies supported objects as loose objects.
-  - Later slices completed plain HTTP `rit fetch` ingestion. Still open:
-    HTTPS/TLS, thin-pack fixups, and deeper negotiation parity.
+  - Later slices completed HTTP(S) `rit fetch` ingestion. Still open:
+    thin-pack fixups and deeper negotiation parity.
 - 2026-05-11, M7 transport module hygiene:
   - Verified large-file state before continuing: `transport.rs` had grown to
     roughly 1955 lines after the pack ingest work.
@@ -523,8 +523,8 @@ Completion criteria:
     `want`/`have`/`done` request with supported advertised capabilities, parses
     the upload-pack result, rejects protocol `ERR`, and returns extracted raw
     pack bytes.
-  - Later slice completed plain HTTP `rit fetch` ingestion. Still open:
-    multi-round negotiation, thin-pack fixups, and HTTPS/TLS.
+  - Later slice completed HTTP(S) `rit fetch` ingestion. Still open:
+    multi-round negotiation and thin-pack fixups.
 - 2026-05-11, M7 plain HTTP fetch ingestion:
   - Reference Git: `git version 2.52.0.windows.1`.
   - Reference docs checked: `git fetch -h`, local `gitprotocol-http(5)`, and
@@ -533,9 +533,9 @@ Completion criteria:
     negotiation API, ingests returned pack bytes into `.git/objects`, writes
     `.git/FETCH_HEAD`, and updates a destination ref for one simple refspec.
   - Implemented: `rit fetch http://... [<src>:<dst>]` dispatches to the plain
-    HTTP path while keeping HTTPS and SSH rejected until those transports exist.
-  - Still open: HTTPS/TLS, SSH sessions, named remote config, multiple
-    refspecs, multi-round negotiation, and thin-pack fixups.
+    HTTP path. A later TLS slice extended the same path to `https://`.
+  - Still open: SSH sessions, named remote config, multiple refspecs,
+    multi-round negotiation, and thin-pack fixups.
 - 2026-05-11, M7 push pack generation:
   - Reference Git: `git version 2.52.0.windows.1`.
   - Reference docs checked: local `gitformat-pack(5)` and
@@ -554,11 +554,22 @@ Completion criteria:
     resolves one local source revision, walks reachable commit/tree/blob
     objects, builds a whole-object pack, sends a receive-pack update request,
     and validates `report-status` for the destination ref.
-  - Implemented: `rit push http://... <src>:<dst>` CLI dispatch for this plain
-    HTTP subset.
-  - Still open: HTTPS/TLS, SSH sessions, named remotes, multiple refspecs,
-    force/lease semantics, hooks, thin-pack/delta generation, and full object
-    minimization against remote history.
+  - Implemented: `rit push http://... <src>:<dst>` CLI dispatch for this smart
+    HTTP subset. A later TLS slice extended the same path to `https://`.
+  - Still open: SSH sessions, named remotes, multiple refspecs, force/lease
+    semantics, hooks, thin-pack/delta generation, and full object minimization
+    against remote history.
+- 2026-05-12, M7 HTTPS/TLS transport:
+  - Reference Git: `git version 2.52.0.windows.1`.
+  - Reference docs checked: `git fetch -h` and `git push -h`.
+  - Implemented: `BlockingSmartHttpClient` parses `https://` URLs, uses
+    `native-tls` for platform certificate verification, and reuses the existing
+    smart HTTP GET/POST validation path.
+  - Implemented: `rit fetch https://...` and `rit push https://...` now
+    dispatch to the smart HTTP transport instead of being rejected at argument
+    parsing time.
+  - Still open: SSH sessions, multi-round negotiation, thin-pack fixups, and
+    advanced fetch/push options.
 - 2026-05-11, CLI module hygiene:
   - Verified large-file state before continuing: `rit-cli/src/main.rs` had
     grown past 2100 lines.
