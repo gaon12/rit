@@ -310,10 +310,12 @@
 - Added `[policy]` config model in `rit.toml` / `.rit.toml` with optional
   `max_regular_blob_size`, `deny_secrets`, `protect_branches`, and explicit
   `enforcement = "warn" | "block"`.
+- Added regular blob size policy findings with warning-by-default and explicit
+  blocking severity.
 - Policy defaults warn and do not block writes; blocking requires explicit
   `enforcement = "block"`.
-- Still unsupported: evaluating blob size/secret/branch policies, `rit doctor`,
-  and `rit repair`.
+- Still unsupported: evaluating secret/branch policies, `rit doctor`, and
+  `rit repair`.
 
 ### `rit version`
 

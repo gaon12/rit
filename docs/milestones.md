@@ -395,7 +395,7 @@ Completion criteria:
 ## M13: Policy, Doctor, Repair
 
 - [x] Policy config model.
-- [ ] Blob size warning/check.
+- [x] Blob size warning/check.
 - [ ] Secret pattern warning/check.
 - [ ] Protected branch policy.
 - [ ] `rit doctor`

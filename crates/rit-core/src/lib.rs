@@ -20,6 +20,7 @@ pub mod odb;
 pub mod partial_clone;
 pub mod pathspec;
 pub mod policy;
+pub mod policy_check;
 pub mod refs;
 pub mod repository;
 pub mod semantic_diff;
@@ -66,6 +67,7 @@ pub use odb::{IngestedPack, LooseObjectDb, StoredPack, StoredPackIndex};
 pub use partial_clone::{PartialClonePolicy, PromisorRemote};
 pub use pathspec::PathspecSet;
 pub use policy::{PolicyConfig, PolicyEnforcement, parse_size_limit};
+pub use policy_check::{PolicyFinding, PolicyFindingKind, PolicySeverity};
 pub use refs::{Branch, Tag};
 pub use repository::{
     InitOptions, LocalCloneOptions, LocalFetchOptions, LocalFetchResult, RemoteFetchOptions,
