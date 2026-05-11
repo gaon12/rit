@@ -27,7 +27,8 @@ The current codebase implements an early local Git subset:
 - Transport locations are classified as local, HTTP(S), or SSH before command
   implementations choose the supported transfer path. Smart HTTP discovery
   request URLs, expected advertisement content types, and advertised-ref
-  response parsing are modeled, but HTTP network I/O is not implemented yet.
+  response parsing are modeled. Smart HTTP upload-pack request bodies can be
+  serialized as pkt-lines, but HTTP network I/O is not implemented yet.
 - Index v2 read/write for regular files, including status stat refresh for
   clean tracked files, raw extension-byte preservation, and committed
   `100644`/`100755` executable-bit modes. Optional index extension records can

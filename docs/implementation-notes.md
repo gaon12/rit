@@ -58,6 +58,8 @@
 - 2026-05-11 smart HTTP advertisement parser slice checked
   `git help protocol-http`; implemented pkt-line service-header validation,
   first-ref capability parsing, and advertised ref parsing.
+- 2026-05-11 upload-pack request-model slice checked `git help protocol-http`;
+  modeled pkt-line `want`, `have`, and `done` request bodies.
 
 ## Milestone Notes
 
@@ -513,6 +515,9 @@
 - Supported HTTP model: smart HTTP reference-discovery request metadata for
   `git-upload-pack` and `git-receive-pack`, plus pkt-line advertised-ref
   response parsing.
+- Supported negotiation model: smart HTTP `git-upload-pack` request bodies with
+  at least one `want`, optional first-want capabilities, optional `have` lines,
+  and a terminal `done`.
 - Unsupported behavior: no HTTP, HTTPS, or SSH network transfer is implemented
   yet. Remote-looking locations are classified and rejected by commands whose
   current implementation only supports local paths.

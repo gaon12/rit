@@ -40,7 +40,7 @@ pub use status::{
 };
 pub use transport::{
     AdvertisedRef, FetchRefSpec, SmartHttpAdvertisement, SmartHttpRequest, SmartHttpService,
-    TransportLocation, TransportProtocol,
+    TransportLocation, TransportProtocol, UploadPackRequest,
 };
 pub use write::{
     AddOptions, CommitOptions, CommitResult, FileModeOverride, SignatureIdentity, SignatureTime,

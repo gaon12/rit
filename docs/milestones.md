@@ -242,6 +242,7 @@ Completion criteria:
 - [~] Fetch refs negotiation.
   - [x] Single local fetch refspec updates a destination ref after copying
     objects.
+  - [x] Smart HTTP upload-pack `want`/`have`/`done` request model.
   - [ ] Remote advertised refs and pack negotiation.
 - [ ] Push basics.
 

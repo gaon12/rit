@@ -63,6 +63,67 @@ pub struct SmartHttpAdvertisement {
     pub refs: Vec<AdvertisedRef>,
 }
 
+/// Request body for smart HTTP `git-upload-pack`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UploadPackRequest {
+    wants: Vec<ObjectId>,
+    haves: Vec<ObjectId>,
+    capabilities: Vec<String>,
+    done: bool,
+}
+
+impl UploadPackRequest {
+    /// Creates a request with one or more wanted objects.
+    pub fn new(wants: Vec<ObjectId>) -> Result<Self> {
+        if wants.is_empty() {
+            return Err(RitError::invalid_input(
+                "upload-pack request requires at least one want",
+            ));
+        }
+        Ok(Self {
+            wants,
+            haves: Vec::new(),
+            capabilities: Vec::new(),
+            done: true,
+        })
+    }
+
+    /// Adds capabilities sent on the first `want` line.
+    pub fn with_capabilities(mut self, capabilities: Vec<String>) -> Self {
+        self.capabilities = capabilities;
+        self
+    }
+
+    /// Adds existing local objects as `have` lines.
+    pub fn with_haves(mut self, haves: Vec<ObjectId>) -> Self {
+        self.haves = haves;
+        self
+    }
+
+    /// Serializes the request as pkt-lines.
+    pub fn to_pkt_lines(&self) -> Vec<u8> {
+        let mut output = Vec::new();
+        for (index, object_id) in self.wants.iter().enumerate() {
+            let mut line = format!("want {object_id}");
+            if index == 0 && !self.capabilities.is_empty() {
+                line.push(' ');
+                line.push_str(&self.capabilities.join(" "));
+            }
+            line.push('\n');
+            write_pkt_line(&mut output, line.as_bytes());
+        }
+        for object_id in &self.haves {
+            write_pkt_line(&mut output, format!("have {object_id}\n").as_bytes());
+        }
+        if self.done {
+            write_pkt_line(&mut output, b"done\n");
+        } else {
+            output.extend_from_slice(b"0000");
+        }
+        output
+    }
+}
+
 impl SmartHttpAdvertisement {
     /// Parses the pkt-line response body returned by smart HTTP `info/refs`.
     pub fn parse(service: SmartHttpService, bytes: &[u8]) -> Result<Self> {
@@ -167,6 +228,12 @@ fn parse_pkt_lines(bytes: &[u8]) -> Result<Vec<Vec<u8>>> {
         position = payload_end;
     }
     Ok(lines)
+}
+
+fn write_pkt_line(output: &mut Vec<u8>, payload: &[u8]) {
+    let length = payload.len() + 4;
+    output.extend_from_slice(format!("{length:04x}").as_bytes());
+    output.extend_from_slice(payload);
 }
 
 fn parse_advertised_ref_line(
@@ -313,6 +380,7 @@ mod tests {
         FetchRefSpec, SmartHttpAdvertisement, SmartHttpService, TransportLocation,
         TransportProtocol,
     };
+    use crate::ObjectId;
 
     #[test]
     fn classifies_local_paths() {
@@ -412,5 +480,33 @@ mod tests {
             .expect_err("service should be checked");
 
         assert!(error.to_string().contains("service header"));
+    }
+
+    #[test]
+    fn builds_upload_pack_request_pkt_lines() {
+        let want = ObjectId::from_hex("0a53e9ddeaddad63ad106860237bbf53411d11a7").expect("want");
+        let have = ObjectId::from_hex("441b40d833fdfa93eb2908e52742248faf0ee993").expect("have");
+        let request = super::UploadPackRequest::new(vec![want])
+            .expect("request should build")
+            .with_capabilities(vec!["multi_ack".to_owned(), "thin-pack".to_owned()])
+            .with_haves(vec![have]);
+
+        let body = String::from_utf8(request.to_pkt_lines()).expect("pkt-lines are UTF-8");
+
+        assert_eq!(
+            body,
+            concat!(
+                "0046want 0a53e9ddeaddad63ad106860237bbf53411d11a7 multi_ack thin-pack\n",
+                "0032have 441b40d833fdfa93eb2908e52742248faf0ee993\n",
+                "0009done\n"
+            )
+        );
+    }
+
+    #[test]
+    fn rejects_upload_pack_request_without_wants() {
+        let error = super::UploadPackRequest::new(Vec::new()).expect_err("want is required");
+
+        assert!(error.to_string().contains("at least one want"));
     }
 }
