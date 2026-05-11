@@ -352,7 +352,9 @@ Completion criteria:
 
 ## M11: Auth
 
-- [ ] Credential abstraction.
+- [x] Credential abstraction.
+  - [x] Add redacted credential, credential request, and provider trait models
+    independent from transport execution.
 - [ ] Environment token provider.
 - [ ] Git credential helper compatibility.
 - [ ] SSH agent integration.

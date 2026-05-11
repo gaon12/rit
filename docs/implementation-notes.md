@@ -251,6 +251,18 @@
 
 ## Implemented Commands
 
+### M11: Auth
+
+- Baseline checked: `git credential -h` exposes `fill`, `approve`, and
+  `reject` actions.
+- Added transport-independent credential models: `Credential`,
+  `CredentialRequest`, `CredentialProvider`, and redacted `SecretString`.
+- Secrets are redacted through `Debug` and `Display`; callers must explicitly
+  call `expose_secret()` to authenticate.
+- Still unsupported: environment token provider, Git credential helper
+  subprocess compatibility, SSH agent integration, OS keychain adapters, and CI
+  non-interactive policy.
+
 ### `rit version`
 
 - Baseline command checked: `git version`
