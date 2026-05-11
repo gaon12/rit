@@ -31,6 +31,7 @@ Core commands:
   show          Show one object
   ls-files      Show files in the index
   workspace     Inspect workspace profile operations
+  doctor        Check repository health without modifying it
 
 Run 'rit help <command>' for command-specific notes.
 ";
@@ -181,6 +182,12 @@ rit workspace prefetch <profile>
 Print the prefetch plan for a named workspace profile. Network prefetch execution is not implemented yet.
 ";
 
+const DOCTOR_HELP: &str = "\
+rit doctor
+
+Run read-only repository health checks and print structured check results.
+";
+
 pub fn print_command_help(
     topic: &str,
     stdout: &mut dyn Write,
@@ -210,6 +217,7 @@ pub fn print_command_help(
         "show" => stdout.write_all(SHOW_HELP.as_bytes())?,
         "ls-files" => stdout.write_all(LS_FILES_HELP.as_bytes())?,
         "workspace" => stdout.write_all(WORKSPACE_HELP.as_bytes())?,
+        "doctor" => stdout.write_all(DOCTOR_HELP.as_bytes())?,
         unknown => {
             writeln!(stderr, "rit: no help for unknown command '{unknown}'")?;
             return Ok(ExitCode::from(129));

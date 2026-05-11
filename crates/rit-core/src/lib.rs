@@ -9,6 +9,7 @@ pub mod auth;
 pub mod commit;
 pub mod config;
 pub mod diff;
+pub mod doctor;
 pub mod error;
 pub mod history;
 pub mod index;
@@ -127,3 +128,4 @@ pub use auth::{
 pub use commit::{Commit, Signature, parse_commit};
 pub use config::{GitConfig, GitConfigEntry};
 pub use diff::{DiffFileStat, DiffOptions, DiffPatch, DiffPatchFile, DiffSummary};
+pub use doctor::{DoctorCheck, DoctorReport, DoctorSeverity};

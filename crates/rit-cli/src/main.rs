@@ -2,6 +2,7 @@ use std::env;
 use std::io::{self, Write};
 use std::process::ExitCode;
 
+mod doctor;
 mod help;
 mod pathspec_args;
 mod remote;
@@ -55,6 +56,7 @@ fn run(
         [command, rest @ ..] if command == "show" => show_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ls-files" => ls_files_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "workspace" => workspace_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "doctor" => doctor::doctor_command(rest, stdout, stderr),
         [command] if command == "help" => {
             stdout.write_all(help::GENERAL_HELP.as_bytes())?;
             Ok(ExitCode::SUCCESS)
@@ -1888,6 +1890,24 @@ mod tests {
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit workspace prefetch"));
         assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn doctor_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "doctor"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit doctor"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn doctor_rejects_options_for_now() {
+        let (code, stdout, stderr) = run_with(&["doctor", "--json"]);
+
+        assert_eq!(code, ExitCode::from(129));
+        assert_eq!(stdout, "");
+        assert!(stderr.contains("does not accept options yet"));
     }
 
     #[test]

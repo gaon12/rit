@@ -316,9 +316,24 @@
   common token prefixes without including matched secret values in messages.
 - Added protected branch policy findings that accept either short branch names
   or `refs/heads/*` names in `protect_branches`.
+- Added read-only `Repository::doctor` and `rit doctor` to check repository
+  directories, Git config readability, rit config readability, HEAD parsing,
+  and HEAD object presence without invoking external Git.
 - Policy defaults warn and do not block writes; blocking requires explicit
   `enforcement = "block"`.
-- Still unsupported: `rit doctor` and `rit repair`.
+- Still unsupported: `rit repair`.
+
+### `rit doctor`
+
+- Baseline command checked: `git version 2.52.0.windows.1`; `git help -a`
+  does not list `doctor`, while related Git maintenance commands include
+  `git fsck` and `git maintenance`.
+- Supported options: `rit doctor`.
+- Unsupported options: JSON output, repair actions, full object graph fsck.
+- Intentional differences: `doctor` is a rit-specific read-only health summary,
+  not a Git porcelain command.
+- Repository mutation: no.
+- Risk: low; reads repository files only.
 
 ### `rit version`
 

@@ -398,7 +398,7 @@ Completion criteria:
 - [x] Blob size warning/check.
 - [x] Secret pattern warning/check.
 - [x] Protected branch policy.
-- [ ] `rit doctor`
+- [x] `rit doctor`
 - [ ] `rit repair`
 
 Completion criteria:
