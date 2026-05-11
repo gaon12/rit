@@ -22,6 +22,8 @@ pub mod pathspec;
 pub mod refs;
 pub mod repository;
 pub mod semantic_diff;
+#[cfg(feature = "semantic-python")]
+pub mod semantic_python;
 #[cfg(feature = "semantic-rust")]
 pub mod semantic_rust;
 #[cfg(feature = "semantic-typescript")]
@@ -68,6 +70,10 @@ pub use repository::{
 #[cfg(feature = "semantic-tree-sitter")]
 pub use semantic_diff::TreeSitterSemanticParser;
 pub use semantic_diff::{WordDiff, WordDiffOperation, word_diff};
+#[cfg(feature = "semantic-python")]
+pub use semantic_python::{
+    PythonFunctionChange, PythonSemanticSummary, summarize_python_functions,
+};
 #[cfg(feature = "semantic-rust")]
 pub use semantic_rust::{RustFunctionChange, RustSemanticSummary, summarize_rust_functions};
 #[cfg(feature = "semantic-typescript")]

@@ -299,7 +299,9 @@
   summarizes added, deleted, and changed functions.
 - Added optional `semantic-typescript` feature with a tree-sitter TypeScript
   adapter that summarizes added, deleted, and changed function declarations.
-- Still unsupported: Python semantic adapter and JSON semantic output.
+- Added optional `semantic-python` feature with a tree-sitter Python adapter
+  that summarizes added, deleted, and changed function definitions.
+- Still unsupported: JSON semantic output.
 
 ### `rit version`
 

@@ -385,7 +385,7 @@ Completion criteria:
 - [x] Tree-sitter feature gate.
 - [x] Rust semantic adapter.
 - [x] TypeScript semantic adapter.
-- [ ] Python semantic adapter.
+- [x] Python semantic adapter.
 - [ ] JSON output model.
 
 Completion criteria:
