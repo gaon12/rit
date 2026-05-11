@@ -290,6 +290,16 @@ impl BlockingSmartHttpClient {
         Ok(response)
     }
 
+    /// Discovers and parses refs advertised by a smart HTTP service.
+    pub fn discover_refs(
+        &self,
+        location: &TransportLocation,
+        service: SmartHttpService,
+    ) -> Result<SmartHttpAdvertisement> {
+        let response = self.get_info_refs(location, service)?;
+        SmartHttpAdvertisement::parse(service, &response.body)
+    }
+
     /// Performs a smart HTTP upload-pack POST request.
     pub fn post_upload_pack(
         &self,
@@ -1125,6 +1135,34 @@ mod tests {
 
         request_handle.join().expect("server thread");
         assert!(error.to_string().contains("advertisement pkt-line"));
+    }
+
+    #[test]
+    fn blocking_http_client_discovers_advertised_refs() {
+        let (base_url, request_handle) = serve_one_http_request(
+            concat!(
+                "HTTP/1.1 200 OK\r\n",
+                "Content-Type: application/x-git-upload-pack-advertisement\r\n",
+                "Connection: close\r\n",
+                "\r\n",
+                "001e# service=git-upload-pack\n",
+                "0000",
+                "005195dcfa3633004da0049d3d0fa03f80589cbcaf31 refs/heads/main\0multi_ack thin-pack\n",
+                "0000"
+            )
+            .as_bytes(),
+        );
+        let location = TransportLocation::parse(&format!("{base_url}/repo.git"));
+        let client = BlockingSmartHttpClient::new(Duration::from_secs(2));
+        let advertisement = client
+            .discover_refs(&location, SmartHttpService::UploadPack)
+            .expect("refs should parse");
+
+        request_handle.join().expect("server thread");
+        assert_eq!(advertisement.service, SmartHttpService::UploadPack);
+        assert_eq!(advertisement.capabilities, ["multi_ack", "thin-pack"]);
+        assert_eq!(advertisement.refs.len(), 1);
+        assert_eq!(advertisement.refs[0].name, "refs/heads/main");
     }
 
     #[test]

@@ -251,7 +251,8 @@ Completion criteria:
   - [x] Smart HTTP upload-pack ACK/NAK/ERR response parser and raw pack
     classifier.
   - [x] Upload-pack side-band pack/progress/error response parser.
-  - [ ] Remote advertised refs and pack negotiation.
+  - [x] Remote advertised refs discovery through the smart HTTP client.
+  - [ ] Remote pack negotiation and pack application.
 - [ ] Push basics.
 
 Completion criteria:
@@ -388,4 +389,7 @@ Completion criteria:
   - Implemented: chunked transfer decoding for smart HTTP responses.
   - Implemented: status code validation, smart HTTP content-type validation,
     and `info/refs` advertisement prefix validation.
-  - Still open: TLS for `https://` and wiring the client into `rit fetch`.
+  - Implemented: smart HTTP advertised ref discovery using the blocking client
+    and advertisement parser.
+  - Still open: TLS for `https://`, pack negotiation, pack application, and
+    wiring the client into `rit fetch`.
