@@ -386,6 +386,9 @@
 - Documented release archive naming, target triples, and archive contents in
   `docs/release.md`.
 - Added README release build instructions for `rit-min` and `rit-full`.
+- Added root `LICENSE-MIT`, `LICENSE-APACHE`, and `THIRD-PARTY-NOTICES.md`;
+  updated README/release docs to match the workspace `MIT OR Apache-2.0`
+  license and full-feature dependency attribution audit.
 
 ### `rit version`
 

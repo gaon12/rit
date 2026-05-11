@@ -185,4 +185,5 @@ Near-term implementation focus:
 
 ## License
 
-This workspace is configured for `MIT`.
+This workspace is licensed under `MIT OR Apache-2.0`. See `LICENSE-MIT`,
+`LICENSE-APACHE`, and `THIRD-PARTY-NOTICES.md`.

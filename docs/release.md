@@ -71,3 +71,17 @@ Recommended target triples for the first release matrix:
 | `x86_64-apple-darwin` | `.tar.gz` |
 | `aarch64-apple-darwin` | `.tar.gz` |
 | `x86_64-pc-windows-msvc` | `.zip` |
+
+## License And Attribution
+
+The workspace license is `MIT OR Apache-2.0`, matching `Cargo.toml`.
+
+Release archives must include:
+
+- `LICENSE-MIT`
+- `LICENSE-APACHE`
+- `THIRD-PARTY-NOTICES.md`
+
+The third-party notice table is generated from `cargo metadata --locked` using
+the `rit-full` feature set. A release must not ship with unknown or missing
+license metadata in dependency packages without an explicit review note.

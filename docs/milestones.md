@@ -422,7 +422,7 @@ Completion criteria:
 - [x] CI build matrix.
 - [x] Release archive layout.
 - [x] README release instructions.
-- [ ] License and attribution audit.
+- [x] License and attribution audit.
 
 Completion criteria:
 - A release can be built as a single binary with documented feature choices.
