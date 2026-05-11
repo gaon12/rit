@@ -368,10 +368,13 @@
   materialization into a worktree path; it rejects path traversal, writes via a
   temporary file, does not overwrite existing files, and verifies the object is
   a blob.
+- Added `Repository::prefetch_vfs_objects` and `Repository::spawn_vfs_prefetch`
+  for local object warmup in a background worker, reporting available and
+  missing objects without invoking external Git.
 - VFS availability now reports a clear message when a binary is built without
   the `vfs` feature.
-- Still unsupported: platform backend execution and background prefetch
-  execution.
+- Still unsupported: platform backend execution and network/promisor object
+  fetching for missing VFS objects.
 
 ### `rit version`
 

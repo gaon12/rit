@@ -411,7 +411,7 @@ Completion criteria:
 - [x] Fallback materialized backend.
 - [x] Platform backend plan.
 - [x] Lazy materialization.
-- [ ] Background prefetch.
+- [x] Background prefetch.
 
 Completion criteria:
 - Builds without VFS still work normally and VFS-specific errors are clear.

@@ -2,9 +2,11 @@ use crate::LazyMaterializationPolicy;
 
 mod materialize;
 mod platform;
+mod prefetch;
 
 pub use materialize::{VfsMaterializeRequest, VfsMaterializeResult, VfsMaterializeStatus};
 pub use platform::{VfsPlatformBackend, VfsPlatformBackendPlan};
+pub use prefetch::{VfsPrefetchObject, VfsPrefetchRequest, VfsPrefetchResult, VfsPrefetchedObject};
 
 /// Requested VFS backend.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

@@ -41,6 +41,8 @@ pub mod status;
 pub mod transport;
 pub mod vfs;
 #[cfg(test)]
+mod vfs_prefetch_tests;
+#[cfg(test)]
 mod vfs_tests;
 pub mod workspace_profile;
 pub mod write;
@@ -112,7 +114,8 @@ pub use vfs::{
     FallbackMaterializedAction, FallbackMaterializedBackend, FallbackMaterializedPlan,
     VfsAvailability, VfsBackendPreference, VfsLazyMaterialization, VfsMaterializeRequest,
     VfsMaterializeResult, VfsMaterializeStatus, VfsPlan, VfsPlatformBackend,
-    VfsPlatformBackendPlan,
+    VfsPlatformBackendPlan, VfsPrefetchObject, VfsPrefetchRequest, VfsPrefetchResult,
+    VfsPrefetchedObject,
 };
 pub use workspace_profile::{
     LazyMaterializationPolicy, RitConfig, WorkspacePrefetchPlan, WorkspaceProfile,
