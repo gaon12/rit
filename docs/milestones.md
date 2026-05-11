@@ -240,6 +240,8 @@ Completion criteria:
   - [~] HTTP client I/O.
     - [x] Blocking plain HTTP GET discovery and POST upload-pack requests.
     - [x] Chunked response decoding.
+    - [x] Smart HTTP status, content-type, and advertisement prefix
+      validation.
     - [ ] HTTPS/TLS.
 - [ ] SSH transport.
 - [~] Fetch refs negotiation.
@@ -384,5 +386,6 @@ Completion criteria:
     and POST upload-pack requests using Rust `TcpStream`, plus raw HTTP
     response parsing and transport I/O errors.
   - Implemented: chunked transfer decoding for smart HTTP responses.
-  - Still open: TLS for `https://`, status/content type validation policy, and
-    wiring the client into `rit fetch`.
+  - Implemented: status code validation, smart HTTP content-type validation,
+    and `info/refs` advertisement prefix validation.
+  - Still open: TLS for `https://` and wiring the client into `rit fetch`.

@@ -280,7 +280,14 @@ impl BlockingSmartHttpClient {
         service: SmartHttpService,
     ) -> Result<SmartHttpResponse> {
         let request = location.smart_http_info_refs(service)?;
-        self.send_http_request("GET", &request.info_refs_url, None, &[])
+        let response = self.send_http_request("GET", &request.info_refs_url, None, &[])?;
+        validate_smart_http_response(
+            &response,
+            &request.advertisement_content_type,
+            &[200, 304],
+            SmartHttpBodyCheck::InfoRefsAdvertisement,
+        )?;
+        Ok(response)
     }
 
     /// Performs a smart HTTP upload-pack POST request.
@@ -290,12 +297,19 @@ impl BlockingSmartHttpClient {
         request: &UploadPackRequest,
     ) -> Result<SmartHttpResponse> {
         let post_request = location.smart_http_upload_pack(request)?;
-        self.send_http_request(
+        let response = self.send_http_request(
             "POST",
             &post_request.url,
             Some(post_request.content_type.as_str()),
             &post_request.body,
-        )
+        )?;
+        validate_smart_http_response(
+            &response,
+            &post_request.response_content_type,
+            &[200],
+            SmartHttpBodyCheck::None,
+        )?;
+        Ok(response)
     }
 
     fn send_http_request(
@@ -830,6 +844,70 @@ fn parse_http_status_code(status_line: &str) -> Result<u16> {
         .map_err(|_| RitError::invalid_input("HTTP response has invalid status code"))
 }
 
+enum SmartHttpBodyCheck {
+    None,
+    InfoRefsAdvertisement,
+}
+
+fn validate_smart_http_response(
+    response: &SmartHttpResponse,
+    expected_content_type: &str,
+    allowed_status_codes: &[u16],
+    body_check: SmartHttpBodyCheck,
+) -> Result<()> {
+    if !allowed_status_codes.contains(&response.status_code) {
+        return Err(RitError::invalid_input(format!(
+            "smart HTTP response returned unexpected status code: {}",
+            response.status_code
+        )));
+    }
+    validate_smart_http_content_type(response, expected_content_type)?;
+    match body_check {
+        SmartHttpBodyCheck::None => {}
+        SmartHttpBodyCheck::InfoRefsAdvertisement => {
+            validate_info_refs_advertisement_prefix(&response.body)?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_smart_http_content_type(
+    response: &SmartHttpResponse,
+    expected_content_type: &str,
+) -> Result<()> {
+    let Some(content_type) = response.header("Content-Type") else {
+        return Err(RitError::invalid_input(
+            "smart HTTP response is missing Content-Type",
+        ));
+    };
+    let media_type = content_type
+        .split(';')
+        .next()
+        .unwrap_or(content_type)
+        .trim();
+    if media_type != expected_content_type {
+        return Err(RitError::invalid_input(format!(
+            "smart HTTP response has unsupported Content-Type: {content_type}"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_info_refs_advertisement_prefix(body: &[u8]) -> Result<()> {
+    let Some(prefix) = body.get(..5) else {
+        return Err(RitError::invalid_input(
+            "smart HTTP info/refs response is too short",
+        ));
+    };
+    if prefix[..4].iter().all(u8::is_ascii_hexdigit) && prefix[4] == b'#' {
+        Ok(())
+    } else {
+        Err(RitError::invalid_input(
+            "smart HTTP info/refs response does not start with an advertisement pkt-line",
+        ))
+    }
+}
+
 fn looks_like_scp_location(input: &str) -> bool {
     if is_windows_drive_path(input) {
         return false;
@@ -958,7 +1036,7 @@ mod tests {
     #[test]
     fn blocking_http_client_gets_info_refs() {
         let (base_url, request_handle) = serve_one_http_request(
-            b"HTTP/1.1 200 OK\r\nContent-Type: application/x-git-upload-pack-advertisement\r\nContent-Length: 4\r\nConnection: close\r\n\r\nbody",
+            b"HTTP/1.1 200 OK\r\nContent-Type: application/x-git-upload-pack-advertisement\r\nContent-Length: 34\r\nConnection: close\r\n\r\n001e# service=git-upload-pack\n0000",
         );
         let location = TransportLocation::parse(&format!("{base_url}/repo.git"));
         let client = BlockingSmartHttpClient::new(Duration::from_secs(2));
@@ -977,13 +1055,13 @@ mod tests {
             response.header("content-type"),
             Some("application/x-git-upload-pack-advertisement")
         );
-        assert_eq!(response.body, b"body");
+        assert_eq!(response.body, b"001e# service=git-upload-pack\n0000");
     }
 
     #[test]
     fn blocking_http_client_posts_upload_pack() {
         let (base_url, request_handle) =
-            serve_one_http_request(b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\n0008NAK\n");
+            serve_one_http_request(b"HTTP/1.1 200 OK\r\nContent-Type: application/x-git-upload-pack-result\r\nContent-Length: 8\r\n\r\n0008NAK\n");
         let location = TransportLocation::parse(&format!("{base_url}/repo.git"));
         let want = ObjectId::from_hex("0a53e9ddeaddad63ad106860237bbf53411d11a7").expect("want");
         let upload_pack = super::UploadPackRequest::new(vec![want]).expect("request");
@@ -1006,7 +1084,7 @@ mod tests {
     #[test]
     fn blocking_http_client_decodes_chunked_responses() {
         let (base_url, request_handle) = serve_one_http_request(
-            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n4\r\nbody\r\n0\r\n\r\n",
+            b"HTTP/1.1 200 OK\r\nContent-Type: application/x-git-upload-pack-advertisement\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n22\r\n001e# service=git-upload-pack\n0000\r\n0\r\n\r\n",
         );
         let location = TransportLocation::parse(&format!("{base_url}/repo.git"));
         let client = BlockingSmartHttpClient::new(Duration::from_secs(2));
@@ -1016,7 +1094,37 @@ mod tests {
 
         request_handle.join().expect("server thread");
         assert_eq!(response.status_code, 200);
-        assert_eq!(response.body, b"body");
+        assert_eq!(response.body, b"001e# service=git-upload-pack\n0000");
+    }
+
+    #[test]
+    fn blocking_http_client_rejects_wrong_content_type() {
+        let (base_url, request_handle) = serve_one_http_request(
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 34\r\n\r\n001e# service=git-upload-pack\n0000",
+        );
+        let location = TransportLocation::parse(&format!("{base_url}/repo.git"));
+        let client = BlockingSmartHttpClient::new(Duration::from_secs(2));
+        let error = client
+            .get_info_refs(&location, SmartHttpService::UploadPack)
+            .expect_err("content type should be validated");
+
+        request_handle.join().expect("server thread");
+        assert!(error.to_string().contains("Content-Type"));
+    }
+
+    #[test]
+    fn blocking_http_client_rejects_bad_info_refs_prefix() {
+        let (base_url, request_handle) = serve_one_http_request(
+            b"HTTP/1.1 200 OK\r\nContent-Type: application/x-git-upload-pack-advertisement\r\nContent-Length: 5\r\n\r\nhello",
+        );
+        let location = TransportLocation::parse(&format!("{base_url}/repo.git"));
+        let client = BlockingSmartHttpClient::new(Duration::from_secs(2));
+        let error = client
+            .get_info_refs(&location, SmartHttpService::UploadPack)
+            .expect_err("advertisement prefix should be validated");
+
+        request_handle.join().expect("server thread");
+        assert!(error.to_string().contains("advertisement pkt-line"));
     }
 
     #[test]
