@@ -32,6 +32,7 @@ Core commands:
   ls-files      Show files in the index
   workspace     Inspect workspace profile operations
   doctor        Check repository health without modifying it
+  repair        Plan or apply conservative repository repairs
 
 Run 'rit help <command>' for command-specific notes.
 ";
@@ -188,6 +189,12 @@ rit doctor
 Run read-only repository health checks and print structured check results.
 ";
 
+const REPAIR_HELP: &str = "\
+rit repair [--dry-run|--apply]
+
+Plan conservative repository repairs. Use --apply to create missing standard Git directories.
+";
+
 pub fn print_command_help(
     topic: &str,
     stdout: &mut dyn Write,
@@ -218,6 +225,7 @@ pub fn print_command_help(
         "ls-files" => stdout.write_all(LS_FILES_HELP.as_bytes())?,
         "workspace" => stdout.write_all(WORKSPACE_HELP.as_bytes())?,
         "doctor" => stdout.write_all(DOCTOR_HELP.as_bytes())?,
+        "repair" => stdout.write_all(REPAIR_HELP.as_bytes())?,
         unknown => {
             writeln!(stderr, "rit: no help for unknown command '{unknown}'")?;
             return Ok(ExitCode::from(129));

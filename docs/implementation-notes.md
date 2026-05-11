@@ -319,9 +319,13 @@
 - Added read-only `Repository::doctor` and `rit doctor` to check repository
   directories, Git config readability, rit config readability, HEAD parsing,
   and HEAD object presence without invoking external Git.
+- Added conservative `Repository::repair_plan`, `Repository::apply_repair_plan`,
+  and `rit repair [--dry-run|--apply]`; the first repair action set only creates
+  missing standard Git directories and refuses paths outside the repository.
 - Policy defaults warn and do not block writes; blocking requires explicit
   `enforcement = "block"`.
-- Still unsupported: `rit repair`.
+- Still unsupported: full object graph fsck, automatic ref/object repair, and
+  repair of unsupported repository formats.
 
 ### `rit doctor`
 
@@ -334,6 +338,20 @@
   not a Git porcelain command.
 - Repository mutation: no.
 - Risk: low; reads repository files only.
+
+### `rit repair`
+
+- Baseline command checked: `git version 2.52.0.windows.1`; `git help -a`
+  does not list `repair`, while related Git maintenance commands include
+  `git fsck` and `git maintenance`.
+- Supported options: `rit repair`, `rit repair --dry-run`, `rit repair --apply`.
+- Unsupported options: object recovery, ref recovery, index repair, config
+  rewrite, and JSON output.
+- Intentional differences: `repair` is a rit-specific safety command; it plans
+  by default and only creates missing standard Git directories with `--apply`.
+- Repository mutation: only with `--apply`.
+- Risk: medium-low; it creates directories but does not overwrite existing
+  files or refs.
 
 ### `rit version`
 

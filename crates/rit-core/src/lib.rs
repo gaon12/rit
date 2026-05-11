@@ -25,6 +25,7 @@ pub mod policy_check;
 #[cfg(test)]
 mod policy_check_tests;
 pub mod refs;
+pub mod repair;
 pub mod repository;
 pub mod semantic_diff;
 #[cfg(test)]
@@ -72,6 +73,7 @@ pub use pathspec::PathspecSet;
 pub use policy::{PolicyConfig, PolicyEnforcement, parse_size_limit};
 pub use policy_check::{PolicyFinding, PolicyFindingKind, PolicySeverity};
 pub use refs::{Branch, Tag};
+pub use repair::{RepairAction, RepairPlan, RepairResult};
 pub use repository::{
     InitOptions, LocalCloneOptions, LocalFetchOptions, LocalFetchResult, RemoteFetchOptions,
     RemoteFetchResult, RemotePushOptions, RemotePushResult, Repository,

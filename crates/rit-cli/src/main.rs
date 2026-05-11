@@ -6,6 +6,7 @@ mod doctor;
 mod help;
 mod pathspec_args;
 mod remote;
+mod repair;
 
 fn main() -> ExitCode {
     match run(env::args().skip(1), &mut io::stdout(), &mut io::stderr()) {
@@ -57,6 +58,7 @@ fn run(
         [command, rest @ ..] if command == "ls-files" => ls_files_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "workspace" => workspace_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "doctor" => doctor::doctor_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "repair" => repair::repair_command(rest, stdout, stderr),
         [command] if command == "help" => {
             stdout.write_all(help::GENERAL_HELP.as_bytes())?;
             Ok(ExitCode::SUCCESS)
@@ -1908,6 +1910,24 @@ mod tests {
         assert_eq!(code, ExitCode::from(129));
         assert_eq!(stdout, "");
         assert!(stderr.contains("does not accept options yet"));
+    }
+
+    #[test]
+    fn repair_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "repair"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit repair"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn repair_rejects_unknown_options() {
+        let (code, stdout, stderr) = run_with(&["repair", "--json"]);
+
+        assert_eq!(code, ExitCode::from(129));
+        assert_eq!(stdout, "");
+        assert!(stderr.contains("unsupported repair option"));
     }
 
     #[test]

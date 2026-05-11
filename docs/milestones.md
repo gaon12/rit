@@ -399,7 +399,7 @@ Completion criteria:
 - [x] Secret pattern warning/check.
 - [x] Protected branch policy.
 - [x] `rit doctor`
-- [ ] `rit repair`
+- [x] `rit repair`
 
 Completion criteria:
 - Policy defaults warn conservatively and blocking behavior requires explicit
