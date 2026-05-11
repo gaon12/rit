@@ -368,7 +368,9 @@ Completion criteria:
 - [~] OS keychain adapters.
   - [x] Model platform default keychain adapter selection.
   - [ ] Read/write credential implementations for each OS keychain.
-- [ ] CI non-interactive mode.
+- [x] CI non-interactive mode.
+  - [x] Disable auth prompts for CI-like environments and
+    `GIT_TERMINAL_PROMPT=0`.
 
 Completion criteria:
 - Secrets are never printed and auth is separated from transport.
