@@ -120,6 +120,28 @@ fn add_icase_magic_pathspec_matches_git_status() {
 }
 
 #[test]
+fn add_attr_pathspec_matches_git_status() {
+    for (name, pathspec) in [
+        ("set", ":(attr:text)*"),
+        ("unset", ":(attr:-text)*"),
+        ("value", ":(attr:diff=markdown)*"),
+        ("unspecified", ":(attr:!diff)*"),
+    ] {
+        let fixture = AttrPathspecWriteFixture::new(&format!("add-attr-{name}"));
+
+        let outcome = compare_after_command(
+            fixture.path(),
+            command_words("git", ["add", pathspec]),
+            command_words(rit_binary(), ["add", pathspec]),
+        );
+
+        assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+        assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+        assert_eq!(outcome.git_status, outcome.rit_status);
+    }
+}
+
+#[test]
 fn add_honors_core_ignorecase_for_mismatched_case_pathspec() {
     let fixture = temp_path("add-core-ignorecase-fixture");
     fs::create_dir_all(&fixture).expect("fixture should be created");
@@ -716,6 +738,66 @@ struct CommandSpec {
     program: OsString,
     args: Vec<OsString>,
     env: Vec<(OsString, OsString)>,
+}
+
+struct AttrPathspecWriteFixture {
+    path: PathBuf,
+}
+
+impl AttrPathspecWriteFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+        run_git(&path, ["config", "core.eol", "lf"]);
+
+        fs::write(
+            path.join(".gitattributes"),
+            "*.rs text\n*.bin -text\ndocs/*.md diff=markdown\nplain.txt !diff\n",
+        )
+        .expect("attributes file should be written");
+        fs::write(path.join("main.rs"), "fn main() {}\n").expect("rust file should be written");
+        fs::write(path.join("image.bin"), [0, 1, 2]).expect("binary file should be written");
+        fs::create_dir_all(path.join("docs")).expect("docs directory should be created");
+        fs::write(path.join("docs").join("readme.md"), "hello\n")
+            .expect("markdown file should be written");
+        fs::write(path.join("plain.txt"), "plain\n").expect("plain file should be written");
+        run_git(
+            &path,
+            [
+                "add",
+                ".gitattributes",
+                "main.rs",
+                "image.bin",
+                "docs/readme.md",
+                "plain.txt",
+            ],
+        );
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+
+        fs::write(path.join("main.rs"), "fn main() { println!(\"hi\"); }\n")
+            .expect("rust file should be modified");
+        fs::write(path.join("image.bin"), [0, 1, 2, 3]).expect("binary file should be modified");
+        fs::write(path.join("docs").join("readme.md"), "hello\nworld\n")
+            .expect("markdown file should be modified");
+        fs::write(path.join("plain.txt"), "plain\nchanged\n")
+            .expect("plain file should be modified");
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for AttrPathspecWriteFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
 }
 
 struct CommandOutcome {

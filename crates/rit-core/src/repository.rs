@@ -1,4 +1,4 @@
-use crate::{GitConfig, GitObject, LooseObjectDb, ObjectId, Result, RitError};
+use crate::{GitAttributes, GitConfig, GitObject, LooseObjectDb, ObjectId, Result, RitError};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -149,6 +149,18 @@ impl Repository {
     /// Returns whether Git should compare worktree path names case-insensitively.
     pub(crate) fn core_ignorecase_enabled(&self) -> Result<bool> {
         self.read_core_bool("ignorecase", default_core_ignorecase())
+    }
+
+    /// Reads repository-level `.gitattributes` rules from the working tree.
+    pub fn root_attributes(&self) -> Result<GitAttributes> {
+        let Some(worktree) = self.worktree() else {
+            return Ok(GitAttributes::default());
+        };
+        let attributes_path = worktree.join(".gitattributes");
+        if !attributes_path.exists() {
+            return Ok(GitAttributes::default());
+        }
+        GitAttributes::read(&attributes_path)
     }
 
     /// Returns a loose object database reader for this repository.

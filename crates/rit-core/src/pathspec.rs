@@ -1,4 +1,4 @@
-use crate::{Result, RitError};
+use crate::{AttributeState, GitAttributes, Result, RitError};
 
 /// A small, conservative subset of Git pathspec matching.
 ///
@@ -17,6 +17,21 @@ pub struct PathspecPattern {
     mode: PathspecMatchMode,
     ignore_case: bool,
     exclude: bool,
+    attributes: Vec<AttributeRequirement>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct AttributeRequirement {
+    name: String,
+    state: AttributeRequirementState,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum AttributeRequirementState {
+    Set,
+    Unset,
+    Value(String),
+    Unspecified,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -58,6 +73,11 @@ impl PathspecSet {
 
     /// Returns true when a repository-relative slash path matches this set.
     pub fn matches(&self, path: &str) -> bool {
+        self.matches_with_attributes(path, None)
+    }
+
+    /// Returns true when a path and optional attributes match this set.
+    pub fn matches_with_attributes(&self, path: &str, attributes: Option<&GitAttributes>) -> bool {
         if self.is_all() {
             return true;
         }
@@ -65,7 +85,7 @@ impl PathspecSet {
         let has_positive = self.patterns.iter().any(|pattern| !pattern.exclude);
         let mut matched = !has_positive;
         for pattern in &self.patterns {
-            if pattern.matches(path) {
+            if pattern.matches_with_attributes(path, attributes) {
                 if pattern.exclude {
                     return false;
                 }
@@ -102,6 +122,11 @@ impl PathspecPattern {
         self.exclude
     }
 
+    /// Returns true when this pattern requires `.gitattributes` state.
+    pub fn has_attribute_requirements(&self) -> bool {
+        !self.attributes.is_empty()
+    }
+
     /// Returns true when this pattern is a non-wildcard exact path filter.
     pub(crate) fn is_exact_path(&self, path: &str) -> bool {
         !self.has_wildcard() && self.pattern == path
@@ -112,8 +137,14 @@ impl PathspecPattern {
         !self.has_wildcard() && self.pattern.starts_with(&format!("{directory}/"))
     }
 
-    /// Returns true when this pathspec matches a repository-relative slash path.
-    pub(crate) fn matches(&self, path: &str) -> bool {
+    pub(crate) fn matches_with_attributes(
+        &self,
+        path: &str,
+        attributes: Option<&GitAttributes>,
+    ) -> bool {
+        if !self.attributes_match(path, attributes) {
+            return false;
+        }
         if self.ignore_case {
             let pattern = self.pattern.to_ascii_lowercase();
             let path = path.to_ascii_lowercase();
@@ -127,6 +158,30 @@ impl PathspecPattern {
             PathspecMatchMode::Default => pattern_matches(&self.pattern, path),
             PathspecMatchMode::Literal => literal_pattern_matches(&self.pattern, path),
             PathspecMatchMode::Glob => glob_pattern_matches(&self.pattern, path),
+        }
+    }
+
+    fn attributes_match(&self, path: &str, attributes: Option<&GitAttributes>) -> bool {
+        self.attributes.iter().all(|requirement| {
+            let state = attributes
+                .and_then(|attributes| attributes.state_for_path(path, &requirement.name));
+            requirement.matches(state)
+        })
+    }
+}
+
+impl AttributeRequirement {
+    fn matches(&self, state: Option<AttributeState>) -> bool {
+        match (&self.state, state) {
+            (AttributeRequirementState::Set, Some(AttributeState::Set)) => true,
+            (AttributeRequirementState::Unset, Some(AttributeState::Unset)) => true,
+            (AttributeRequirementState::Value(expected), Some(AttributeState::Value(actual))) => {
+                expected == &actual
+            }
+            (AttributeRequirementState::Unspecified, None | Some(AttributeState::Unspecified)) => {
+                true
+            }
+            _ => false,
         }
     }
 }
@@ -317,6 +372,7 @@ fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
             mode: PathspecMatchMode::Default,
             ignore_case: false,
             exclude: false,
+            attributes: Vec::new(),
         });
     }
     if let Some(pattern) = normalized
@@ -328,6 +384,7 @@ fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
             mode: PathspecMatchMode::Default,
             ignore_case: false,
             exclude: true,
+            attributes: Vec::new(),
         });
     }
     if let Some(rest) = normalized.strip_prefix(":(") {
@@ -340,6 +397,7 @@ fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
         let mut top = false;
         let mut ignore_case = false;
         let mut exclude = false;
+        let mut attributes = Vec::new();
         for word in magic.split(',').filter(|word| !word.is_empty()) {
             match word {
                 "top" => top = true,
@@ -347,6 +405,12 @@ fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
                 "glob" => mode = PathspecMatchMode::Glob,
                 "icase" => ignore_case = true,
                 "exclude" => exclude = true,
+                word if word.starts_with("attr:") => {
+                    attributes.extend(parse_attribute_requirements(
+                        word.trim_start_matches("attr:"),
+                        pathspec,
+                    )?);
+                }
                 _ => {
                     return Err(RitError::invalid_input(format!(
                         "unsupported pathspec magic '{word}' in {pathspec}"
@@ -360,6 +424,7 @@ fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
             mode,
             ignore_case,
             exclude,
+            attributes,
         });
     }
 
@@ -374,7 +439,44 @@ fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
         mode: PathspecMatchMode::Default,
         ignore_case: false,
         exclude: false,
+        attributes: Vec::new(),
     })
+}
+
+fn parse_attribute_requirements(
+    requirements: &str,
+    pathspec: &str,
+) -> Result<Vec<AttributeRequirement>> {
+    let mut output = Vec::new();
+    for token in requirements.split_whitespace() {
+        if token.is_empty() {
+            continue;
+        }
+        let (name, state) = if let Some(name) = token.strip_prefix('-') {
+            (name, AttributeRequirementState::Unset)
+        } else if let Some(name) = token.strip_prefix('!') {
+            (name, AttributeRequirementState::Unspecified)
+        } else if let Some((name, value)) = token.split_once('=') {
+            (name, AttributeRequirementState::Value(value.to_owned()))
+        } else {
+            (token, AttributeRequirementState::Set)
+        };
+        if name.is_empty() {
+            return Err(RitError::invalid_input(format!(
+                "invalid attr pathspec magic in {pathspec}"
+            )));
+        }
+        output.push(AttributeRequirement {
+            name: name.to_owned(),
+            state,
+        });
+    }
+    if output.is_empty() {
+        return Err(RitError::invalid_input(format!(
+            "empty attr pathspec magic in {pathspec}"
+        )));
+    }
+    Ok(output)
 }
 
 fn normalize_pathspec_pattern(pattern: &str, original: &str, top_magic: bool) -> Result<String> {
@@ -411,6 +513,7 @@ fn normalize_pathspec_pattern(pattern: &str, original: &str, top_magic: bool) ->
 #[cfg(test)]
 mod tests {
     use super::PathspecSet;
+    use crate::GitAttributes;
 
     #[test]
     fn empty_pathspec_matches_every_path() {
@@ -548,9 +651,38 @@ mod tests {
     }
 
     #[test]
+    fn attr_magic_matches_attribute_states() {
+        let attributes = GitAttributes::parse(
+            "*.rs text\n*.bin -text\ndocs/*.md diff=markdown\nplain.txt !diff\n",
+        )
+        .expect("attributes should parse");
+
+        let pathspec =
+            PathspecSet::from_args(&[":(attr:text)*".to_owned()]).expect("valid attr pathspec");
+        assert!(pathspec.matches_with_attributes("main.rs", Some(&attributes)));
+        assert!(!pathspec.matches_with_attributes("image.bin", Some(&attributes)));
+
+        let pathspec =
+            PathspecSet::from_args(&[":(attr:-text)*".to_owned()]).expect("valid attr pathspec");
+        assert!(pathspec.matches_with_attributes("image.bin", Some(&attributes)));
+        assert!(!pathspec.matches_with_attributes("main.rs", Some(&attributes)));
+
+        let pathspec = PathspecSet::from_args(&[":(attr:diff=markdown)*".to_owned()])
+            .expect("valid attr value pathspec");
+        assert!(pathspec.matches_with_attributes("docs/readme.md", Some(&attributes)));
+        assert!(!pathspec.matches_with_attributes("main.rs", Some(&attributes)));
+
+        let pathspec =
+            PathspecSet::from_args(&[":(attr:!diff)*".to_owned()]).expect("valid attr pathspec");
+        assert!(pathspec.matches_with_attributes("main.rs", Some(&attributes)));
+        assert!(pathspec.matches_with_attributes("plain.txt", Some(&attributes)));
+        assert!(!pathspec.matches_with_attributes("docs/readme.md", Some(&attributes)));
+    }
+
+    #[test]
     fn unsupported_magic_returns_clear_error() {
-        let error =
-            PathspecSet::from_args(&[":(attr:text)README.md".to_owned()]).expect_err("unsupported");
+        let error = PathspecSet::from_args(&[":(max-depth:1)README.md".to_owned()])
+            .expect_err("unsupported");
 
         assert!(error.to_string().contains("unsupported pathspec magic"));
     }

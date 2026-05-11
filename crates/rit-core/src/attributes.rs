@@ -65,6 +65,22 @@ impl GitAttributes {
     pub fn macros(&self) -> &[AttributeMacro] {
         &self.macros
     }
+
+    /// Returns the final state for one attribute on a repository-relative path.
+    pub fn state_for_path(&self, path: &str, name: &str) -> Option<AttributeState> {
+        let mut state = None;
+        for rule in &self.rules {
+            if !attribute_pattern_matches(&rule.pattern, path) {
+                continue;
+            }
+            for assignment in &rule.assignments {
+                if assignment.name == name {
+                    state = Some(assignment.state.clone());
+                }
+            }
+        }
+        state
+    }
 }
 
 /// One path pattern and the attributes assigned by that line.
@@ -146,6 +162,46 @@ fn validate_attribute_name(name: &str, line_number: usize) -> Result<()> {
     Ok(())
 }
 
+fn attribute_pattern_matches(pattern: &str, path: &str) -> bool {
+    let pattern = pattern.trim_start_matches('/');
+    if pattern.contains('/') {
+        return attribute_wildcard_matches(pattern, path);
+    }
+    path.rsplit('/')
+        .next()
+        .is_some_and(|name| attribute_wildcard_matches(pattern, name))
+}
+
+fn attribute_wildcard_matches(pattern: &str, path: &str) -> bool {
+    let pattern = pattern.as_bytes();
+    let path = path.as_bytes();
+    let mut pattern_index = 0;
+    let mut path_index = 0;
+    let mut last_star = None;
+    let mut path_after_star = 0;
+
+    while path_index < path.len() {
+        if pattern.get(pattern_index) == Some(&b'*') {
+            last_star = Some(pattern_index);
+            pattern_index += 1;
+            path_after_star = path_index;
+        } else if pattern.get(pattern_index) == Some(&path[path_index]) {
+            pattern_index += 1;
+            path_index += 1;
+        } else if let Some(star_index) = last_star {
+            pattern_index = star_index + 1;
+            path_after_star += 1;
+            path_index = path_after_star;
+        } else {
+            return false;
+        }
+    }
+
+    pattern[pattern_index..]
+        .iter()
+        .all(|character| *character == b'*')
+}
+
 #[cfg(test)]
 mod tests {
     use super::{AttributeState, GitAttributes};
@@ -200,5 +256,31 @@ mod tests {
         let error = GitAttributes::parse("*.rs\n").expect_err("rule should fail");
 
         assert!(error.to_string().contains("has no attributes"));
+    }
+
+    #[test]
+    fn resolves_attribute_state_for_paths() {
+        let attributes = GitAttributes::parse(
+            "*.rs text diff=rust\n*.bin -text\ndocs/*.md diff=markdown\nplain.txt !diff\n",
+        )
+        .expect("attributes should parse");
+
+        assert_eq!(
+            attributes.state_for_path("src/main.rs", "text"),
+            Some(AttributeState::Set)
+        );
+        assert_eq!(
+            attributes.state_for_path("image.bin", "text"),
+            Some(AttributeState::Unset)
+        );
+        assert_eq!(
+            attributes.state_for_path("docs/readme.md", "diff"),
+            Some(AttributeState::Value("markdown".to_owned()))
+        );
+        assert_eq!(
+            attributes.state_for_path("plain.txt", "diff"),
+            Some(AttributeState::Unspecified)
+        );
+        assert_eq!(attributes.state_for_path("README.md", "diff"), None);
     }
 }

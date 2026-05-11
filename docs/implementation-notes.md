@@ -39,6 +39,10 @@
   and direct Git comparisons for mismatched-case `git add` pathspecs.
 - 2026-05-10 exclude pathspec magic slice checked direct Git comparisons for
   `:!`, `:^`, and `:(exclude)` in `status`, `diff`, `ls-files`, and `add`.
+- 2026-05-11 attr pathspec magic slice checked `git config -h`, `git status -h`,
+  `git add -h`, `git diff -h`, and direct Git comparisons for
+  `:(attr:name)`, `:(attr:-name)`, `:(attr:name=value)`, and `:(attr:!name)`
+  in `status`, `diff`, `ls-files`, and `add`.
 
 ## Milestone Notes
 
@@ -514,6 +518,10 @@
 - Supported parser surface: repository-level `.gitattributes` style lines with
   ordinary path patterns, `[attr]name` macro definitions, and `name`, `-name`,
   `name=value`, and `!name` assignment tokens.
-- Unsupported behavior: applying attributes to paths, nested attributes files,
-  quoted pattern parsing, macro expansion, and CLI `check-attr` output.
+- Supported path application: root worktree `.gitattributes` rules can be
+  applied to repository-relative paths for `:(attr:...)` pathspec matching.
+  Supported requirements are set, unset, exact value, and unspecified states.
+- Unsupported behavior: nested attributes files, full Git wildcard syntax in
+  attributes patterns, quoted pattern parsing, macro expansion, and CLI
+  `check-attr` output.
 - Repository mutation: no.

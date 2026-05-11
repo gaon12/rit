@@ -215,7 +215,8 @@ Completion criteria:
   - [x] Positive `:(literal)`, `:(glob)`, `:(top)`, and `:/` forms.
   - [x] Case-insensitive `:(icase)` pathspec magic.
   - [x] Exclude `:!`, `:^`, and `:(exclude)` pathspec magic.
-  - [ ] Attr pathspec magic.
+  - [x] Attr pathspec magic for root `.gitattributes` set/unset/value/
+    unspecified requirements.
 - [~] Case-sensitivity behavior by platform/config.
   - [x] `git add` honors `core.ignorecase=true` for mismatched-case
     pathspecs that Git accepts as no-ops.

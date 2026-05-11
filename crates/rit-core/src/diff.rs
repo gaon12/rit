@@ -262,10 +262,11 @@ impl Repository {
             ));
         };
         let index = Index::read(&self.git_dir().join("index"))?;
+        let attributes = self.root_attributes()?;
         let mut files = Vec::new();
 
         for entry in index.entries {
-            if !pathspecs.matches(&entry.path) {
+            if !pathspecs.matches_with_attributes(&entry.path, Some(&attributes)) {
                 continue;
             }
             let worktree_path = join_slash_path(worktree, &entry.path);
@@ -319,10 +320,11 @@ impl Repository {
             ));
         };
         let index = Index::read(&self.git_dir().join("index"))?;
+        let attributes = self.root_attributes()?;
         let mut files = Vec::new();
 
         for entry in index.entries {
-            if !pathspecs.matches(&entry.path) {
+            if !pathspecs.matches_with_attributes(&entry.path, Some(&attributes)) {
                 continue;
             }
             let worktree_path = join_slash_path(worktree, &entry.path);
@@ -389,6 +391,7 @@ impl Repository {
             })
             .collect::<BTreeMap<_, _>>();
         let head_entries = self.head_diff_entries()?;
+        let attributes = self.root_attributes()?;
         let paths = index_entries
             .keys()
             .chain(head_entries.keys())
@@ -397,7 +400,7 @@ impl Repository {
         let mut files = Vec::new();
 
         for path in paths {
-            if !pathspecs.matches(&path) {
+            if !pathspecs.matches_with_attributes(&path, Some(&attributes)) {
                 continue;
             }
             match (head_entries.get(&path), index_entries.get(&path)) {
@@ -467,6 +470,7 @@ impl Repository {
             })
             .collect::<BTreeMap<_, _>>();
         let head_entries = self.head_diff_entries()?;
+        let attributes = self.root_attributes()?;
         let paths = index_entries
             .keys()
             .chain(head_entries.keys())
@@ -475,7 +479,7 @@ impl Repository {
         let mut files = Vec::new();
 
         for path in paths {
-            if !pathspecs.matches(&path) {
+            if !pathspecs.matches_with_attributes(&path, Some(&attributes)) {
                 continue;
             }
             match (head_entries.get(&path), index_entries.get(&path)) {

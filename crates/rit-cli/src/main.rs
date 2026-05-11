@@ -506,7 +506,10 @@ fn ls_tree_command(
         print_tree_entries(&object.data, name_only, object_only, stdout)?;
     } else {
         for pathspec in pathspecs.patterns() {
-            if pathspec.is_exclude() || pathspec.has_wildcard() {
+            if pathspec.is_exclude()
+                || pathspec.has_wildcard()
+                || pathspec.has_attribute_requirements()
+            {
                 continue;
             }
             match find_tree_entry_by_path(&repository, object_id, pathspec.pattern()) {
@@ -919,8 +922,15 @@ fn ls_files_command(
             return Ok(ExitCode::from(1));
         }
     };
+    let attributes = match repository.root_attributes() {
+        Ok(attributes) => attributes,
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            return Ok(ExitCode::from(1));
+        }
+    };
     for entry in index.entries {
-        if !pathspecs.matches(&entry.path) {
+        if !pathspecs.matches_with_attributes(&entry.path, Some(&attributes)) {
             continue;
         }
         if stage {

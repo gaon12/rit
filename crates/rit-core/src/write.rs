@@ -1,8 +1,8 @@
 use crate::index::{Index, IndexEntry, IndexEntryStat, join_slash_path, relative_slash_path};
 use crate::object::{hash_object, parse_tree_entries};
 use crate::{
-    GitConfig, ObjectId, ObjectKind, PathspecSet, Repository, Result, RitError, Signature,
-    parse_commit, refs::validate_ref_short_name,
+    GitAttributes, GitConfig, ObjectId, ObjectKind, PathspecSet, Repository, Result, RitError,
+    Signature, parse_commit, refs::validate_ref_short_name,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -182,7 +182,14 @@ impl Repository {
             .map(|entry| (entry.path.clone(), entry))
             .collect::<BTreeMap<_, _>>();
         let ignore_case = self.core_ignorecase_enabled()?;
-        let files_to_add = expand_add_pathspecs(worktree, &pathspecs, entries.keys(), ignore_case)?;
+        let attributes = self.root_attributes()?;
+        let files_to_add = expand_add_pathspecs(
+            worktree,
+            &pathspecs,
+            entries.keys(),
+            ignore_case,
+            &attributes,
+        )?;
         let symlinks_enabled = self.core_symlinks_enabled()?;
 
         for relative_path in files_to_add {
@@ -225,7 +232,9 @@ impl Repository {
         }
 
         for path in entries.keys().cloned().collect::<Vec<_>>() {
-            if pathspecs.matches(&path) && !join_slash_path(worktree, &path).exists() {
+            if pathspecs.matches_with_attributes(&path, Some(&attributes))
+                && !join_slash_path(worktree, &path).exists()
+            {
                 entries.remove(&path);
             }
         }
@@ -307,10 +316,11 @@ impl Repository {
         let index = Index::read(&self.git_dir().join("index"))?;
         let pathspecs = PathspecSet::from_args(paths)?;
         let symlinks_enabled = self.core_symlinks_enabled()?;
+        let attributes = self.root_attributes()?;
         let entries = index
             .entries
             .iter()
-            .filter(|entry| pathspecs.matches(&entry.path))
+            .filter(|entry| pathspecs.matches_with_attributes(&entry.path, Some(&attributes)))
             .collect::<Vec<_>>();
         if entries.is_empty() {
             return Err(RitError::invalid_input(format!(
@@ -349,6 +359,7 @@ impl Repository {
             return Err(RitError::invalid_input("reset requires at least one path"));
         }
         let pathspecs = PathspecSet::from_args(paths)?;
+        let attributes = self.root_attributes()?;
 
         let index_path = self.git_dir().join("index");
         let index = Index::read(&index_path)?;
@@ -361,7 +372,7 @@ impl Repository {
         let target_paths = index_entries
             .keys()
             .chain(head_entries.keys())
-            .filter(|path| pathspecs.matches(path))
+            .filter(|path| pathspecs.matches_with_attributes(path, Some(&attributes)))
             .cloned()
             .collect::<BTreeSet<_>>();
         if target_paths.is_empty() {
@@ -636,6 +647,7 @@ fn expand_add_pathspecs<'a>(
     pathspecs: &PathspecSet,
     indexed_paths: impl Iterator<Item = &'a String>,
     ignore_case: bool,
+    attributes: &GitAttributes,
 ) -> Result<BTreeSet<String>> {
     let mut files = BTreeSet::new();
 
@@ -647,7 +659,7 @@ fn expand_add_pathspecs<'a>(
 
     if pathspecs.is_all() || positive_patterns.is_empty() {
         collect_regular_files(worktree, worktree, &mut files)?;
-        files.retain(|path| pathspecs.matches(path));
+        files.retain(|path| pathspecs.matches_with_attributes(path, Some(attributes)));
         return Ok(files);
     }
 
@@ -665,12 +677,17 @@ fn expand_add_pathspecs<'a>(
                 .expect("wildcard expansion should collect worktree files");
             let mut matched = false;
             for path in all_worktree_files {
-                if pattern.matches(path) {
+                if pattern.matches_with_attributes(path, Some(attributes))
+                    && pathspecs.matches_with_attributes(path, Some(attributes))
+                {
                     files.insert(path.clone());
                     matched = true;
                 }
             }
-            if indexed_paths.iter().any(|path| pattern.matches(path)) {
+            if indexed_paths.iter().any(|path| {
+                pattern.matches_with_attributes(path, Some(attributes))
+                    && pathspecs.matches_with_attributes(path, Some(attributes))
+            }) {
                 matched = true;
             }
             if !matched {
@@ -695,7 +712,10 @@ fn expand_add_pathspecs<'a>(
                 files.insert(relative_slash_path(worktree, &full_path)?);
             } else if exact_case_exists && full_path.is_dir() {
                 collect_regular_files(worktree, &full_path, &mut files)?;
-            } else if indexed_paths.iter().any(|path| pattern.matches(path)) {
+            } else if indexed_paths.iter().any(|path| {
+                pattern.matches_with_attributes(path, Some(attributes))
+                    && pathspecs.matches_with_attributes(path, Some(attributes))
+            }) {
                 continue;
             } else {
                 return Err(RitError::invalid_input(format!(
@@ -706,7 +726,7 @@ fn expand_add_pathspecs<'a>(
         }
     }
 
-    files.retain(|path| pathspecs.matches(path));
+    files.retain(|path| pathspecs.matches_with_attributes(path, Some(attributes)));
 
     Ok(files)
 }

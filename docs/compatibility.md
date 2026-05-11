@@ -54,8 +54,11 @@ The current codebase implements an early local Git subset:
 - Ordinary literal file, directory, and `.` pathspec expansion is supported for
   `add`, `restore`, and `reset`.
 - `.gitattributes` parser support exists for ordinary rule lines, macro
-  definitions, and set/unset/value/unspecified assignment states; applying
-  attributes to paths is not implemented yet.
+  definitions, and set/unset/value/unspecified assignment states. Root
+  `.gitattributes` rules are applied for `:(attr:...)` pathspecs in the shared
+  path filtering used by supported `status`, `diff`, `ls-files`, and write
+  paths. Nested attributes files, macro expansion, quoted patterns, and full
+  Git wildcard syntax are still not implemented.
 - `add --chmod=+x|-x` records executable-bit mode overrides in the index and
   committed trees.
 - On Unix, `status --porcelain=v1` detects worktree executable-bit changes and

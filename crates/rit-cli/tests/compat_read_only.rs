@@ -228,6 +228,33 @@ fn diff_pathspec_outputs_match_git() {
 }
 
 #[test]
+fn diff_attr_pathspec_outputs_match_git() {
+    let fixture = AttrPathspecFixture::new("attr-pathspec-diff");
+
+    for args in [
+        vec!["diff", "--name-only", "--", ":(attr:text)*"],
+        vec!["diff", "--name-only", "--", ":(attr:-text)*"],
+        vec!["diff", "--name-only", "--", ":(attr:diff=markdown)*"],
+        vec!["diff", "--name-only", "--", ":(attr:!diff)*"],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "attr pathspec diff {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn status_pathspec_outputs_match_git() {
     let fixture = DiffFixture::new("pathspec-status");
 
@@ -278,6 +305,33 @@ fn status_pathspec_outputs_match_git() {
         assert!(
             outcome.is_match(),
             "exclude pathspec status {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
+fn status_attr_pathspec_outputs_match_git() {
+    let fixture = AttrPathspecFixture::new("attr-pathspec-status");
+
+    for args in [
+        vec!["status", "--porcelain=v1", "--", ":(attr:text)*"],
+        vec!["status", "--porcelain=v1", "--", ":(attr:-text)*"],
+        vec!["status", "--porcelain=v1", "--", ":(attr:diff=markdown)*"],
+        vec!["status", "--porcelain=v1", "--", ":(attr:!diff)*"],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "attr pathspec status {:?}\n{}",
             args,
             outcome.report()
         );
@@ -628,6 +682,32 @@ fn ls_files_pathspec_outputs_match_git() {
 }
 
 #[test]
+fn ls_files_attr_pathspec_outputs_match_git() {
+    let fixture = AttrPathspecFixture::new("attr-pathspec-ls-files");
+
+    for args in [
+        vec!["ls-files", "--", ":(attr:text)*"],
+        vec!["ls-files", "--stage", "--", ":(attr:-text)*"],
+        vec!["ls-files", "--", ":(attr:diff=markdown)*"],
+        vec!["ls-files", "--", ":(attr:!diff)*"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "attr pathspec ls-files {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn ls_tree_pathspec_outputs_match_git() {
     let fixture = DiffFixture::new("pathspec-ls-tree");
 
@@ -758,6 +838,66 @@ impl DiffFixture {
 }
 
 impl Drop for DiffFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct AttrPathspecFixture {
+    path: PathBuf,
+}
+
+impl AttrPathspecFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+        run_git(&path, ["config", "core.eol", "lf"]);
+
+        fs::write(
+            path.join(".gitattributes"),
+            "*.rs text\n*.bin -text\ndocs/*.md diff=markdown\nplain.txt !diff\n",
+        )
+        .expect("attributes file should be written");
+        fs::write(path.join("main.rs"), "fn main() {}\n").expect("rust file should be written");
+        fs::write(path.join("image.bin"), [0, 1, 2]).expect("binary file should be written");
+        fs::create_dir_all(path.join("docs")).expect("docs directory should be created");
+        fs::write(path.join("docs").join("readme.md"), "hello\n")
+            .expect("markdown file should be written");
+        fs::write(path.join("plain.txt"), "plain\n").expect("plain file should be written");
+        run_git(
+            &path,
+            [
+                "add",
+                ".gitattributes",
+                "main.rs",
+                "image.bin",
+                "docs/readme.md",
+                "plain.txt",
+            ],
+        );
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+
+        fs::write(path.join("main.rs"), "fn main() { println!(\"hi\"); }\n")
+            .expect("rust file should be modified");
+        fs::write(path.join("image.bin"), [0, 1, 2, 3]).expect("binary file should be modified");
+        fs::write(path.join("docs").join("readme.md"), "hello\nworld\n")
+            .expect("markdown file should be modified");
+        fs::write(path.join("plain.txt"), "plain\nchanged\n")
+            .expect("plain file should be modified");
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for AttrPathspecFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

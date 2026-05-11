@@ -1,7 +1,7 @@
 use crate::index::{Index, join_slash_path, relative_slash_path};
 use crate::object::{ObjectKind, hash_object, parse_tree_entries};
 use crate::parse_commit;
-use crate::{ObjectId, PathspecSet, Repository, Result, RitError};
+use crate::{GitAttributes, ObjectId, PathspecSet, Repository, Result, RitError};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
@@ -171,6 +171,7 @@ impl Repository {
         let ignore_rules = IgnoreRules::read(worktree, self.common_dir())?;
         let working_tree = scan_working_tree(worktree, &ignore_rules)?;
         let symlinks_enabled = self.core_symlinks_enabled()?;
+        let attributes = self.root_attributes()?;
 
         let mut entries = Vec::new();
         let mut index_refreshed = false;
@@ -227,7 +228,9 @@ impl Repository {
                 }
             };
 
-            if pathspecs.matches(path) && (index_status != ' ' || worktree_status != ' ') {
+            if pathspecs.matches_with_attributes(path, Some(&attributes))
+                && (index_status != ' ' || worktree_status != ' ')
+            {
                 entries.push(StatusEntry {
                     index_status,
                     worktree_status,
@@ -242,6 +245,7 @@ impl Repository {
                 &tracked_paths,
                 pathspecs,
                 options.untracked_files,
+                &attributes,
             ) {
                 if !index_entries.contains_key(&path) {
                     entries.push(StatusEntry {
@@ -253,7 +257,12 @@ impl Repository {
             }
 
             if options.include_ignored {
-                for path in ignored_status_paths(&working_tree.ignored, &tracked_paths, pathspecs) {
+                for path in ignored_status_paths(
+                    &working_tree.ignored,
+                    &tracked_paths,
+                    pathspecs,
+                    &attributes,
+                ) {
                     entries.push(StatusEntry {
                         index_status: '!',
                         worktree_status: '!',
@@ -416,11 +425,14 @@ fn collapse_untracked_paths(
     working_files: &BTreeSet<String>,
     tracked_paths: &BTreeSet<String>,
     pathspecs: &PathspecSet,
+    attributes: &GitAttributes,
 ) -> BTreeSet<String> {
     let mut output = BTreeSet::new();
 
     for path in working_files {
-        if tracked_paths.contains(path) || !pathspecs.matches(path) {
+        if tracked_paths.contains(path)
+            || !pathspecs.matches_with_attributes(path, Some(attributes))
+        {
             continue;
         }
 
@@ -435,15 +447,19 @@ fn untracked_status_paths(
     tracked_paths: &BTreeSet<String>,
     pathspecs: &PathspecSet,
     mode: UntrackedFilesMode,
+    attributes: &GitAttributes,
 ) -> BTreeSet<String> {
     match mode {
         UntrackedFilesMode::No => BTreeSet::new(),
         UntrackedFilesMode::Normal => {
-            collapse_untracked_paths(working_files, tracked_paths, pathspecs)
+            collapse_untracked_paths(working_files, tracked_paths, pathspecs, attributes)
         }
         UntrackedFilesMode::All => working_files
             .iter()
-            .filter(|path| !tracked_paths.contains(*path) && pathspecs.matches(path))
+            .filter(|path| {
+                !tracked_paths.contains(*path)
+                    && pathspecs.matches_with_attributes(path, Some(attributes))
+            })
             .cloned()
             .collect(),
     }
@@ -453,20 +469,25 @@ fn ignored_status_paths(
     ignored_paths: &BTreeSet<String>,
     tracked_paths: &BTreeSet<String>,
     pathspecs: &PathspecSet,
+    attributes: &GitAttributes,
 ) -> BTreeSet<String> {
     ignored_paths
         .iter()
         .filter(|path| {
             let normalized = path.trim_end_matches('/');
-            ignored_path_matches_pathspecs(path, pathspecs)
+            ignored_path_matches_pathspecs(path, pathspecs, attributes)
                 && !has_tracked_path_below(tracked_paths, normalized)
         })
         .cloned()
         .collect()
 }
 
-fn ignored_path_matches_pathspecs(path: &str, pathspecs: &PathspecSet) -> bool {
-    if pathspecs.matches(path) {
+fn ignored_path_matches_pathspecs(
+    path: &str,
+    pathspecs: &PathspecSet,
+    attributes: &GitAttributes,
+) -> bool {
+    if pathspecs.matches_with_attributes(path, Some(attributes)) {
         return true;
     }
 
@@ -812,9 +833,9 @@ mod tests {
         UntrackedFilesMode, collapse_untracked_paths, ignored_status_paths, quote_porcelain_path,
         untracked_status_paths,
     };
-    use crate::PathspecSet;
     #[cfg(unix)]
     use crate::{AddOptions, FileModeOverride, InitOptions, Repository};
+    use crate::{GitAttributes, PathspecSet};
     use std::collections::BTreeSet;
     #[cfg(unix)]
     use std::fs;
@@ -956,8 +977,10 @@ mod tests {
         let working_files = set(["dir/a.txt", "dir/sub/b.txt", "root.txt"]);
         let tracked_paths = BTreeSet::new();
         let pathspecs = PathspecSet::all();
+        let attributes = GitAttributes::default();
 
-        let collapsed = collapse_untracked_paths(&working_files, &tracked_paths, &pathspecs);
+        let collapsed =
+            collapse_untracked_paths(&working_files, &tracked_paths, &pathspecs, &attributes);
 
         assert_eq!(collapsed, set(["dir/", "root.txt"]));
     }
@@ -967,8 +990,10 @@ mod tests {
         let working_files = set(["dir/new/a.txt", "dir/tracked.txt"]);
         let tracked_paths = set(["dir/tracked.txt"]);
         let pathspecs = PathspecSet::all();
+        let attributes = GitAttributes::default();
 
-        let collapsed = collapse_untracked_paths(&working_files, &tracked_paths, &pathspecs);
+        let collapsed =
+            collapse_untracked_paths(&working_files, &tracked_paths, &pathspecs, &attributes);
 
         assert_eq!(collapsed, set(["dir/new/"]));
     }
@@ -979,8 +1004,10 @@ mod tests {
         let tracked_paths = BTreeSet::new();
         let pathspecs =
             PathspecSet::from_args(&["dir/sub/a.txt".to_owned()]).expect("pathspec should parse");
+        let attributes = GitAttributes::default();
 
-        let collapsed = collapse_untracked_paths(&working_files, &tracked_paths, &pathspecs);
+        let collapsed =
+            collapse_untracked_paths(&working_files, &tracked_paths, &pathspecs, &attributes);
 
         assert_eq!(collapsed, set(["dir/sub/a.txt"]));
     }
@@ -990,12 +1017,14 @@ mod tests {
         let working_files = set(["dir/a.txt", "dir/sub/b.txt", "root.txt"]);
         let tracked_paths = BTreeSet::new();
         let pathspecs = PathspecSet::all();
+        let attributes = GitAttributes::default();
 
         let paths = untracked_status_paths(
             &working_files,
             &tracked_paths,
             &pathspecs,
             UntrackedFilesMode::All,
+            &attributes,
         );
 
         assert_eq!(paths, set(["dir/a.txt", "dir/sub/b.txt", "root.txt"]));
@@ -1006,12 +1035,14 @@ mod tests {
         let working_files = set(["dir/a.txt", "root.txt"]);
         let tracked_paths = BTreeSet::new();
         let pathspecs = PathspecSet::all();
+        let attributes = GitAttributes::default();
 
         let paths = untracked_status_paths(
             &working_files,
             &tracked_paths,
             &pathspecs,
             UntrackedFilesMode::No,
+            &attributes,
         );
 
         assert!(paths.is_empty());
@@ -1022,8 +1053,9 @@ mod tests {
         let ignored_paths = set(["ignored/", "secret.txt", "tracked.log"]);
         let tracked_paths = set(["tracked.log"]);
         let pathspecs = PathspecSet::all();
+        let attributes = GitAttributes::default();
 
-        let paths = ignored_status_paths(&ignored_paths, &tracked_paths, &pathspecs);
+        let paths = ignored_status_paths(&ignored_paths, &tracked_paths, &pathspecs, &attributes);
 
         assert_eq!(paths, set(["ignored/", "secret.txt"]));
     }
@@ -1034,8 +1066,9 @@ mod tests {
         let tracked_paths = BTreeSet::new();
         let pathspecs =
             PathspecSet::from_args(&["ignored/deep/a.txt".to_owned()]).expect("valid pathspec");
+        let attributes = GitAttributes::default();
 
-        let paths = ignored_status_paths(&ignored_paths, &tracked_paths, &pathspecs);
+        let paths = ignored_status_paths(&ignored_paths, &tracked_paths, &pathspecs, &attributes);
 
         assert_eq!(paths, set(["ignored/"]));
     }

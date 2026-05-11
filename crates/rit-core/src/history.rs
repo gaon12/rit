@@ -64,10 +64,11 @@ impl Repository {
         } else {
             BTreeMap::new()
         };
+        let attributes = self.root_attributes()?;
         let paths = current_entries
             .keys()
             .chain(parent_entries.keys())
-            .filter(|path| pathspecs.matches(path))
+            .filter(|path| pathspecs.matches_with_attributes(path, Some(&attributes)))
             .collect::<BTreeSet<_>>();
 
         Ok(paths
