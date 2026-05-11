@@ -2,8 +2,8 @@ use crate::object::parse_tree_entries;
 use crate::{
     BlockingSmartHttpClient, FetchRefSpec, GitAttributes, GitConfig, GitObject, LooseObjectDb,
     ObjectId, ObjectKind, ReceivePackCommand, ReceivePackCommandStatus, ReceivePackRequest,
-    ReceivePackStatus, Result, RitError, SmartHttpAdvertisement, SmartHttpService, SparseCheckout,
-    TransportLocation, TransportProtocol, parse_commit,
+    ReceivePackStatus, Result, RitConfig, RitError, SmartHttpAdvertisement, SmartHttpService,
+    SparseCheckout, TransportLocation, TransportProtocol, parse_commit,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -490,6 +490,14 @@ impl Repository {
             GitConfig::default()
         };
         SparseCheckout::read_from_git_dir(&config, &self.git_dir)
+    }
+
+    /// Reads optional `rit.toml` workspace profile configuration.
+    pub fn rit_config(&self) -> Result<RitConfig> {
+        let Some(worktree) = self.worktree() else {
+            return Ok(RitConfig::default());
+        };
+        RitConfig::read_from_worktree(worktree)
     }
 
     /// Returns a loose object database reader for this repository.
@@ -1145,6 +1153,26 @@ mod tests {
         assert!(sparse.enabled);
         assert_eq!(sparse.mode, crate::SparseCheckoutMode::Cone);
         assert_eq!(sparse.cone_directories(), vec!["src"]);
+
+        remove_dir_all(&root);
+    }
+
+    #[test]
+    fn reads_rit_workspace_profile_config_from_worktree() {
+        let root = temp_path("repository-rit-config");
+        let repository = Repository::init(&InitOptions::new(&root)).expect("repo should init");
+        fs::write(
+            root.join("rit.toml"),
+            "[workspace.mobile]\ninclude = [\"apps/mobile\", \"packages/ui\"]\n",
+        )
+        .expect("rit config should be written");
+
+        let config = repository.rit_config().expect("rit config should read");
+        let mobile = config
+            .workspace_profile("mobile")
+            .expect("mobile profile should exist");
+
+        assert_eq!(mobile.include, vec!["apps/mobile", "packages/ui"]);
 
         remove_dir_all(&root);
     }

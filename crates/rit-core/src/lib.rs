@@ -22,6 +22,7 @@ pub mod repository;
 pub mod sparse;
 pub mod status;
 pub mod transport;
+pub mod workspace_profile;
 pub mod write;
 
 pub use error::{Result, RitError};
@@ -67,6 +68,7 @@ pub use transport::{
     SmartHttpService, SshServiceCommand, TransportLocation, TransportProtocol, UploadPackAckStatus,
     UploadPackAcknowledgement, UploadPackRequest, UploadPackResponse, UploadPackSideBand,
 };
+pub use workspace_profile::{RitConfig, WorkspaceProfile};
 pub use write::{
     AddOptions, CommitOptions, CommitResult, FileModeOverride, SignatureIdentity, SignatureTime,
 };

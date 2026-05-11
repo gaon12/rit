@@ -333,7 +333,9 @@ Completion criteria:
 - [x] Sparse checkout reader.
   - [x] Read `core.sparseCheckout`, `core.sparseCheckoutCone`, and
     `.git/info/sparse-checkout` pattern state without mutating the repository.
-- [ ] Workspace profile config.
+- [x] Workspace profile config.
+  - [x] Read optional `rit.toml` / `.rit.toml` workspace profile includes from
+    `[workspace.<name>]` tables.
 - [ ] Partial clone object policy.
 - [ ] Lazy file materialization policy.
 - [ ] Prefetch command shape.

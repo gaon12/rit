@@ -237,6 +237,8 @@
 - Added a read-only sparse-checkout state model for `core.sparseCheckout`,
   `core.sparseCheckoutCone`, and `.git/info/sparse-checkout` patterns.
 - Added `Repository::sparse_checkout()` as the public reader entry point.
+- Added optional `rit.toml` / `.rit.toml` workspace profile parsing for
+  `[workspace.<name>] include = [...]` and `Repository::rit_config()`.
 - Still unsupported: sparse-checkout write commands, named workspace profiles,
   partial clone object policy, lazy materialization, and prefetch command
   execution.
