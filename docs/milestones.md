@@ -255,8 +255,9 @@ Completion criteria:
   - [x] Upload-pack side-band pack/progress/error response parser.
   - [x] Upload-pack raw/side-band pack byte extraction.
   - [x] Received packfile checksum validation and `.pack` storage.
+  - [x] Non-delta received pack application to loose objects.
   - [x] Remote advertised refs discovery through the smart HTTP client.
-  - [ ] Remote pack negotiation and pack index/application.
+  - [ ] Remote pack negotiation and delta/index pack application.
 - [~] Push basics.
   - [x] receive-pack reference update request body model.
   - [x] receive-pack `report-status` parser.
@@ -430,5 +431,6 @@ Completion criteria:
     concatenate side-band band 1 pack data while surfacing band 3 errors.
   - Implemented: packfile `PACK` header/version/trailer checksum validation
     and atomic `.git/objects/pack/pack-<checksum>.pack` storage.
-  - Still open: building a pack index, and using the resulting objects in
-    remote fetch.
+  - Implemented: non-delta pack object application to loose objects.
+  - Still open: delta pack application, building a pack index, and using the
+    resulting objects in remote fetch.

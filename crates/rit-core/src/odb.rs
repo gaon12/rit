@@ -104,6 +104,47 @@ impl LooseObjectDb {
         })
     }
 
+    /// Unpacks non-delta pack entries into loose objects.
+    ///
+    /// Delta entries are intentionally rejected for now. They need base lookup
+    /// and ordered application, which will be added with full remote pack
+    /// application.
+    pub fn unpack_pack_as_loose(&self, pack_bytes: &[u8]) -> Result<Vec<ObjectId>> {
+        let (_, object_count) = validate_pack_bytes(pack_bytes)?;
+        let trailer_start = pack_bytes.len() - 20;
+        let mut position = 12;
+        let mut object_ids = Vec::new();
+
+        for _ in 0..object_count {
+            let (kind, size) = read_pack_object_header_from_bytes(pack_bytes, &mut position)?;
+            let PackObjectKind::Whole(kind) = kind else {
+                return Err(RitError::invalid_input(
+                    "delta pack application is not implemented yet",
+                ));
+            };
+            let mut decoder = ZlibDecoder::new(&pack_bytes[position..trailer_start]);
+            let mut data = Vec::new();
+            decoder
+                .read_to_end(&mut data)
+                .map_err(|source| RitError::io(self.objects_dir.join("pack"), source))?;
+            if data.len() != size {
+                return Err(RitError::invalid_input(format!(
+                    "pack object size mismatch: header says {size}, payload is {}",
+                    data.len()
+                )));
+            }
+            position += decoder.total_in() as usize;
+            object_ids.push(self.write_object(kind, &data)?);
+        }
+
+        if position != trailer_start {
+            return Err(RitError::invalid_input(
+                "packfile has trailing data before checksum",
+            ));
+        }
+        Ok(object_ids)
+    }
+
     /// Returns the path where a loose object should live.
     pub fn loose_object_path(&self, object_id: ObjectId) -> PathBuf {
         let hex = object_id.to_hex();
@@ -230,6 +271,44 @@ fn validate_pack_bytes(pack_bytes: &[u8]) -> Result<(ObjectId, u32)> {
         return Err(RitError::invalid_input("packfile checksum mismatch"));
     }
     Ok((ObjectId::from_bytes(expected_checksum), object_count))
+}
+
+fn read_pack_object_header_from_bytes(
+    bytes: &[u8],
+    position: &mut usize,
+) -> Result<(PackObjectKind, usize)> {
+    let first = read_pack_byte_from_bytes(bytes, position)?;
+    let object_type = (first >> 4) & 0x07;
+    let mut size = (first & 0x0f) as usize;
+    let mut shift = 4;
+    let mut byte = first;
+    while byte & 0x80 != 0 {
+        byte = read_pack_byte_from_bytes(bytes, position)?;
+        size |= ((byte & 0x7f) as usize) << shift;
+        shift += 7;
+    }
+    let kind = match object_type {
+        1 => PackObjectKind::Whole(ObjectKind::Commit),
+        2 => PackObjectKind::Whole(ObjectKind::Tree),
+        3 => PackObjectKind::Whole(ObjectKind::Blob),
+        4 => PackObjectKind::Whole(ObjectKind::Tag),
+        6 => PackObjectKind::OffsetDelta,
+        7 => PackObjectKind::RefDelta,
+        _ => {
+            return Err(RitError::invalid_input(format!(
+                "unknown pack object type: {object_type}"
+            )));
+        }
+    };
+    Ok((kind, size))
+}
+
+fn read_pack_byte_from_bytes(bytes: &[u8], position: &mut usize) -> Result<u8> {
+    let byte = *bytes
+        .get(*position)
+        .ok_or_else(|| RitError::invalid_input("pack object header is truncated"))?;
+    *position += 1;
+    Ok(byte)
 }
 
 fn remember_unique_object_id(
@@ -644,9 +723,11 @@ fn write_new_file_atomically(path: &Path, contents: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{LooseObjectDb, apply_delta_object};
-    use crate::{GitObject, ObjectKind, object::sha1_bytes};
+    use crate::{GitObject, ObjectKind, hash_object, object::sha1_bytes};
+    use flate2::{Compression, write::ZlibEncoder};
     use std::{
         fs,
+        io::Write,
         path::PathBuf,
         time::{SystemTime, UNIX_EPOCH},
     };
@@ -698,6 +779,36 @@ mod tests {
         assert!(!objects_dir.join("pack").exists());
     }
 
+    #[test]
+    fn unpacks_whole_pack_objects_as_loose_objects() {
+        let objects_dir = temp_path("unpack-whole").join("objects");
+        let database = LooseObjectDb::new(&objects_dir);
+        let pack = pack_with_one_blob(b"hello");
+
+        let object_ids = database
+            .unpack_pack_as_loose(&pack)
+            .expect("pack should unpack");
+
+        let expected_id = hash_object(ObjectKind::Blob, b"hello");
+        assert_eq!(object_ids, [expected_id]);
+        let object = database.read_object(expected_id).expect("loose object");
+        assert_eq!(object.kind, ObjectKind::Blob);
+        assert_eq!(object.data, b"hello");
+    }
+
+    #[test]
+    fn rejects_delta_pack_application_for_now() {
+        let objects_dir = temp_path("unpack-delta").join("objects");
+        let database = LooseObjectDb::new(&objects_dir);
+        let pack = pack_with_offset_delta_placeholder();
+
+        let error = database
+            .unpack_pack_as_loose(&pack)
+            .expect_err("delta should be rejected");
+
+        assert!(error.to_string().contains("delta"));
+    }
+
     fn empty_pack() -> Vec<u8> {
         let mut pack = Vec::new();
         pack.extend_from_slice(b"PACK");
@@ -706,6 +817,35 @@ mod tests {
         let checksum = sha1_bytes(&pack);
         pack.extend_from_slice(&checksum);
         pack
+    }
+
+    fn pack_with_one_blob(data: &[u8]) -> Vec<u8> {
+        let mut object = Vec::new();
+        object.push(0x30 | data.len() as u8);
+        object.extend_from_slice(&zlib(data));
+        pack_with_objects(1, &object)
+    }
+
+    fn pack_with_offset_delta_placeholder() -> Vec<u8> {
+        let object = [0x60, 0x01];
+        pack_with_objects(1, &object)
+    }
+
+    fn pack_with_objects(object_count: u32, objects: &[u8]) -> Vec<u8> {
+        let mut pack = Vec::new();
+        pack.extend_from_slice(b"PACK");
+        pack.extend_from_slice(&2_u32.to_be_bytes());
+        pack.extend_from_slice(&object_count.to_be_bytes());
+        pack.extend_from_slice(objects);
+        let checksum = sha1_bytes(&pack);
+        pack.extend_from_slice(&checksum);
+        pack
+    }
+
+    fn zlib(data: &[u8]) -> Vec<u8> {
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(data).expect("compress data");
+        encoder.finish().expect("finish zlib")
     }
 
     fn temp_path(name: &str) -> PathBuf {
