@@ -5,6 +5,7 @@ use crate::{
 use flate2::Compression;
 use flate2::read::ZlibDecoder;
 use flate2::write::ZlibEncoder;
+use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -104,37 +105,72 @@ impl LooseObjectDb {
         })
     }
 
-    /// Unpacks non-delta pack entries into loose objects.
+    /// Unpacks supported pack entries into loose objects.
     ///
-    /// Delta entries are intentionally rejected for now. They need base lookup
-    /// and ordered application, which will be added with full remote pack
-    /// application.
+    /// Whole objects and deltas whose base has already appeared in the same
+    /// pack, or already exists in the object database, are supported. Pack
+    /// indexes are still handled separately.
     pub fn unpack_pack_as_loose(&self, pack_bytes: &[u8]) -> Result<Vec<ObjectId>> {
         let (_, object_count) = validate_pack_bytes(pack_bytes)?;
         let trailer_start = pack_bytes.len() - 20;
         let mut position = 12;
+        let mut objects_by_offset: HashMap<u64, GitObject> = HashMap::new();
+        let mut objects_by_id: HashMap<ObjectId, GitObject> = HashMap::new();
         let mut object_ids = Vec::new();
 
         for _ in 0..object_count {
+            let object_offset = position;
             let (kind, size) = read_pack_object_header_from_bytes(pack_bytes, &mut position)?;
-            let PackObjectKind::Whole(kind) = kind else {
-                return Err(RitError::invalid_input(
-                    "delta pack application is not implemented yet",
-                ));
+            let object = match kind {
+                PackObjectKind::Whole(kind) => {
+                    let (data, consumed) = read_compressed_pack_payload_from_bytes(
+                        pack_bytes,
+                        position,
+                        trailer_start,
+                        size,
+                    )?;
+                    position += consumed;
+                    GitObject { kind, data }
+                }
+                PackObjectKind::OffsetDelta => {
+                    let base_offset = read_offset_delta_base_from_bytes(
+                        pack_bytes,
+                        &mut position,
+                        object_offset,
+                    )?;
+                    let (delta, consumed) = read_compressed_pack_payload_from_bytes(
+                        pack_bytes,
+                        position,
+                        trailer_start,
+                        size,
+                    )?;
+                    position += consumed;
+                    let base = objects_by_offset
+                        .get(&base_offset)
+                        .cloned()
+                        .ok_or_else(|| RitError::invalid_input("offset delta base is missing"))?;
+                    apply_delta_object(base, &delta)?
+                }
+                PackObjectKind::RefDelta => {
+                    let base_id = read_ref_delta_base_from_bytes(pack_bytes, &mut position)?;
+                    let (delta, consumed) = read_compressed_pack_payload_from_bytes(
+                        pack_bytes,
+                        position,
+                        trailer_start,
+                        size,
+                    )?;
+                    position += consumed;
+                    let base = match objects_by_id.get(&base_id) {
+                        Some(base) => base.clone(),
+                        None => self.read_object(base_id)?,
+                    };
+                    apply_delta_object(base, &delta)?
+                }
             };
-            let mut decoder = ZlibDecoder::new(&pack_bytes[position..trailer_start]);
-            let mut data = Vec::new();
-            decoder
-                .read_to_end(&mut data)
-                .map_err(|source| RitError::io(self.objects_dir.join("pack"), source))?;
-            if data.len() != size {
-                return Err(RitError::invalid_input(format!(
-                    "pack object size mismatch: header says {size}, payload is {}",
-                    data.len()
-                )));
-            }
-            position += decoder.total_in() as usize;
-            object_ids.push(self.write_object(kind, &data)?);
+            let object_id = self.write_object(object.kind, &object.data)?;
+            objects_by_offset.insert(object_offset as u64, object.clone());
+            objects_by_id.insert(object_id, object);
+            object_ids.push(object_id);
         }
 
         if position != trailer_start {
@@ -309,6 +345,58 @@ fn read_pack_byte_from_bytes(bytes: &[u8], position: &mut usize) -> Result<u8> {
         .ok_or_else(|| RitError::invalid_input("pack object header is truncated"))?;
     *position += 1;
     Ok(byte)
+}
+
+fn read_offset_delta_base_from_bytes(
+    bytes: &[u8],
+    position: &mut usize,
+    object_offset: usize,
+) -> Result<u64> {
+    let mut byte = read_pack_byte_from_bytes(bytes, position)?;
+    let mut distance = (byte & 0x7f) as u64;
+    while byte & 0x80 != 0 {
+        byte = read_pack_byte_from_bytes(bytes, position)?;
+        distance = ((distance + 1) << 7) | (byte & 0x7f) as u64;
+    }
+    (object_offset as u64)
+        .checked_sub(distance)
+        .ok_or_else(|| RitError::invalid_input("pack offset delta points before pack start"))
+}
+
+fn read_ref_delta_base_from_bytes(bytes: &[u8], position: &mut usize) -> Result<ObjectId> {
+    let end = position
+        .checked_add(20)
+        .ok_or_else(|| RitError::invalid_input("ref delta base offset overflows"))?;
+    let base = bytes
+        .get(*position..end)
+        .ok_or_else(|| RitError::invalid_input("ref delta base object id is truncated"))?;
+    let mut base_id = [0_u8; 20];
+    base_id.copy_from_slice(base);
+    *position = end;
+    Ok(ObjectId::from_bytes(base_id))
+}
+
+fn read_compressed_pack_payload_from_bytes(
+    bytes: &[u8],
+    position: usize,
+    trailer_start: usize,
+    expected_size: usize,
+) -> Result<(Vec<u8>, usize)> {
+    let payload = bytes
+        .get(position..trailer_start)
+        .ok_or_else(|| RitError::invalid_input("pack payload starts after trailer"))?;
+    let mut decoder = ZlibDecoder::new(payload);
+    let mut data = Vec::new();
+    decoder
+        .read_to_end(&mut data)
+        .map_err(|source| RitError::io("pack-bytes", source))?;
+    if data.len() != expected_size {
+        return Err(RitError::invalid_input(format!(
+            "pack object size mismatch: header says {expected_size}, payload is {}",
+            data.len()
+        )));
+    }
+    Ok((data, decoder.total_in() as usize))
 }
 
 fn remember_unique_object_id(
@@ -797,16 +885,41 @@ mod tests {
     }
 
     #[test]
-    fn rejects_delta_pack_application_for_now() {
-        let objects_dir = temp_path("unpack-delta").join("objects");
+    fn unpacks_offset_delta_pack_objects_as_loose_objects() {
+        let objects_dir = temp_path("unpack-offset-delta").join("objects");
         let database = LooseObjectDb::new(&objects_dir);
-        let pack = pack_with_offset_delta_placeholder();
+        let pack = pack_with_offset_delta_blob();
 
-        let error = database
+        let object_ids = database
             .unpack_pack_as_loose(&pack)
-            .expect_err("delta should be rejected");
+            .expect("offset delta should unpack");
 
-        assert!(error.to_string().contains("delta"));
+        let base_id = hash_object(ObjectKind::Blob, b"hello");
+        let delta_id = hash_object(ObjectKind::Blob, b"hello!");
+        assert_eq!(object_ids, [base_id, delta_id]);
+        let object = database.read_object(delta_id).expect("delta object");
+        assert_eq!(object.kind, ObjectKind::Blob);
+        assert_eq!(object.data, b"hello!");
+    }
+
+    #[test]
+    fn unpacks_ref_delta_pack_objects_as_loose_objects() {
+        let objects_dir = temp_path("unpack-ref-delta").join("objects");
+        let database = LooseObjectDb::new(&objects_dir);
+        let base_id = database
+            .write_object(ObjectKind::Blob, b"hello")
+            .expect("base object");
+        let pack = pack_with_ref_delta_blob(base_id);
+
+        let object_ids = database
+            .unpack_pack_as_loose(&pack)
+            .expect("ref delta should unpack");
+
+        let delta_id = hash_object(ObjectKind::Blob, b"hello!");
+        assert_eq!(object_ids, [delta_id]);
+        let object = database.read_object(delta_id).expect("delta object");
+        assert_eq!(object.kind, ObjectKind::Blob);
+        assert_eq!(object.data, b"hello!");
     }
 
     fn empty_pack() -> Vec<u8> {
@@ -826,9 +939,37 @@ mod tests {
         pack_with_objects(1, &object)
     }
 
-    fn pack_with_offset_delta_placeholder() -> Vec<u8> {
-        let object = [0x60, 0x01];
+    fn pack_with_offset_delta_blob() -> Vec<u8> {
+        let mut base = Vec::new();
+        base.push(0x35);
+        base.extend_from_slice(&zlib(b"hello"));
+
+        let base_offset = 12;
+        let delta_offset = base_offset + base.len();
+        let distance = delta_offset - base_offset;
+        let delta = blob_delta_hello_to_hello_bang();
+        let mut delta_object = Vec::new();
+        delta_object.push(0x60 | delta.len() as u8);
+        delta_object.push(distance as u8);
+        delta_object.extend_from_slice(&zlib(&delta));
+
+        let mut objects = Vec::new();
+        objects.extend_from_slice(&base);
+        objects.extend_from_slice(&delta_object);
+        pack_with_objects(2, &objects)
+    }
+
+    fn pack_with_ref_delta_blob(base_id: crate::ObjectId) -> Vec<u8> {
+        let delta = blob_delta_hello_to_hello_bang();
+        let mut object = Vec::new();
+        object.push(0x70 | delta.len() as u8);
+        object.extend_from_slice(base_id.as_bytes());
+        object.extend_from_slice(&zlib(&delta));
         pack_with_objects(1, &object)
+    }
+
+    fn blob_delta_hello_to_hello_bang() -> Vec<u8> {
+        vec![5, 6, 0x90, 5, 1, b'!']
     }
 
     fn pack_with_objects(object_count: u32, objects: &[u8]) -> Vec<u8> {
