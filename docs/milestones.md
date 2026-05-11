@@ -360,7 +360,8 @@ Completion criteria:
     providers without mutating process environment in tests.
 - [~] Git credential helper compatibility.
   - [x] Encode and parse Git credential helper line-protocol messages.
-  - [ ] Helper subprocess execution and configured helper lookup.
+  - [x] Read `credential.helper` command shape from Git config.
+  - [ ] Helper subprocess execution and helper chaining.
 - [ ] SSH agent integration.
 - [ ] OS keychain adapters.
 - [ ] CI non-interactive mode.

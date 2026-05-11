@@ -263,9 +263,11 @@
   `GITHUB_TOKEN`, `GITLAB_TOKEN`, and `HF_TOKEN`.
 - Added Git credential helper line-protocol encode/decode for request and
   response-shaped messages.
-- Still unsupported: Git credential helper subprocess execution/configured
-  helper lookup, SSH agent integration, OS keychain adapters, and CI
-  non-interactive policy.
+- Added `credential.helper` config lookup for helper command shape without
+  executing helper subprocesses.
+- Still unsupported: Git credential helper subprocess execution/helper
+  chaining, SSH agent integration, OS keychain adapters, and CI non-interactive
+  policy.
 
 ### `rit version`
 

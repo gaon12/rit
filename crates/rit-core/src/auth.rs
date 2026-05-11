@@ -1,4 +1,4 @@
-use crate::Result;
+use crate::{GitConfig, Result};
 use std::env;
 use std::fmt::{Debug, Display, Formatter};
 
@@ -203,6 +203,23 @@ pub struct GitCredentialMessage {
     pub password: Option<SecretString>,
 }
 
+/// Configured Git credential helper command.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GitCredentialHelper {
+    /// Raw `credential.helper` value.
+    pub command: String,
+}
+
+impl GitCredentialHelper {
+    /// Reads the last configured `credential.helper`, matching scalar config
+    /// lookup behavior used elsewhere in rit.
+    pub fn from_config(config: &GitConfig) -> Option<Self> {
+        config.get("credential", "helper").map(|helper| Self {
+            command: helper.to_owned(),
+        })
+    }
+}
+
 impl GitCredentialMessage {
     /// Creates a helper request from a credential lookup request.
     pub fn from_request(request: &CredentialRequest) -> Self {
@@ -357,5 +374,21 @@ mod tests {
             "super-secret-token"
         );
         assert!(!format!("{response:?}").contains("super-secret-token"));
+    }
+
+    #[test]
+    fn git_credential_helper_reads_configured_command() {
+        let config = GitConfig::parse(
+            r#"
+            [credential]
+                helper = cache
+                helper = manager
+            "#,
+        )
+        .expect("config should parse");
+
+        let helper = GitCredentialHelper::from_config(&config).expect("helper should exist");
+
+        assert_eq!(helper.command, "manager");
     }
 }
