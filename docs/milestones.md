@@ -355,7 +355,9 @@ Completion criteria:
 - [x] Credential abstraction.
   - [x] Add redacted credential, credential request, and provider trait models
     independent from transport execution.
-- [ ] Environment token provider.
+- [x] Environment token provider.
+  - [x] Read default token environment variables into redacted credential
+    providers without mutating process environment in tests.
 - [ ] Git credential helper compatibility.
 - [ ] SSH agent integration.
 - [ ] OS keychain adapters.

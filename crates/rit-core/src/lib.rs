@@ -85,7 +85,10 @@ pub fn version() -> &'static str {
 pub use attributes::{
     AttributeAssignment, AttributeMacro, AttributeRule, AttributeState, GitAttributes,
 };
-pub use auth::{Credential, CredentialKind, CredentialProvider, CredentialRequest, SecretString};
+pub use auth::{
+    Credential, CredentialKind, CredentialProvider, CredentialRequest, DEFAULT_TOKEN_ENV_VARS,
+    EnvironmentToken, EnvironmentTokenProvider, SecretString,
+};
 pub use commit::{Commit, Signature, parse_commit};
 pub use config::{GitConfig, GitConfigEntry};
 pub use diff::{DiffFileStat, DiffOptions, DiffPatch, DiffPatchFile, DiffSummary};

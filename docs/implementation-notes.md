@@ -259,9 +259,10 @@
   `CredentialRequest`, `CredentialProvider`, and redacted `SecretString`.
 - Secrets are redacted through `Debug` and `Display`; callers must explicitly
   call `expose_secret()` to authenticate.
-- Still unsupported: environment token provider, Git credential helper
-  subprocess compatibility, SSH agent integration, OS keychain adapters, and CI
-  non-interactive policy.
+- Added `EnvironmentTokenProvider` for `RIT_TOKEN`, `GIT_TOKEN`,
+  `GITHUB_TOKEN`, `GITLAB_TOKEN`, and `HF_TOKEN`.
+- Still unsupported: Git credential helper subprocess compatibility, SSH agent
+  integration, OS keychain adapters, and CI non-interactive policy.
 
 ### `rit version`
 
