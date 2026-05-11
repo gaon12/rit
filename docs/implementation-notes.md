@@ -301,7 +301,9 @@
   adapter that summarizes added, deleted, and changed function declarations.
 - Added optional `semantic-python` feature with a tree-sitter Python adapter
   that summarizes added, deleted, and changed function definitions.
-- Still unsupported: JSON semantic output.
+- Added `SemanticDiffReport` JSON output model behind `semantic-json`,
+  including path classification for code, tests, docs, and other files.
+- M12 still does not wire semantic summaries into the `rit diff` CLI.
 
 ### `rit version`
 

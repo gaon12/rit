@@ -386,7 +386,7 @@ Completion criteria:
 - [x] Rust semantic adapter.
 - [x] TypeScript semantic adapter.
 - [x] Python semantic adapter.
-- [ ] JSON output model.
+- [x] JSON output model.
 
 Completion criteria:
 - Semantic output is structured and can distinguish code-only changes from

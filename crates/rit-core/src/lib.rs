@@ -22,6 +22,8 @@ pub mod pathspec;
 pub mod refs;
 pub mod repository;
 pub mod semantic_diff;
+#[cfg(test)]
+mod semantic_diff_tests;
 #[cfg(feature = "semantic-python")]
 pub mod semantic_python;
 #[cfg(feature = "semantic-rust")]
@@ -69,7 +71,10 @@ pub use repository::{
 };
 #[cfg(feature = "semantic-tree-sitter")]
 pub use semantic_diff::TreeSitterSemanticParser;
-pub use semantic_diff::{WordDiff, WordDiffOperation, word_diff};
+pub use semantic_diff::{
+    SemanticDiffFile, SemanticDiffReport, SemanticFileCategory, WordDiff, WordDiffOperation,
+    classify_semantic_path, semantic_report_from_paths, word_diff,
+};
 #[cfg(feature = "semantic-python")]
 pub use semantic_python::{
     PythonFunctionChange, PythonSemanticSummary, summarize_python_functions,

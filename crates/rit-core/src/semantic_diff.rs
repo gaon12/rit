@@ -1,4 +1,5 @@
 /// Word-level diff result for higher-level semantic summaries.
+#[cfg_attr(feature = "semantic-json", derive(serde::Serialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct WordDiff {
     /// Ordered word operations.
@@ -15,7 +16,9 @@ impl WordDiff {
 }
 
 /// One word-level diff operation.
+#[cfg_attr(feature = "semantic-json", derive(serde::Serialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "semantic-json", serde(tag = "kind", content = "token"))]
 pub enum WordDiffOperation {
     /// Unchanged token.
     Equal(String),
@@ -23,6 +26,101 @@ pub enum WordDiffOperation {
     Delete(String),
     /// Token present only in the new text.
     Insert(String),
+}
+
+/// Structured semantic diff report suitable for JSON output.
+#[cfg_attr(feature = "semantic-json", derive(serde::Serialize))]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SemanticDiffReport {
+    /// Changed files in stable caller-provided order.
+    pub files: Vec<SemanticDiffFile>,
+}
+
+impl SemanticDiffReport {
+    /// Returns true when every changed file is classified as code.
+    pub fn is_code_only(&self) -> bool {
+        !self.files.is_empty()
+            && self
+                .files
+                .iter()
+                .all(|file| file.category == SemanticFileCategory::Code)
+    }
+
+    /// Serializes the report to JSON when the `semantic-json` feature is enabled.
+    #[cfg(feature = "semantic-json")]
+    pub fn to_json_string(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(self)
+    }
+}
+
+/// One file in a semantic diff report.
+#[cfg_attr(feature = "semantic-json", derive(serde::Serialize))]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SemanticDiffFile {
+    /// Repository-relative path.
+    pub path: String,
+    /// Coarse category used by automation and review summaries.
+    pub category: SemanticFileCategory,
+}
+
+/// Coarse file category for semantic summaries.
+#[cfg_attr(feature = "semantic-json", derive(serde::Serialize))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "semantic-json", serde(rename_all = "snake_case"))]
+pub enum SemanticFileCategory {
+    /// Source code or configuration treated as code.
+    Code,
+    /// Test-only paths.
+    Tests,
+    /// Documentation paths and common prose formats.
+    Docs,
+    /// Anything not classified yet.
+    Other,
+}
+
+/// Builds a semantic report from changed paths.
+pub fn semantic_report_from_paths(
+    paths: impl IntoIterator<Item = impl Into<String>>,
+) -> SemanticDiffReport {
+    SemanticDiffReport {
+        files: paths
+            .into_iter()
+            .map(|path| {
+                let path = path.into();
+                let category = classify_semantic_path(&path);
+                SemanticDiffFile { path, category }
+            })
+            .collect(),
+    }
+}
+
+/// Classifies a path for semantic summaries.
+pub fn classify_semantic_path(path: &str) -> SemanticFileCategory {
+    let normalized = path.replace('\\', "/").to_ascii_lowercase();
+    if normalized.starts_with("test/")
+        || normalized.starts_with("tests/")
+        || normalized.contains("/tests/")
+        || normalized.ends_with("_test.rs")
+        || normalized.ends_with(".test.ts")
+        || normalized.ends_with("_test.py")
+    {
+        SemanticFileCategory::Tests
+    } else if normalized.starts_with("docs/")
+        || normalized.ends_with(".md")
+        || normalized.ends_with(".markdown")
+        || normalized.ends_with(".rst")
+        || normalized.ends_with(".txt")
+    {
+        SemanticFileCategory::Docs
+    } else if normalized.ends_with(".rs")
+        || normalized.ends_with(".ts")
+        || normalized.ends_with(".tsx")
+        || normalized.ends_with(".py")
+    {
+        SemanticFileCategory::Code
+    } else {
+        SemanticFileCategory::Other
+    }
 }
 
 /// Computes a small, stable word-level diff.
@@ -126,38 +224,4 @@ fn lcs_table(old_words: &[&str], new_words: &[&str]) -> Vec<Vec<usize>> {
         }
     }
     table
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn word_diff_reports_insertions_and_deletions() {
-        let diff = word_diff("fn add(a: i32) -> i32", "fn sum(a: i64) -> i64");
-
-        assert_eq!(
-            diff.operations,
-            vec![
-                WordDiffOperation::Equal("fn".to_owned()),
-                WordDiffOperation::Delete("add".to_owned()),
-                WordDiffOperation::Insert("sum".to_owned()),
-                WordDiffOperation::Equal("(".to_owned()),
-                WordDiffOperation::Equal("a".to_owned()),
-                WordDiffOperation::Equal(":".to_owned()),
-                WordDiffOperation::Delete("i32".to_owned()),
-                WordDiffOperation::Insert("i64".to_owned()),
-                WordDiffOperation::Equal(")".to_owned()),
-                WordDiffOperation::Equal("-".to_owned()),
-                WordDiffOperation::Equal(">".to_owned()),
-                WordDiffOperation::Delete("i32".to_owned()),
-                WordDiffOperation::Insert("i64".to_owned()),
-            ]
-        );
-    }
-
-    #[test]
-    fn unchanged_word_diff_is_empty() {
-        assert!(word_diff("let value = 1;", "let value = 1;").is_empty());
-    }
 }

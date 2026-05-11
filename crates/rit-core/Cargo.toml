@@ -13,6 +13,7 @@ path = "src/lib.rs"
 default = []
 large-files = ["lfs", "xet"]
 lfs = ["dep:serde", "dep:serde_json", "dep:sha2"]
+semantic-json = ["dep:serde", "dep:serde_json"]
 semantic-rust = ["semantic-tree-sitter", "dep:tree-sitter-rust"]
 semantic-tree-sitter = ["dep:tree-sitter"]
 semantic-typescript = ["semantic-tree-sitter", "dep:tree-sitter-typescript"]
