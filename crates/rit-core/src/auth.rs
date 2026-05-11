@@ -2,6 +2,8 @@ mod credential;
 mod environment;
 mod git_credential;
 mod git_credential_process;
+#[cfg(test)]
+mod git_credential_process_tests;
 mod interaction;
 mod platform;
 
