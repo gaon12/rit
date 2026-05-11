@@ -98,7 +98,7 @@ Show a conservative porcelain v1 status.
 ";
 
 const DIFF_HELP: &str = "\
-rit diff [--cached|--staged] [-M|--find-renames] [--name-only|--name-status|--numstat|--stat|-p] [--] [<pathspec>...]
+rit diff [--cached|--staged] [-M[<n>]|--find-renames[=<n>]] [-C[<n>]|--find-copies[=<n>]] [--name-only|--name-status|--numstat|--stat|-p] [--] [<pathspec>...]
 
 Show working tree changes compared with the index, or staged changes compared with HEAD.
 ";

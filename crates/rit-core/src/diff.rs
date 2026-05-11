@@ -23,9 +23,10 @@ impl DiffSummary {
     pub fn to_name_status_text(&self) -> String {
         let mut output = String::new();
         for file in &self.files {
-            if file.status == 'R' {
+            if file.status == 'R' || file.status == 'C' {
                 output.push_str(&format!(
-                    "R{}\t{}\t{}\n",
+                    "{}{:03}\t{}\t{}\n",
+                    file.status,
                     file.similarity_score.unwrap_or(100),
                     file.old_path.as_deref().unwrap_or(&file.path),
                     file.path
@@ -80,7 +81,10 @@ impl DiffSummary {
         let mut total_insertions = 0;
         let mut total_deletions = 0;
         let has_binary_file = self.files.iter().any(|file| file.binary);
-        let has_rename = self.files.iter().any(|file| file.status == 'R');
+        let has_rename_or_copy = self
+            .files
+            .iter()
+            .any(|file| file.status == 'R' || file.status == 'C');
 
         for file in &self.files {
             let path = file.display_path();
@@ -120,13 +124,13 @@ impl DiffSummary {
             " {} changed",
             plural(self.files.len(), "file", "files")
         ));
-        if total_insertions > 0 || has_binary_file || has_rename {
+        if total_insertions > 0 || has_binary_file || has_rename_or_copy {
             output.push_str(&format!(
                 ", {}",
                 plural(total_insertions, "insertion(+)", "insertions(+)")
             ));
         }
-        if total_deletions > 0 || has_binary_file || has_rename {
+        if total_deletions > 0 || has_binary_file || has_rename_or_copy {
             output.push_str(&format!(
                 ", {}",
                 plural(total_deletions, "deletion(-)", "deletions(-)")
@@ -160,11 +164,11 @@ impl DiffPatch {
 pub struct DiffPatchFile {
     /// Git name-status code for this path.
     pub status: char,
-    /// Previous repository-relative path for exact renames.
+    /// Previous repository-relative path for renames and copies.
     pub old_path: Option<String>,
     /// Repository-relative path using `/` separators.
     pub path: String,
-    /// Similarity percentage for exact rename entries.
+    /// Similarity percentage for rename and copy entries.
     pub similarity_score: Option<u8>,
     /// Old blob object ID, or `None` for new files.
     pub old_object_id: Option<ObjectId>,
@@ -185,14 +189,27 @@ impl DiffPatchFile {
         let old_path = self.old_path.as_deref().unwrap_or(&self.path);
         output.push_str(&format!("diff --git a/{old_path} b/{}\n", self.path));
         match self.status {
-            'R' => {
+            'R' | 'C' => {
+                let action = if self.status == 'R' { "rename" } else { "copy" };
                 output.push_str(&format!(
                     "similarity index {}%\n",
                     self.similarity_score.unwrap_or(100)
                 ));
-                output.push_str(&format!("rename from {old_path}\n"));
-                output.push_str(&format!("rename to {}\n", self.path));
-                return Ok(output);
+                output.push_str(&format!("{action} from {old_path}\n"));
+                output.push_str(&format!("{action} to {}\n", self.path));
+                if self.old_object_id == self.new_object_id {
+                    return Ok(output);
+                }
+                output.push_str(&format!(
+                    "index {}..{} {:06o}\n",
+                    short_object_id(self.old_object_id),
+                    short_object_id(self.new_object_id),
+                    self.mode
+                ));
+                if !is_binary {
+                    output.push_str(&format!("--- a/{old_path}\n"));
+                    output.push_str(&format!("+++ b/{}\n", self.path));
+                }
             }
             'A' => {
                 output.push_str(&format!("new file mode {:06o}\n", self.mode));
@@ -240,7 +257,7 @@ impl DiffPatchFile {
 
 fn binary_patch_line(file: &DiffPatchFile) -> String {
     let old_path = if file.old_object_id.is_some() {
-        format!("a/{}", file.path)
+        format!("a/{}", file.old_path.as_deref().unwrap_or(&file.path))
     } else {
         "/dev/null".to_owned()
     };
@@ -257,11 +274,11 @@ fn binary_patch_line(file: &DiffPatchFile) -> String {
 pub struct DiffFileStat {
     /// Git name-status code for this path.
     pub status: char,
-    /// Previous repository-relative path for exact renames.
+    /// Previous repository-relative path for renames and copies.
     pub old_path: Option<String>,
     /// Repository-relative path using `/` separators.
     pub path: String,
-    /// Similarity percentage for exact rename entries.
+    /// Similarity percentage for rename and copy entries.
     pub similarity_score: Option<u8>,
     /// Added line count.
     pub insertions: usize,
@@ -281,7 +298,7 @@ impl DiffFileStat {
     }
 
     fn display_path(&self) -> String {
-        if self.status == 'R' {
+        if self.status == 'R' || self.status == 'C' {
             format!(
                 "{} => {}",
                 self.old_path.as_deref().unwrap_or(&self.path),
@@ -294,10 +311,34 @@ impl DiffFileStat {
 }
 
 /// Options for repository diff calculations.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DiffOptions {
-    /// Detect exact renames between deleted and added paths.
+    /// Detect renames between deleted and added paths.
     pub find_renames: bool,
+    /// Detect copies from modified paths to added paths.
+    pub find_copies: bool,
+    /// Minimum similarity score for rename detection.
+    pub rename_similarity_threshold: u8,
+    /// Minimum similarity score for copy detection.
+    pub copy_similarity_threshold: u8,
+}
+
+impl DiffOptions {
+    /// Returns options that follow Git's default rename/copy threshold.
+    pub fn new() -> Self {
+        Self {
+            find_renames: false,
+            find_copies: false,
+            rename_similarity_threshold: 50,
+            copy_similarity_threshold: 50,
+        }
+    }
+}
+
+impl Default for DiffOptions {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Repository {
@@ -526,7 +567,10 @@ impl Repository {
         }
 
         if options.find_renames {
-            detect_exact_summary_renames(&mut files, &head_entries, &index_entries);
+            self.detect_summary_renames(&mut files, &head_entries, &index_entries, options)?;
+        }
+        if options.find_copies {
+            self.detect_summary_copies(&mut files, &head_entries, &index_entries, options)?;
         }
 
         Ok(DiffSummary { files })
@@ -622,7 +666,10 @@ impl Repository {
         }
 
         if options.find_renames {
-            detect_exact_patch_renames(&mut files);
+            detect_patch_renames(&mut files, options)?;
+        }
+        if options.find_copies {
+            detect_patch_copies(&mut files, options)?;
         }
 
         Ok(DiffPatch { files })
@@ -691,60 +738,136 @@ impl Repository {
 
         Ok(())
     }
-}
 
-fn detect_exact_summary_renames(
-    files: &mut Vec<DiffFileStat>,
-    old_entries: &BTreeMap<String, DiffTreeEntry>,
-    new_entries: &BTreeMap<String, DiffTreeEntry>,
-) {
-    let mut remove_indexes = Vec::new();
-    for delete_index in 0..files.len() {
-        if files[delete_index].status != 'D' {
-            continue;
+    fn detect_summary_renames(
+        &self,
+        files: &mut Vec<DiffFileStat>,
+        old_entries: &BTreeMap<String, DiffTreeEntry>,
+        new_entries: &BTreeMap<String, DiffTreeEntry>,
+        options: &DiffOptions,
+    ) -> Result<()> {
+        let mut remove_indexes = Vec::new();
+        for delete_index in 0..files.len() {
+            if files[delete_index].status != 'D' {
+                continue;
+            }
+            let old_path = files[delete_index].path.clone();
+            let Some(old_entry) = old_entries.get(&old_path) else {
+                continue;
+            };
+            let old_object = self.read_blob(old_entry.object_id)?;
+            let Some(match_candidate) = best_similarity_match(
+                files,
+                |file| file.status == 'A',
+                |file| {
+                    new_entries
+                        .get(&file.path)
+                        .is_some_and(|new_entry| new_entry.mode == old_entry.mode)
+                },
+                |file| {
+                    let new_entry = new_entries
+                        .get(&file.path)
+                        .ok_or_else(|| RitError::invalid_input("added diff entry disappeared"))?;
+                    let new_object = self.read_blob(new_entry.object_id)?;
+                    similarity_score(&old_object.data, &new_object.data)
+                },
+                options.rename_similarity_threshold,
+                delete_index,
+            )?
+            else {
+                continue;
+            };
+            let add_index = match_candidate.index;
+            let new_path = files[add_index].path.clone();
+            let new_entry = new_entries
+                .get(&new_path)
+                .ok_or_else(|| RitError::invalid_input("added diff entry disappeared"))?;
+            let new_object = self.read_blob(new_entry.object_id)?;
+            let (insertions, deletions, binary) = file_delta(&old_object.data, &new_object.data)?;
+
+            files[delete_index] = DiffFileStat {
+                status: 'R',
+                old_path: Some(old_path),
+                path: new_path,
+                similarity_score: Some(match_candidate.score),
+                insertions,
+                deletions,
+                binary,
+                old_size: old_object.data.len(),
+                new_size: new_object.data.len(),
+            };
+            remove_indexes.push(add_index);
         }
-        let old_path = files[delete_index].path.clone();
-        let Some(old_entry) = old_entries.get(&old_path) else {
-            continue;
-        };
-        let Some((add_index, new_path)) = files
-            .iter()
-            .enumerate()
-            .find(|(index, file)| {
-                if *index == delete_index || file.status != 'A' {
-                    return false;
-                }
-                new_entries
-                    .get(&file.path)
-                    .is_some_and(|new_entry| new_entry == old_entry)
-            })
-            .map(|(index, file)| (index, file.path.clone()))
-        else {
-            continue;
-        };
 
-        files[delete_index] = DiffFileStat {
-            status: 'R',
-            old_path: Some(old_path),
-            path: new_path,
-            similarity_score: Some(100),
-            insertions: 0,
-            deletions: 0,
-            binary: false,
-            old_size: files[delete_index].old_size,
-            new_size: files[add_index].new_size,
-        };
-        remove_indexes.push(add_index);
+        remove_indexes.sort_unstable();
+        remove_indexes.dedup();
+        for index in remove_indexes.into_iter().rev() {
+            files.remove(index);
+        }
+        Ok(())
     }
 
-    remove_indexes.sort_unstable();
-    remove_indexes.dedup();
-    for index in remove_indexes.into_iter().rev() {
-        files.remove(index);
+    fn detect_summary_copies(
+        &self,
+        files: &mut [DiffFileStat],
+        old_entries: &BTreeMap<String, DiffTreeEntry>,
+        new_entries: &BTreeMap<String, DiffTreeEntry>,
+        options: &DiffOptions,
+    ) -> Result<()> {
+        for add_index in 0..files.len() {
+            if files[add_index].status != 'A' {
+                continue;
+            }
+            let new_path = files[add_index].path.clone();
+            let Some(new_entry) = new_entries.get(&new_path) else {
+                continue;
+            };
+            let new_object = self.read_blob(new_entry.object_id)?;
+            let Some(match_candidate) = best_similarity_match(
+                files,
+                |file| file.status == 'M',
+                |file| {
+                    old_entries
+                        .get(&file.path)
+                        .is_some_and(|old_entry| old_entry.mode == new_entry.mode)
+                },
+                |file| {
+                    let old_entry = old_entries
+                        .get(&file.path)
+                        .ok_or_else(|| RitError::invalid_input("copy source disappeared"))?;
+                    let old_object = self.read_blob(old_entry.object_id)?;
+                    similarity_score(&old_object.data, &new_object.data)
+                },
+                options.copy_similarity_threshold,
+                add_index,
+            )?
+            else {
+                continue;
+            };
+            let old_path = files[match_candidate.index].path.clone();
+            let old_entry = old_entries
+                .get(&old_path)
+                .ok_or_else(|| RitError::invalid_input("copy source disappeared"))?;
+            let old_object = self.read_blob(old_entry.object_id)?;
+            let (insertions, deletions, binary) = file_delta(&old_object.data, &new_object.data)?;
+
+            files[add_index] = DiffFileStat {
+                status: 'C',
+                old_path: Some(old_path),
+                path: new_path,
+                similarity_score: Some(match_candidate.score),
+                insertions,
+                deletions,
+                binary,
+                old_size: old_object.data.len(),
+                new_size: new_object.data.len(),
+            };
+        }
+        Ok(())
     }
 }
 
-fn detect_exact_patch_renames(files: &mut Vec<DiffPatchFile>) {
+fn detect_patch_renames(files: &mut Vec<DiffPatchFile>, options: &DiffOptions) -> Result<()> {
     let mut remove_indexes = Vec::new();
     for delete_index in 0..files.len() {
         if files[delete_index].status != 'D' {
@@ -753,30 +876,33 @@ fn detect_exact_patch_renames(files: &mut Vec<DiffPatchFile>) {
         let old_path = files[delete_index].path.clone();
         let old_object_id = files[delete_index].old_object_id;
         let old_mode = files[delete_index].mode;
-        let Some((add_index, new_path)) = files
-            .iter()
-            .enumerate()
-            .find(|(index, file)| {
-                *index != delete_index
-                    && file.status == 'A'
-                    && file.new_object_id == old_object_id
-                    && file.mode == old_mode
-            })
-            .map(|(index, file)| (index, file.path.clone()))
+        let old_data = files[delete_index].old_data.clone();
+        let Some(match_candidate) = best_similarity_match(
+            files,
+            |file| file.status == 'A' && file.mode == old_mode,
+            |file| file.new_object_id.is_some(),
+            |file| similarity_score(&old_data, &file.new_data),
+            options.rename_similarity_threshold,
+            delete_index,
+        )?
         else {
             continue;
         };
+        let add_index = match_candidate.index;
+        let new_path = files[add_index].path.clone();
+        let new_object_id = files[add_index].new_object_id;
+        let new_data = files[add_index].new_data.clone();
 
         files[delete_index] = DiffPatchFile {
             status: 'R',
             old_path: Some(old_path),
             path: new_path,
-            similarity_score: Some(100),
+            similarity_score: Some(match_candidate.score),
             old_object_id,
-            new_object_id: old_object_id,
+            new_object_id,
             mode: old_mode,
-            old_data: Vec::new(),
-            new_data: Vec::new(),
+            old_data,
+            new_data,
         };
         remove_indexes.push(add_index);
     }
@@ -786,6 +912,82 @@ fn detect_exact_patch_renames(files: &mut Vec<DiffPatchFile>) {
     for index in remove_indexes.into_iter().rev() {
         files.remove(index);
     }
+    Ok(())
+}
+
+fn detect_patch_copies(files: &mut [DiffPatchFile], options: &DiffOptions) -> Result<()> {
+    for add_index in 0..files.len() {
+        if files[add_index].status != 'A' {
+            continue;
+        }
+        let new_path = files[add_index].path.clone();
+        let new_object_id = files[add_index].new_object_id;
+        let new_data = files[add_index].new_data.clone();
+        let new_mode = files[add_index].mode;
+        let Some(match_candidate) = best_similarity_match(
+            files,
+            |file| file.status == 'M' && file.mode == new_mode,
+            |file| file.old_object_id.is_some(),
+            |file| similarity_score(&file.old_data, &new_data),
+            options.copy_similarity_threshold,
+            add_index,
+        )?
+        else {
+            continue;
+        };
+        let source_path = files[match_candidate.index].path.clone();
+        let source_object_id = files[match_candidate.index].old_object_id;
+        let source_data = files[match_candidate.index].old_data.clone();
+
+        files[add_index] = DiffPatchFile {
+            status: 'C',
+            old_path: Some(source_path),
+            path: new_path,
+            similarity_score: Some(match_candidate.score),
+            old_object_id: source_object_id,
+            new_object_id,
+            mode: new_mode,
+            old_data: source_data,
+            new_data,
+        };
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct SimilarityMatch {
+    index: usize,
+    score: u8,
+}
+
+fn best_similarity_match<T>(
+    files: &[T],
+    mut is_candidate: impl FnMut(&T) -> bool,
+    mut can_compare: impl FnMut(&T) -> bool,
+    mut score: impl FnMut(&T) -> Result<u8>,
+    threshold: u8,
+    excluded_index: usize,
+) -> Result<Option<SimilarityMatch>> {
+    let mut best = None;
+    for (index, file) in files.iter().enumerate() {
+        if index == excluded_index || !is_candidate(file) || !can_compare(file) {
+            continue;
+        }
+        let candidate_score = score(file)?;
+        if candidate_score < threshold {
+            continue;
+        }
+        let should_replace = best
+            .map(|best: SimilarityMatch| candidate_score > best.score)
+            .unwrap_or(true);
+        if should_replace {
+            best = Some(SimilarityMatch {
+                index,
+                score: candidate_score,
+            });
+        }
+    }
+    Ok(best)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -934,6 +1136,36 @@ fn file_delta(old_data: &[u8], new_data: &[u8]) -> Result<(usize, usize, bool)> 
     Ok((insertions, deletions, false))
 }
 
+fn similarity_score(old_data: &[u8], new_data: &[u8]) -> Result<u8> {
+    if old_data == new_data {
+        return Ok(100);
+    }
+    if old_data.is_empty()
+        || new_data.is_empty()
+        || is_binary_data(old_data)
+        || is_binary_data(new_data)
+    {
+        return Ok(0);
+    }
+
+    let old_text = std::str::from_utf8(old_data)
+        .map_err(|_| RitError::invalid_input("binary similarity scoring is not implemented"))?;
+    let new_text = std::str::from_utf8(new_data)
+        .map_err(|_| RitError::invalid_input("binary similarity scoring is not implemented"))?;
+    let old_lines = split_lines_like_git(old_text);
+    let new_lines = split_lines_like_git(new_text);
+    let operations = line_operations(&old_lines, &new_lines);
+    let common_bytes = operations
+        .iter()
+        .filter_map(|operation| match operation {
+            LineOperation::Context(line) => Some(line.len()),
+            _ => None,
+        })
+        .sum::<usize>();
+    let maximum_size = old_data.len().max(new_data.len());
+    Ok(((common_bytes * 100) / maximum_size).min(100) as u8)
+}
+
 fn is_binary_data(data: &[u8]) -> bool {
     data.contains(&0) || std::str::from_utf8(data).is_err()
 }
@@ -1059,7 +1291,9 @@ fn plural(count: usize, singular: &str, plural: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{DiffFileStat, DiffSummary, file_delta, line_delta, unified_hunk};
+    use super::{
+        DiffFileStat, DiffSummary, file_delta, line_delta, similarity_score, unified_hunk,
+    };
     use crate::{InitOptions, Repository};
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -1134,6 +1368,25 @@ mod tests {
     }
 
     #[test]
+    fn name_status_text_lists_copy_similarity_and_paths() {
+        let summary = DiffSummary {
+            files: vec![DiffFileStat {
+                status: 'C',
+                old_path: Some("old.txt".to_owned()),
+                path: "copy.txt".to_owned(),
+                similarity_score: Some(79),
+                insertions: 1,
+                deletions: 1,
+                binary: false,
+                old_size: 24,
+                new_size: 24,
+            }],
+        };
+
+        assert_eq!(summary.to_name_status_text(), "C079\told.txt\tcopy.txt\n");
+    }
+
+    #[test]
     fn binary_numstat_and_stat_match_small_git_shape() {
         let summary = DiffSummary {
             files: vec![DiffFileStat {
@@ -1161,6 +1414,17 @@ mod tests {
         let delta = file_delta(&[0, 1, 2], &[0, 1, 2, 3]).expect("binary delta should work");
 
         assert_eq!(delta, (0, 0, true));
+    }
+
+    #[test]
+    fn similarity_score_counts_common_text_bytes() {
+        let score = similarity_score(
+            b"one\ntwo\nthree\nfour\nfive\n",
+            b"one\ntwo\nthree\nfour\nsix\n",
+        )
+        .expect("text similarity should work");
+
+        assert_eq!(score, 79);
     }
 
     #[test]

@@ -70,6 +70,58 @@ fn diff_cached_exact_rename_outputs_match_git() {
 }
 
 #[test]
+fn diff_cached_similarity_rename_outputs_match_git() {
+    let fixture = SimilarityRenameFixture::new("cached-similarity-rename");
+
+    for args in [
+        vec!["diff", "--cached", "-M", "--name-status"],
+        vec!["diff", "--cached", "-M79%", "--name-status"],
+        vec!["diff", "--cached", "--find-renames=79", "--stat"],
+        vec!["diff", "--cached", "-M"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached similarity rename {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
+fn diff_cached_copy_outputs_match_git() {
+    let fixture = CopyFixture::new("cached-copy");
+
+    for args in [
+        vec!["diff", "--cached", "-C", "--name-status"],
+        vec!["diff", "--cached", "-C79%", "--name-status"],
+        vec!["diff", "--cached", "--find-copies=79", "--stat"],
+        vec!["diff", "--cached", "-C"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached copy {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn binary_diff_summary_outputs_match_git() {
     let fixture = BinaryDiffFixture::new("binary-diff");
 
@@ -897,6 +949,79 @@ impl ExactRenameFixture {
 }
 
 impl Drop for ExactRenameFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct SimilarityRenameFixture {
+    path: PathBuf,
+}
+
+impl SimilarityRenameFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("old.txt"), "one\ntwo\nthree\nfour\nfive\n")
+            .expect("base file should be written");
+        run_git(&path, ["add", "old.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+        fs::remove_file(path.join("old.txt")).expect("old file should be removed");
+        fs::write(path.join("new.txt"), "one\ntwo\nthree\nfour\nsix\n")
+            .expect("renamed file should be written");
+        run_git(&path, ["add", "-A"]);
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for SimilarityRenameFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct CopyFixture {
+    path: PathBuf,
+}
+
+impl CopyFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("old.txt"), "one\ntwo\nthree\nfour\nfive\n")
+            .expect("base file should be written");
+        run_git(&path, ["add", "old.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+        fs::write(path.join("old.txt"), "one\ntwo\nthree\nfour\nsix\n")
+            .expect("source file should be modified");
+        fs::write(path.join("copy.txt"), "one\ntwo\nthree\nfour\nsix\n")
+            .expect("copy file should be written");
+        run_git(&path, ["add", "-A"]);
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for CopyFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

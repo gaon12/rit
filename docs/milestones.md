@@ -129,7 +129,10 @@ Completion criteria:
 - [~] Rename detection.
   - [x] Exact staged rename detection for `diff --cached -M` summary and
     patch output.
-  - [ ] Similarity thresholds, copy detection, and non-exact rename scoring.
+  - [x] Staged similarity thresholds, copy detection, and non-exact rename
+    scoring for `diff --cached -M/-C` summary and patch output.
+  - [ ] Worktree rename/copy detection, `--find-copies-harder`, rename limits,
+    and advanced Git diffcore parity.
 - [x] Binary diff accounting for summary modes.
 
 Completion criteria:

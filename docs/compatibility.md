@@ -51,6 +51,9 @@ The current codebase implements an early local Git subset:
   `clone --local --no-checkout`, plus local-path `fetch`.
 - Small text patch output is supported for default `diff`, `diff -p`, and
   `diff --cached`.
+- Cached diff supports staged rename/copy detection with `-M[<n>]`,
+  `--find-renames[=<n>]`, `-C[<n>]`, and `--find-copies[=<n>]` for summary
+  modes and patch output.
 - Ordinary literal file and directory pathspec filtering is supported for
   `status --porcelain=v1` and the supported `diff` summary modes.
 - Ordinary literal file and directory pathspec filtering is supported for

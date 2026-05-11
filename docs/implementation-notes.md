@@ -45,6 +45,9 @@
   in `status`, `diff`, `ls-files`, and `add`.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
+- 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git
+  comparisons for `diff --cached -M`, `-M79%`, `--find-renames=79`, `-C`,
+  `-C79%`, and `--find-copies=79`.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
   `--pathspec-file-nul`, including a quoted pathspec entry.
@@ -500,11 +503,13 @@
   `--cached`/`--staged` with those output modes, and ordinary literal
   file/directory plus simple `*`, `?`, and bracket-class wildcard pathspec
   filters and positive `:(literal)`, `:(glob)`, `:(top)`, `:/`, and
-  `:(icase)` pathspec magic. `-M`/`--find-renames` supports exact staged
-  renames in cached diff output.
+  `:(icase)` pathspec magic. `-M[<n>]`/`--find-renames[=<n>]` supports staged
+  exact and non-exact rename detection in cached diff output. `-C[<n>]` and
+  `--find-copies[=<n>]` support staged copy detection from modified source
+  files.
 - Unsupported options: commit/tree/blob arguments, pathspec files,
-  similarity-threshold rename scoring, copy detection, and many advanced patch
-  formatting options.
+  worktree rename/copy detection, `--find-copies-harder`, rename limits, and
+  many advanced patch formatting options.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files.
 - Git-compatible behavior: cached diff scope compares the index against `HEAD`.
 - Intentional differences: advanced patch formatting and custom diff drivers

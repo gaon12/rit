@@ -533,6 +533,9 @@ fn diff_command(
 ) -> io::Result<ExitCode> {
     let mut cached = false;
     let mut find_renames = false;
+    let mut find_copies = false;
+    let mut rename_similarity_threshold = 50;
+    let mut copy_similarity_threshold = 50;
     let mut output_mode = None;
     let mut pathspec_args = Vec::new();
     let mut after_separator = false;
@@ -542,16 +545,36 @@ fn diff_command(
             "--" if !after_separator => after_separator = true,
             "--cached" | "--staged" if !after_separator => cached = true,
             "-M" | "--find-renames" if !after_separator => find_renames = true,
-            unsupported
-                if (unsupported.starts_with("-M")
-                    || unsupported.starts_with("--find-renames="))
+            "-C" | "--find-copies" if !after_separator => find_copies = true,
+            option
+                if (option.starts_with("-M") || option.starts_with("--find-renames="))
                     && !after_separator =>
             {
-                writeln!(
-                    stderr,
-                    "rit: diff currently supports only exact rename detection with -M"
-                )?;
-                return Ok(ExitCode::from(129));
+                match parse_similarity_option(option, "-M", "--find-renames=") {
+                    Ok(threshold) => {
+                        find_renames = true;
+                        rename_similarity_threshold = threshold;
+                    }
+                    Err(error) => {
+                        writeln!(stderr, "rit: {error}")?;
+                        return Ok(ExitCode::from(129));
+                    }
+                }
+            }
+            option
+                if (option.starts_with("-C") || option.starts_with("--find-copies="))
+                    && !after_separator =>
+            {
+                match parse_similarity_option(option, "-C", "--find-copies=") {
+                    Ok(threshold) => {
+                        find_copies = true;
+                        copy_similarity_threshold = threshold;
+                    }
+                    Err(error) => {
+                        writeln!(stderr, "rit: {error}")?;
+                        return Ok(ExitCode::from(129));
+                    }
+                }
             }
             "-p" | "-u" if !after_separator => {
                 if output_mode.replace("--patch").is_some() {
@@ -586,7 +609,12 @@ fn diff_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    let diff_options = rit_core::DiffOptions { find_renames };
+    let diff_options = rit_core::DiffOptions {
+        find_renames,
+        find_copies,
+        rename_similarity_threshold,
+        copy_similarity_threshold,
+    };
     if output_mode == "--patch" {
         let patch_result = if cached {
             repository.diff_index_to_head_patch_with_options(&pathspecs, &diff_options)
@@ -631,6 +659,33 @@ fn diff_command(
     }
 
     Ok(ExitCode::SUCCESS)
+}
+
+fn parse_similarity_option(
+    option: &str,
+    short_prefix: &str,
+    long_prefix: &str,
+) -> Result<u8, String> {
+    let raw_value = if let Some(value) = option.strip_prefix(long_prefix) {
+        value
+    } else if let Some(value) = option.strip_prefix(short_prefix) {
+        value
+    } else {
+        return Err(format!("invalid similarity option '{option}'"));
+    };
+    let value = raw_value.trim_end_matches('%');
+    if value.is_empty() {
+        return Err(format!("missing similarity threshold in '{option}'"));
+    }
+    let threshold = value
+        .parse::<u8>()
+        .map_err(|_| format!("invalid similarity threshold in '{option}'"))?;
+    if threshold > 100 {
+        return Err(format!(
+            "similarity threshold must be between 0 and 100 in '{option}'"
+        ));
+    }
+    Ok(threshold)
 }
 
 fn log_command(
