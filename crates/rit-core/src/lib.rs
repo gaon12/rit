@@ -110,7 +110,8 @@ pub use transport::{
 };
 pub use vfs::{
     FallbackMaterializedAction, FallbackMaterializedBackend, FallbackMaterializedPlan,
-    VfsAvailability, VfsBackendPreference, VfsLazyMaterialization, VfsPlan,
+    VfsAvailability, VfsBackendPreference, VfsLazyMaterialization, VfsPlan, VfsPlatformBackend,
+    VfsPlatformBackendPlan,
 };
 pub use workspace_profile::{
     LazyMaterializationPolicy, RitConfig, WorkspacePrefetchPlan, WorkspaceProfile,

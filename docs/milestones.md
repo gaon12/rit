@@ -409,7 +409,7 @@ Completion criteria:
 
 - [x] Common VFS model.
 - [x] Fallback materialized backend.
-- [ ] Platform backend plan.
+- [x] Platform backend plan.
 - [ ] Lazy materialization.
 - [ ] Background prefetch.
 

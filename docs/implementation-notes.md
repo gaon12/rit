@@ -361,6 +361,9 @@
 - Added `FallbackMaterializedBackend` planning so builds without a platform VFS
   can keep the whole worktree or configured workspace include paths as ordinary
   materialized files.
+- Added platform backend planning for Windows Projected File System, macOS FUSE,
+  and Linux FUSE candidates without claiming that OS-specific drivers are
+  implemented.
 - VFS availability now reports a clear message when a binary is built without
   the `vfs` feature.
 - Still unsupported: fallback backend execution, platform backend selection,

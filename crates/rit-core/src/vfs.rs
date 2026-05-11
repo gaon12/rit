@@ -1,5 +1,9 @@
 use crate::LazyMaterializationPolicy;
 
+mod platform;
+
+pub use platform::{VfsPlatformBackend, VfsPlatformBackendPlan};
+
 /// Requested VFS backend.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum VfsBackendPreference {

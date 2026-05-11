@@ -1,6 +1,6 @@
 use crate::{
     FallbackMaterializedAction, FallbackMaterializedBackend, LazyMaterializationPolicy,
-    VfsAvailability, VfsBackendPreference, VfsPlan,
+    VfsAvailability, VfsBackendPreference, VfsPlan, VfsPlatformBackend, VfsPlatformBackendPlan,
 };
 
 #[test]
@@ -62,6 +62,33 @@ fn fallback_backend_keeps_workspace_paths_materialized() {
     );
     assert!(fallback_plan.partial_clone_required);
     assert!(fallback_plan.background_prefetch_requested);
+}
+
+#[test]
+fn platform_backend_names_are_stable() {
+    assert_eq!(
+        VfsPlatformBackend::WindowsProjectedFileSystem.name(),
+        "windows-projected-file-system"
+    );
+    assert_eq!(VfsPlatformBackend::MacFuse.name(), "macos-fuse");
+    assert_eq!(VfsPlatformBackend::LinuxFuse.name(), "linux-fuse");
+}
+
+#[test]
+fn platform_backend_plan_matches_build_availability() {
+    let plan = VfsPlatformBackendPlan::current();
+
+    assert!(plan.message.contains("VFS") || plan.message.contains("backend"));
+    if cfg!(feature = "vfs") {
+        assert_eq!(plan.availability, VfsAvailability::Available);
+        assert!(plan.backend.is_some());
+    } else {
+        assert!(matches!(
+            plan.availability,
+            VfsAvailability::BuildDisabled { feature: "vfs" }
+        ));
+        assert_eq!(plan.backend, None);
+    }
 }
 
 fn lazy_policy() -> LazyMaterializationPolicy {
