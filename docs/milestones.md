@@ -228,7 +228,10 @@ Completion criteria:
 
 ## M7: Transport Foundation
 
-- [ ] Local clone/fetch object transfer.
+- [~] Local clone/fetch object transfer.
+  - [x] `clone --local --no-checkout` copies objects and local refs without
+    calling external `git` in production code.
+  - [ ] Local fetch into an existing repository.
 - [ ] Protocol model.
 - [ ] HTTP transport.
 - [ ] SSH transport.
@@ -340,6 +343,7 @@ Completion criteria:
 
 ## Active Queue
 
-1. Continue M6 with Git-compatible ignore glob rules.
-2. Continue pathspec support for remaining read-only commands and advanced
-   pathspec forms.
+1. Keep M6 case-sensitivity parity under verification as new path lookup
+   surfaces are added.
+2. Begin M7 with local clone/fetch object transfer that does not call the
+   external `git` binary in production code.

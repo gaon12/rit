@@ -42,7 +42,8 @@ The current codebase implements an early local Git subset:
   `diff --name-status`, `diff --numstat`, `diff --stat`,
   `diff --cached --name-only`, `diff --cached --name-status`,
   `diff --cached --numstat`, `diff --cached --stat`, `log`, `add`, `commit`,
-  `branch`, `tag`, `restore`, `reset`, `checkout`, and `switch`.
+  `branch`, `tag`, `restore`, `reset`, `checkout`, `switch`, and
+  `clone --local --no-checkout`.
 - Small text patch output is supported for default `diff`, `diff -p`, and
   `diff --cached`.
 - Ordinary literal file and directory pathspec filtering is supported for
@@ -118,8 +119,9 @@ filters and simple `*`, `?`, and bracket-class wildcard filters for
 cached and staged output. Positive `:(literal)`, `:(glob)`, `:(top)`, and
 `:/` pathspec magic is covered for status, diff, ls-files, log, show, and add.
 `:(icase)` is covered for status, diff, and add. Exclude `:!`, `:^`, and
-`:(exclude)` is covered for status, diff, ls-files, and add. Attr magic and
-pathspec-file input remain unsupported.
+`:(exclude)` is covered for status, diff, ls-files, and add. Attr magic is
+covered for root `.gitattributes` set/unset/value/unspecified requirements in
+status, diff, ls-files, and add. Pathspec-file input remains unsupported.
 Local write compatibility tests cover `core.ignorecase=true` for a
 mismatched-case `add` pathspec that Git accepts as a no-op.
 
@@ -164,6 +166,9 @@ Binary diff compatibility tests cover `--name-only`, `--name-status`,
 `--numstat`, and `--stat` summary output.
 Packed object compatibility tests cover reading a delta-compressed packed blob
 created by `git gc --aggressive --prune=now` through `rit cat-file -p`.
+Local clone compatibility tests cover `clone --local --no-checkout` by
+comparing the cloned `HEAD` object and ensuring no checkout file is
+materialized.
 
 Local write compatibility tests currently cover directory pathspec behavior and
 simple wildcard/bracket-class pathspec behavior for `add`, `restore`, and

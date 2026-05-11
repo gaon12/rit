@@ -43,6 +43,8 @@
   `git add -h`, `git diff -h`, and direct Git comparisons for
   `:(attr:name)`, `:(attr:-name)`, `:(attr:name=value)`, and `:(attr:!name)`
   in `status`, `diff`, `ls-files`, and `add`.
+- 2026-05-11 local clone object-transfer slice checked `git clone -h` and a
+  direct Git comparison for `clone --local --no-checkout`.
 
 ## Milestone Notes
 
@@ -452,6 +454,23 @@
 - Intentional differences: switch requires a clean index and working tree.
 - Repository mutation: writes `HEAD`, `.git/index`, and tracked worktree files.
 - Risk: moderate; file writes use temp files and branch refs use lock/rename.
+
+### `rit clone`
+
+- Baseline command checked: `git clone -h`
+- Supported options: `--local`/`-l`, `--no-checkout`/`-n`, and `--quiet`/`-q`.
+- Unsupported options: checkout, bare/mirror clones, remote protocols,
+  hardlink/shared/reference modes, branch selection, shallow/partial clone,
+  submodules, sparse checkout, templates, and config overrides.
+- Git-compatible behavior: local no-checkout clone copies the source object
+  store, local heads/tags, optional `packed-refs`, writes a symbolic `HEAD`,
+  and records `remote.origin` plus current branch merge config.
+- Intentional differences: checkout is rejected instead of silently producing a
+  partial worktree; local fetch into an existing repository is still pending.
+- Repository mutation: creates a new repository directory and copies local
+  object/ref files without invoking external `git`.
+- Risk: moderate; object/ref transfer is copy-based and does not mutate the
+  source repository.
 
 ### `rit rev-parse` revision support
 

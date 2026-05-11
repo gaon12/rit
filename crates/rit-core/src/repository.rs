@@ -17,6 +17,25 @@ pub struct InitOptions {
     pub initial_branch: String,
 }
 
+/// Options for cloning from a local repository without checking files out.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LocalCloneOptions {
+    /// Existing local repository to copy from.
+    pub source: PathBuf,
+    /// Directory to create as the destination working tree.
+    pub directory: PathBuf,
+}
+
+impl LocalCloneOptions {
+    /// Builds local clone options for `source` and `directory`.
+    pub fn new(source: impl Into<PathBuf>, directory: impl Into<PathBuf>) -> Self {
+        Self {
+            source: source.into(),
+            directory: directory.into(),
+        }
+    }
+}
+
 impl InitOptions {
     /// Builds default init options for `directory`.
     pub fn new(directory: impl Into<PathBuf>) -> Self {
@@ -129,6 +148,44 @@ impl Repository {
         )?;
 
         Self::from_paths((!options.bare).then_some(target), git_dir, options.bare)
+    }
+
+    /// Clones a local repository by copying objects and local refs.
+    ///
+    /// This intentionally implements only the `--local --no-checkout` shape for
+    /// now: no remote protocol, no working tree checkout, and no external `git`
+    /// process.
+    pub fn clone_local_no_checkout(options: &LocalCloneOptions) -> Result<Self> {
+        ensure_clone_target_is_available(&options.directory)?;
+        let source = Repository::open(&options.source)?;
+        let branch_name = source.current_branch_name()?.ok_or_else(|| {
+            RitError::invalid_input("local clone from detached HEAD is not implemented")
+        })?;
+        source.resolve_head()?.ok_or_else(|| {
+            RitError::invalid_input("local clone from an unborn branch is not implemented")
+        })?;
+
+        let mut init_options = InitOptions::new(&options.directory);
+        init_options.initial_branch = branch_name.clone();
+        let target = Repository::init(&init_options)?;
+
+        copy_directory_contents(
+            &source.common_dir().join("objects"),
+            &target.common_dir().join("objects"),
+        )?;
+        copy_ref_namespace(&source, &target, "heads")?;
+        copy_ref_namespace(&source, &target, "tags")?;
+        copy_file_if_exists(
+            &source.common_dir().join("packed-refs"),
+            &target.common_dir().join("packed-refs"),
+        )?;
+        write_file(
+            &target.git_dir().join("HEAD"),
+            format!("ref: refs/heads/{branch_name}\n").as_bytes(),
+        )?;
+        append_clone_remote_config(&target, &source, &branch_name)?;
+
+        Ok(target)
     }
 
     /// Returns the path to the repository metadata directory.
@@ -349,6 +406,10 @@ fn write_file_if_missing(path: &Path, contents: &[u8]) -> Result<()> {
         return Ok(());
     }
 
+    write_file(path, contents)
+}
+
+fn write_file(path: &Path, contents: &[u8]) -> Result<()> {
     let lock_path = path.with_extension("lock");
     {
         let mut file = fs::OpenOptions::new()
@@ -363,6 +424,88 @@ fn write_file_if_missing(path: &Path, contents: &[u8]) -> Result<()> {
     }
     fs::rename(&lock_path, path).map_err(|source| RitError::io(path, source))?;
     Ok(())
+}
+
+fn ensure_clone_target_is_available(path: &Path) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    if !path.is_dir() {
+        return Err(RitError::invalid_input(format!(
+            "destination path exists and is not a directory: {}",
+            path.display()
+        )));
+    }
+    let mut entries = fs::read_dir(path).map_err(|source| RitError::io(path, source))?;
+    if entries.next().is_some() {
+        return Err(RitError::invalid_input(format!(
+            "destination path already exists and is not empty: {}",
+            path.display()
+        )));
+    }
+    Ok(())
+}
+
+fn copy_ref_namespace(source: &Repository, target: &Repository, namespace: &str) -> Result<()> {
+    copy_directory_contents(
+        &source.common_dir().join("refs").join(namespace),
+        &target.common_dir().join("refs").join(namespace),
+    )
+}
+
+fn copy_directory_contents(source: &Path, target: &Path) -> Result<()> {
+    if !source.exists() {
+        return Ok(());
+    }
+    fs::create_dir_all(target).map_err(|source| RitError::io(target, source))?;
+    for entry in fs::read_dir(source).map_err(|error| RitError::io(source, error))? {
+        let entry = entry.map_err(|error| RitError::io(source, error))?;
+        let source_path = entry.path();
+        let target_path = target.join(entry.file_name());
+        let file_type = entry
+            .file_type()
+            .map_err(|error| RitError::io(&source_path, error))?;
+        if file_type.is_dir() {
+            copy_directory_contents(&source_path, &target_path)?;
+        } else if file_type.is_file() {
+            if let Some(parent) = target_path.parent() {
+                fs::create_dir_all(parent).map_err(|error| RitError::io(parent, error))?;
+            }
+            fs::copy(&source_path, &target_path)
+                .map_err(|error| RitError::io(&target_path, error))?;
+        }
+    }
+    Ok(())
+}
+
+fn copy_file_if_exists(source: &Path, target: &Path) -> Result<()> {
+    if !source.exists() {
+        return Ok(());
+    }
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).map_err(|error| RitError::io(parent, error))?;
+    }
+    fs::copy(source, target).map_err(|error| RitError::io(target, error))?;
+    Ok(())
+}
+
+fn append_clone_remote_config(
+    target: &Repository,
+    source: &Repository,
+    branch_name: &str,
+) -> Result<()> {
+    let source_path = source
+        .worktree()
+        .unwrap_or_else(|| source.git_dir())
+        .to_string_lossy()
+        .replace('\\', "/");
+    let config_path = target.common_dir().join("config");
+    let mut config =
+        fs::read_to_string(&config_path).map_err(|source| RitError::io(&config_path, source))?;
+    config.push_str(&format!(
+        "[remote \"origin\"]\n\turl = {source_path}\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n[branch \"{branch_name}\"]\n\tremote = origin\n\tmerge = refs/heads/{branch_name}\n"
+    ));
+    write_file(&config_path, config.as_bytes())
 }
 
 fn default_config(bare: bool) -> String {

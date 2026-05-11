@@ -734,6 +734,61 @@ fn branch_delete_allows_merged_branch_like_git() {
     );
 }
 
+#[test]
+fn clone_local_no_checkout_copies_head_objects_and_refs() {
+    let workspace = temp_path("clone-local-no-checkout");
+    let source = workspace.join("source");
+    let git_target = workspace.join("git-target");
+    let rit_target = workspace.join("rit-target");
+    fs::create_dir_all(&source).expect("source should be created");
+    run_git(&source, ["init", "--quiet"]);
+    run_git(&source, ["config", "user.name", "Rit Test"]);
+    run_git(&source, ["config", "user.email", "rit@example.test"]);
+    run_git(&source, ["config", "core.autocrlf", "false"]);
+    fs::write(source.join("a.txt"), "base\n").expect("source file should be written");
+    run_git(&source, ["add", "a.txt"]);
+    run_git(&source, ["commit", "--quiet", "-m", "base"]);
+
+    let git_output = Command::new("git")
+        .args(["clone", "-q", "--local", "--no-checkout"])
+        .arg(&source)
+        .arg(&git_target)
+        .output()
+        .expect("git clone should start");
+    assert!(
+        git_output.status.success(),
+        "git clone failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&git_output.stdout),
+        String::from_utf8_lossy(&git_output.stderr)
+    );
+
+    let rit_output = Command::new(rit_binary())
+        .args(["clone", "-q", "--local", "--no-checkout"])
+        .arg(&source)
+        .arg(&rit_target)
+        .output()
+        .expect("rit clone should start");
+    assert!(
+        rit_output.status.success(),
+        "rit clone failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&rit_output.stdout),
+        String::from_utf8_lossy(&rit_output.stderr)
+    );
+    assert_eq!(git_output.stdout, rit_output.stdout);
+    assert_eq!(git_output.stderr, rit_output.stderr);
+
+    let git_head = run_capture("git", ["rev-parse", "HEAD"], &git_target).0;
+    let rit_head = run_capture(rit_binary(), ["rev-parse", "HEAD"], &rit_target).0;
+    assert_eq!(git_head, rit_head);
+
+    let git_commit = run_capture("git", ["cat-file", "-p", "HEAD"], &git_target).0;
+    let rit_commit = run_capture(rit_binary(), ["cat-file", "-p", "HEAD"], &rit_target).0;
+    assert_eq!(git_commit, rit_commit);
+    assert!(!rit_target.join("a.txt").exists());
+
+    let _ = fs::remove_dir_all(workspace);
+}
+
 struct CommandSpec {
     program: OsString,
     args: Vec<OsString>,

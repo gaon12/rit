@@ -12,6 +12,7 @@ Core commands:
   version       Display rit version information
   help          Display help for rit or a command
   init          Create an empty Git repository
+  clone         Clone a local repository without checkout
   rev-parse     Inspect the current repository paths
   cat-file      Inspect loose objects
   ls-tree       List entries in a tree object
@@ -48,6 +49,12 @@ const INIT_HELP: &str = "\
 rit init [-q|--quiet] [--bare] [-b <branch>|--initial-branch <branch>] [<directory>]
 
 Create an empty Git-compatible repository.
+";
+
+const CLONE_HELP: &str = "\
+rit clone [-q|--quiet] --local --no-checkout <source> [<directory>]
+
+Clone a local repository by copying objects and refs. Checkout is not implemented yet.
 ";
 
 const REV_PARSE_HELP: &str = "\
@@ -183,6 +190,7 @@ fn run(
         [flag] if flag == "--version" => print_version(stdout),
         [command] if command == "version" => print_version(stdout),
         [command, rest @ ..] if command == "init" => init_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "clone" => clone_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "rev-parse" => rev_parse_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "cat-file" => cat_file_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ls-tree" => ls_tree_command(rest, stdout, stderr),
@@ -226,6 +234,7 @@ fn print_command_help(
         "version" => stdout.write_all(VERSION_HELP.as_bytes())?,
         "help" => stdout.write_all(HELP_HELP.as_bytes())?,
         "init" => stdout.write_all(INIT_HELP.as_bytes())?,
+        "clone" => stdout.write_all(CLONE_HELP.as_bytes())?,
         "rev-parse" => stdout.write_all(REV_PARSE_HELP.as_bytes())?,
         "cat-file" => stdout.write_all(CAT_FILE_HELP.as_bytes())?,
         "ls-tree" => stdout.write_all(LS_TREE_HELP.as_bytes())?,
@@ -307,6 +316,83 @@ fn init_command(
             Ok(ExitCode::from(1))
         }
     }
+}
+
+fn clone_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let mut quiet = false;
+    let mut local = false;
+    let mut no_checkout = false;
+    let mut positional = Vec::new();
+    let mut after_separator = false;
+
+    for arg in args {
+        match arg.as_str() {
+            "--" if !after_separator => after_separator = true,
+            "-q" | "--quiet" if !after_separator => quiet = true,
+            "-l" | "--local" if !after_separator => local = true,
+            "-n" | "--no-checkout" if !after_separator => no_checkout = true,
+            unsupported if unsupported.starts_with('-') && !after_separator => {
+                writeln!(stderr, "rit: unsupported clone option '{unsupported}'")?;
+                return Ok(ExitCode::from(129));
+            }
+            value => positional.push(value.to_owned()),
+        }
+    }
+
+    if !local {
+        writeln!(stderr, "rit: clone currently requires --local")?;
+        return Ok(ExitCode::from(129));
+    }
+    if !no_checkout {
+        writeln!(
+            stderr,
+            "rit: clone checkout is not implemented; pass --no-checkout"
+        )?;
+        return Ok(ExitCode::from(129));
+    }
+    if positional.is_empty() || positional.len() > 2 {
+        writeln!(
+            stderr,
+            "rit: clone expects <source> and optional <directory>"
+        )?;
+        return Ok(ExitCode::from(129));
+    }
+
+    let source = std::path::PathBuf::from(&positional[0]);
+    let directory = positional
+        .get(1)
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| default_clone_directory(&source));
+    let options = rit_core::LocalCloneOptions::new(&source, &directory);
+
+    match rit_core::Repository::clone_local_no_checkout(&options) {
+        Ok(_) => {
+            if !quiet {
+                writeln!(
+                    stdout,
+                    "Cloned local repository into '{}'.",
+                    directory.display()
+                )?;
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(error) => {
+            writeln!(stderr, "rit: {error}")?;
+            Ok(ExitCode::from(1))
+        }
+    }
+}
+
+fn default_clone_directory(source: &std::path::Path) -> std::path::PathBuf {
+    source
+        .file_name()
+        .filter(|name| !name.is_empty())
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("repository"))
 }
 
 fn rev_parse_command(
@@ -1749,6 +1835,15 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit init"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn clone_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "clone"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit clone"));
         assert_eq!(stderr, "");
     }
 

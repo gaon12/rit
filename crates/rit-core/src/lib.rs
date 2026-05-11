@@ -31,7 +31,7 @@ pub use object::{GitObject, ObjectId, ObjectKind, TreeEntry, hash_object};
 pub use odb::LooseObjectDb;
 pub use pathspec::PathspecSet;
 pub use refs::{Branch, Tag};
-pub use repository::{InitOptions, Repository};
+pub use repository::{InitOptions, LocalCloneOptions, Repository};
 pub use status::{
     PorcelainStatus, StatusBranchHeader, StatusEntry, StatusOptions, UntrackedFilesMode,
 };
