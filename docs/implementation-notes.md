@@ -314,10 +314,11 @@
   blocking severity.
 - Added conservative secret-pattern policy findings for private key blocks and
   common token prefixes without including matched secret values in messages.
+- Added protected branch policy findings that accept either short branch names
+  or `refs/heads/*` names in `protect_branches`.
 - Policy defaults warn and do not block writes; blocking requires explicit
   `enforcement = "block"`.
-- Still unsupported: evaluating protected branch policies, `rit doctor`, and
-  `rit repair`.
+- Still unsupported: `rit doctor` and `rit repair`.
 
 ### `rit version`
 

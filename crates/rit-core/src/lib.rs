@@ -21,6 +21,8 @@ pub mod partial_clone;
 pub mod pathspec;
 pub mod policy;
 pub mod policy_check;
+#[cfg(test)]
+mod policy_check_tests;
 pub mod refs;
 pub mod repository;
 pub mod semantic_diff;

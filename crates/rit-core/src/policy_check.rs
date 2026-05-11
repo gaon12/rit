@@ -24,12 +24,17 @@ pub enum PolicyFindingKind {
         /// Human-readable pattern name, never the detected secret value.
         pattern: String,
     },
+    /// A protected branch would be updated by a write operation.
+    ProtectedBranch {
+        /// Protected branch name.
+        branch: String,
+    },
 }
 
 /// One policy finding.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PolicyFinding {
-    /// Repository-relative path involved in the finding.
+    /// Repository-relative path or ref involved in the finding.
     pub path: String,
     /// Finding kind and details.
     pub kind: PolicyFindingKind,
@@ -77,6 +82,26 @@ impl PolicyConfig {
             .map(|pattern| secret_finding(path.clone(), pattern, self.enforcement))
             .collect()
     }
+
+    /// Checks whether a branch update targets a protected branch.
+    pub fn check_protected_branch_update(
+        &self,
+        branch_name: impl Into<String>,
+    ) -> Option<PolicyFinding> {
+        let branch_name = branch_name.into();
+        if !is_protected_branch(&self.protect_branches, &branch_name) {
+            return None;
+        }
+
+        Some(PolicyFinding {
+            message: format!("{branch_name} is protected by rit policy"),
+            path: branch_ref_name(&branch_name),
+            kind: PolicyFindingKind::ProtectedBranch {
+                branch: branch_name,
+            },
+            severity: severity_from_enforcement(self.enforcement),
+        })
+    }
 }
 
 fn secret_finding(
@@ -120,6 +145,20 @@ fn secret_patterns(contents: &str) -> Vec<&'static str> {
     patterns
 }
 
+fn is_protected_branch(protected_branches: &[String], branch_name: &str) -> bool {
+    let branch_ref = branch_ref_name(branch_name);
+    protected_branches
+        .iter()
+        .any(|protected| branch_ref_name(protected) == branch_ref)
+}
+
+fn branch_ref_name(branch_name: &str) -> String {
+    branch_name.strip_prefix("refs/heads/").map_or_else(
+        || format!("refs/heads/{branch_name}"),
+        |name| format!("refs/heads/{name}"),
+    )
+}
+
 fn contains_token_with_prefix(contents: &str, prefix: &str, minimum_len: usize) -> bool {
     contents
         .match_indices(prefix)
@@ -140,103 +179,5 @@ fn severity_from_enforcement(enforcement: PolicyEnforcement) -> PolicySeverity {
     match enforcement {
         PolicyEnforcement::Warn => PolicySeverity::Warning,
         PolicyEnforcement::Block => PolicySeverity::Blocking,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::PolicyEnforcement;
-
-    #[test]
-    fn blob_size_policy_warns_by_default() {
-        let policy = PolicyConfig {
-            max_regular_blob_size: Some(10),
-            ..PolicyConfig::default()
-        };
-
-        let finding = policy
-            .check_blob_size("large.bin", 11)
-            .expect("large blob should be reported");
-
-        assert_eq!(finding.severity, PolicySeverity::Warning);
-        assert_eq!(
-            finding.kind,
-            PolicyFindingKind::BlobTooLarge {
-                limit: 10,
-                actual: 11,
-            }
-        );
-    }
-
-    #[test]
-    fn blob_size_policy_blocks_only_when_explicit() {
-        let policy = PolicyConfig {
-            max_regular_blob_size: Some(10),
-            enforcement: PolicyEnforcement::Block,
-            ..PolicyConfig::default()
-        };
-
-        assert_eq!(
-            policy
-                .check_blob_size("large.bin", 11)
-                .expect("large blob should be reported")
-                .severity,
-            PolicySeverity::Blocking
-        );
-        assert_eq!(policy.check_blob_size("small.bin", 10), None);
-    }
-
-    #[test]
-    fn secret_policy_is_disabled_by_default() {
-        let policy = PolicyConfig::default();
-
-        assert_eq!(
-            policy.check_text_for_secrets(
-                "config.txt",
-                "token = ghp_123456789012345678901234567890123456"
-            ),
-            Vec::new()
-        );
-    }
-
-    #[test]
-    fn secret_policy_reports_without_revealing_secret() {
-        let policy = PolicyConfig {
-            deny_secrets: true,
-            ..PolicyConfig::default()
-        };
-
-        let findings = policy.check_text_for_secrets(
-            "config.txt",
-            "token = ghp_123456789012345678901234567890123456",
-        );
-
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, PolicySeverity::Warning);
-        assert_eq!(
-            findings[0].kind,
-            PolicyFindingKind::SecretPattern {
-                pattern: "GitHub token".to_owned(),
-            }
-        );
-        assert!(!findings[0].message.contains("ghp_"));
-    }
-
-    #[test]
-    fn secret_policy_blocks_only_when_explicit() {
-        let policy = PolicyConfig {
-            deny_secrets: true,
-            enforcement: PolicyEnforcement::Block,
-            ..PolicyConfig::default()
-        };
-
-        let findings = policy.check_text_for_secrets(
-            "key.pem",
-            "-----BEGIN OPENSSH PRIVATE KEY-----\nsecret\n-----END OPENSSH PRIVATE KEY-----",
-        );
-
-        assert_eq!(findings.len(), 1);
-        assert_eq!(findings[0].severity, PolicySeverity::Blocking);
     }
 }
