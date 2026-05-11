@@ -72,6 +72,45 @@ pub struct UploadPackRequest {
     done: bool,
 }
 
+/// ACK status words used by upload-pack negotiation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UploadPackAckStatus {
+    /// The object is common, and negotiation should continue.
+    Continue,
+    /// The object is a common commit.
+    Common,
+    /// The server is ready to send pack data.
+    Ready,
+}
+
+/// One upload-pack negotiation response line.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum UploadPackAcknowledgement {
+    /// The server has no common object to acknowledge for this round.
+    Nak,
+    /// The server acknowledges a common object.
+    Ack {
+        /// Common object ID reported by the server.
+        object_id: ObjectId,
+        /// Optional multi_ack status word.
+        status: Option<UploadPackAckStatus>,
+    },
+    /// Server-side protocol error returned as an `ERR` pkt-line.
+    Error {
+        /// Human-readable error message without the leading `ERR ` marker.
+        message: String,
+    },
+}
+
+/// Parsed upload-pack response up to the start of pack data.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UploadPackResponse {
+    /// ACK, NAK, or ERR records returned before pack bytes.
+    pub acknowledgements: Vec<UploadPackAcknowledgement>,
+    /// Raw non-sideband pack bytes when the response switches to `PACK...`.
+    pub pack_data: Option<Vec<u8>>,
+}
+
 impl UploadPackRequest {
     /// Creates a request with one or more wanted objects.
     pub fn new(wants: Vec<ObjectId>) -> Result<Self> {
@@ -121,6 +160,38 @@ impl UploadPackRequest {
             output.extend_from_slice(b"0000");
         }
         output
+    }
+}
+
+impl UploadPackResponse {
+    /// Parses upload-pack ACK/NAK pkt-lines and raw `PACK` data.
+    ///
+    /// Side-band pack data is still handled by future transport work; this
+    /// parser intentionally rejects unknown pkt-line payloads so callers do not
+    /// accidentally treat multiplexed progress or errors as pack data.
+    pub fn parse(bytes: &[u8]) -> Result<Self> {
+        let mut acknowledgements = Vec::new();
+        let mut pack_data = None;
+        let mut position = 0;
+
+        while position < bytes.len() {
+            if bytes[position..].starts_with(b"PACK") {
+                pack_data = Some(bytes[position..].to_vec());
+                break;
+            }
+
+            let (payload, next_position) = read_pkt_line_at(bytes, position)?;
+            position = next_position;
+            if payload.is_empty() {
+                continue;
+            }
+            acknowledgements.push(parse_upload_pack_acknowledgement(&payload)?);
+        }
+
+        Ok(Self {
+            acknowledgements,
+            pack_data,
+        })
     }
 }
 
@@ -199,35 +270,38 @@ fn parse_pkt_lines(bytes: &[u8]) -> Result<Vec<Vec<u8>>> {
     let mut lines = Vec::new();
     let mut position = 0;
     while position < bytes.len() {
-        let length_end = position + 4;
-        let Some(length_bytes) = bytes.get(position..length_end) else {
-            return Err(RitError::invalid_input("truncated pkt-line length"));
-        };
-        let length_text = std::str::from_utf8(length_bytes)
-            .map_err(|_| RitError::invalid_input("pkt-line length is not UTF-8"))?;
-        let length = u16::from_str_radix(length_text, 16)
-            .map_err(|_| RitError::invalid_input("invalid pkt-line length"))?
-            as usize;
-        position = length_end;
-
-        if length == 0 {
-            lines.push(Vec::new());
-            continue;
-        }
-        if length < 4 {
-            return Err(RitError::invalid_input(
-                "pkt-line length is smaller than header",
-            ));
-        }
-        let payload_len = length - 4;
-        let payload_end = position + payload_len;
-        let Some(payload) = bytes.get(position..payload_end) else {
-            return Err(RitError::invalid_input("truncated pkt-line payload"));
-        };
-        lines.push(payload.to_vec());
-        position = payload_end;
+        let (payload, next_position) = read_pkt_line_at(bytes, position)?;
+        lines.push(payload);
+        position = next_position;
     }
     Ok(lines)
+}
+
+fn read_pkt_line_at(bytes: &[u8], position: usize) -> Result<(Vec<u8>, usize)> {
+    let length_end = position + 4;
+    let Some(length_bytes) = bytes.get(position..length_end) else {
+        return Err(RitError::invalid_input("truncated pkt-line length"));
+    };
+    let length_text = std::str::from_utf8(length_bytes)
+        .map_err(|_| RitError::invalid_input("pkt-line length is not UTF-8"))?;
+    let length = u16::from_str_radix(length_text, 16)
+        .map_err(|_| RitError::invalid_input("invalid pkt-line length"))? as usize;
+
+    if length == 0 {
+        return Ok((Vec::new(), length_end));
+    }
+    if length < 4 {
+        return Err(RitError::invalid_input(
+            "pkt-line length is smaller than header",
+        ));
+    }
+    let payload_start = length_end;
+    let payload_len = length - 4;
+    let payload_end = payload_start + payload_len;
+    let Some(payload) = bytes.get(payload_start..payload_end) else {
+        return Err(RitError::invalid_input("truncated pkt-line payload"));
+    };
+    Ok((payload.to_vec(), payload_end))
 }
 
 fn write_pkt_line(output: &mut Vec<u8>, payload: &[u8]) {
@@ -272,6 +346,46 @@ fn parse_advertised_ref_line(
         },
         capabilities,
     ))
+}
+
+fn parse_upload_pack_acknowledgement(line: &[u8]) -> Result<UploadPackAcknowledgement> {
+    let line = line.strip_suffix(b"\n").unwrap_or(line);
+    let line_text = std::str::from_utf8(line)
+        .map_err(|_| RitError::invalid_input("upload-pack response is not UTF-8"))?;
+    if line_text == "NAK" {
+        return Ok(UploadPackAcknowledgement::Nak);
+    }
+    if let Some(message) = line_text.strip_prefix("ERR ") {
+        return Ok(UploadPackAcknowledgement::Error {
+            message: message.to_owned(),
+        });
+    }
+
+    let parts = line_text.split_whitespace().collect::<Vec<_>>();
+    match parts.as_slice() {
+        ["ACK", object_id] => Ok(UploadPackAcknowledgement::Ack {
+            object_id: ObjectId::from_hex(object_id)?,
+            status: None,
+        }),
+        ["ACK", object_id, status] => Ok(UploadPackAcknowledgement::Ack {
+            object_id: ObjectId::from_hex(object_id)?,
+            status: Some(parse_upload_pack_ack_status(status)?),
+        }),
+        _ => Err(RitError::invalid_input(
+            "unsupported upload-pack response line",
+        )),
+    }
+}
+
+fn parse_upload_pack_ack_status(status: &str) -> Result<UploadPackAckStatus> {
+    match status {
+        "continue" => Ok(UploadPackAckStatus::Continue),
+        "common" => Ok(UploadPackAckStatus::Common),
+        "ready" => Ok(UploadPackAckStatus::Ready),
+        _ => Err(RitError::invalid_input(format!(
+            "unsupported upload-pack ACK status: {status}"
+        ))),
+    }
 }
 
 /// Transport protocol family inferred from a repository location.
@@ -378,7 +492,7 @@ fn is_windows_drive_path(input: &str) -> bool {
 mod tests {
     use super::{
         FetchRefSpec, SmartHttpAdvertisement, SmartHttpService, TransportLocation,
-        TransportProtocol,
+        TransportProtocol, UploadPackAckStatus, UploadPackAcknowledgement, UploadPackResponse,
     };
     use crate::ObjectId;
 
@@ -508,5 +622,62 @@ mod tests {
         let error = super::UploadPackRequest::new(Vec::new()).expect_err("want is required");
 
         assert!(error.to_string().contains("at least one want"));
+    }
+
+    #[test]
+    fn parses_upload_pack_nak_and_raw_pack_response() {
+        let response =
+            UploadPackResponse::parse(b"0008NAK\nPACK\x00\x00\x00\x02payload").expect("response");
+
+        assert_eq!(response.acknowledgements, [UploadPackAcknowledgement::Nak]);
+        assert_eq!(
+            response.pack_data,
+            Some(b"PACK\x00\x00\x00\x02payload".to_vec())
+        );
+    }
+
+    #[test]
+    fn parses_upload_pack_ack_statuses() {
+        let first = "7e47fe2bd8d01d481f44d7af0531bd93d3b21c01";
+        let second = "74730d410fcb6603ace96f1dc55ea6196122532d";
+        let response = UploadPackResponse::parse(
+            format!("003aACK {first} continue\n0037ACK {second} ready\n").as_bytes(),
+        )
+        .expect("response");
+
+        assert_eq!(
+            response.acknowledgements,
+            [
+                UploadPackAcknowledgement::Ack {
+                    object_id: ObjectId::from_hex(first).expect("first object"),
+                    status: Some(UploadPackAckStatus::Continue),
+                },
+                UploadPackAcknowledgement::Ack {
+                    object_id: ObjectId::from_hex(second).expect("second object"),
+                    status: Some(UploadPackAckStatus::Ready),
+                },
+            ]
+        );
+        assert_eq!(response.pack_data, None);
+    }
+
+    #[test]
+    fn parses_upload_pack_error_response() {
+        let response = UploadPackResponse::parse(b"0014ERR unknown ref\n").expect("response");
+
+        assert_eq!(
+            response.acknowledgements,
+            [UploadPackAcknowledgement::Error {
+                message: "unknown ref".to_owned(),
+            }]
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_upload_pack_response_lines() {
+        let error =
+            UploadPackResponse::parse(b"000dprogress\n").expect_err("line should be rejected");
+
+        assert!(error.to_string().contains("unsupported upload-pack"));
     }
 }

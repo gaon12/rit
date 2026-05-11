@@ -243,6 +243,8 @@ Completion criteria:
   - [x] Single local fetch refspec updates a destination ref after copying
     objects.
   - [x] Smart HTTP upload-pack `want`/`have`/`done` request model.
+  - [x] Smart HTTP upload-pack ACK/NAK/ERR response parser and raw pack
+    classifier.
   - [ ] Remote advertised refs and pack negotiation.
 - [ ] Push basics.
 
@@ -354,3 +356,16 @@ Completion criteria:
 1. Keep M6 case-sensitivity parity under verification as new path lookup
    surfaces are added.
 2. Continue M7 with HTTP transport planning and fetch negotiation boundaries.
+
+## Implementation Notes
+
+- 2026-05-11, M7 upload-pack response model:
+  - Reference Git: `git version 2.52.0.windows.1`.
+  - Reference docs checked: local `gitprotocol-http(5)` smart HTTP
+    upload-pack POST/result content types and local `gitprotocol-pack(5)`
+    ACK/NAK negotiation plus packfile data sections.
+  - Implemented: pure Rust parsing for upload-pack `NAK`, `ACK <object>`,
+    `ACK <object> continue|common|ready`, `ERR <message>`, and detection of
+    non-sideband raw `PACK` data.
+  - Still open: HTTP client I/O, side-band/side-band-64k unpacking, applying
+    received packfiles into the object database, and full remote negotiation.
