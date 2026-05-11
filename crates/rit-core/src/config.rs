@@ -88,6 +88,31 @@ impl GitConfig {
             .map(|entry| entry.value.as_str())
     }
 
+    /// Returns all values for `section.key`, preserving file order.
+    pub fn values(&self, section: &str, key: &str) -> Vec<&str> {
+        self.values_in_subsection(section, None, key)
+    }
+
+    /// Returns all values for `section.subsection.key`, preserving file order.
+    pub fn values_in_subsection(
+        &self,
+        section: &str,
+        subsection: Option<&str>,
+        key: &str,
+    ) -> Vec<&str> {
+        let section = section.to_ascii_lowercase();
+        let key = key.to_ascii_lowercase();
+        self.entries
+            .iter()
+            .filter(|entry| {
+                entry.section == section
+                    && entry.subsection.as_deref() == subsection
+                    && entry.key == key
+            })
+            .map(|entry| entry.value.as_str())
+            .collect()
+    }
+
     /// Returns a boolean config value using Git's common true/false spellings.
     pub fn get_bool(&self, section: &str, key: &str, default: bool) -> Result<bool> {
         match self.get(section, key) {
@@ -336,6 +361,23 @@ mod tests {
             config
                 .get_bool("core", "missing", true)
                 .expect("default should be returned")
+        );
+    }
+
+    #[test]
+    fn returns_all_values_in_file_order() {
+        let config = GitConfig::parse(
+            r#"
+            [credential]
+                helper = cache
+                helper = manager
+            "#,
+        )
+        .expect("config should parse");
+
+        assert_eq!(
+            config.values("credential", "helper"),
+            vec!["cache", "manager"]
         );
     }
 }

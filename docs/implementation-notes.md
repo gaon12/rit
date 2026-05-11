@@ -265,14 +265,16 @@
   response-shaped messages.
 - Added `credential.helper` config lookup for helper command shape without
   executing helper subprocesses.
+- Added ordered `credential.helper` chain parsing, including empty helper
+  entries that reset earlier helpers.
 - Added SSH agent availability modeling from `SSH_AUTH_SOCK`.
 - Added platform default OS keychain adapter selection models for Windows
   Credential Manager, macOS Keychain, and freedesktop Secret Service/libsecret.
 - Added CI/non-interactive prompt policy for `CI`, `GITHUB_ACTIONS`,
   `RIT_NONINTERACTIVE`, and `GIT_TERMINAL_PROMPT=0`.
-- Still unsupported: Git credential helper subprocess execution/helper
-  chaining, SSH agent protocol identity lookup/signing, OS keychain read/write
-  implementations, and using auth policies inside transport execution.
+- Still unsupported: Git credential helper subprocess execution, SSH agent
+  protocol identity lookup/signing, OS keychain read/write implementations, and
+  using auth policies inside transport execution.
 
 ### `rit version`
 

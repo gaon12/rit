@@ -27,9 +27,25 @@ impl GitCredentialHelper {
     /// Reads the last configured `credential.helper`, matching scalar config
     /// lookup behavior used elsewhere in rit.
     pub fn from_config(config: &GitConfig) -> Option<Self> {
-        config.get("credential", "helper").map(|helper| Self {
-            command: helper.to_owned(),
-        })
+        Self::chain_from_config(config).pop()
+    }
+
+    /// Reads configured `credential.helper` values as an ordered helper chain.
+    ///
+    /// An empty helper value clears previously configured helpers, matching
+    /// Git's documented reset behavior for this multi-valued setting.
+    pub fn chain_from_config(config: &GitConfig) -> Vec<Self> {
+        let mut helpers = Vec::new();
+        for helper in config.values("credential", "helper") {
+            if helper.is_empty() {
+                helpers.clear();
+                continue;
+            }
+            helpers.push(Self {
+                command: helper.to_owned(),
+            });
+        }
+        helpers
     }
 }
 
@@ -150,5 +166,33 @@ mod tests {
         let helper = GitCredentialHelper::from_config(&config).expect("helper should exist");
 
         assert_eq!(helper.command, "manager");
+    }
+
+    #[test]
+    fn git_credential_helper_reads_ordered_chain_with_reset() {
+        let config = GitConfig::parse(
+            r#"
+            [credential]
+                helper = cache
+                helper =
+                helper = manager
+                helper = "store --file ~/.git-credentials"
+            "#,
+        )
+        .expect("config should parse");
+
+        let helpers = GitCredentialHelper::chain_from_config(&config);
+
+        assert_eq!(
+            helpers,
+            vec![
+                GitCredentialHelper {
+                    command: "manager".to_owned(),
+                },
+                GitCredentialHelper {
+                    command: "store --file ~/.git-credentials".to_owned(),
+                },
+            ]
+        );
     }
 }
