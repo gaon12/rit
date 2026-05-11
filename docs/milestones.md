@@ -362,7 +362,9 @@ Completion criteria:
   - [x] Encode and parse Git credential helper line-protocol messages.
   - [x] Read `credential.helper` command shape from Git config.
   - [ ] Helper subprocess execution and helper chaining.
-- [ ] SSH agent integration.
+- [~] SSH agent integration.
+  - [x] Model `SSH_AUTH_SOCK` based agent availability.
+  - [ ] Agent protocol identity lookup and signing.
 - [ ] OS keychain adapters.
 - [ ] CI non-interactive mode.
 

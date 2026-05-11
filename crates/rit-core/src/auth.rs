@@ -1,6 +1,7 @@
 use crate::{GitConfig, Result};
 use std::env;
 use std::fmt::{Debug, Display, Formatter};
+use std::path::PathBuf;
 
 /// Environment variables checked by the default token provider.
 pub const DEFAULT_TOKEN_ENV_VARS: &[&str] = &[
@@ -210,6 +211,34 @@ pub struct GitCredentialHelper {
     pub command: String,
 }
 
+/// SSH agent connection settings.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SshAgentConfig {
+    /// Path from `SSH_AUTH_SOCK`, when available.
+    pub socket: Option<PathBuf>,
+}
+
+impl SshAgentConfig {
+    /// Reads SSH agent settings from the current environment.
+    pub fn from_env() -> Self {
+        Self {
+            socket: env::var_os("SSH_AUTH_SOCK").map(PathBuf::from),
+        }
+    }
+
+    /// Creates explicit SSH agent settings.
+    pub fn new(socket: Option<impl Into<PathBuf>>) -> Self {
+        Self {
+            socket: socket.map(Into::into),
+        }
+    }
+
+    /// Returns true when an agent socket is configured.
+    pub fn is_available(&self) -> bool {
+        self.socket.is_some()
+    }
+}
+
 impl GitCredentialHelper {
     /// Reads the last configured `credential.helper`, matching scalar config
     /// lookup behavior used elsewhere in rit.
@@ -390,5 +419,16 @@ mod tests {
         let helper = GitCredentialHelper::from_config(&config).expect("helper should exist");
 
         assert_eq!(helper.command, "manager");
+    }
+
+    #[test]
+    fn ssh_agent_config_reports_socket_availability() {
+        let config = SshAgentConfig::new(Some("/tmp/agent.sock"));
+
+        assert!(config.is_available());
+        assert_eq!(config.socket, Some(PathBuf::from("/tmp/agent.sock")));
+
+        let missing = SshAgentConfig::new(None::<PathBuf>);
+        assert!(!missing.is_available());
     }
 }

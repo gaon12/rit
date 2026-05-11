@@ -265,9 +265,10 @@
   response-shaped messages.
 - Added `credential.helper` config lookup for helper command shape without
   executing helper subprocesses.
+- Added SSH agent availability modeling from `SSH_AUTH_SOCK`.
 - Still unsupported: Git credential helper subprocess execution/helper
-  chaining, SSH agent integration, OS keychain adapters, and CI non-interactive
-  policy.
+  chaining, SSH agent protocol identity lookup/signing, OS keychain adapters,
+  and CI non-interactive policy.
 
 ### `rit version`
 
