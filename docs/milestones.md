@@ -260,7 +260,9 @@ Completion criteria:
   - [x] Pack index v2 generation for received packs.
   - [x] Received pack ingest helper for store, index, and loose application.
   - [x] Remote advertised refs discovery through the smart HTTP client.
-  - [ ] Remote pack negotiation.
+  - [x] Single-round remote pack negotiation for an advertised ref through the
+    smart HTTP client.
+  - [ ] Wire negotiated remote pack ingestion into `rit fetch`.
 - [~] Push basics.
   - [x] receive-pack reference update request body model.
   - [x] receive-pack `report-status` parser.
@@ -452,3 +454,15 @@ Completion criteria:
     names re-exported from `transport`.
   - Result: `transport.rs` is now roughly 1546 lines, with upload-pack and
     receive-pack protocol logic isolated for easier review and future M7 work.
+- 2026-05-11, M7 remote pack negotiation:
+  - Reference Git: `git version 2.52.0.windows.1`.
+  - Reference docs checked: local `gitprotocol-http(5)` smart HTTP discovery
+    and upload-pack POST/result flow, plus local `gitprotocol-pack(5)`
+    upload-pack negotiation and side-band data rules.
+  - Implemented: `BlockingSmartHttpClient::negotiate_upload_pack` discovers
+    upload-pack refs, finds a caller-selected advertised ref, sends one
+    `want`/`have`/`done` request with supported advertised capabilities, parses
+    the upload-pack result, rejects protocol `ERR`, and returns extracted raw
+    pack bytes.
+  - Still open: multi-round negotiation, thin-pack fixups, HTTPS/TLS, and
+    writing negotiated pack ingestion into `rit fetch`.

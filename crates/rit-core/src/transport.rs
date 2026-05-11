@@ -83,6 +83,21 @@ pub struct SmartHttpResponse {
     pub body: Vec<u8>,
 }
 
+/// Result of a single smart HTTP upload-pack negotiation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RemotePackNegotiation {
+    /// Advertisement used to choose the wanted object and capabilities.
+    pub advertisement: SmartHttpAdvertisement,
+    /// Ref requested by the caller.
+    pub wanted_ref: String,
+    /// Object ID advertised for `wanted_ref`.
+    pub want_id: ObjectId,
+    /// Parsed upload-pack response returned by the server.
+    pub response: UploadPackResponse,
+    /// Raw pack bytes extracted from raw or side-band upload-pack data.
+    pub pack_bytes: Vec<u8>,
+}
+
 /// Command metadata needed to start a Git service over SSH.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SshServiceCommand {
@@ -173,6 +188,42 @@ impl BlockingSmartHttpClient {
     ) -> Result<SmartHttpAdvertisement> {
         let response = self.get_info_refs(location, service)?;
         SmartHttpAdvertisement::parse(service, &response.body)
+    }
+
+    /// Performs one smart HTTP upload-pack negotiation for an advertised ref.
+    pub fn negotiate_upload_pack(
+        &self,
+        location: &TransportLocation,
+        wanted_ref: &str,
+        haves: Vec<ObjectId>,
+    ) -> Result<RemotePackNegotiation> {
+        let advertisement = self.discover_refs(location, SmartHttpService::UploadPack)?;
+        let advertised_ref = advertisement
+            .refs
+            .iter()
+            .find(|advertised_ref| advertised_ref.name == wanted_ref)
+            .ok_or_else(|| {
+                RitError::invalid_input(format!("remote did not advertise ref: {wanted_ref}"))
+            })?;
+        let want_id = advertised_ref.object_id;
+        let capabilities = select_upload_pack_capabilities(&advertisement.capabilities);
+        let request = UploadPackRequest::new(vec![want_id])?
+            .with_capabilities(capabilities)
+            .with_haves(haves);
+        let response = self.post_upload_pack(location, &request)?;
+        let parsed_response = UploadPackResponse::parse(&response.body)?;
+        reject_upload_pack_error(&parsed_response)?;
+        let pack_bytes = parsed_response.pack_bytes()?.ok_or_else(|| {
+            RitError::invalid_input("upload-pack response did not include pack data")
+        })?;
+
+        Ok(RemotePackNegotiation {
+            advertisement,
+            wanted_ref: wanted_ref.to_owned(),
+            want_id,
+            response: parsed_response,
+            pack_bytes,
+        })
     }
 
     /// Performs a smart HTTP upload-pack POST request.
@@ -322,6 +373,38 @@ impl FetchRefSpec {
             destination: destination.to_owned(),
         })
     }
+}
+
+fn select_upload_pack_capabilities(advertised: &[String]) -> Vec<String> {
+    let mut selected = Vec::new();
+    push_capability_if_advertised(advertised, &mut selected, "multi_ack_detailed");
+    if !selected
+        .iter()
+        .any(|capability| capability == "multi_ack_detailed")
+    {
+        push_capability_if_advertised(advertised, &mut selected, "multi_ack");
+    }
+    push_capability_if_advertised(advertised, &mut selected, "side-band-64k");
+    push_capability_if_advertised(advertised, &mut selected, "thin-pack");
+    push_capability_if_advertised(advertised, &mut selected, "ofs-delta");
+    selected
+}
+
+fn push_capability_if_advertised(advertised: &[String], selected: &mut Vec<String>, name: &str) {
+    if advertised.iter().any(|capability| capability == name) {
+        selected.push(name.to_owned());
+    }
+}
+
+fn reject_upload_pack_error(response: &UploadPackResponse) -> Result<()> {
+    for acknowledgement in &response.acknowledgements {
+        if let UploadPackAcknowledgement::Error { message } = acknowledgement {
+            return Err(RitError::invalid_input(format!(
+                "upload-pack error: {message}"
+            )));
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn parse_pkt_lines(bytes: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -1115,6 +1198,57 @@ mod tests {
     }
 
     #[test]
+    fn blocking_http_client_negotiates_upload_pack_for_advertised_ref() {
+        let want = ObjectId::from_hex("0a53e9ddeaddad63ad106860237bbf53411d11a7").expect("want");
+        let have = ObjectId::from_hex("441b40d833fdfa93eb2908e52742248faf0ee993").expect("have");
+        let mut advertisement = Vec::new();
+        test_pkt_line(&mut advertisement, b"# service=git-upload-pack\n");
+        advertisement.extend_from_slice(b"0000");
+        test_pkt_line(
+            &mut advertisement,
+            format!("{want} HEAD\0multi_ack_detailed side-band-64k ofs-delta agent=git/2.52\n")
+                .as_bytes(),
+        );
+        test_pkt_line(
+            &mut advertisement,
+            format!("{want} refs/heads/main\n").as_bytes(),
+        );
+        advertisement.extend_from_slice(b"0000");
+
+        let mut upload_pack = Vec::new();
+        test_pkt_line(&mut upload_pack, b"NAK\n");
+        let mut pack_side_band = vec![1];
+        pack_side_band.extend_from_slice(b"PACKdata");
+        test_pkt_line(&mut upload_pack, &pack_side_band);
+        upload_pack.extend_from_slice(b"0000");
+
+        let (base_url, request_handle) = serve_http_requests(vec![
+            http_response(
+                "application/x-git-upload-pack-advertisement",
+                &advertisement,
+            ),
+            http_response("application/x-git-upload-pack-result", &upload_pack),
+        ]);
+        let location = TransportLocation::parse(&format!("{base_url}/repo.git"));
+        let client = BlockingSmartHttpClient::new(Duration::from_secs(2));
+        let negotiation = client
+            .negotiate_upload_pack(&location, "refs/heads/main", vec![have])
+            .expect("negotiation should fetch pack bytes");
+        let requests = request_handle.join().expect("server thread");
+        let post_request = String::from_utf8(requests[1].clone()).expect("request should be UTF-8");
+
+        assert_eq!(negotiation.wanted_ref, "refs/heads/main");
+        assert_eq!(negotiation.want_id, want);
+        assert_eq!(negotiation.pack_bytes, b"PACKdata");
+        assert!(post_request.starts_with("POST /repo.git/git-upload-pack HTTP/1.1\r\n"));
+        assert!(post_request.contains(
+            "want 0a53e9ddeaddad63ad106860237bbf53411d11a7 \
+             multi_ack_detailed side-band-64k ofs-delta\n"
+        ));
+        assert!(post_request.contains("have 441b40d833fdfa93eb2908e52742248faf0ee993\n"));
+    }
+
+    #[test]
     fn blocking_http_client_posts_receive_pack_and_parses_status() {
         let (base_url, request_handle) = serve_one_http_request(
             b"HTTP/1.1 200 OK\r\nContent-Type: application/x-git-receive-pack-result\r\nConnection: close\r\n\r\n000eunpack ok\n0017ok refs/heads/main\n0000",
@@ -1522,6 +1656,49 @@ mod tests {
             request
         });
         (format!("http://127.0.0.1:{}", address.port()), handle)
+    }
+
+    fn serve_http_requests(responses: Vec<Vec<u8>>) -> (String, thread::JoinHandle<Vec<Vec<u8>>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let address = listener.local_addr().expect("local address");
+        let handle = thread::spawn(move || {
+            let mut requests = Vec::new();
+            for response in responses {
+                let (mut stream, _) = listener.accept().expect("accept connection");
+                let mut request = Vec::new();
+                let mut buffer = [0_u8; 1024];
+                loop {
+                    let bytes_read = stream.read(&mut buffer).expect("read request");
+                    if bytes_read == 0 {
+                        break;
+                    }
+                    request.extend_from_slice(&buffer[..bytes_read]);
+                    if request_is_complete(&request) {
+                        break;
+                    }
+                }
+                stream.write_all(&response).expect("write response");
+                requests.push(request);
+            }
+            requests
+        });
+        (format!("http://127.0.0.1:{}", address.port()), handle)
+    }
+
+    fn http_response(content_type: &str, body: &[u8]) -> Vec<u8> {
+        let mut response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        )
+        .into_bytes();
+        response.extend_from_slice(body);
+        response
+    }
+
+    fn test_pkt_line(output: &mut Vec<u8>, payload: &[u8]) {
+        let length = payload.len() + 4;
+        output.extend_from_slice(format!("{length:04x}").as_bytes());
+        output.extend_from_slice(payload);
     }
 
     fn request_is_complete(request: &[u8]) -> bool {

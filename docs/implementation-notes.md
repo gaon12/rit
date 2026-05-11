@@ -521,15 +521,17 @@
 - Supported negotiation model: smart HTTP `git-upload-pack` request bodies with
   at least one `want`, optional first-want capabilities, optional `have` lines,
   and a terminal `done`; upload-pack ACK/NAK/ERR, raw pack, and side-band
-  response parsing; receive-pack command/request bodies and `report-status`
-  parsing.
+  response parsing; single-round smart HTTP negotiation for a caller-selected
+  advertised ref that returns extracted pack bytes; receive-pack
+  command/request bodies and `report-status` parsing.
 - Supported SSH model: parse `ssh://user@host/path` and `user@host:path`
   locations and build quoted `git-upload-pack` / `git-receive-pack` remote
   commands.
-- Unsupported behavior: HTTPS/TLS, SSH process/session I/O, remote pack
-  negotiation/application, push pack generation, and CLI remote fetch/push
-  wiring are not implemented yet. Remote-looking locations are classified and
-  rejected by commands whose current implementation only supports local paths.
+- Unsupported behavior: HTTPS/TLS, SSH process/session I/O, multi-round
+  negotiation, thin-pack fixups, remote pack ingestion in `rit fetch`, push
+  pack generation, and CLI remote fetch/push wiring are not implemented yet.
+  Remote-looking locations are classified and rejected by commands whose
+  current implementation only supports local paths.
 - Repository mutation: no direct mutation; command implementations decide how
   to act on a classified location.
 - Risk: low; this is routing metadata for future transports.
