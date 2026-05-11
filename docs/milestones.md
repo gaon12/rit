@@ -255,7 +255,9 @@ Completion criteria:
   - [x] Upload-pack side-band pack/progress/error response parser.
   - [x] Remote advertised refs discovery through the smart HTTP client.
   - [ ] Remote pack negotiation and pack application.
-- [ ] Push basics.
+- [~] Push basics.
+  - [x] receive-pack reference update request body model.
+  - [ ] Push pack generation, status parsing, and ref update workflow.
 
 Completion criteria:
 - Transport code does not live in core command formatting and does not depend on
@@ -404,3 +406,11 @@ Completion criteria:
     `git-receive-pack` command construction.
   - Still open: starting an SSH session, pkt-line I/O over that session,
     authentication, and pack negotiation.
+- 2026-05-11, M7 receive-pack request model:
+  - Reference Git: `git version 2.52.0.windows.1`.
+  - Reference docs checked: local `gitprotocol-pack(5)` reference update
+    request and packfile transfer grammar, plus `git push -h`.
+  - Implemented: pure Rust receive-pack command/request serialization with
+    first-command capabilities, command-list flush, and trailing raw pack data.
+  - Still open: pack generation, push-status parsing, server-side status
+    handling, and CLI `rit push`.

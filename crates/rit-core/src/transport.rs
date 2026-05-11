@@ -116,6 +116,25 @@ pub struct UploadPackRequest {
     done: bool,
 }
 
+/// One receive-pack reference update command.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReceivePackCommand {
+    /// Object ID the server currently has for the ref.
+    pub old_id: ObjectId,
+    /// Object ID the client wants the ref to point to.
+    pub new_id: ObjectId,
+    /// Full ref name to update.
+    pub name: String,
+}
+
+/// Request body for smart HTTP or SSH `git-receive-pack`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReceivePackRequest {
+    commands: Vec<ReceivePackCommand>,
+    capabilities: Vec<String>,
+    pack_data: Vec<u8>,
+}
+
 /// ACK status words used by upload-pack negotiation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UploadPackAckStatus {
@@ -216,6 +235,68 @@ impl UploadPackRequest {
         } else {
             output.extend_from_slice(b"0000");
         }
+        output
+    }
+}
+
+impl ReceivePackCommand {
+    /// Creates a reference update command.
+    pub fn new(old_id: ObjectId, new_id: ObjectId, name: impl Into<String>) -> Result<Self> {
+        let name = name.into();
+        if name.is_empty() {
+            return Err(RitError::invalid_input(
+                "receive-pack command requires a ref name",
+            ));
+        }
+        Ok(Self {
+            old_id,
+            new_id,
+            name,
+        })
+    }
+}
+
+impl ReceivePackRequest {
+    /// Creates a receive-pack request with one or more ref update commands.
+    pub fn new(commands: Vec<ReceivePackCommand>) -> Result<Self> {
+        if commands.is_empty() {
+            return Err(RitError::invalid_input(
+                "receive-pack request requires at least one command",
+            ));
+        }
+        Ok(Self {
+            commands,
+            capabilities: Vec::new(),
+            pack_data: Vec::new(),
+        })
+    }
+
+    /// Adds capabilities sent on the first command line.
+    pub fn with_capabilities(mut self, capabilities: Vec<String>) -> Self {
+        self.capabilities = capabilities;
+        self
+    }
+
+    /// Adds raw packfile bytes after the command list flush.
+    pub fn with_pack_data(mut self, pack_data: Vec<u8>) -> Self {
+        self.pack_data = pack_data;
+        self
+    }
+
+    /// Serializes the receive-pack request body.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut output = Vec::new();
+        for (index, command) in self.commands.iter().enumerate() {
+            let mut line = format!("{} {} {}", command.old_id, command.new_id, command.name);
+            if index == 0 {
+                line.push('\0');
+                line.push_str(&self.capabilities.join(" "));
+            }
+            line.push('\n');
+            write_pkt_line(&mut output, line.as_bytes());
+        }
+        output.extend_from_slice(b"0000");
+        output.extend_from_slice(&self.pack_data);
         output
     }
 }
@@ -1392,6 +1473,47 @@ mod tests {
         let error = super::UploadPackRequest::new(Vec::new()).expect_err("want is required");
 
         assert!(error.to_string().contains("at least one want"));
+    }
+
+    #[test]
+    fn builds_receive_pack_request_body() {
+        let old_id = ObjectId::from_hex("441b40d833fdfa93eb2908e52742248faf0ee993").expect("old");
+        let new_id = ObjectId::from_hex("0a53e9ddeaddad63ad106860237bbf53411d11a7").expect("new");
+        let command =
+            super::ReceivePackCommand::new(old_id, new_id, "refs/heads/main").expect("command");
+        let request = super::ReceivePackRequest::new(vec![command])
+            .expect("request")
+            .with_capabilities(vec!["report-status".to_owned(), "side-band-64k".to_owned()])
+            .with_pack_data(b"PACKdata".to_vec());
+
+        let body = request.to_bytes();
+        let command_bytes = &body[..body.len() - b"PACKdata".len()];
+        let command_text = String::from_utf8(command_bytes.to_vec()).expect("command text");
+
+        assert!(command_text.contains(
+            "441b40d833fdfa93eb2908e52742248faf0ee993 \
+             0a53e9ddeaddad63ad106860237bbf53411d11a7 \
+             refs/heads/main\0report-status side-band-64k\n"
+        ));
+        assert!(command_text.ends_with("0000"));
+        assert!(body.ends_with(b"PACKdata"));
+    }
+
+    #[test]
+    fn rejects_empty_receive_pack_requests() {
+        let error = super::ReceivePackRequest::new(Vec::new()).expect_err("command is required");
+
+        assert!(error.to_string().contains("at least one command"));
+    }
+
+    #[test]
+    fn rejects_receive_pack_commands_without_ref_names() {
+        let old_id = ObjectId::from_bytes([0; 20]);
+        let new_id = ObjectId::from_hex("0a53e9ddeaddad63ad106860237bbf53411d11a7").expect("new");
+        let error =
+            super::ReceivePackCommand::new(old_id, new_id, "").expect_err("ref is required");
+
+        assert!(error.to_string().contains("ref name"));
     }
 
     #[test]

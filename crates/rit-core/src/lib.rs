@@ -39,10 +39,10 @@ pub use status::{
     PorcelainStatus, StatusBranchHeader, StatusEntry, StatusOptions, UntrackedFilesMode,
 };
 pub use transport::{
-    AdvertisedRef, BlockingSmartHttpClient, FetchRefSpec, SmartHttpAdvertisement,
-    SmartHttpPostRequest, SmartHttpRequest, SmartHttpResponse, SmartHttpService, SshServiceCommand,
-    TransportLocation, TransportProtocol, UploadPackAckStatus, UploadPackAcknowledgement,
-    UploadPackRequest, UploadPackResponse, UploadPackSideBand,
+    AdvertisedRef, BlockingSmartHttpClient, FetchRefSpec, ReceivePackCommand, ReceivePackRequest,
+    SmartHttpAdvertisement, SmartHttpPostRequest, SmartHttpRequest, SmartHttpResponse,
+    SmartHttpService, SshServiceCommand, TransportLocation, TransportProtocol, UploadPackAckStatus,
+    UploadPackAcknowledgement, UploadPackRequest, UploadPackResponse, UploadPackSideBand,
 };
 pub use write::{
     AddOptions, CommitOptions, CommitResult, FileModeOverride, SignatureIdentity, SignatureTime,
