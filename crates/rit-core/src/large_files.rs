@@ -1,5 +1,7 @@
 use crate::Result;
 
+const GIT_LFS_POINTER_VERSION: &str = "https://git-lfs.github.com/spec/v1";
+
 /// Well-known large-file storage backends.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LargeFileBackendKind {
@@ -78,6 +80,104 @@ pub trait LargeFileBackend {
     fn encode_pointer(&self, pointer: &LargeFilePointer) -> Result<Vec<u8>>;
 }
 
+/// Git LFS pointer parser and encoder.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct GitLfsBackend;
+
+impl LargeFileBackend for GitLfsBackend {
+    fn kind(&self) -> LargeFileBackendKind {
+        LargeFileBackendKind::Lfs
+    }
+
+    fn parse_pointer(&self, data: &[u8]) -> Result<Option<LargeFilePointer>> {
+        parse_lfs_pointer(data)
+    }
+
+    fn encode_pointer(&self, pointer: &LargeFilePointer) -> Result<Vec<u8>> {
+        encode_lfs_pointer(pointer)
+    }
+}
+
+/// Parses a Git LFS v1 pointer blob.
+pub fn parse_lfs_pointer(data: &[u8]) -> Result<Option<LargeFilePointer>> {
+    if data.is_empty() || data.len() >= 1024 {
+        return Ok(None);
+    }
+    let Ok(text) = std::str::from_utf8(data) else {
+        return Ok(None);
+    };
+    let mut lines = text.lines();
+    let Some(version_line) = lines.next() else {
+        return Ok(None);
+    };
+    if version_line != format!("version {GIT_LFS_POINTER_VERSION}") {
+        return Ok(None);
+    }
+
+    let mut oid = None;
+    let mut size = None;
+    for line in lines {
+        let Some((key, value)) = line.split_once(' ') else {
+            return Ok(None);
+        };
+        match key {
+            "oid" => {
+                let Some(hash) = value.strip_prefix("sha256:") else {
+                    return Ok(None);
+                };
+                if !is_lower_hex_sha256(hash) {
+                    return Ok(None);
+                }
+                oid = Some(hash.to_owned());
+            }
+            "size" => {
+                let Ok(parsed_size) = value.parse::<u64>() else {
+                    return Ok(None);
+                };
+                size = Some(parsed_size);
+            }
+            _ => {}
+        }
+    }
+
+    let (Some(object_id), Some(size)) = (oid, size) else {
+        return Ok(None);
+    };
+    Ok(Some(LargeFilePointer::new(
+        LargeFileBackendKind::Lfs,
+        object_id,
+        size,
+    )))
+}
+
+/// Encodes Git LFS v1 pointer metadata.
+pub fn encode_lfs_pointer(pointer: &LargeFilePointer) -> Result<Vec<u8>> {
+    if pointer.backend != LargeFileBackendKind::Lfs {
+        return Err(crate::RitError::invalid_input(format!(
+            "cannot encode {} pointer as Git LFS",
+            pointer.backend.as_str()
+        )));
+    }
+    if !is_lower_hex_sha256(&pointer.object_id) {
+        return Err(crate::RitError::invalid_input(format!(
+            "invalid Git LFS sha256 object id: {}",
+            pointer.object_id
+        )));
+    }
+    Ok(format!(
+        "version {GIT_LFS_POINTER_VERSION}\noid sha256:{}\nsize {}\n",
+        pointer.object_id, pointer.size
+    )
+    .into_bytes())
+}
+
+fn is_lower_hex_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -146,6 +246,53 @@ mod tests {
             backend
                 .parse_pointer(b"not a pointer")
                 .expect("non-pointer should parse"),
+            None
+        );
+    }
+
+    #[test]
+    fn parses_git_lfs_pointer() {
+        let pointer = parse_lfs_pointer(
+            b"version https://git-lfs.github.com/spec/v1\noid sha256:4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393\nsize 12345\n",
+        )
+        .expect("pointer parse should succeed");
+
+        assert_eq!(
+            pointer,
+            Some(LargeFilePointer::new(
+                LargeFileBackendKind::Lfs,
+                "4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393",
+                12345,
+            ))
+        );
+    }
+
+    #[test]
+    fn encodes_git_lfs_pointer() {
+        let pointer = LargeFilePointer::new(
+            LargeFileBackendKind::Lfs,
+            "4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393",
+            12345,
+        );
+
+        assert_eq!(
+            encode_lfs_pointer(&pointer).expect("pointer should encode"),
+            b"version https://git-lfs.github.com/spec/v1\noid sha256:4d7a214614ab2935c943f9e0ff69d22eadbb8f32b1258daaa5e2ca24d17e2393\nsize 12345\n"
+        );
+    }
+
+    #[test]
+    fn rejects_non_lfs_pointers() {
+        assert_eq!(
+            parse_lfs_pointer(b"version https://git-lfs.github.com/spec/v1\nsize 1\n")
+                .expect("parse should succeed"),
+            None
+        );
+        assert_eq!(
+            parse_lfs_pointer(
+                b"version https://git-lfs.github.com/spec/v1\noid sha256:ABC\nsize 1\n"
+            )
+            .expect("parse should succeed"),
             None
         );
     }

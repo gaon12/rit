@@ -305,7 +305,9 @@ Completion criteria:
 - [x] Large-file backend trait.
   - [x] Backend kind, track rule, pointer metadata, and object-safe backend
     interface.
-- [ ] LFS pointer parse/write.
+- [x] LFS pointer parse/write.
+  - [x] Git LFS v1 pointer parser and encoder for `version`, `oid sha256`,
+    and `size`.
 - [ ] LFS local cache.
 - [ ] LFS batch API.
 - [ ] Xet detection.

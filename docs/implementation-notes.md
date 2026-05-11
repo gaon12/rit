@@ -52,6 +52,8 @@
   `git cherry-pick -h`, `git rebase -h`, and `git stash -h`.
 - 2026-05-12 large-file backend trait slice checked the AGENTS large-object
   backend guidance; no external `git-lfs` binary is used.
+- 2026-05-12 LFS pointer slice checked installed `git-lfs/3.7.1` and the
+  official Git LFS specification for v1 pointer format.
 - 2026-05-11 local clone object-transfer slice checked `git clone -h` and a
   direct Git comparison for `clone --local --no-checkout`.
 - 2026-05-11 local fetch object-transfer slice checked `git fetch -h` and a
@@ -212,8 +214,10 @@
   `LargeFilePointer` models.
 - Added an object-safe `LargeFileBackend` trait for parsing and encoding
   backend pointer blobs without depending on external `git-lfs`.
-- Still unsupported: LFS pointer format parsing/writing, LFS cache and batch
-  API, Xet detection, and chunk/cache reconstruction.
+- Added `GitLfsBackend`, `parse_lfs_pointer`, and `encode_lfs_pointer` for Git
+  LFS v1 pointer blobs with `version`, `oid sha256`, and `size` fields.
+- Still unsupported: LFS local object cache and batch API, Xet detection, and
+  chunk/cache reconstruction.
 
 ## Implemented Commands
 

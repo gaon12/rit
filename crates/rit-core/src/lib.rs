@@ -31,7 +31,8 @@ pub use index::{
     UntrackedCache, UntrackedCacheDirectoryBlock, UntrackedCacheStat, UntrackedCacheTail,
 };
 pub use large_files::{
-    LargeFileBackend, LargeFileBackendKind, LargeFilePointer, LargeFileTrackRule,
+    GitLfsBackend, LargeFileBackend, LargeFileBackendKind, LargeFilePointer, LargeFileTrackRule,
+    encode_lfs_pointer, parse_lfs_pointer,
 };
 pub use merge_state::{MergeState, RebaseState};
 pub use object::{GitObject, ObjectId, ObjectKind, TreeEntry, hash_object};
