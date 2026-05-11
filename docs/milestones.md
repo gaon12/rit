@@ -408,7 +408,7 @@ Completion criteria:
 ## M14: VFS
 
 - [x] Common VFS model.
-- [ ] Fallback materialized backend.
+- [x] Fallback materialized backend.
 - [ ] Platform backend plan.
 - [ ] Lazy materialization.
 - [ ] Background prefetch.

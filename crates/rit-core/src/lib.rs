@@ -40,6 +40,8 @@ pub mod sparse;
 pub mod status;
 pub mod transport;
 pub mod vfs;
+#[cfg(test)]
+mod vfs_tests;
 pub mod workspace_profile;
 pub mod write;
 
@@ -106,7 +108,10 @@ pub use transport::{
     SmartHttpService, SshServiceCommand, TransportLocation, TransportProtocol, UploadPackAckStatus,
     UploadPackAcknowledgement, UploadPackRequest, UploadPackResponse, UploadPackSideBand,
 };
-pub use vfs::{VfsAvailability, VfsBackendPreference, VfsLazyMaterialization, VfsPlan};
+pub use vfs::{
+    FallbackMaterializedAction, FallbackMaterializedBackend, FallbackMaterializedPlan,
+    VfsAvailability, VfsBackendPreference, VfsLazyMaterialization, VfsPlan,
+};
 pub use workspace_profile::{
     LazyMaterializationPolicy, RitConfig, WorkspacePrefetchPlan, WorkspaceProfile,
 };

@@ -358,6 +358,9 @@
 - Added optional Cargo feature `vfs`, disabled by default.
 - Added common VFS model types: `VfsBackendPreference`, `VfsAvailability`,
   `VfsLazyMaterialization`, and `VfsPlan`.
+- Added `FallbackMaterializedBackend` planning so builds without a platform VFS
+  can keep the whole worktree or configured workspace include paths as ordinary
+  materialized files.
 - VFS availability now reports a clear message when a binary is built without
   the `vfs` feature.
 - Still unsupported: fallback backend execution, platform backend selection,

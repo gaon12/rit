@@ -123,40 +123,55 @@ impl VfsPlan {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Backend that keeps files as ordinary materialized worktree files.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct FallbackMaterializedBackend;
 
-    #[test]
-    fn disabled_plan_uses_fallback_materialized_backend() {
-        let plan = VfsPlan::disabled();
-
-        assert_eq!(plan.backend, VfsBackendPreference::FallbackMaterialized);
-        assert!(!plan.lazy_materialization.enabled);
-        assert!(!plan.needs_unavailable_vfs());
-    }
-
-    #[test]
-    fn plan_from_lazy_policy_keeps_workspace_paths() {
-        let policy = LazyMaterializationPolicy {
-            workspace: "mobile".to_owned(),
-            enabled: true,
-            include: vec!["apps/mobile".to_owned(), "packages/ui".to_owned()],
-            requires_partial_clone: true,
+impl FallbackMaterializedBackend {
+    /// Builds a fallback execution plan without touching the filesystem.
+    pub fn plan(&self, vfs_plan: &VfsPlan) -> FallbackMaterializedPlan {
+        let actions = if vfs_plan.lazy_materialization.include.is_empty() {
+            vec![FallbackMaterializedAction::KeepFullWorktreeMaterialized]
+        } else {
+            vfs_plan
+                .lazy_materialization
+                .include
+                .iter()
+                .cloned()
+                .map(|path| FallbackMaterializedAction::KeepPathMaterialized { path })
+                .collect()
         };
 
-        let plan = VfsPlan::from_lazy_policy(&policy, VfsBackendPreference::Auto, true);
-
-        assert_eq!(plan.workspace.as_deref(), Some("mobile"));
-        assert_eq!(plan.lazy_materialization.include, policy.include);
-        assert!(plan.lazy_materialization.requires_partial_clone);
-        assert!(plan.background_prefetch);
+        FallbackMaterializedPlan {
+            workspace: vfs_plan.workspace.clone(),
+            actions,
+            partial_clone_required: vfs_plan.lazy_materialization.requires_partial_clone,
+            background_prefetch_requested: vfs_plan.background_prefetch,
+        }
     }
+}
 
-    #[test]
-    fn availability_message_is_clear() {
-        let availability = VfsAvailability::current();
+/// Fallback materialized backend plan.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FallbackMaterializedPlan {
+    /// Workspace name, when known.
+    pub workspace: Option<String>,
+    /// Materialization actions to keep the worktree ordinary and explicit.
+    pub actions: Vec<FallbackMaterializedAction>,
+    /// Whether the source VFS plan expects partial clone for missing blobs.
+    pub partial_clone_required: bool,
+    /// Whether background prefetch was requested by the source VFS plan.
+    pub background_prefetch_requested: bool,
+}
 
-        assert!(availability.message().contains("VFS"));
-    }
+/// One fallback materialization action.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum FallbackMaterializedAction {
+    /// Keep the whole worktree as a normal materialized checkout.
+    KeepFullWorktreeMaterialized,
+    /// Keep one included path materialized as normal files.
+    KeepPathMaterialized {
+        /// Repository-relative path.
+        path: String,
+    },
 }
