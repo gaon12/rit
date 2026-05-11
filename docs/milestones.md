@@ -365,7 +365,7 @@ Completion criteria:
   - [x] Helper subprocess execution for `get`, `store`, and `erase`.
 - [~] SSH agent integration.
   - [x] Model `SSH_AUTH_SOCK` based agent availability.
-  - [ ] Agent protocol identity lookup and signing.
+  - [x] Agent protocol identity lookup and signing.
 - [~] OS keychain adapters.
   - [x] Model platform default keychain adapter selection.
   - [ ] Read/write credential implementations for each OS keychain.

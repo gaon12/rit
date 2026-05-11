@@ -90,7 +90,8 @@ pub use auth::{
     DEFAULT_TOKEN_ENV_VARS, EnvironmentToken, EnvironmentTokenProvider, GitCredentialHelper,
     GitCredentialHelperExecutor, GitCredentialHelperOperation, GitCredentialHelperProvider,
     GitCredentialMessage, KeychainProviderKind, ProcessGitCredentialHelperExecutor, SecretString,
-    SshAgentConfig, SystemKeychainConfig,
+    SshAgentClient, SshAgentConfig, SshAgentIdentity, SshAgentSignFlags, SshAgentSignature,
+    SystemKeychainConfig,
 };
 pub use commit::{Commit, Signature, parse_commit};
 pub use config::{GitConfig, GitConfigEntry};

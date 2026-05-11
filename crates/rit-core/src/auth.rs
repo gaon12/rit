@@ -6,6 +6,9 @@ mod git_credential_process;
 mod git_credential_process_tests;
 mod interaction;
 mod platform;
+mod ssh_agent;
+#[cfg(test)]
+mod ssh_agent_tests;
 
 pub use credential::{
     Credential, CredentialKind, CredentialProvider, CredentialRequest, SecretString,
@@ -18,3 +21,4 @@ pub use git_credential_process::{
 };
 pub use interaction::AuthInteractionPolicy;
 pub use platform::{KeychainProviderKind, SshAgentConfig, SystemKeychainConfig};
+pub use ssh_agent::{SshAgentClient, SshAgentIdentity, SshAgentSignFlags, SshAgentSignature};

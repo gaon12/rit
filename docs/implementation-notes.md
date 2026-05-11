@@ -274,11 +274,13 @@
   no-Git-wrapper production rule while remaining compatible with helpers
   installed on `PATH`.
 - Added SSH agent availability modeling from `SSH_AUTH_SOCK`.
+- Added SSH agent protocol identity lookup and signing client for blocking
+  read/write streams, plus Unix-domain socket connection from `SSH_AUTH_SOCK`.
 - Added platform default OS keychain adapter selection models for Windows
   Credential Manager, macOS Keychain, and freedesktop Secret Service/libsecret.
 - Added CI/non-interactive prompt policy for `CI`, `GITHUB_ACTIONS`,
   `RIT_NONINTERACTIVE`, and `GIT_TERMINAL_PROMPT=0`.
-- Still unsupported: SSH agent protocol identity lookup/signing, OS keychain
+- Still unsupported: Windows named-pipe SSH agent connections, OS keychain
   read/write implementations, and using auth policies inside transport
   execution.
 
