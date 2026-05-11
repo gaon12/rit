@@ -491,3 +491,10 @@ Completion criteria:
   - Still open: deciding the object set for push, thin-pack/delta generation,
     sending the generated pack through receive-pack, and interpreting remote
     ref update results as a full push workflow.
+- 2026-05-11, CLI module hygiene:
+  - Verified large-file state before continuing: `rit-cli/src/main.rs` had
+    grown past 2100 lines.
+  - Implemented: moved static help text and command help routing into
+    `rit-cli/src/help.rs`.
+  - Result: `rit-cli/src/main.rs` is now roughly 1909 lines, with help output
+    covered by the existing CLI tests.

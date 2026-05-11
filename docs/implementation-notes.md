@@ -633,3 +633,11 @@
   `UploadPack*` and `ReceivePack*` types.
 - Behavior change: none intended; this is a readability/module-boundary change
   before more remote fetch and push workflow work.
+
+### CLI help module
+
+- 2026-05-11 hygiene pass: moved long static help text and command-help routing
+  from `crates/rit-cli/src/main.rs` into `crates/rit-cli/src/help.rs`.
+- Behavior change: none intended; this keeps the CLI entrypoint focused on
+  argument dispatch and command execution while preserving the existing help
+  output tested by the CLI suite.
