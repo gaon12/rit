@@ -4,6 +4,13 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+mod batch;
+
+pub use batch::{
+    LFS_BATCH_MEDIA_TYPE, LfsBatchAction, LfsBatchObject, LfsBatchObjectError,
+    LfsBatchObjectResponse, LfsBatchOperation, LfsBatchRef, LfsBatchRequest, LfsBatchResponse,
+};
+
 const GIT_LFS_POINTER_VERSION: &str = "https://git-lfs.github.com/spec/v1";
 
 /// Well-known large-file storage backends.

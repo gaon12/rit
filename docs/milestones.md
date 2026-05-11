@@ -311,7 +311,9 @@ Completion criteria:
 - [x] LFS local cache.
   - [x] Sharded `.git/lfs/objects/<aa>/<bb>/<sha256>` storage with SHA-256
     and size verification.
-- [ ] LFS batch API.
+- [x] LFS batch API.
+  - [x] Batch request/response models and JSON encoding/parsing for basic
+    transfer actions.
 - [ ] Xet detection.
 - [ ] Xet chunk/cache model.
 

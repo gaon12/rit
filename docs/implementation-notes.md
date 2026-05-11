@@ -218,8 +218,10 @@
   LFS v1 pointer blobs with `version`, `oid sha256`, and `size` fields.
 - Added `LfsLocalCache` for sharded `.git/lfs/objects/<aa>/<bb>/<sha256>`
   storage with streaming writes and SHA-256/size verification.
-- Still unsupported: LFS batch API, Xet detection, and chunk/cache
-  reconstruction.
+- Added Git LFS Batch API request/response models and JSON codecs for the
+  `basic` transfer adapter, including per-object actions and errors.
+- Still unsupported: LFS Batch API HTTP client execution, Xet detection, and
+  chunk/cache reconstruction.
 
 ## Implemented Commands
 

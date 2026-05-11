@@ -31,7 +31,9 @@ pub use index::{
     UntrackedCache, UntrackedCacheDirectoryBlock, UntrackedCacheStat, UntrackedCacheTail,
 };
 pub use large_files::{
-    GitLfsBackend, LargeFileBackend, LargeFileBackendKind, LargeFilePointer, LargeFileTrackRule,
+    GitLfsBackend, LFS_BATCH_MEDIA_TYPE, LargeFileBackend, LargeFileBackendKind, LargeFilePointer,
+    LargeFileTrackRule, LfsBatchAction, LfsBatchObject, LfsBatchObjectError,
+    LfsBatchObjectResponse, LfsBatchOperation, LfsBatchRef, LfsBatchRequest, LfsBatchResponse,
     LfsLocalCache, encode_lfs_pointer, parse_lfs_pointer,
 };
 pub use merge_state::{MergeState, RebaseState};
