@@ -253,6 +253,7 @@ Completion criteria:
   - [x] Smart HTTP upload-pack ACK/NAK/ERR response parser and raw pack
     classifier.
   - [x] Upload-pack side-band pack/progress/error response parser.
+  - [x] Upload-pack raw/side-band pack byte extraction.
   - [x] Remote advertised refs discovery through the smart HTTP client.
   - [ ] Remote pack negotiation and pack application.
 - [~] Push basics.
@@ -420,3 +421,11 @@ Completion criteria:
     response parsing through the blocking HTTP client.
   - Still open: pack generation, server-side status handling beyond
     `report-status`, and CLI `rit push`.
+- 2026-05-11, M7 upload-pack pack extraction:
+  - Reference Git: `git version 2.52.0.windows.1`.
+  - Reference docs checked: local `gitprotocol-pack(5)` side-band packfile
+    data section.
+  - Implemented: API to extract raw pack bytes from non-sideband responses or
+    concatenate side-band band 1 pack data while surfacing band 3 errors.
+  - Still open: storing received pack bytes, building a pack index, and using
+    the resulting objects in remote fetch.

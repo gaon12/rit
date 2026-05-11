@@ -401,6 +401,33 @@ impl UploadPackResponse {
             side_bands,
         })
     }
+
+    /// Returns raw pack bytes from either non-sideband or side-band data.
+    pub fn pack_bytes(&self) -> Result<Option<Vec<u8>>> {
+        if let Some(pack_data) = &self.pack_data {
+            return Ok(Some(pack_data.clone()));
+        }
+
+        let mut pack = Vec::new();
+        let mut saw_pack_side_band = false;
+        for side_band in &self.side_bands {
+            match side_band {
+                UploadPackSideBand::PackData(data) => {
+                    saw_pack_side_band = true;
+                    pack.extend_from_slice(data);
+                }
+                UploadPackSideBand::Progress(_) => {}
+                UploadPackSideBand::Error(data) => {
+                    let message = String::from_utf8_lossy(data).trim().to_owned();
+                    return Err(RitError::invalid_input(format!(
+                        "upload-pack side-band error: {message}"
+                    )));
+                }
+            }
+        }
+
+        Ok(saw_pack_side_band.then_some(pack))
+    }
 }
 
 /// Small blocking HTTP client for the first smart HTTP implementation.
@@ -1840,6 +1867,39 @@ mod tests {
             ]
         );
         assert_eq!(response.pack_data, None);
+    }
+
+    #[test]
+    fn extracts_raw_upload_pack_bytes() {
+        let response =
+            UploadPackResponse::parse(b"0008NAK\nPACK\x00\x00\x00\x02payload").expect("response");
+
+        assert_eq!(
+            response.pack_bytes().expect("pack bytes"),
+            Some(b"PACK\x00\x00\x00\x02payload".to_vec())
+        );
+    }
+
+    #[test]
+    fn combines_side_band_pack_bytes() {
+        let response =
+            UploadPackResponse::parse(b"0008NAK\n000a\x01PACKa0008\x02ok\n0009\x01tail0000")
+                .expect("response");
+
+        assert_eq!(
+            response.pack_bytes().expect("pack bytes"),
+            Some(b"PACKatail".to_vec())
+        );
+    }
+
+    #[test]
+    fn reports_side_band_errors_before_pack_application() {
+        let response = UploadPackResponse::parse(b"000b\x03fatal\n0000").expect("response");
+        let error = response
+            .pack_bytes()
+            .expect_err("side-band error should fail");
+
+        assert!(error.to_string().contains("fatal"));
     }
 
     #[test]
