@@ -262,7 +262,7 @@ Completion criteria:
   - [x] Remote advertised refs discovery through the smart HTTP client.
   - [x] Single-round remote pack negotiation for an advertised ref through the
     smart HTTP client.
-  - [ ] Wire negotiated remote pack ingestion into `rit fetch`.
+  - [x] Wire negotiated plain HTTP pack ingestion into `rit fetch`.
 - [~] Push basics.
   - [x] receive-pack reference update request body model.
   - [x] receive-pack `report-status` parser.
@@ -392,8 +392,8 @@ Completion criteria:
     non-sideband raw `PACK` data.
   - Implemented: pure Rust parsing for side-band records 1 (pack data), 2
     (progress), and 3 (server error).
-  - Still open: HTTP fetch wiring, applying received packfiles into the object
-    database, and full remote negotiation.
+  - Later slices completed plain HTTP pack storage/application and one-round
+    fetch negotiation. Still open: HTTPS/TLS and full multi-round negotiation.
 - 2026-05-11, M7 smart HTTP client I/O:
   - Reference Git: `git version 2.52.0.windows.1`.
   - Reference docs checked: local `gitprotocol-http(5)` smart HTTP
@@ -407,8 +407,8 @@ Completion criteria:
     and `info/refs` advertisement prefix validation.
   - Implemented: smart HTTP advertised ref discovery using the blocking client
     and advertisement parser.
-  - Still open: TLS for `https://`, pack negotiation, pack application, and
-    wiring the client into `rit fetch`.
+  - Later slices completed plain HTTP pack negotiation/application and
+    `rit fetch` wiring. Still open: TLS for `https://`.
 - 2026-05-11, M7 SSH command model:
   - Reference Git: `git version 2.52.0.windows.1`.
   - Reference docs checked: local `gitprotocol-pack(5)` SSH transport examples
@@ -444,7 +444,8 @@ Completion criteria:
     CRC32 table, offsets, pack checksum, and index checksum.
   - Implemented: pack ingest helper that stores the pack, writes the index, and
     applies supported objects as loose objects.
-  - Still open: using negotiated remote pack results in `rit fetch`.
+  - Later slices completed plain HTTP `rit fetch` ingestion. Still open:
+    HTTPS/TLS, thin-pack fixups, and deeper negotiation parity.
 - 2026-05-11, M7 transport module hygiene:
   - Verified large-file state before continuing: `transport.rs` had grown to
     roughly 1955 lines after the pack ingest work.
@@ -464,5 +465,16 @@ Completion criteria:
     `want`/`have`/`done` request with supported advertised capabilities, parses
     the upload-pack result, rejects protocol `ERR`, and returns extracted raw
     pack bytes.
-  - Still open: multi-round negotiation, thin-pack fixups, HTTPS/TLS, and
-    writing negotiated pack ingestion into `rit fetch`.
+  - Later slice completed plain HTTP `rit fetch` ingestion. Still open:
+    multi-round negotiation, thin-pack fixups, and HTTPS/TLS.
+- 2026-05-11, M7 plain HTTP fetch ingestion:
+  - Reference Git: `git version 2.52.0.windows.1`.
+  - Reference docs checked: `git fetch -h`, local `gitprotocol-http(5)`, and
+    local `gitprotocol-pack(5)`.
+  - Implemented: `Repository::fetch_remote_http` runs the smart HTTP
+    negotiation API, ingests returned pack bytes into `.git/objects`, writes
+    `.git/FETCH_HEAD`, and updates a destination ref for one simple refspec.
+  - Implemented: `rit fetch http://... [<src>:<dst>]` dispatches to the plain
+    HTTP path while keeping HTTPS and SSH rejected until those transports exist.
+  - Still open: HTTPS/TLS, SSH sessions, named remote config, multiple
+    refspecs, multi-round negotiation, and thin-pack fixups.

@@ -13,7 +13,7 @@ Core commands:
   help          Display help for rit or a command
   init          Create an empty Git repository
   clone         Clone a local repository without checkout
-  fetch         Fetch objects from a local repository
+  fetch         Fetch objects from a local or plain HTTP repository
   rev-parse     Inspect the current repository paths
   cat-file      Inspect loose objects
   ls-tree       List entries in a tree object
@@ -59,9 +59,9 @@ Clone a local repository by copying objects and refs. Checkout is not implemente
 ";
 
 const FETCH_HELP: &str = "\
-rit fetch [-q|--quiet] <local-repository> [<src>:<dst>]
+rit fetch [-q|--quiet] <repository> [<src>:<dst>]
 
-Fetch objects from a local repository and write FETCH_HEAD.
+Fetch objects from a local or plain smart HTTP repository and write FETCH_HEAD.
 ";
 
 const REV_PARSE_HELP: &str = "\
@@ -441,39 +441,70 @@ fn fetch_command(
     }
 
     let source_location = rit_core::TransportLocation::parse(&positional[0]);
-    let Some(source) = source_location.local_path() else {
-        writeln!(
-            stderr,
-            "rit: fetch currently supports only local repository paths"
-        )?;
-        return Ok(ExitCode::from(129));
-    };
-
     let repository = match discover_repository(stderr)? {
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    let mut options = rit_core::LocalFetchOptions::new(source);
-    if let Some(refspec) = positional.get(1) {
-        match rit_core::FetchRefSpec::parse(refspec) {
-            Ok(refspec) => options = options.with_refspec(refspec),
+
+    let refspec = match positional.get(1) {
+        Some(refspec) => match rit_core::FetchRefSpec::parse(refspec) {
+            Ok(refspec) => Some(refspec),
             Err(error) => {
                 writeln!(stderr, "rit: {error}")?;
                 return Ok(ExitCode::from(129));
             }
-        }
-    }
-    match repository.fetch_local(&options) {
-        Ok(result) => {
-            if !quiet {
-                writeln!(stdout, "From {}", result.source)?;
-                writeln!(stdout, " * branch            HEAD       -> FETCH_HEAD")?;
+        },
+        None => None,
+    };
+
+    match source_location.protocol() {
+        rit_core::TransportProtocol::Local => {
+            let source = source_location
+                .local_path()
+                .expect("local paths are available");
+            let mut options = rit_core::LocalFetchOptions::new(source);
+            if let Some(refspec) = refspec {
+                options = options.with_refspec(refspec);
             }
-            Ok(ExitCode::SUCCESS)
+            match repository.fetch_local(&options) {
+                Ok(result) => {
+                    if !quiet {
+                        writeln!(stdout, "From {}", result.source)?;
+                        writeln!(stdout, " * branch            HEAD       -> FETCH_HEAD")?;
+                    }
+                    Ok(ExitCode::SUCCESS)
+                }
+                Err(error) => {
+                    writeln!(stderr, "rit: {error}")?;
+                    Ok(ExitCode::from(1))
+                }
+            }
         }
-        Err(error) => {
-            writeln!(stderr, "rit: {error}")?;
-            Ok(ExitCode::from(1))
+        rit_core::TransportProtocol::Http => {
+            let mut options = rit_core::RemoteFetchOptions::new(source_location);
+            if let Some(refspec) = refspec {
+                options = options.with_refspec(refspec);
+            }
+            match repository.fetch_remote_http(&options) {
+                Ok(result) => {
+                    if !quiet {
+                        writeln!(stdout, "From {}", result.source)?;
+                        writeln!(stdout, " * branch            HEAD       -> FETCH_HEAD")?;
+                    }
+                    Ok(ExitCode::SUCCESS)
+                }
+                Err(error) => {
+                    writeln!(stderr, "rit: {error}")?;
+                    Ok(ExitCode::from(1))
+                }
+            }
+        }
+        rit_core::TransportProtocol::Https | rit_core::TransportProtocol::Ssh => {
+            writeln!(
+                stderr,
+                "rit: fetch currently supports only local paths and plain http:// smart HTTP remotes"
+            )?;
+            Ok(ExitCode::from(129))
         }
     }
 }
@@ -1959,7 +1990,7 @@ mod tests {
 
         assert_eq!(code, ExitCode::from(129));
         assert_eq!(stdout, "");
-        assert!(stderr.contains("only local repository paths"));
+        assert!(stderr.contains("local paths and plain http:// smart HTTP remotes"));
     }
 
     #[test]

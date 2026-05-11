@@ -1,5 +1,6 @@
 use crate::{
-    FetchRefSpec, GitAttributes, GitConfig, GitObject, LooseObjectDb, ObjectId, Result, RitError,
+    BlockingSmartHttpClient, FetchRefSpec, GitAttributes, GitConfig, GitObject, LooseObjectDb,
+    ObjectId, Result, RitError, TransportLocation, TransportProtocol,
 };
 use std::fs;
 use std::io::Write;
@@ -37,11 +38,36 @@ pub struct LocalFetchOptions {
     pub refspec: Option<FetchRefSpec>,
 }
 
+/// Options for fetching from a smart HTTP remote.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RemoteFetchOptions {
+    /// Remote repository location.
+    pub location: TransportLocation,
+    /// Optional refspec to update after objects are downloaded.
+    pub refspec: Option<FetchRefSpec>,
+}
+
 impl LocalFetchOptions {
     /// Builds local fetch options for `source`.
     pub fn new(source: impl Into<PathBuf>) -> Self {
         Self {
             source: source.into(),
+            refspec: None,
+        }
+    }
+
+    /// Adds one source-to-destination refspec.
+    pub fn with_refspec(mut self, refspec: FetchRefSpec) -> Self {
+        self.refspec = Some(refspec);
+        self
+    }
+}
+
+impl RemoteFetchOptions {
+    /// Builds remote fetch options for `location`.
+    pub fn new(location: TransportLocation) -> Self {
+        Self {
+            location,
             refspec: None,
         }
     }
@@ -60,6 +86,17 @@ pub struct LocalFetchResult {
     pub fetch_head: ObjectId,
     /// Human-readable source path recorded in `FETCH_HEAD`.
     pub source: String,
+}
+
+/// Summary of a smart HTTP fetch operation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RemoteFetchResult {
+    /// Object recorded in `FETCH_HEAD`.
+    pub fetch_head: ObjectId,
+    /// Human-readable remote location recorded in `FETCH_HEAD`.
+    pub source: String,
+    /// Number of objects unpacked from the received pack.
+    pub object_count: usize,
 }
 
 impl LocalCloneOptions {
@@ -260,6 +297,53 @@ impl Repository {
         Ok(LocalFetchResult {
             fetch_head,
             source: source_name,
+        })
+    }
+
+    /// Fetches one advertised ref from a plain smart HTTP remote.
+    ///
+    /// This first remote implementation uses one upload-pack negotiation round,
+    /// ingests the returned pack into the object database, and updates
+    /// `FETCH_HEAD`. HTTPS, SSH, and multi-round negotiation are intentionally
+    /// left to later transport milestones.
+    pub fn fetch_remote_http(&self, options: &RemoteFetchOptions) -> Result<RemoteFetchResult> {
+        if options.location.protocol() != TransportProtocol::Http {
+            return Err(RitError::invalid_input(
+                "remote fetch currently supports only plain http:// smart HTTP remotes",
+            ));
+        }
+
+        let wanted_ref = options
+            .refspec
+            .as_ref()
+            .map(|refspec| refspec.source.as_str())
+            .unwrap_or("HEAD");
+        let client = BlockingSmartHttpClient::default();
+        let negotiation =
+            client.negotiate_upload_pack(&options.location, wanted_ref, Vec::new())?;
+        let ingested = self.loose_objects().ingest_pack(&negotiation.pack_bytes)?;
+        let source_name = options.location.original().to_owned();
+        let fetch_head = negotiation.want_id;
+        let fetch_head_line = match &options.refspec {
+            Some(refspec) => {
+                validate_full_ref_name(&refspec.destination)?;
+                write_full_ref(self, &refspec.destination, fetch_head)?;
+                format!(
+                    "{fetch_head}\t\t{} of {source_name}\n",
+                    fetch_head_description(&refspec.source)
+                )
+            }
+            None => format!("{fetch_head}\t\t{source_name}\n"),
+        };
+        write_file(
+            &self.git_dir().join("FETCH_HEAD"),
+            fetch_head_line.as_bytes(),
+        )?;
+
+        Ok(RemoteFetchResult {
+            fetch_head,
+            source: source_name,
+            object_count: ingested.object_ids.len(),
         })
     }
 
@@ -715,9 +799,14 @@ fn validate_branch_name(branch_name: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{InitOptions, Repository};
+    use super::{InitOptions, RemoteFetchOptions, Repository};
+    use crate::{FetchRefSpec, ObjectKind, TransportLocation, hash_object, object::sha1_bytes};
+    use flate2::{Compression, write::ZlibEncoder};
     use std::fs;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
     use std::path::{Path, PathBuf};
+    use std::thread;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -884,6 +973,162 @@ mod tests {
             "linked worktree should read objects from the common directory"
         );
         remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn fetch_remote_http_ingests_pack_and_writes_fetch_head() {
+        let temp = temp_path("remote-http-fetch");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        let object_data = b"hello";
+        let object_id = hash_object(ObjectKind::Blob, object_data);
+        let pack = pack_with_one_blob(object_data);
+        let advertisement = upload_pack_advertisement(object_id);
+        let upload_pack = upload_pack_response_with_pack(&pack);
+        let (base_url, request_handle) = serve_http_requests(vec![
+            http_response(
+                "application/x-git-upload-pack-advertisement",
+                &advertisement,
+            ),
+            http_response("application/x-git-upload-pack-result", &upload_pack),
+        ]);
+        let refspec =
+            FetchRefSpec::parse("refs/heads/main:refs/remotes/origin/main").expect("refspec");
+        let options =
+            RemoteFetchOptions::new(TransportLocation::parse(&format!("{base_url}/repo.git")))
+                .with_refspec(refspec);
+
+        let result = repository
+            .fetch_remote_http(&options)
+            .expect("remote fetch should ingest pack");
+        let requests = request_handle.join().expect("server thread");
+
+        assert_eq!(result.fetch_head, object_id);
+        assert_eq!(result.object_count, 1);
+        assert_eq!(
+            repository
+                .read_object(object_id)
+                .expect("fetched object should be readable")
+                .data,
+            object_data
+        );
+        assert_eq!(
+            repository
+                .resolve_revision("refs/remotes/origin/main")
+                .expect("destination ref should resolve"),
+            object_id
+        );
+        assert_eq!(
+            fs::read_to_string(repository.git_dir().join("FETCH_HEAD"))
+                .expect("FETCH_HEAD should be written"),
+            format!("{object_id}\t\tbranch 'main' of {base_url}/repo.git\n")
+        );
+        assert_eq!(requests.len(), 2);
+
+        remove_dir_all(&temp);
+    }
+
+    fn upload_pack_advertisement(object_id: crate::ObjectId) -> Vec<u8> {
+        let mut body = Vec::new();
+        test_pkt_line(&mut body, b"# service=git-upload-pack\n");
+        body.extend_from_slice(b"0000");
+        test_pkt_line(&mut body, format!("{object_id} HEAD\n").as_bytes());
+        test_pkt_line(
+            &mut body,
+            format!("{object_id} refs/heads/main\n").as_bytes(),
+        );
+        body.extend_from_slice(b"0000");
+        body
+    }
+
+    fn upload_pack_response_with_pack(pack: &[u8]) -> Vec<u8> {
+        let mut body = Vec::new();
+        test_pkt_line(&mut body, b"NAK\n");
+        body.extend_from_slice(pack);
+        body
+    }
+
+    fn pack_with_one_blob(data: &[u8]) -> Vec<u8> {
+        let mut object = Vec::new();
+        object.push(0x30 | data.len() as u8);
+        object.extend_from_slice(&zlib(data));
+
+        let mut pack = Vec::new();
+        pack.extend_from_slice(b"PACK");
+        pack.extend_from_slice(&2_u32.to_be_bytes());
+        pack.extend_from_slice(&1_u32.to_be_bytes());
+        pack.extend_from_slice(&object);
+        let checksum = sha1_bytes(&pack);
+        pack.extend_from_slice(&checksum);
+        pack
+    }
+
+    fn zlib(data: &[u8]) -> Vec<u8> {
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(data).expect("compress data");
+        encoder.finish().expect("finish zlib")
+    }
+
+    fn serve_http_requests(responses: Vec<Vec<u8>>) -> (String, thread::JoinHandle<Vec<Vec<u8>>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let address = listener.local_addr().expect("local address");
+        let handle = thread::spawn(move || {
+            let mut requests = Vec::new();
+            for response in responses {
+                let (mut stream, _) = listener.accept().expect("accept connection");
+                let mut request = Vec::new();
+                let mut buffer = [0_u8; 1024];
+                loop {
+                    let bytes_read = stream.read(&mut buffer).expect("read request");
+                    if bytes_read == 0 {
+                        break;
+                    }
+                    request.extend_from_slice(&buffer[..bytes_read]);
+                    if request_is_complete(&request) {
+                        break;
+                    }
+                }
+                stream.write_all(&response).expect("write response");
+                requests.push(request);
+            }
+            requests
+        });
+        (format!("http://127.0.0.1:{}", address.port()), handle)
+    }
+
+    fn http_response(content_type: &str, body: &[u8]) -> Vec<u8> {
+        let mut response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        )
+        .into_bytes();
+        response.extend_from_slice(body);
+        response
+    }
+
+    fn request_is_complete(request: &[u8]) -> bool {
+        let Some(header_end) = request
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+            .map(|index| index + 4)
+        else {
+            return false;
+        };
+        let header_text = String::from_utf8_lossy(&request[..header_end]);
+        let Some(content_length) = header_text.lines().find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("Content-Length")
+                .then(|| value.trim().parse::<usize>().ok())
+                .flatten()
+        }) else {
+            return true;
+        };
+        request.len() >= header_end + content_length
+    }
+
+    fn test_pkt_line(output: &mut Vec<u8>, payload: &[u8]) {
+        let length = payload.len() + 4;
+        output.extend_from_slice(format!("{length:04x}").as_bytes());
+        output.extend_from_slice(payload);
     }
 
     fn temp_path(name: &str) -> PathBuf {

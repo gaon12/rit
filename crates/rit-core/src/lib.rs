@@ -33,7 +33,8 @@ pub use odb::{IngestedPack, LooseObjectDb, StoredPack, StoredPackIndex};
 pub use pathspec::PathspecSet;
 pub use refs::{Branch, Tag};
 pub use repository::{
-    InitOptions, LocalCloneOptions, LocalFetchOptions, LocalFetchResult, Repository,
+    InitOptions, LocalCloneOptions, LocalFetchOptions, LocalFetchResult, RemoteFetchOptions,
+    RemoteFetchResult, Repository,
 };
 pub use status::{
     PorcelainStatus, StatusBranchHeader, StatusEntry, StatusOptions, UntrackedFilesMode,

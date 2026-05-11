@@ -481,7 +481,7 @@
   store, local heads/tags, optional `packed-refs`, writes a symbolic `HEAD`,
   and records `remote.origin` plus current branch merge config.
 - Intentional differences: checkout is rejected instead of silently producing a
-  partial worktree; local fetch into an existing repository is still pending.
+  partial worktree; remote clone protocols are still pending.
 - Repository mutation: creates a new repository directory and copies local
   object/ref files without invoking external `git`.
 - Risk: moderate; object/ref transfer is copy-based and does not mutate the
@@ -490,11 +490,12 @@
 ### `rit fetch`
 
 - Baseline command checked: `git fetch -h`
-- Supported options: `--quiet`/`-q` with one local repository path and either no
-  refspec or one simple `<src>:<dst>` refspec.
+- Supported options: `--quiet`/`-q` with one local repository path or plain
+  `http://` smart HTTP repository and either no refspec or one simple
+  `<src>:<dst>` refspec.
 - Unsupported options: named remotes, multiple refspecs, append/atomic/force
-  semantics, tags, prune, shallow/partial fetch, submodules, protocol options,
-  stdin, and maintenance hooks.
+  semantics, HTTPS/TLS, SSH sessions, tags, prune, shallow/partial fetch,
+  submodules, protocol options, stdin, and maintenance hooks.
 - Git-compatible behavior: `fetch <local-repository>` copies source objects
   into the current repository and overwrites `.git/FETCH_HEAD` with the source
   `HEAD` commit. Local refs and remote-tracking refs are not updated, matching
@@ -502,8 +503,13 @@
 - Git-compatible behavior: `fetch <local-repository> <src>:<dst>` resolves the
   source ref, copies objects, writes `FETCH_HEAD`, and updates the destination
   full ref.
+- Implemented smart HTTP behavior: `fetch http://... [<src>:<dst>]` discovers
+  advertised refs, performs one upload-pack negotiation round, ingests the
+  received pack, writes `FETCH_HEAD`, and updates the destination full ref when
+  a refspec is supplied.
 - Intentional differences: default progress/status text is simplified; quiet
-  mode is used for compatibility coverage.
+  mode is used for compatibility coverage. Plain HTTP fetch supports only one
+  negotiation round and does not yet implement thin-pack fixups.
 - Repository mutation: writes object files and `.git/FETCH_HEAD`.
 - Risk: moderate; fetch mutates only the destination repository.
 
@@ -528,13 +534,13 @@
   locations and build quoted `git-upload-pack` / `git-receive-pack` remote
   commands.
 - Unsupported behavior: HTTPS/TLS, SSH process/session I/O, multi-round
-  negotiation, thin-pack fixups, remote pack ingestion in `rit fetch`, push
-  pack generation, and CLI remote fetch/push wiring are not implemented yet.
-  Remote-looking locations are classified and rejected by commands whose
-  current implementation only supports local paths.
-- Repository mutation: no direct mutation; command implementations decide how
-  to act on a classified location.
-- Risk: low; this is routing metadata for future transports.
+  negotiation, thin-pack fixups, push pack generation, and CLI remote push
+  wiring are not implemented yet. `rit fetch` accepts local paths and plain
+  `http://` smart HTTP remotes; HTTPS and SSH are rejected with clear errors.
+- Repository mutation: plain HTTP fetch ingests received packs and writes
+  `FETCH_HEAD`; other transport APIs remain request/response models.
+- Risk: moderate for fetch ingestion, low for request/response-only transport
+  models.
 
 ### `rit rev-parse` revision support
 
