@@ -223,8 +223,10 @@
 - Added conservative Xet detection from explicit `filter=xet` attributes and
   Xet pointer hash extension lines, while preserving LFS-compatible attribute
   rules as separate hints.
-- Still unsupported: LFS Batch API HTTP client execution and Xet chunk/cache
-  reconstruction.
+- Added Xet hash, xorb chunk range, reconstruction term/file, and local cache
+  path models for future CAS integration.
+- Still unsupported: LFS Batch API HTTP client execution, Xet CAS API
+  execution, content-defined chunking, and xorb/shard binary parsing.
 
 ## Implemented Commands
 

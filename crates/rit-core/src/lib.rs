@@ -34,7 +34,8 @@ pub use large_files::{
     GitLfsBackend, LFS_BATCH_MEDIA_TYPE, LargeFileBackend, LargeFileBackendKind, LargeFilePointer,
     LargeFileTrackRule, LfsBatchAction, LfsBatchObject, LfsBatchObjectError,
     LfsBatchObjectResponse, LfsBatchOperation, LfsBatchRef, LfsBatchRequest, LfsBatchResponse,
-    LfsLocalCache, XetDetection, detect_xet_storage, encode_lfs_pointer, parse_lfs_pointer,
+    LfsLocalCache, XetChunkRange, XetDetection, XetFileReconstruction, XetHash, XetLocalCache,
+    XetReconstructionTerm, detect_xet_storage, encode_lfs_pointer, parse_lfs_pointer,
     parse_xet_pointer_hash,
 };
 pub use merge_state::{MergeState, RebaseState};

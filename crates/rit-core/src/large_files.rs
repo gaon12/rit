@@ -5,10 +5,14 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 mod batch;
+mod xet;
 
 pub use batch::{
     LFS_BATCH_MEDIA_TYPE, LfsBatchAction, LfsBatchObject, LfsBatchObjectError,
     LfsBatchObjectResponse, LfsBatchOperation, LfsBatchRef, LfsBatchRequest, LfsBatchResponse,
+};
+pub use xet::{
+    XetChunkRange, XetFileReconstruction, XetHash, XetLocalCache, XetReconstructionTerm,
 };
 
 const GIT_LFS_POINTER_VERSION: &str = "https://git-lfs.github.com/spec/v1";

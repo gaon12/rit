@@ -317,7 +317,9 @@ Completion criteria:
 - [x] Xet detection.
   - [x] Explicit `filter=xet` attribute rules and Xet pointer hash extension
     hints.
-- [ ] Xet chunk/cache model.
+- [x] Xet chunk/cache model.
+  - [x] Xet hash, xorb chunk range, reconstruction term/file models, and
+    sharded local cache paths.
 
 Completion criteria:
 - LFS/Xet features are feature-gated and never require external `git-lfs` in
