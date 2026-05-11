@@ -461,6 +461,7 @@ fn diff_command(
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
     let mut cached = false;
+    let mut find_renames = false;
     let mut output_mode = None;
     let mut pathspec_args = Vec::new();
     let mut after_separator = false;
@@ -469,6 +470,18 @@ fn diff_command(
         match arg.as_str() {
             "--" if !after_separator => after_separator = true,
             "--cached" | "--staged" if !after_separator => cached = true,
+            "-M" | "--find-renames" if !after_separator => find_renames = true,
+            unsupported
+                if (unsupported.starts_with("-M")
+                    || unsupported.starts_with("--find-renames="))
+                    && !after_separator =>
+            {
+                writeln!(
+                    stderr,
+                    "rit: diff currently supports only exact rename detection with -M"
+                )?;
+                return Ok(ExitCode::from(129));
+            }
             "-p" | "-u" if !after_separator => {
                 if output_mode.replace("--patch").is_some() {
                     writeln!(stderr, "rit: diff accepts one output option")?;
@@ -502,9 +515,10 @@ fn diff_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
+    let diff_options = rit_core::DiffOptions { find_renames };
     if output_mode == "--patch" {
         let patch_result = if cached {
-            repository.diff_index_to_head_patch_with_pathspecs(&pathspecs)
+            repository.diff_index_to_head_patch_with_options(&pathspecs, &diff_options)
         } else {
             repository.diff_worktree_to_index_patch_with_pathspecs(&pathspecs)
         };
@@ -521,7 +535,7 @@ fn diff_command(
     }
 
     let diff_result = if cached {
-        repository.diff_index_to_head_with_pathspecs(&pathspecs)
+        repository.diff_index_to_head_with_options(&pathspecs, &diff_options)
     } else {
         repository.diff_worktree_to_index_with_pathspecs(&pathspecs)
     };

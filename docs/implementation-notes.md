@@ -43,6 +43,8 @@
   `git add -h`, `git diff -h`, and direct Git comparisons for
   `:(attr:name)`, `:(attr:-name)`, `:(attr:name=value)`, and `:(attr:!name)`
   in `status`, `diff`, `ls-files`, and `add`.
+- 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
+  comparisons for `diff --cached -M` exact rename output.
 - 2026-05-11 local clone object-transfer slice checked `git clone -h` and a
   direct Git comparison for `clone --local --no-checkout`.
 - 2026-05-11 local fetch object-transfer slice checked `git fetch -h` and a
@@ -174,12 +176,14 @@
 - Added binary diff accounting for summary modes. `--numstat` reports
   `-\t-\t<path>` and `--stat` reports `Bin <old> -> <new> bytes` with zero
   insertion/deletion totals.
+- Added exact staged rename detection for `diff --cached -M` summary and patch
+  output.
 - Added local write compatibility coverage that compares Git and rit porcelain
   state after directory pathspec `add`, `restore`, and `reset`.
 - Added local write compatibility coverage for simple wildcard and
   bracket-class pathspecs in `add`, `restore`, and `reset`.
-- Still unsupported: attr pathspec magic, pathspec files, and
-  `show` path filtering for patch output.
+- Still unsupported: pathspec files, similarity-threshold rename scoring, copy
+  detection, and `show` path filtering for patch output.
 
 ## Implemented Commands
 
@@ -293,9 +297,11 @@
   `--cached`/`--staged` with those output modes, and ordinary literal
   file/directory plus simple `*`, `?`, and bracket-class wildcard pathspec
   filters and positive `:(literal)`, `:(glob)`, `:(top)`, `:/`, and
-  `:(icase)` pathspec magic.
-- Unsupported options: commit/tree/blob arguments, attr pathspec magic,
-  rename/copy detection, and many advanced patch formatting options.
+  `:(icase)` pathspec magic. `-M`/`--find-renames` supports exact staged
+  renames in cached diff output.
+- Unsupported options: commit/tree/blob arguments, pathspec files,
+  similarity-threshold rename scoring, copy detection, and many advanced patch
+  formatting options.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files.
 - Git-compatible behavior: cached diff scope compares the index against `HEAD`.
 - Intentional differences: advanced patch formatting and custom diff drivers

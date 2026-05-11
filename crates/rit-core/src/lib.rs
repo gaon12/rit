@@ -59,4 +59,4 @@ pub use attributes::{
 };
 pub use commit::{Commit, Signature, parse_commit};
 pub use config::{GitConfig, GitConfigEntry};
-pub use diff::{DiffFileStat, DiffPatch, DiffPatchFile, DiffSummary};
+pub use diff::{DiffFileStat, DiffOptions, DiffPatch, DiffPatchFile, DiffSummary};

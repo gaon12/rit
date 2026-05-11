@@ -23,10 +23,19 @@ impl DiffSummary {
     pub fn to_name_status_text(&self) -> String {
         let mut output = String::new();
         for file in &self.files {
-            output.push(file.status);
-            output.push('\t');
-            output.push_str(&file.path);
-            output.push('\n');
+            if file.status == 'R' {
+                output.push_str(&format!(
+                    "R{}\t{}\t{}\n",
+                    file.similarity_score.unwrap_or(100),
+                    file.old_path.as_deref().unwrap_or(&file.path),
+                    file.path
+                ));
+            } else {
+                output.push(file.status);
+                output.push('\t');
+                output.push_str(&file.path);
+                output.push('\n');
+            }
         }
         output
     }
@@ -43,7 +52,7 @@ impl DiffSummary {
                 output.push_str(&file.deletions.to_string());
             }
             output.push('\t');
-            output.push_str(&file.path);
+            output.push_str(&file.display_path());
             output.push('\n');
         }
         output
@@ -58,7 +67,7 @@ impl DiffSummary {
         let max_path_width = self
             .files
             .iter()
-            .map(|file| file.path.len())
+            .map(|file| file.display_path().len())
             .max()
             .unwrap_or(0);
         let max_change_width = self
@@ -71,14 +80,16 @@ impl DiffSummary {
         let mut total_insertions = 0;
         let mut total_deletions = 0;
         let has_binary_file = self.files.iter().any(|file| file.binary);
+        let has_rename = self.files.iter().any(|file| file.status == 'R');
 
         for file in &self.files {
+            let path = file.display_path();
             total_insertions += file.insertions;
             total_deletions += file.deletions;
             if file.binary {
                 output.push_str(&format!(
                     " {:path_width$} | Bin {} -> {} bytes\n",
-                    file.path,
+                    path,
                     file.old_size,
                     file.new_size,
                     path_width = max_path_width
@@ -87,14 +98,21 @@ impl DiffSummary {
                 let mut graph = String::new();
                 graph.extend(std::iter::repeat_n('+', file.insertions));
                 graph.extend(std::iter::repeat_n('-', file.deletions));
-                output.push_str(&format!(
-                    " {:path_width$} | {:change_width$} {}\n",
-                    file.path,
-                    file.changed_lines(),
-                    graph,
-                    path_width = max_path_width,
-                    change_width = max_change_width
-                ));
+                if graph.is_empty() {
+                    output.push_str(&format!(
+                        " {path:path_width$} | {:change_width$}\n",
+                        file.changed_lines(),
+                        path_width = max_path_width,
+                        change_width = max_change_width
+                    ));
+                } else {
+                    output.push_str(&format!(
+                        " {path:path_width$} | {:change_width$} {graph}\n",
+                        file.changed_lines(),
+                        path_width = max_path_width,
+                        change_width = max_change_width
+                    ));
+                }
             }
         }
 
@@ -102,13 +120,13 @@ impl DiffSummary {
             " {} changed",
             plural(self.files.len(), "file", "files")
         ));
-        if total_insertions > 0 || has_binary_file {
+        if total_insertions > 0 || has_binary_file || has_rename {
             output.push_str(&format!(
                 ", {}",
                 plural(total_insertions, "insertion(+)", "insertions(+)")
             ));
         }
-        if total_deletions > 0 || has_binary_file {
+        if total_deletions > 0 || has_binary_file || has_rename {
             output.push_str(&format!(
                 ", {}",
                 plural(total_deletions, "deletion(-)", "deletions(-)")
@@ -142,8 +160,12 @@ impl DiffPatch {
 pub struct DiffPatchFile {
     /// Git name-status code for this path.
     pub status: char,
+    /// Previous repository-relative path for exact renames.
+    pub old_path: Option<String>,
     /// Repository-relative path using `/` separators.
     pub path: String,
+    /// Similarity percentage for exact rename entries.
+    pub similarity_score: Option<u8>,
     /// Old blob object ID, or `None` for new files.
     pub old_object_id: Option<ObjectId>,
     /// New blob object ID, or `None` for deleted files.
@@ -160,8 +182,18 @@ impl DiffPatchFile {
     fn to_patch_text(&self) -> Result<String> {
         let mut output = String::new();
         let is_binary = is_binary_data(&self.old_data) || is_binary_data(&self.new_data);
-        output.push_str(&format!("diff --git a/{0} b/{0}\n", self.path));
+        let old_path = self.old_path.as_deref().unwrap_or(&self.path);
+        output.push_str(&format!("diff --git a/{old_path} b/{}\n", self.path));
         match self.status {
+            'R' => {
+                output.push_str(&format!(
+                    "similarity index {}%\n",
+                    self.similarity_score.unwrap_or(100)
+                ));
+                output.push_str(&format!("rename from {old_path}\n"));
+                output.push_str(&format!("rename to {}\n", self.path));
+                return Ok(output);
+            }
             'A' => {
                 output.push_str(&format!("new file mode {:06o}\n", self.mode));
                 output.push_str(&format!(
@@ -225,8 +257,12 @@ fn binary_patch_line(file: &DiffPatchFile) -> String {
 pub struct DiffFileStat {
     /// Git name-status code for this path.
     pub status: char,
+    /// Previous repository-relative path for exact renames.
+    pub old_path: Option<String>,
     /// Repository-relative path using `/` separators.
     pub path: String,
+    /// Similarity percentage for exact rename entries.
+    pub similarity_score: Option<u8>,
     /// Added line count.
     pub insertions: usize,
     /// Deleted line count.
@@ -243,6 +279,25 @@ impl DiffFileStat {
     fn changed_lines(&self) -> usize {
         self.insertions + self.deletions
     }
+
+    fn display_path(&self) -> String {
+        if self.status == 'R' {
+            format!(
+                "{} => {}",
+                self.old_path.as_deref().unwrap_or(&self.path),
+                self.path
+            )
+        } else {
+            self.path.clone()
+        }
+    }
+}
+
+/// Options for repository diff calculations.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct DiffOptions {
+    /// Detect exact renames between deleted and added paths.
+    pub find_renames: bool,
 }
 
 impl Repository {
@@ -278,7 +333,9 @@ impl Repository {
             if !worktree_path.exists() {
                 files.push(DiffFileStat {
                     status: 'D',
+                    old_path: None,
                     path: entry.path,
+                    similarity_score: None,
                     insertions: 0,
                     deletions: count_lines(&old_object.data),
                     binary: is_binary_data(&old_object.data),
@@ -297,7 +354,9 @@ impl Repository {
             let (insertions, deletions, binary) = file_delta(&old_object.data, &new_data)?;
             files.push(DiffFileStat {
                 status: 'M',
+                old_path: None,
                 path: entry.path,
+                similarity_score: None,
                 insertions,
                 deletions,
                 binary,
@@ -336,7 +395,9 @@ impl Repository {
             if !worktree_path.exists() {
                 files.push(DiffPatchFile {
                     status: 'D',
+                    old_path: None,
                     path: entry.path,
+                    similarity_score: None,
                     old_object_id: Some(entry.object_id),
                     new_object_id: None,
                     mode: entry.mode,
@@ -354,7 +415,9 @@ impl Repository {
 
             files.push(DiffPatchFile {
                 status: 'M',
+                old_path: None,
                 path: entry.path,
+                similarity_score: None,
                 old_object_id: Some(entry.object_id),
                 new_object_id: Some(new_object_id),
                 mode: entry.mode,
@@ -375,6 +438,15 @@ impl Repository {
     pub fn diff_index_to_head_with_pathspecs(
         &self,
         pathspecs: &PathspecSet,
+    ) -> Result<DiffSummary> {
+        self.diff_index_to_head_with_options(pathspecs, &DiffOptions::default())
+    }
+
+    /// Computes `git diff --cached` with explicit diff options.
+    pub fn diff_index_to_head_with_options(
+        &self,
+        pathspecs: &PathspecSet,
+        options: &DiffOptions,
     ) -> Result<DiffSummary> {
         let index = Index::read(&self.git_dir().join("index"))?;
         let index_entries = index
@@ -408,7 +480,9 @@ impl Repository {
                     let new_object = self.read_blob(new_entry.object_id)?;
                     files.push(DiffFileStat {
                         status: 'A',
+                        old_path: None,
                         path,
+                        similarity_score: None,
                         insertions: count_lines(&new_object.data),
                         deletions: 0,
                         binary: is_binary_data(&new_object.data),
@@ -420,7 +494,9 @@ impl Repository {
                     let old_object = self.read_blob(old_entry.object_id)?;
                     files.push(DiffFileStat {
                         status: 'D',
+                        old_path: None,
                         path,
+                        similarity_score: None,
                         insertions: 0,
                         deletions: count_lines(&old_object.data),
                         binary: is_binary_data(&old_object.data),
@@ -435,7 +511,9 @@ impl Repository {
                         file_delta(&old_object.data, &new_object.data)?;
                     files.push(DiffFileStat {
                         status: 'M',
+                        old_path: None,
                         path,
+                        similarity_score: None,
                         insertions,
                         deletions,
                         binary,
@@ -447,6 +525,10 @@ impl Repository {
             }
         }
 
+        if options.find_renames {
+            detect_exact_summary_renames(&mut files, &head_entries, &index_entries);
+        }
+
         Ok(DiffSummary { files })
     }
 
@@ -454,6 +536,15 @@ impl Repository {
     pub fn diff_index_to_head_patch_with_pathspecs(
         &self,
         pathspecs: &PathspecSet,
+    ) -> Result<DiffPatch> {
+        self.diff_index_to_head_patch_with_options(pathspecs, &DiffOptions::default())
+    }
+
+    /// Computes `git diff --cached` patch output with explicit diff options.
+    pub fn diff_index_to_head_patch_with_options(
+        &self,
+        pathspecs: &PathspecSet,
+        options: &DiffOptions,
     ) -> Result<DiffPatch> {
         let index = Index::read(&self.git_dir().join("index"))?;
         let index_entries = index
@@ -487,7 +578,9 @@ impl Repository {
                     let new_object = self.read_blob(new_entry.object_id)?;
                     files.push(DiffPatchFile {
                         status: 'A',
+                        old_path: None,
                         path,
+                        similarity_score: None,
                         old_object_id: None,
                         new_object_id: Some(new_entry.object_id),
                         mode: new_entry.mode,
@@ -499,7 +592,9 @@ impl Repository {
                     let old_object = self.read_blob(old_entry.object_id)?;
                     files.push(DiffPatchFile {
                         status: 'D',
+                        old_path: None,
                         path,
+                        similarity_score: None,
                         old_object_id: Some(old_entry.object_id),
                         new_object_id: None,
                         mode: old_entry.mode,
@@ -512,7 +607,9 @@ impl Repository {
                     let new_object = self.read_blob(new_entry.object_id)?;
                     files.push(DiffPatchFile {
                         status: 'M',
+                        old_path: None,
                         path,
+                        similarity_score: None,
                         old_object_id: Some(old_entry.object_id),
                         new_object_id: Some(new_entry.object_id),
                         mode: new_entry.mode,
@@ -522,6 +619,10 @@ impl Repository {
                 }
                 _ => {}
             }
+        }
+
+        if options.find_renames {
+            detect_exact_patch_renames(&mut files);
         }
 
         Ok(DiffPatch { files })
@@ -589,6 +690,101 @@ impl Repository {
         }
 
         Ok(())
+    }
+}
+
+fn detect_exact_summary_renames(
+    files: &mut Vec<DiffFileStat>,
+    old_entries: &BTreeMap<String, DiffTreeEntry>,
+    new_entries: &BTreeMap<String, DiffTreeEntry>,
+) {
+    let mut remove_indexes = Vec::new();
+    for delete_index in 0..files.len() {
+        if files[delete_index].status != 'D' {
+            continue;
+        }
+        let old_path = files[delete_index].path.clone();
+        let Some(old_entry) = old_entries.get(&old_path) else {
+            continue;
+        };
+        let Some((add_index, new_path)) = files
+            .iter()
+            .enumerate()
+            .find(|(index, file)| {
+                if *index == delete_index || file.status != 'A' {
+                    return false;
+                }
+                new_entries
+                    .get(&file.path)
+                    .is_some_and(|new_entry| new_entry == old_entry)
+            })
+            .map(|(index, file)| (index, file.path.clone()))
+        else {
+            continue;
+        };
+
+        files[delete_index] = DiffFileStat {
+            status: 'R',
+            old_path: Some(old_path),
+            path: new_path,
+            similarity_score: Some(100),
+            insertions: 0,
+            deletions: 0,
+            binary: false,
+            old_size: files[delete_index].old_size,
+            new_size: files[add_index].new_size,
+        };
+        remove_indexes.push(add_index);
+    }
+
+    remove_indexes.sort_unstable();
+    remove_indexes.dedup();
+    for index in remove_indexes.into_iter().rev() {
+        files.remove(index);
+    }
+}
+
+fn detect_exact_patch_renames(files: &mut Vec<DiffPatchFile>) {
+    let mut remove_indexes = Vec::new();
+    for delete_index in 0..files.len() {
+        if files[delete_index].status != 'D' {
+            continue;
+        }
+        let old_path = files[delete_index].path.clone();
+        let old_object_id = files[delete_index].old_object_id;
+        let old_mode = files[delete_index].mode;
+        let Some((add_index, new_path)) = files
+            .iter()
+            .enumerate()
+            .find(|(index, file)| {
+                *index != delete_index
+                    && file.status == 'A'
+                    && file.new_object_id == old_object_id
+                    && file.mode == old_mode
+            })
+            .map(|(index, file)| (index, file.path.clone()))
+        else {
+            continue;
+        };
+
+        files[delete_index] = DiffPatchFile {
+            status: 'R',
+            old_path: Some(old_path),
+            path: new_path,
+            similarity_score: Some(100),
+            old_object_id,
+            new_object_id: old_object_id,
+            mode: old_mode,
+            old_data: Vec::new(),
+            new_data: Vec::new(),
+        };
+        remove_indexes.push(add_index);
+    }
+
+    remove_indexes.sort_unstable();
+    remove_indexes.dedup();
+    for index in remove_indexes.into_iter().rev() {
+        files.remove(index);
     }
 }
 
@@ -882,7 +1078,9 @@ mod tests {
         let summary = DiffSummary {
             files: vec![DiffFileStat {
                 status: 'M',
+                old_path: None,
                 path: "a.txt".to_owned(),
+                similarity_score: None,
                 insertions: 1,
                 deletions: 0,
                 binary: false,
@@ -902,7 +1100,9 @@ mod tests {
         let summary = DiffSummary {
             files: vec![DiffFileStat {
                 status: 'A',
+                old_path: None,
                 path: "a.txt".to_owned(),
+                similarity_score: None,
                 insertions: 1,
                 deletions: 0,
                 binary: false,
@@ -919,7 +1119,9 @@ mod tests {
         let summary = DiffSummary {
             files: vec![DiffFileStat {
                 status: 'M',
+                old_path: None,
                 path: "a.txt".to_owned(),
+                similarity_score: None,
                 insertions: 2,
                 deletions: 1,
                 binary: false,
@@ -936,7 +1138,9 @@ mod tests {
         let summary = DiffSummary {
             files: vec![DiffFileStat {
                 status: 'M',
+                old_path: None,
                 path: "bin.dat".to_owned(),
+                similarity_score: None,
                 insertions: 0,
                 deletions: 0,
                 binary: true,
@@ -987,7 +1191,9 @@ mod tests {
         let patch = super::DiffPatch {
             files: vec![super::DiffPatchFile {
                 status: 'M',
+                old_path: None,
                 path: "bin.dat".to_owned(),
+                similarity_score: None,
                 old_object_id: Some(crate::hash_object(crate::ObjectKind::Blob, &[0, 1])),
                 new_object_id: Some(crate::hash_object(crate::ObjectKind::Blob, &[0, 1, 2])),
                 mode: 0o100644,
@@ -1030,7 +1236,9 @@ mod tests {
             diff.files,
             vec![DiffFileStat {
                 status: 'M',
+                old_path: None,
                 path: "a.txt".to_owned(),
+                similarity_score: None,
                 insertions: 1,
                 deletions: 0,
                 binary: false,

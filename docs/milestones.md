@@ -126,7 +126,10 @@ Completion criteria:
   - [x] Ordinary literal path filters for `show --no-patch`.
   - [x] Simple `*` and `?` wildcard pathspec filters for first-parent `log`
     and `show --no-patch`.
-- [ ] Rename detection.
+- [~] Rename detection.
+  - [x] Exact staged rename detection for `diff --cached -M` summary and
+    patch output.
+  - [ ] Similarity thresholds, copy detection, and non-exact rename scoring.
 - [x] Binary diff accounting for summary modes.
 
 Completion criteria:
