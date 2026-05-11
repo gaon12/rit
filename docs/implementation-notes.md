@@ -376,6 +376,11 @@
 - Still unsupported: platform backend execution and network/promisor object
   fetching for missing VFS objects.
 
+### M15: Release Packaging
+
+- Added `docs/release.md` with the first `rit-min` / `rit-full` feature matrix
+  and the current `rit-core` feature flag inventory.
+
 ### `rit version`
 
 - Baseline command checked: `git version`
