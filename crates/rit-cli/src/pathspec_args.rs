@@ -1,5 +1,5 @@
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 
 pub fn handle_pathspec_file_option(
     args: &[String],
@@ -41,22 +41,26 @@ pub fn read_pathspecs_from_file(
     command: &str,
     stderr: &mut dyn Write,
 ) -> io::Result<Option<Vec<String>>> {
-    if file_name == "-" {
-        writeln!(
-            stderr,
-            "rit: {command} does not support --pathspec-from-file=- yet"
-        )?;
-        return Ok(None);
-    }
-
-    let data = match fs::read(file_name) {
-        Ok(data) => data,
-        Err(error) => {
+    let data = if file_name == "-" {
+        let mut data = Vec::new();
+        if let Err(error) = io::stdin().read_to_end(&mut data) {
             writeln!(
                 stderr,
-                "rit: could not read pathspec file '{file_name}': {error}"
+                "rit: {command} could not read pathspecs from stdin: {error}"
             )?;
             return Ok(None);
+        }
+        data
+    } else {
+        match fs::read(file_name) {
+            Ok(data) => data,
+            Err(error) => {
+                writeln!(
+                    stderr,
+                    "rit: could not read pathspec file '{file_name}': {error}"
+                )?;
+                return Ok(None);
+            }
         }
     };
 

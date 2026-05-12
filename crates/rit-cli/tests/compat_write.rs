@@ -1,8 +1,9 @@
 use rit_testkit::{LocalWriteFixture, LocalWriteFixtureKind};
 use std::ffi::{OsStr, OsString};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
@@ -104,6 +105,31 @@ fn add_pathspec_from_file_matches_git_status() {
             rit_binary(),
             ["add", "--pathspec-from-file", "pathspecs.txt"],
         ),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
+}
+
+#[test]
+fn add_pathspec_from_stdin_matches_git_status() {
+    let fixture =
+        LocalWriteFixture::new("add-pathspec-stdin", LocalWriteFixtureKind::NestedTracked)
+            .expect("fixture should build");
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "changed\n",
+    )
+    .expect("tracked file should be modified");
+    fs::write(fixture.path().join("nested").join("new.txt"), "new\n")
+        .expect("new file should be written");
+    let stdin = b"nested/tracked.txt\nnested/new.txt\n";
+
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words_with_stdin("git", ["add", "--pathspec-from-file", "-"], stdin),
+        command_words_with_stdin(rit_binary(), ["add", "--pathspec-from-file", "-"], stdin),
     );
 
     assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
@@ -431,6 +457,41 @@ fn restore_pathspec_from_file_matches_git_status_and_files() {
 }
 
 #[test]
+fn restore_pathspec_from_stdin_matches_git_status_and_files() {
+    let fixture = LocalWriteFixture::new(
+        "restore-pathspec-stdin",
+        LocalWriteFixtureKind::NestedTracked,
+    )
+    .expect("fixture should build");
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "changed\n",
+    )
+    .expect("tracked file should be modified");
+    let stdin = b"nested/tracked.txt\n";
+
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words_with_stdin("git", ["restore", "--pathspec-from-file", "-"], stdin),
+        command_words_with_stdin(
+            rit_binary(),
+            ["restore", "--pathspec-from-file", "-"],
+            stdin,
+        ),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
+    assert_eq!(
+        fs::read_to_string(outcome.git_repo.join("nested").join("tracked.txt"))
+            .expect("git file should read"),
+        fs::read_to_string(outcome.rit_repo.join("nested").join("tracked.txt"))
+            .expect("rit file should read")
+    );
+}
+
+#[test]
 fn reset_directory_pathspec_matches_git_status() {
     let fixture = LocalWriteFixture::new("reset-directory", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");
@@ -519,6 +580,30 @@ fn reset_pathspec_from_file_matches_git_status() {
             rit_binary(),
             ["reset", "--pathspec-from-file", "pathspecs.txt"],
         ),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
+}
+
+#[test]
+fn reset_pathspec_from_stdin_matches_git_status() {
+    let fixture =
+        LocalWriteFixture::new("reset-pathspec-stdin", LocalWriteFixtureKind::NestedTracked)
+            .expect("fixture should build");
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "changed\n",
+    )
+    .expect("tracked file should be modified");
+    run_git(fixture.path(), ["add", "nested"]);
+    let stdin = b"nested/tracked.txt\n";
+
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words_with_stdin("git", ["reset", "--pathspec-from-file", "-"], stdin),
+        command_words_with_stdin(rit_binary(), ["reset", "--pathspec-from-file", "-"], stdin),
     );
 
     assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
@@ -799,11 +884,13 @@ fn checkout_detached_commit_matches_git_state() {
             program: OsString::from("git"),
             args: vec![OsString::from("checkout"), OsString::from(base.clone())],
             env: Vec::new(),
+            stdin: None,
         },
         CommandSpec {
             program: rit_binary(),
             args: vec![OsString::from("checkout"), OsString::from(base)],
             env: Vec::new(),
+            stdin: None,
         },
     );
 
@@ -1111,6 +1198,7 @@ struct CommandSpec {
     program: OsString,
     args: Vec<OsString>,
     env: Vec<(OsString, OsString)>,
+    stdin: Option<Vec<u8>>,
 }
 
 struct AttrPathspecWriteFixture {
@@ -1221,6 +1309,20 @@ fn command_words<const N: usize>(program: impl Into<OsString>, args: [&str; N]) 
         program: program.into(),
         args: args.into_iter().map(OsString::from).collect(),
         env: Vec::new(),
+        stdin: None,
+    }
+}
+
+fn command_words_with_stdin<const N: usize>(
+    program: impl Into<OsString>,
+    args: [&str; N],
+    stdin: &[u8],
+) -> CommandSpec {
+    CommandSpec {
+        program: program.into(),
+        args: args.into_iter().map(OsString::from).collect(),
+        env: Vec::new(),
+        stdin: Some(stdin.to_vec()),
     }
 }
 
@@ -1236,6 +1338,7 @@ fn command_words_with_env<const N: usize, const M: usize>(
             .iter()
             .map(|(name, value)| (OsString::from(name), OsString::from(value)))
             .collect(),
+        stdin: None,
     }
 }
 
@@ -1245,7 +1348,19 @@ fn run_command(spec: &CommandSpec, cwd: &Path) -> (String, String) {
     for (name, value) in &spec.env {
         command.env(name, value);
     }
-    let output = command.output().expect("command should start");
+    if spec.stdin.is_some() {
+        command.stdin(Stdio::piped());
+    }
+    let mut child = command.spawn().expect("command should start");
+    if let Some(stdin) = &spec.stdin {
+        child
+            .stdin
+            .take()
+            .expect("stdin should be piped")
+            .write_all(stdin)
+            .expect("stdin should be written");
+    }
+    let output = child.wait_with_output().expect("command should finish");
     assert!(
         output.status.success(),
         "command failed\nstdout:\n{}\nstderr:\n{}",
@@ -1268,7 +1383,19 @@ fn run_command_allow_failure(spec: &CommandSpec, cwd: &Path) -> CommandRun {
     for (name, value) in &spec.env {
         command.env(name, value);
     }
-    let output = command.output().expect("command should start");
+    if spec.stdin.is_some() {
+        command.stdin(Stdio::piped());
+    }
+    let mut child = command.spawn().expect("command should start");
+    if let Some(stdin) = &spec.stdin {
+        child
+            .stdin
+            .take()
+            .expect("stdin should be piped")
+            .write_all(stdin)
+            .expect("stdin should be written");
+    }
+    let output = child.wait_with_output().expect("command should finish");
     CommandRun {
         success: output.status.success(),
     }

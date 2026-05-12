@@ -161,6 +161,8 @@ Completion criteria:
       and `reset`.
     - [x] `--pathspec-from-file` and `--pathspec-file-nul` for `add`,
       `restore`, and `reset`.
+    - [x] `--pathspec-from-file=-` stdin pathspecs for `add`, `restore`, and
+      `reset`.
     - [x] C-style quoted pathspec-file entries for common escapes.
     - [ ] Full Git pathspec-file edge cases and advanced glob parity.
 - [x] Hook execution for commit.

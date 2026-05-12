@@ -59,6 +59,8 @@
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
   `--pathspec-file-nul`, including a quoted pathspec entry.
+- 2026-05-12 stdin pathspec-file slice checked `git add -h`, `git restore -h`,
+  `git reset -h`, and direct Git comparisons for `--pathspec-from-file=-`.
 - 2026-05-12 merge-state model slice checked `git merge -h`,
   `git cherry-pick -h`, `git rebase -h`, and `git stash -h`.
 - 2026-05-12 large-file backend trait slice checked the AGENTS large-object
@@ -549,7 +551,7 @@
 - Supported options: ordinary literal file, directory, `.`, simple `*`, `?`,
   and bracket-class wildcard pathspecs, positive `:(literal)`, `:(glob)`,
   `:(top)`, `:/`, and `:(icase)` pathspec magic, plus `--chmod=+x`, `--chmod=-x`,
-  `--chmod +x`, `--chmod -x`, `--pathspec-from-file`, and
+  `--chmod +x`, `--chmod -x`, `--pathspec-from-file`, `--pathspec-from-file=-`, and
   `--pathspec-file-nul`.
 - Unsupported options: full Git pathspec-file edge cases, update/all modes,
   patch/interactive mode, sparse mode, ignored-file override.
@@ -634,7 +636,7 @@
   restore index from `HEAD`, with ordinary literal file, directory, `.`, simple
   `*`, `?`, and bracket-class wildcard pathspecs plus positive `:(literal)`,
   `:(glob)`, `:(top)`, `:/`, and `:(icase)` pathspec magic, plus
-  `--pathspec-from-file` and `--pathspec-file-nul`.
+  `--pathspec-from-file`, `--pathspec-from-file=-`, and `--pathspec-file-nul`.
 - Unsupported options: source revisions, patch mode, merge conflict modes,
   sparse controls, full Git pathspec-file edge cases.
 - Git-compatible behavior: explicit tracked file restore for regular files,
@@ -644,8 +646,7 @@
 - Git-compatible behavior: when `core.symlinks=false`, restore and checkout
   materialize `120000` entries as plain `100644` files containing the link
   target text, and status treats that plain file as clean.
-- Intentional differences: `--pathspec-from-file=-` and conflict handling are
-  not implemented.
+- Intentional differences: conflict handling is not implemented.
 - Repository mutation: worktree restore writes files; staged restore writes `.git/index`.
 - Risk: moderate; worktree writes use temp file then replace destination.
 
@@ -655,7 +656,8 @@
 - Supported options: ordinary literal file, directory, `.`, simple `*`, `?`,
   and bracket-class wildcard pathspecs plus positive `:(literal)`, `:(glob)`,
   `:(top)`, `:/`, and `:(icase)` pathspec magic, equivalent to unstaging matching paths
-  from `HEAD`, plus `--pathspec-from-file` and `--pathspec-file-nul`.
+  from `HEAD`, plus `--pathspec-from-file`, `--pathspec-from-file=-`, and
+  `--pathspec-file-nul`.
 - Unsupported options: commit-moving resets, soft/mixed/hard/merge/keep modes,
   patch mode, full Git pathspec-file edge cases.
 - Git-compatible behavior: unstages explicit paths and reports remaining unstaged modifications.
