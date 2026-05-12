@@ -64,6 +64,9 @@
   pack sending, and report-status validation without invoking external `git`.
 - 2026-05-12 SSH port slice checked the existing SSH command model; added
   `ssh://host:port/path` parsing and `ssh -p <port>` process argument wiring.
+- 2026-05-12 SSH environment command slice checked `git fetch -h` and
+  `git push -h`; added `GIT_SSH_COMMAND` and `GIT_SSH` process selection for
+  SSH fetch/push process execution.
 - 2026-05-12 copy-detection-hard slice checked `git diff -h` and direct Git
   comparisons for `diff --cached --find-copies-harder`.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
@@ -242,6 +245,8 @@
   update with report-status validation.
 - Added SSH URL port parsing for `ssh://host:port/path` and process executor
   wiring for `ssh -p <port>`.
+- Added `GIT_SSH_COMMAND` shell-word parsing and `GIT_SSH` program override
+  support when building SSH process invocations.
 - Still unsupported: auth option parity, broader SSH option/config support,
   multi-round negotiation, and thin-pack fixups.
 

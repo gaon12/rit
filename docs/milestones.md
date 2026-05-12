@@ -270,6 +270,7 @@ Completion criteria:
     source-to-destination refspec.
   - [x] `ssh://host:port/path` URL port parsing and `ssh -p` process
     argument wiring.
+  - [x] `GIT_SSH_COMMAND` and `GIT_SSH` process selection for SSH transport.
   - [ ] SSH auth option parity and broader advanced SSH transport
     configuration.
 - [~] Fetch refs negotiation.

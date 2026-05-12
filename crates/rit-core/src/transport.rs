@@ -1,4 +1,5 @@
 use std::{
+    env,
     io::{BufReader, ErrorKind, Read, Write},
     net::TcpStream,
     path::PathBuf,
@@ -118,6 +119,15 @@ pub struct SshServiceCommand {
     pub remote_command: String,
 }
 
+/// Local process invocation used for SSH transport.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SshProcessInvocation {
+    /// Program to execute, usually `ssh` or `GIT_SSH`.
+    pub program: String,
+    /// Arguments passed to the SSH program.
+    pub args: Vec<String>,
+}
+
 impl SshServiceCommand {
     /// Returns the `ssh` destination argument, including `user@` when present.
     pub fn target(&self) -> String {
@@ -163,8 +173,7 @@ pub struct ProcessSshServiceExecutor;
 
 impl SshServiceExecutor for ProcessSshServiceExecutor {
     fn run(&self, command: &SshServiceCommand, request: &[u8]) -> Result<Vec<u8>> {
-        let mut process = Command::new("ssh");
-        add_ssh_process_args(&mut process, command);
+        let mut process = command_to_process(command)?;
         let mut child = process
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -201,8 +210,7 @@ impl SshUploadPackExecutor for ProcessSshServiceExecutor {
         haves: Vec<ObjectId>,
     ) -> Result<RemotePackNegotiation> {
         let command = location.ssh_service_command(SmartHttpService::UploadPack)?;
-        let mut process = Command::new("ssh");
-        add_ssh_process_args(&mut process, &command);
+        let mut process = command_to_process(&command)?;
         let mut child = process
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -277,8 +285,7 @@ impl SshReceivePackExecutor for ProcessSshServiceExecutor {
         pack_data: Vec<u8>,
     ) -> Result<ReceivePackStatus> {
         let command = location.ssh_service_command(SmartHttpService::ReceivePack)?;
-        let mut process = Command::new("ssh");
-        add_ssh_process_args(&mut process, &command);
+        let mut process = command_to_process(&command)?;
         let mut child = process
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -331,11 +338,86 @@ impl SshReceivePackExecutor for ProcessSshServiceExecutor {
     }
 }
 
-fn add_ssh_process_args(process: &mut Command, command: &SshServiceCommand) {
+fn command_to_process(command: &SshServiceCommand) -> Result<Command> {
+    let git_ssh_command = env::var("GIT_SSH_COMMAND").ok();
+    let git_ssh = env::var("GIT_SSH").ok();
+    let invocation =
+        ssh_process_invocation(command, git_ssh_command.as_deref(), git_ssh.as_deref())?;
+    let mut process = Command::new(&invocation.program);
+    process.args(&invocation.args);
+    Ok(process)
+}
+
+fn ssh_process_invocation(
+    command: &SshServiceCommand,
+    git_ssh_command: Option<&str>,
+    git_ssh: Option<&str>,
+) -> Result<SshProcessInvocation> {
+    let (program, mut args) = match git_ssh_command.filter(|value| !value.trim().is_empty()) {
+        Some(command) => parse_git_ssh_command(command)?,
+        None => match git_ssh.filter(|value| !value.trim().is_empty()) {
+            Some(program) => (program.to_owned(), Vec::new()),
+            None => ("ssh".to_owned(), Vec::new()),
+        },
+    };
+    add_ssh_process_args(&mut args, command);
+    Ok(SshProcessInvocation { program, args })
+}
+
+fn add_ssh_process_args(args: &mut Vec<String>, command: &SshServiceCommand) {
     if let Some(port) = command.port {
-        process.arg("-p").arg(port.to_string());
+        args.push("-p".to_owned());
+        args.push(port.to_string());
     }
-    process.arg(command.target()).arg(&command.remote_command);
+    args.push(command.target());
+    args.push(command.remote_command.clone());
+}
+
+fn parse_git_ssh_command(command: &str) -> Result<(String, Vec<String>)> {
+    let words = split_command_words(command)?;
+    let Some((program, args)) = words.split_first() else {
+        return Err(RitError::invalid_input("GIT_SSH_COMMAND is empty"));
+    };
+    Ok((program.clone(), args.to_vec()))
+}
+
+fn split_command_words(command: &str) -> Result<Vec<String>> {
+    let mut words = Vec::new();
+    let mut current = String::new();
+    let mut chars = command.chars();
+    let mut quote = None;
+
+    while let Some(ch) = chars.next() {
+        match (quote, ch) {
+            (None, '\'') => quote = Some('\''),
+            (None, '"') => quote = Some('"'),
+            (None, ch) if ch.is_whitespace() => {
+                if !current.is_empty() {
+                    words.push(std::mem::take(&mut current));
+                }
+            }
+            (Some('\''), '\'') | (Some('"'), '"') => quote = None,
+            (Some('"'), '\\') | (None, '\\') => {
+                let Some(next) = chars.next() else {
+                    return Err(RitError::invalid_input(
+                        "GIT_SSH_COMMAND has a trailing backslash",
+                    ));
+                };
+                current.push(next);
+            }
+            _ => current.push(ch),
+        }
+    }
+
+    if quote.is_some() {
+        return Err(RitError::invalid_input(
+            "GIT_SSH_COMMAND has an unterminated quote",
+        ));
+    }
+    if !current.is_empty() {
+        words.push(current);
+    }
+    Ok(words)
 }
 
 /// Runs one SSH upload-pack request and parses the server response.
@@ -1413,9 +1495,9 @@ fn is_windows_drive_path(input: &str) -> bool {
 mod tests {
     use super::{
         BlockingSmartHttpClient, FetchRefSpec, SmartHttpAdvertisement, SmartHttpService,
-        SshServiceCommand, SshServiceExecutor, TransportLocation, TransportProtocol,
-        UploadPackAckStatus, UploadPackAcknowledgement, UploadPackRequest, UploadPackResponse,
-        UploadPackSideBand,
+        SshProcessInvocation, SshServiceCommand, SshServiceExecutor, TransportLocation,
+        TransportProtocol, UploadPackAckStatus, UploadPackAcknowledgement, UploadPackRequest,
+        UploadPackResponse, UploadPackSideBand,
     };
     use crate::{ObjectId, Result};
     use std::{
@@ -1501,6 +1583,73 @@ mod tests {
         assert_eq!(command.port, Some(2222));
         assert_eq!(command.target(), "git@example.test");
         assert_eq!(command.remote_command, "git-upload-pack '/project.git'");
+    }
+
+    #[test]
+    fn builds_default_ssh_process_invocation() {
+        let command = TransportLocation::parse("git@example.test:org/repo.git")
+            .ssh_service_command(SmartHttpService::UploadPack)
+            .expect("ssh command");
+
+        let invocation = super::ssh_process_invocation(&command, None, None)
+            .expect("default invocation should build");
+
+        assert_eq!(
+            invocation,
+            SshProcessInvocation {
+                program: "ssh".to_owned(),
+                args: vec![
+                    "git@example.test".to_owned(),
+                    "git-upload-pack 'org/repo.git'".to_owned(),
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn git_ssh_command_overrides_process_and_keeps_port() {
+        let command = TransportLocation::parse("ssh://git@example.test:2222/project.git")
+            .ssh_service_command(SmartHttpService::ReceivePack)
+            .expect("ssh command");
+
+        let invocation =
+            super::ssh_process_invocation(&command, Some("plink -batch -i 'key file.ppk'"), None)
+                .expect("GIT_SSH_COMMAND invocation should build");
+
+        assert_eq!(
+            invocation,
+            SshProcessInvocation {
+                program: "plink".to_owned(),
+                args: vec![
+                    "-batch".to_owned(),
+                    "-i".to_owned(),
+                    "key file.ppk".to_owned(),
+                    "-p".to_owned(),
+                    "2222".to_owned(),
+                    "git@example.test".to_owned(),
+                    "git-receive-pack '/project.git'".to_owned(),
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn git_ssh_overrides_program_without_extra_args() {
+        let command = TransportLocation::parse("example.test:org/repo.git")
+            .ssh_service_command(SmartHttpService::UploadPack)
+            .expect("ssh command");
+
+        let invocation = super::ssh_process_invocation(&command, None, Some("custom-ssh"))
+            .expect("GIT_SSH invocation should build");
+
+        assert_eq!(invocation.program, "custom-ssh");
+        assert_eq!(
+            invocation.args,
+            vec![
+                "example.test".to_owned(),
+                "git-upload-pack 'org/repo.git'".to_owned(),
+            ]
+        );
     }
 
     #[test]
