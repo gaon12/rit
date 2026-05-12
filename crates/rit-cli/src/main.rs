@@ -1826,12 +1826,12 @@ mod tests {
     }
 
     #[test]
-    fn fetch_rejects_remote_locations() {
-        let (code, stdout, stderr) = run_with(&["fetch", "git@example.test:org/repo.git"]);
+    fn fetch_rejects_unsupported_options() {
+        let (code, stdout, stderr) = run_with(&["fetch", "--depth=1", "origin"]);
 
         assert_eq!(code, ExitCode::from(129));
         assert_eq!(stdout, "");
-        assert!(stderr.contains("local paths and http:// or https:// smart remotes"));
+        assert!(stderr.contains("unsupported fetch option"));
     }
 
     #[test]

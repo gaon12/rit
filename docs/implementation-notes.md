@@ -56,6 +56,9 @@
 - 2026-05-12 SSH session slice checked `git fetch -h`, `git push -h`, and the
   existing SSH command model; added process-backed upload-pack session I/O
   without invoking external `git`.
+- 2026-05-12 SSH fetch wiring slice checked `git fetch -h`; wired
+  single-round SSH upload-pack advertisement parsing, pack ingestion, and
+  `FETCH_HEAD`/destination ref updates without invoking external `git`.
 - 2026-05-12 copy-detection-hard slice checked `git diff -h` and direct Git
   comparisons for `diff --cached --find-copies-harder`.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
@@ -216,8 +219,21 @@
 - Added Git comparison coverage for stdin-delivered NUL-separated pathspecs
   in `add`, `restore`, and `reset`.
 - Added C-style quoted pathspec-file entry parsing for common escapes.
-- Still unsupported: full Git pathspec-file edge cases, similarity-threshold
-  rename scoring, copy detection, and `show` path filtering for patch output.
+- Still unsupported: full Git pathspec-file edge cases, worktree rename/copy
+  detection, rename limits/advanced diffcore parity, and `show` path filtering
+  for patch output.
+
+### M7: Remote transport foundation
+
+- Added SSH Git protocol advertisement parsing for native upload-pack streams
+  that do not include the smart HTTP service header.
+- Added a process-backed interactive SSH upload-pack executor that reads the
+  advertisement, selects the requested ref, writes one upload-pack request in
+  the same session, and extracts the returned pack.
+- `rit fetch` now routes SSH/scp-like remotes through the SSH upload-pack
+  fetch path, ingests the received pack, and writes `FETCH_HEAD`.
+- Still unsupported: SSH receive-pack push workflow, auth/SSH option parity,
+  multi-round negotiation, and thin-pack fixups.
 
 ### M8: Merge-state local workflows
 

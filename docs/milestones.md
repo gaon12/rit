@@ -264,6 +264,8 @@ Completion criteria:
 - [~] SSH transport.
   - [x] SSH/scp-like upload-pack and receive-pack command model.
   - [x] Process-based SSH upload-pack session I/O model.
+  - [x] SSH fetch workflow wiring for a single advertised ref, including
+    pack ingestion and `FETCH_HEAD` updates.
   - [ ] SSH fetch/push workflow wiring, receive-pack session I/O, and auth
     option parity.
 - [~] Fetch refs negotiation.
@@ -283,6 +285,7 @@ Completion criteria:
   - [x] Single-round remote pack negotiation for an advertised ref through the
     smart HTTP client.
   - [x] Wire negotiated plain HTTP pack ingestion into `rit fetch`.
+  - [x] Wire single-round SSH upload-pack ingestion into `rit fetch`.
   - [ ] Multi-round negotiation, thin-pack fixups, and advanced capability
     parity.
 - [x] Push basics.

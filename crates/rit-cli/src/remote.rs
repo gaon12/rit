@@ -167,11 +167,23 @@ pub fn fetch_command(
             }
         }
         rit_core::TransportProtocol::Ssh => {
-            writeln!(
-                stderr,
-                "rit: fetch currently supports only local paths and http:// or https:// smart remotes"
-            )?;
-            Ok(ExitCode::from(129))
+            let mut options = rit_core::RemoteFetchOptions::new(source_location);
+            if let Some(refspec) = refspec {
+                options = options.with_refspec(refspec);
+            }
+            match repository.fetch_remote_ssh(&options) {
+                Ok(result) => {
+                    if !quiet {
+                        writeln!(stdout, "From {}", result.source)?;
+                        writeln!(stdout, " * branch            HEAD       -> FETCH_HEAD")?;
+                    }
+                    Ok(ExitCode::SUCCESS)
+                }
+                Err(error) => {
+                    writeln!(stderr, "rit: {error}")?;
+                    Ok(ExitCode::from(1))
+                }
+            }
         }
     }
 }

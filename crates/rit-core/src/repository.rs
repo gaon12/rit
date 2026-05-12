@@ -1,9 +1,10 @@
 use crate::object::parse_tree_entries;
 use crate::{
     BlockingSmartHttpClient, FetchRefSpec, GitAttributes, GitConfig, GitObject, LooseObjectDb,
-    ObjectId, ObjectKind, PartialClonePolicy, ReceivePackCommand, ReceivePackCommandStatus,
-    ReceivePackRequest, ReceivePackStatus, Result, RitConfig, RitError, SmartHttpAdvertisement,
-    SmartHttpService, SparseCheckout, TransportLocation, TransportProtocol, parse_commit,
+    ObjectId, ObjectKind, PartialClonePolicy, ProcessSshServiceExecutor, ReceivePackCommand,
+    ReceivePackCommandStatus, ReceivePackRequest, ReceivePackStatus, Result, RitConfig, RitError,
+    SmartHttpAdvertisement, SmartHttpService, SparseCheckout, SshUploadPackExecutor,
+    TransportLocation, TransportProtocol, parse_commit,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -357,30 +358,46 @@ impl Repository {
         let client = BlockingSmartHttpClient::default();
         let negotiation =
             client.negotiate_upload_pack(&options.location, wanted_ref, Vec::new())?;
-        let ingested = self.loose_objects().ingest_pack(&negotiation.pack_bytes)?;
         let source_name = options.location.original().to_owned();
-        let fetch_head = negotiation.want_id;
-        let fetch_head_line = match &options.refspec {
-            Some(refspec) => {
-                validate_full_ref_name(&refspec.destination)?;
-                write_full_ref(self, &refspec.destination, fetch_head)?;
-                format!(
-                    "{fetch_head}\t\t{} of {source_name}\n",
-                    fetch_head_description(&refspec.source)
-                )
-            }
-            None => format!("{fetch_head}\t\t{source_name}\n"),
-        };
-        write_file(
-            &self.git_dir().join("FETCH_HEAD"),
-            fetch_head_line.as_bytes(),
-        )?;
+        self.finish_remote_fetch(
+            options,
+            source_name,
+            negotiation.want_id,
+            &negotiation.pack_bytes,
+        )
+    }
 
-        Ok(RemoteFetchResult {
-            fetch_head,
-            source: source_name,
-            object_count: ingested.object_ids.len(),
-        })
+    /// Fetches one advertised ref from an SSH remote.
+    pub fn fetch_remote_ssh(&self, options: &RemoteFetchOptions) -> Result<RemoteFetchResult> {
+        self.fetch_remote_ssh_with_executor(options, &ProcessSshServiceExecutor)
+    }
+
+    /// Fetches one advertised ref from an SSH remote using an explicit executor.
+    pub fn fetch_remote_ssh_with_executor(
+        &self,
+        options: &RemoteFetchOptions,
+        executor: &impl SshUploadPackExecutor,
+    ) -> Result<RemoteFetchResult> {
+        if options.location.protocol() != TransportProtocol::Ssh {
+            return Err(RitError::invalid_input(
+                "SSH fetch requires an ssh:// or scp-like remote",
+            ));
+        }
+
+        let wanted_ref = options
+            .refspec
+            .as_ref()
+            .map(|refspec| refspec.source.as_str())
+            .unwrap_or("HEAD");
+        let negotiation =
+            executor.negotiate_upload_pack(&options.location, wanted_ref, Vec::new())?;
+        let source_name = options.location.original().to_owned();
+        self.finish_remote_fetch(
+            options,
+            source_name,
+            negotiation.want_id,
+            &negotiation.pack_bytes,
+        )
     }
 
     /// Pushes one source ref or revision to a smart HTTP or HTTPS remote.
@@ -415,6 +432,37 @@ impl Repository {
             new_id,
             object_count: object_ids.len(),
             status,
+        })
+    }
+
+    fn finish_remote_fetch(
+        &self,
+        options: &RemoteFetchOptions,
+        source_name: String,
+        fetch_head: ObjectId,
+        pack_bytes: &[u8],
+    ) -> Result<RemoteFetchResult> {
+        let ingested = self.loose_objects().ingest_pack(pack_bytes)?;
+        let fetch_head_line = match &options.refspec {
+            Some(refspec) => {
+                validate_full_ref_name(&refspec.destination)?;
+                write_full_ref(self, &refspec.destination, fetch_head)?;
+                format!(
+                    "{fetch_head}\t\t{} of {source_name}\n",
+                    fetch_head_description(&refspec.source)
+                )
+            }
+            None => format!("{fetch_head}\t\t{source_name}\n"),
+        };
+        write_file(
+            &self.git_dir().join("FETCH_HEAD"),
+            fetch_head_line.as_bytes(),
+        )?;
+
+        Ok(RemoteFetchResult {
+            fetch_head,
+            source: source_name,
+            object_count: ingested.object_ids.len(),
         })
     }
 
@@ -975,7 +1023,10 @@ fn validate_branch_name(branch_name: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{InitOptions, RemoteFetchOptions, RemotePushOptions, Repository};
-    use crate::{FetchRefSpec, ObjectKind, TransportLocation, hash_object, object::sha1_bytes};
+    use crate::{
+        FetchRefSpec, ObjectKind, RemotePackNegotiation, SmartHttpAdvertisement, SmartHttpService,
+        SshUploadPackExecutor, TransportLocation, hash_object, object::sha1_bytes,
+    };
     use flate2::{Compression, write::ZlibEncoder};
     use std::fs;
     use std::io::{Read, Write};
@@ -1276,6 +1327,62 @@ mod tests {
     }
 
     #[test]
+    fn fetch_remote_ssh_ingests_pack_and_writes_fetch_head() {
+        let temp = temp_path("remote-ssh-fetch");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        let object_data = b"hello";
+        let object_id = hash_object(ObjectKind::Blob, object_data);
+        let pack = pack_with_one_blob(object_data);
+        let advertisement = upload_pack_git_protocol_advertisement(object_id);
+        let advertisement = SmartHttpAdvertisement::parse_git_protocol(
+            SmartHttpService::UploadPack,
+            &advertisement,
+        )
+        .expect("advertisement should parse");
+        let refspec =
+            FetchRefSpec::parse("refs/heads/main:refs/remotes/origin/main").expect("refspec");
+        let location = TransportLocation::parse("git@example.test:org/repo.git");
+        let executor = FakeSshUploadPackExecutor {
+            negotiation: RemotePackNegotiation {
+                advertisement,
+                wanted_ref: "refs/heads/main".to_owned(),
+                want_id: object_id,
+                response: crate::UploadPackResponse::parse(&upload_pack_response_with_pack(&pack))
+                    .expect("response should parse"),
+                pack_bytes: pack,
+            },
+        };
+        let options = RemoteFetchOptions::new(location).with_refspec(refspec);
+
+        let result = repository
+            .fetch_remote_ssh_with_executor(&options, &executor)
+            .expect("remote fetch should ingest pack");
+
+        assert_eq!(result.fetch_head, object_id);
+        assert_eq!(result.object_count, 1);
+        assert_eq!(
+            repository
+                .read_object(object_id)
+                .expect("fetched object should be readable")
+                .data,
+            object_data
+        );
+        assert_eq!(
+            repository
+                .resolve_revision("refs/remotes/origin/main")
+                .expect("destination ref should resolve"),
+            object_id
+        );
+        assert_eq!(
+            fs::read_to_string(repository.git_dir().join("FETCH_HEAD"))
+                .expect("FETCH_HEAD should be written"),
+            format!("{object_id}\t\tbranch 'main' of git@example.test:org/repo.git\n")
+        );
+
+        remove_dir_all(&temp);
+    }
+
+    #[test]
     fn push_remote_http_sends_pack_and_checks_status() {
         let temp = temp_path("remote-http-push");
         let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
@@ -1330,6 +1437,20 @@ mod tests {
         body
     }
 
+    fn upload_pack_git_protocol_advertisement(object_id: crate::ObjectId) -> Vec<u8> {
+        let mut body = Vec::new();
+        test_pkt_line(
+            &mut body,
+            format!("{object_id} HEAD\0multi_ack side-band-64k\n").as_bytes(),
+        );
+        test_pkt_line(
+            &mut body,
+            format!("{object_id} refs/heads/main\n").as_bytes(),
+        );
+        body.extend_from_slice(b"0000");
+        body
+    }
+
     fn upload_pack_response_with_pack(pack: &[u8]) -> Vec<u8> {
         let mut body = Vec::new();
         test_pkt_line(&mut body, b"NAK\n");
@@ -1366,6 +1487,23 @@ mod tests {
         let checksum = sha1_bytes(&pack);
         pack.extend_from_slice(&checksum);
         pack
+    }
+
+    struct FakeSshUploadPackExecutor {
+        negotiation: RemotePackNegotiation,
+    }
+
+    impl SshUploadPackExecutor for FakeSshUploadPackExecutor {
+        fn negotiate_upload_pack(
+            &self,
+            location: &TransportLocation,
+            wanted_ref: &str,
+            _haves: Vec<crate::ObjectId>,
+        ) -> crate::Result<RemotePackNegotiation> {
+            assert_eq!(location.protocol(), crate::TransportProtocol::Ssh);
+            assert_eq!(wanted_ref, self.negotiation.wanted_ref);
+            Ok(self.negotiation.clone())
+        }
     }
 
     fn zlib(data: &[u8]) -> Vec<u8> {

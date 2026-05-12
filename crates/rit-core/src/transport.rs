@@ -1,5 +1,5 @@
 use std::{
-    io::{Read, Write},
+    io::{BufReader, ErrorKind, Read, Write},
     net::TcpStream,
     path::PathBuf,
     process::{Command, Stdio},
@@ -132,6 +132,17 @@ pub trait SshServiceExecutor {
     fn run(&self, command: &SshServiceCommand, request: &[u8]) -> Result<Vec<u8>>;
 }
 
+/// Executes an interactive SSH upload-pack session.
+pub trait SshUploadPackExecutor {
+    /// Negotiates one upload-pack request for an advertised ref.
+    fn negotiate_upload_pack(
+        &self,
+        location: &TransportLocation,
+        wanted_ref: &str,
+        haves: Vec<ObjectId>,
+    ) -> Result<RemotePackNegotiation>;
+}
+
 /// SSH executor backed by the system `ssh` program.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ProcessSshServiceExecutor;
@@ -168,6 +179,81 @@ impl SshServiceExecutor for ProcessSshServiceExecutor {
     }
 }
 
+impl SshUploadPackExecutor for ProcessSshServiceExecutor {
+    fn negotiate_upload_pack(
+        &self,
+        location: &TransportLocation,
+        wanted_ref: &str,
+        haves: Vec<ObjectId>,
+    ) -> Result<RemotePackNegotiation> {
+        let command = location.ssh_service_command(SmartHttpService::UploadPack)?;
+        let mut child = Command::new("ssh")
+            .arg(command.target())
+            .arg(&command.remote_command)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| RitError::invalid_input("SSH upload-pack stdout was not captured"))?;
+        let mut stdout = BufReader::new(stdout);
+        let mut advertisement_bytes = Vec::new();
+        read_ssh_advertisement(&mut stdout, &mut advertisement_bytes, &command.host)?;
+        let advertisement = SmartHttpAdvertisement::parse_git_protocol(
+            SmartHttpService::UploadPack,
+            &advertisement_bytes,
+        )?;
+        let want_id = advertised_ref_id(&advertisement, wanted_ref).ok_or_else(|| {
+            RitError::invalid_input(format!(
+                "remote did not advertise requested ref: {wanted_ref}"
+            ))
+        })?;
+        let request = UploadPackRequest::new(vec![want_id])?
+            .with_capabilities(select_upload_pack_capabilities(&advertisement.capabilities))
+            .with_haves(haves);
+
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin
+                .write_all(&request.to_pkt_lines())
+                .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+        }
+
+        let mut response_bytes = Vec::new();
+        stdout
+            .read_to_end(&mut response_bytes)
+            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+        let output = child
+            .wait_with_output()
+            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(RitError::invalid_input(format!(
+                "SSH upload-pack failed for {}: {}",
+                command.host,
+                stderr.trim()
+            )));
+        }
+
+        let response = UploadPackResponse::parse(&response_bytes)?;
+        reject_upload_pack_error(&response)?;
+        let pack_bytes = response.pack_bytes()?.ok_or_else(|| {
+            RitError::invalid_input("upload-pack response did not include a pack")
+        })?;
+
+        Ok(RemotePackNegotiation {
+            advertisement,
+            wanted_ref: wanted_ref.to_owned(),
+            want_id,
+            response,
+            pack_bytes,
+        })
+    }
+}
+
 /// Runs one SSH upload-pack request and parses the server response.
 pub fn run_ssh_upload_pack(
     location: &TransportLocation,
@@ -177,6 +263,54 @@ pub fn run_ssh_upload_pack(
     let command = location.ssh_service_command(SmartHttpService::UploadPack)?;
     let response = executor.run(&command, &request.to_pkt_lines())?;
     UploadPackResponse::parse(&response)
+}
+
+fn read_ssh_advertisement(
+    reader: &mut impl Read,
+    output: &mut Vec<u8>,
+    location: &str,
+) -> Result<()> {
+    loop {
+        let line = read_pkt_line_from(reader, location)?;
+        let is_flush = line == b"0000";
+        output.extend_from_slice(&line);
+        if is_flush {
+            break;
+        }
+    }
+    Ok(())
+}
+
+fn read_pkt_line_from(reader: &mut impl Read, location: &str) -> Result<Vec<u8>> {
+    let mut header = [0_u8; 4];
+    match reader.read_exact(&mut header) {
+        Ok(()) => {}
+        Err(error) if error.kind() == ErrorKind::UnexpectedEof => {
+            return Err(RitError::invalid_input(
+                "SSH upload-pack ended before advertising refs",
+            ));
+        }
+        Err(error) => return Err(RitError::transport_io(location.to_owned(), error)),
+    }
+    let length_text = std::str::from_utf8(&header)
+        .map_err(|_| RitError::invalid_input("pkt-line length is not UTF-8"))?;
+    let length = u16::from_str_radix(length_text, 16)
+        .map_err(|_| RitError::invalid_input("invalid pkt-line length"))? as usize;
+    let mut raw = header.to_vec();
+    if length == 0 {
+        return Ok(raw);
+    }
+    if length < 4 {
+        return Err(RitError::invalid_input(
+            "pkt-line length is smaller than header",
+        ));
+    }
+    let mut payload = vec![0_u8; length - 4];
+    reader
+        .read_exact(&mut payload)
+        .map_err(|source| RitError::transport_io(location.to_owned(), source))?;
+    raw.extend_from_slice(&payload);
+    Ok(raw)
 }
 
 /// One reference advertised by a smart HTTP service.
@@ -446,6 +580,12 @@ impl SmartHttpAdvertisement {
             refs,
         })
     }
+
+    /// Parses the pkt-line advertisement returned by native Git protocol
+    /// transports such as SSH.
+    pub fn parse_git_protocol(service: SmartHttpService, bytes: &[u8]) -> Result<Self> {
+        parse_advertisement_records(service, parse_pkt_lines(bytes)?)
+    }
 }
 
 impl FetchRefSpec {
@@ -504,6 +644,49 @@ fn reject_upload_pack_error(response: &UploadPackResponse) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn parse_advertisement_records(
+    service: SmartHttpService,
+    lines: Vec<Vec<u8>>,
+) -> Result<SmartHttpAdvertisement> {
+    let mut capabilities = Vec::new();
+    let mut refs = Vec::new();
+    for line in lines {
+        if line.is_empty() {
+            break;
+        }
+        let (advertised_ref, advertised_capabilities) =
+            parse_advertised_ref_line(&line, refs.is_empty())?;
+        if let Some(advertised_capabilities) = advertised_capabilities {
+            capabilities = advertised_capabilities;
+        }
+        refs.push(advertised_ref);
+    }
+
+    Ok(SmartHttpAdvertisement {
+        service,
+        capabilities,
+        refs,
+    })
+}
+
+fn advertised_ref_id(advertisement: &SmartHttpAdvertisement, wanted_ref: &str) -> Option<ObjectId> {
+    advertisement
+        .refs
+        .iter()
+        .find(|advertised| advertised.name == wanted_ref)
+        .map(|advertised| advertised.object_id)
+        .or_else(|| {
+            if wanted_ref == "HEAD" {
+                advertisement
+                    .refs
+                    .first()
+                    .map(|advertised| advertised.object_id)
+            } else {
+                None
+            }
+        })
 }
 
 pub(super) fn parse_pkt_lines(bytes: &[u8]) -> Result<Vec<Vec<u8>>> {

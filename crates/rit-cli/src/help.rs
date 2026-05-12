@@ -64,7 +64,7 @@ Clone a local repository by copying objects and refs. Checkout is not implemente
 const FETCH_HELP: &str = "\
 rit fetch [-q|--quiet] <repository> [<src>:<dst>]
 
-Fetch objects from a local or plain smart HTTP repository and write FETCH_HEAD.
+Fetch objects from a local, smart HTTP(S), or SSH repository and write FETCH_HEAD.
 ";
 
 const PUSH_HELP: &str = "\
