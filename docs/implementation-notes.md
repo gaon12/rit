@@ -15,6 +15,8 @@
 - 2026-05-10 bracket wildcard pathspec slice checked: `git status -h` and
   `git diff -h`, plus direct Git comparisons for `[ab]`, `[a-c]`, and `[!a]`
   forms.
+- 2026-05-12 POSIX bracket pathspec slice checked `git add -h` and direct Git
+  comparisons for `[[:digit:]]` forms in write-command pathspec expansion.
 - 2026-05-09 diff patch milestone checked: `git diff -h`.
 - 2026-05-09 detached checkout milestone checked: `git checkout -h`.
 - 2026-05-09 branch delete safety milestone checked: `git branch -h`.
@@ -180,6 +182,8 @@
   behavior for simple path filters.
 - Added simple wildcard pathspec compatibility coverage for `ls-files`,
   first-parent `log`, and `show --no-patch`.
+- Added ASCII POSIX bracket character class support, such as `[[:digit:]]`,
+  to the shared pathspec wildcard matcher.
 - Added positive pathspec magic support for `:(literal)`, `:(glob)`,
   `:(top)`, and `:/` with Git comparison coverage for status, diff, ls-files,
   first-parent `log`, `show --no-patch`, and `add`.

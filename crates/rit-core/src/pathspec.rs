@@ -341,6 +341,14 @@ fn match_bracket_class(pattern: &[u8], index: usize, path_byte: u8) -> Option<us
             };
         }
 
+        if let Some((class_matches, next_cursor)) =
+            match_posix_bracket_class(pattern, cursor, path_byte)
+        {
+            matched |= class_matches;
+            cursor = next_cursor;
+            continue;
+        }
+
         if cursor + 2 < pattern.len() && pattern[cursor + 1] == b'-' && pattern[cursor + 2] != b']'
         {
             let start = pattern[cursor];
@@ -361,6 +369,44 @@ fn match_bracket_class(pattern: &[u8], index: usize, path_byte: u8) -> Option<us
         Some(index + 1)
     } else {
         None
+    }
+}
+
+fn match_posix_bracket_class(
+    pattern: &[u8],
+    cursor: usize,
+    path_byte: u8,
+) -> Option<(bool, usize)> {
+    if pattern.get(cursor) != Some(&b'[') || pattern.get(cursor + 1) != Some(&b':') {
+        return None;
+    }
+
+    let mut end = cursor + 2;
+    while end + 1 < pattern.len() {
+        if pattern[end] == b':' && pattern[end + 1] == b']' {
+            let class_name = &pattern[cursor + 2..end];
+            return Some((posix_class_matches(class_name, path_byte), end + 2));
+        }
+        end += 1;
+    }
+    None
+}
+
+fn posix_class_matches(class_name: &[u8], byte: u8) -> bool {
+    match class_name {
+        b"alnum" => byte.is_ascii_alphanumeric(),
+        b"alpha" => byte.is_ascii_alphabetic(),
+        b"blank" => matches!(byte, b' ' | b'\t'),
+        b"cntrl" => byte.is_ascii_control(),
+        b"digit" => byte.is_ascii_digit(),
+        b"graph" => byte.is_ascii_graphic(),
+        b"lower" => byte.is_ascii_lowercase(),
+        b"print" => byte.is_ascii_graphic() || byte == b' ',
+        b"punct" => byte.is_ascii_punctuation(),
+        b"space" => byte.is_ascii_whitespace(),
+        b"upper" => byte.is_ascii_uppercase(),
+        b"xdigit" => byte.is_ascii_hexdigit(),
+        _ => false,
     }
 }
 
@@ -501,12 +547,6 @@ fn normalize_pathspec_pattern(pattern: &str, original: &str, top_magic: bool) ->
             "absolute pathspecs are not supported yet: {original}"
         )));
     }
-    if normalized.contains(':') {
-        return Err(RitError::invalid_input(format!(
-            "pathspec magic is not supported yet: {original}"
-        )));
-    }
-
     Ok(normalized)
 }
 
@@ -571,6 +611,27 @@ mod tests {
         let pathspec = PathspecSet::from_args(&["[!a].txt".to_owned()]).expect("valid pathspec");
 
         assert!(pathspec.matches("b.txt"));
+        assert!(!pathspec.matches("a.txt"));
+    }
+
+    #[test]
+    fn posix_bracket_pathspec_matches_like_git_simple_globs() {
+        let pathspec =
+            PathspecSet::from_args(&["[[:digit:]].txt".to_owned()]).expect("valid pathspec");
+
+        assert!(pathspec.matches("1.txt"));
+        assert!(!pathspec.matches("a.txt"));
+
+        let pathspec =
+            PathspecSet::from_args(&["[![:digit:]].txt".to_owned()]).expect("valid pathspec");
+
+        assert!(pathspec.matches("a.txt"));
+        assert!(!pathspec.matches("1.txt"));
+
+        let pathspec =
+            PathspecSet::from_args(&["[[:upper:]].txt".to_owned()]).expect("valid pathspec");
+
+        assert!(pathspec.matches("A.txt"));
         assert!(!pathspec.matches("a.txt"));
     }
 

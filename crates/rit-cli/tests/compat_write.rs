@@ -55,6 +55,24 @@ fn add_wildcard_pathspec_matches_git_status() {
 }
 
 #[test]
+fn add_posix_bracket_pathspec_matches_git_status() {
+    let fixture = LocalWriteFixture::new("add-posix-bracket", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
+    fs::write(fixture.path().join("1.txt"), "number\n").expect("number file should be written");
+    fs::write(fixture.path().join("a.txt"), "letter\n").expect("letter file should be written");
+
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words("git", ["add", "[[:digit:]].txt"]),
+        command_words(rit_binary(), ["add", "[[:digit:]].txt"]),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
+}
+
+#[test]
 fn add_magic_pathspec_matches_git_status() {
     let fixture = LocalWriteFixture::new("add-magic", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");

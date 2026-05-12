@@ -159,6 +159,8 @@ Completion criteria:
     - [x] Shared simple bracket-class wildcard matcher.
     - [x] Simple wildcard and bracket-class expansion for `add`, `restore`,
       and `reset`.
+    - [x] POSIX bracket character classes such as `[[:digit:]]` in shared
+      pathspec glob matching.
     - [x] `--pathspec-from-file` and `--pathspec-file-nul` for `add`,
       `restore`, and `reset`.
     - [x] `--pathspec-from-file=-` stdin pathspecs for `add`, `restore`, and
