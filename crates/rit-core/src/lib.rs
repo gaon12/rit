@@ -106,9 +106,10 @@ pub use status::{
 pub use transport::{
     AdvertisedRef, BlockingSmartHttpClient, FetchRefSpec, ReceivePackCommand,
     ReceivePackCommandStatus, ReceivePackRequest, ReceivePackStatus, RemotePackNegotiation,
-    SmartHttpAdvertisement, SmartHttpPostRequest, SmartHttpRequest, SmartHttpResponse,
-    SmartHttpService, SshServiceCommand, TransportLocation, TransportProtocol, UploadPackAckStatus,
-    UploadPackAcknowledgement, UploadPackRequest, UploadPackResponse, UploadPackSideBand,
+    ProcessSshServiceExecutor, SmartHttpAdvertisement, SmartHttpPostRequest, SmartHttpRequest,
+    SmartHttpResponse, SmartHttpService, SshServiceCommand, SshServiceExecutor,
+    TransportLocation, TransportProtocol, UploadPackAckStatus, UploadPackAcknowledgement,
+    UploadPackRequest, UploadPackResponse, UploadPackSideBand, run_ssh_upload_pack,
 };
 pub use vfs::{
     FallbackMaterializedAction, FallbackMaterializedBackend, FallbackMaterializedPlan,

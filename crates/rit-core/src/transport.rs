@@ -2,6 +2,7 @@ use std::{
     io::{Read, Write},
     net::TcpStream,
     path::PathBuf,
+    process::{Command, Stdio},
     time::Duration,
 };
 
@@ -113,6 +114,69 @@ pub struct SshServiceCommand {
     pub path: String,
     /// Remote shell command, such as `git-upload-pack 'repo.git'`.
     pub remote_command: String,
+}
+
+impl SshServiceCommand {
+    /// Returns the `ssh` destination argument, including `user@` when present.
+    pub fn target(&self) -> String {
+        match &self.user {
+            Some(user) => format!("{user}@{}", self.host),
+            None => self.host.clone(),
+        }
+    }
+}
+
+/// Executes an SSH Git service session.
+pub trait SshServiceExecutor {
+    /// Sends a pkt-line request to the remote command and returns raw response bytes.
+    fn run(&self, command: &SshServiceCommand, request: &[u8]) -> Result<Vec<u8>>;
+}
+
+/// SSH executor backed by the system `ssh` program.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ProcessSshServiceExecutor;
+
+impl SshServiceExecutor for ProcessSshServiceExecutor {
+    fn run(&self, command: &SshServiceCommand, request: &[u8]) -> Result<Vec<u8>> {
+        let mut child = Command::new("ssh")
+            .arg(command.target())
+            .arg(&command.remote_command)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin
+                .write_all(request)
+                .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+        }
+
+        let output = child
+            .wait_with_output()
+            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(RitError::invalid_input(format!(
+                "SSH service command failed for {}: {}",
+                command.host,
+                stderr.trim()
+            )));
+        }
+        Ok(output.stdout)
+    }
+}
+
+/// Runs one SSH upload-pack request and parses the server response.
+pub fn run_ssh_upload_pack(
+    location: &TransportLocation,
+    request: &UploadPackRequest,
+    executor: &impl SshServiceExecutor,
+) -> Result<UploadPackResponse> {
+    let command = location.ssh_service_command(SmartHttpService::UploadPack)?;
+    let response = executor.run(&command, &request.to_pkt_lines())?;
+    UploadPackResponse::parse(&response)
 }
 
 /// One reference advertised by a smart HTTP service.
@@ -1033,10 +1097,11 @@ fn is_windows_drive_path(input: &str) -> bool {
 mod tests {
     use super::{
         BlockingSmartHttpClient, FetchRefSpec, SmartHttpAdvertisement, SmartHttpService,
-        TransportLocation, TransportProtocol, UploadPackAckStatus, UploadPackAcknowledgement,
-        UploadPackResponse, UploadPackSideBand,
+        SshServiceCommand, SshServiceExecutor, TransportLocation, TransportProtocol,
+        UploadPackAckStatus, UploadPackAcknowledgement, UploadPackRequest, UploadPackResponse,
+        UploadPackSideBand,
     };
-    use crate::ObjectId;
+    use crate::{ObjectId, Result};
     use std::{
         io::{Read, Write},
         net::TcpListener,
@@ -1091,6 +1156,7 @@ mod tests {
         assert_eq!(command.host, "example.test");
         assert_eq!(command.path, "org/repo.git");
         assert_eq!(command.remote_command, "git-upload-pack 'org/repo.git'");
+        assert_eq!(command.target(), "git@example.test");
     }
 
     #[test]
@@ -1115,6 +1181,37 @@ mod tests {
         assert_eq!(
             command.remote_command,
             "git-upload-pack 'org/repo'\\''with-quote.git'"
+        );
+    }
+
+    #[test]
+    fn ssh_upload_pack_uses_executor_and_parses_response() {
+        struct FakeSshExecutor;
+
+        impl SshServiceExecutor for FakeSshExecutor {
+            fn run(&self, command: &SshServiceCommand, request: &[u8]) -> Result<Vec<u8>> {
+                assert_eq!(command.target(), "git@example.test");
+                assert_eq!(command.remote_command, "git-upload-pack 'org/repo.git'");
+                assert!(String::from_utf8_lossy(request).contains("want "));
+                Ok(b"0008NAK\nPACKmock".to_vec())
+            }
+        }
+
+        let request = UploadPackRequest::new(vec![
+            ObjectId::from_hex("1111111111111111111111111111111111111111")
+                .expect("valid object id"),
+        ])
+        .expect("valid upload-pack request");
+        let response = super::run_ssh_upload_pack(
+            &TransportLocation::parse("git@example.test:org/repo.git"),
+            &request,
+            &FakeSshExecutor,
+        )
+        .expect("ssh upload-pack response should parse");
+
+        assert_eq!(
+            response.pack_bytes().expect("pack bytes"),
+            Some(b"PACKmock".to_vec())
         );
     }
 

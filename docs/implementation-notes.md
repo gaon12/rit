@@ -51,6 +51,9 @@
 - 2026-05-12 HTTPS/TLS transport slice checked `git fetch -h`, `git push -h`,
   and the existing smart HTTP tests; TLS uses platform certificate
   verification through `native-tls`.
+- 2026-05-12 SSH session slice checked `git fetch -h`, `git push -h`, and the
+  existing SSH command model; added process-backed upload-pack session I/O
+  without invoking external `git`.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
   `--pathspec-file-nul`, including a quoted pathspec entry.
@@ -772,13 +775,15 @@
   advertised ref that returns extracted pack bytes; receive-pack
   command/request bodies and `report-status` parsing.
 - Supported SSH model: parse `ssh://user@host/path` and `user@host:path`
-  locations and build quoted `git-upload-pack` / `git-receive-pack` remote
-  commands.
-- Unsupported behavior: SSH process/session I/O, multi-round negotiation,
-  thin-pack fixups, push object minimization, and advanced push options are not
-  implemented yet. `rit fetch` accepts local paths plus `http://` and
-  `https://` smart HTTP remotes; `rit push` accepts `http://` and `https://`
-  smart HTTP remotes; SSH is rejected with a clear error.
+  locations, build quoted `git-upload-pack` / `git-receive-pack` remote
+  commands, and run one upload-pack pkt-line request through a process-backed
+  `ssh` session executor.
+- Unsupported behavior: SSH fetch/push CLI wiring, SSH receive-pack session
+  I/O, multi-round negotiation, thin-pack fixups, push object minimization, and
+  advanced push options are not implemented yet. `rit fetch` accepts local
+  paths plus `http://` and `https://` smart HTTP remotes; `rit push` accepts
+  `http://` and `https://` smart HTTP remotes; SSH is still rejected at the CLI
+  workflow layer with a clear error.
 - Repository mutation: HTTP/HTTPS fetch ingests received packs and writes
   `FETCH_HEAD`; other transport APIs remain request/response models.
 - Risk: moderate for fetch ingestion, low for request/response-only transport

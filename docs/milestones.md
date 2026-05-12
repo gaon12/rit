@@ -255,7 +255,9 @@ Completion criteria:
     - [x] HTTPS/TLS via platform certificate verification.
 - [~] SSH transport.
   - [x] SSH/scp-like upload-pack and receive-pack command model.
-  - [ ] SSH process/session I/O.
+  - [x] Process-based SSH upload-pack session I/O model.
+  - [ ] SSH fetch/push workflow wiring, receive-pack session I/O, and auth
+    option parity.
 - [~] Fetch refs negotiation.
   - [x] Single local fetch refspec updates a destination ref after copying
     objects.
@@ -474,8 +476,10 @@ Completion criteria:
   - Implemented: pure Rust parsing for `ssh://user@host/path` and
     `user@host:path` locations plus remote `git-upload-pack` /
     `git-receive-pack` command construction.
-  - Still open: starting an SSH session, pkt-line I/O over that session,
-    authentication, and pack negotiation.
+  - Later slice added process-backed upload-pack pkt-line I/O over an `ssh`
+    session executor.
+  - Still open: SSH fetch/push workflow wiring, receive-pack session I/O,
+    authentication options, and pack negotiation.
 - 2026-05-11, M7 receive-pack request model:
   - Reference Git: `git version 2.52.0.windows.1`.
   - Reference docs checked: local `gitprotocol-pack(5)` reference update
@@ -570,6 +574,16 @@ Completion criteria:
     parsing time.
   - Still open: SSH sessions, multi-round negotiation, thin-pack fixups, and
     advanced fetch/push options.
+- 2026-05-12, M7 SSH upload-pack session I/O:
+  - Reference Git: `git version 2.52.0.windows.1`.
+  - Reference docs checked: `git fetch -h` and `git push -h`.
+  - Implemented: `SshServiceExecutor` trait, `ProcessSshServiceExecutor`
+    backed by the system `ssh` program, `SshServiceCommand::target`, and
+    `run_ssh_upload_pack` for one pkt-line upload-pack request/response cycle.
+  - Safety note: the executor starts `ssh`, not `git`; remote Git service
+    commands are passed as quoted SSH remote commands.
+  - Still open: wiring SSH fetch/push workflows, receive-pack sessions,
+    authentication options, and multi-round negotiation.
 - 2026-05-11, CLI module hygiene:
   - Verified large-file state before continuing: `rit-cli/src/main.rs` had
     grown past 2100 lines.
