@@ -62,6 +62,8 @@
 - 2026-05-12 SSH push wiring slice checked `git push -h`; wired
   single-ref SSH receive-pack advertisement parsing, request serialization,
   pack sending, and report-status validation without invoking external `git`.
+- 2026-05-12 SSH port slice checked the existing SSH command model; added
+  `ssh://host:port/path` parsing and `ssh -p <port>` process argument wiring.
 - 2026-05-12 copy-detection-hard slice checked `git diff -h` and direct Git
   comparisons for `diff --cached --find-copies-harder`.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
@@ -238,8 +240,10 @@
 - Added a process-backed interactive SSH receive-pack executor and routed
   `rit push` for SSH/scp-like remotes through one source-to-destination refspec
   update with report-status validation.
-- Still unsupported: auth/SSH option parity, multi-round negotiation, and
-  thin-pack fixups.
+- Added SSH URL port parsing for `ssh://host:port/path` and process executor
+  wiring for `ssh -p <port>`.
+- Still unsupported: auth option parity, broader SSH option/config support,
+  multi-round negotiation, and thin-pack fixups.
 
 ### M8: Merge-state local workflows
 

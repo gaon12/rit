@@ -110,6 +110,8 @@ pub struct SshServiceCommand {
     pub user: Option<String>,
     /// SSH host name.
     pub host: String,
+    /// Optional SSH port from `ssh://host:port/path` URLs.
+    pub port: Option<u16>,
     /// Repository path passed to the remote Git service.
     pub path: String,
     /// Remote shell command, such as `git-upload-pack 'repo.git'`.
@@ -161,9 +163,9 @@ pub struct ProcessSshServiceExecutor;
 
 impl SshServiceExecutor for ProcessSshServiceExecutor {
     fn run(&self, command: &SshServiceCommand, request: &[u8]) -> Result<Vec<u8>> {
-        let mut child = Command::new("ssh")
-            .arg(command.target())
-            .arg(&command.remote_command)
+        let mut process = Command::new("ssh");
+        add_ssh_process_args(&mut process, command);
+        let mut child = process
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -199,9 +201,9 @@ impl SshUploadPackExecutor for ProcessSshServiceExecutor {
         haves: Vec<ObjectId>,
     ) -> Result<RemotePackNegotiation> {
         let command = location.ssh_service_command(SmartHttpService::UploadPack)?;
-        let mut child = Command::new("ssh")
-            .arg(command.target())
-            .arg(&command.remote_command)
+        let mut process = Command::new("ssh");
+        add_ssh_process_args(&mut process, &command);
+        let mut child = process
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -275,9 +277,9 @@ impl SshReceivePackExecutor for ProcessSshServiceExecutor {
         pack_data: Vec<u8>,
     ) -> Result<ReceivePackStatus> {
         let command = location.ssh_service_command(SmartHttpService::ReceivePack)?;
-        let mut child = Command::new("ssh")
-            .arg(command.target())
-            .arg(&command.remote_command)
+        let mut process = Command::new("ssh");
+        add_ssh_process_args(&mut process, &command);
+        let mut child = process
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -327,6 +329,13 @@ impl SshReceivePackExecutor for ProcessSshServiceExecutor {
 
         ReceivePackStatus::parse(&response_bytes)
     }
+}
+
+fn add_ssh_process_args(process: &mut Command, command: &SshServiceCommand) {
+    if let Some(port) = command.port {
+        process.arg("-p").arg(port.to_string());
+    }
+    process.arg(command.target()).arg(&command.remote_command);
 }
 
 /// Runs one SSH upload-pack request and parses the server response.
@@ -994,6 +1003,7 @@ impl TransportLocation {
             service,
             user: parsed.user,
             host: parsed.host,
+            port: parsed.port,
             path: parsed.path,
             remote_command,
         })
@@ -1003,6 +1013,7 @@ impl TransportLocation {
 struct ParsedSshLocation {
     user: Option<String>,
     host: String,
+    port: Option<u16>,
     path: String,
 }
 
@@ -1022,7 +1033,7 @@ fn parse_ssh_url(rest: &str, original: &str) -> Result<ParsedSshLocation> {
             "SSH URL is missing repository path: {original}"
         )));
     };
-    let (user, host) = parse_ssh_authority(authority, original)?;
+    let (user, host, port) = parse_ssh_authority(authority, original, true)?;
     if path_without_slash.is_empty() {
         return Err(RitError::invalid_input(format!(
             "SSH URL is missing repository path: {original}"
@@ -1031,6 +1042,7 @@ fn parse_ssh_url(rest: &str, original: &str) -> Result<ParsedSshLocation> {
     Ok(ParsedSshLocation {
         user,
         host,
+        port,
         path: format!("/{path_without_slash}"),
     })
 }
@@ -1041,7 +1053,7 @@ fn parse_scp_like_location(input: &str) -> Result<ParsedSshLocation> {
             "unsupported SSH location: {input}"
         )));
     };
-    let (user, host) = parse_ssh_authority(authority, input)?;
+    let (user, host, port) = parse_ssh_authority(authority, input, false)?;
     if path.is_empty() {
         return Err(RitError::invalid_input(format!(
             "SSH location is missing repository path: {input}"
@@ -1050,17 +1062,22 @@ fn parse_scp_like_location(input: &str) -> Result<ParsedSshLocation> {
     Ok(ParsedSshLocation {
         user,
         host,
+        port,
         path: path.to_owned(),
     })
 }
 
-fn parse_ssh_authority(authority: &str, original: &str) -> Result<(Option<String>, String)> {
+fn parse_ssh_authority(
+    authority: &str,
+    original: &str,
+    allow_port: bool,
+) -> Result<(Option<String>, String, Option<u16>)> {
     if authority.is_empty() {
         return Err(RitError::invalid_input(format!(
             "SSH location is missing host: {original}"
         )));
     }
-    let (user, host) = match authority.rsplit_once('@') {
+    let (user, host_with_port) = match authority.rsplit_once('@') {
         Some((user, host)) if !user.is_empty() && !host.is_empty() => {
             (Some(user.to_owned()), host.to_owned())
         }
@@ -1071,7 +1088,33 @@ fn parse_ssh_authority(authority: &str, original: &str) -> Result<(Option<String
         }
         None => (None, authority.to_owned()),
     };
-    Ok((user, host))
+    let (host, port) = parse_optional_ssh_port(&host_with_port, original, allow_port)?;
+    Ok((user, host, port))
+}
+
+fn parse_optional_ssh_port(
+    host: &str,
+    original: &str,
+    allow_port: bool,
+) -> Result<(String, Option<u16>)> {
+    if !allow_port {
+        return Ok((host.to_owned(), None));
+    }
+    let Some((host, port_text)) = host.rsplit_once(':') else {
+        return Ok((host.to_owned(), None));
+    };
+    if host.is_empty()
+        || port_text.is_empty()
+        || !port_text.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return Err(RitError::invalid_input(format!(
+            "SSH URL has invalid port: {original}"
+        )));
+    }
+    let port = port_text
+        .parse::<u16>()
+        .map_err(|_| RitError::invalid_input(format!("SSH URL has invalid port: {original}")))?;
+    Ok((host.to_owned(), Some(port)))
 }
 
 fn shell_quote(value: &str) -> String {
@@ -1427,6 +1470,7 @@ mod tests {
         assert_eq!(command.service, SmartHttpService::UploadPack);
         assert_eq!(command.user.as_deref(), Some("git"));
         assert_eq!(command.host, "example.test");
+        assert_eq!(command.port, None);
         assert_eq!(command.path, "org/repo.git");
         assert_eq!(command.remote_command, "git-upload-pack 'org/repo.git'");
         assert_eq!(command.target(), "git@example.test");
@@ -1441,8 +1485,22 @@ mod tests {
         assert_eq!(command.service, SmartHttpService::ReceivePack);
         assert_eq!(command.user.as_deref(), Some("git"));
         assert_eq!(command.host, "example.test");
+        assert_eq!(command.port, None);
         assert_eq!(command.path, "/project.git");
         assert_eq!(command.remote_command, "git-receive-pack '/project.git'");
+    }
+
+    #[test]
+    fn builds_ssh_service_command_with_url_port() {
+        let command = TransportLocation::parse("ssh://git@example.test:2222/project.git")
+            .ssh_service_command(SmartHttpService::UploadPack)
+            .expect("ssh command");
+
+        assert_eq!(command.user.as_deref(), Some("git"));
+        assert_eq!(command.host, "example.test");
+        assert_eq!(command.port, Some(2222));
+        assert_eq!(command.target(), "git@example.test");
+        assert_eq!(command.remote_command, "git-upload-pack '/project.git'");
     }
 
     #[test]
