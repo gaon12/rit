@@ -53,7 +53,8 @@ The current codebase implements an early local Git subset:
   `diff --cached`.
 - Cached diff supports staged rename/copy detection with `-M[<n>]`,
   `--find-renames[=<n>]`, `-C[<n>]`, and `--find-copies[=<n>]` for summary
-  modes and patch output.
+  modes and patch output. `--find-copies-harder` can use unchanged HEAD files
+  as copy sources in cached diff.
 - Ordinary literal file and directory pathspec filtering is supported for
   `status --porcelain=v1` and the supported `diff` summary modes.
 - Ordinary literal file and directory pathspec filtering is supported for

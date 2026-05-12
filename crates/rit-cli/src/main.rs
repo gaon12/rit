@@ -534,6 +534,7 @@ fn diff_command(
     let mut cached = false;
     let mut find_renames = false;
     let mut find_copies = false;
+    let mut find_copies_harder = false;
     let mut rename_similarity_threshold = 50;
     let mut copy_similarity_threshold = 50;
     let mut output_mode = None;
@@ -546,6 +547,10 @@ fn diff_command(
             "--cached" | "--staged" if !after_separator => cached = true,
             "-M" | "--find-renames" if !after_separator => find_renames = true,
             "-C" | "--find-copies" if !after_separator => find_copies = true,
+            "--find-copies-harder" if !after_separator => {
+                find_copies = true;
+                find_copies_harder = true;
+            }
             option
                 if (option.starts_with("-M") || option.starts_with("--find-renames="))
                     && !after_separator =>
@@ -612,6 +617,7 @@ fn diff_command(
     let diff_options = rit_core::DiffOptions {
         find_renames,
         find_copies,
+        find_copies_harder,
         rename_similarity_threshold,
         copy_similarity_threshold,
     };

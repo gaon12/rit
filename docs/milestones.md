@@ -131,8 +131,10 @@ Completion criteria:
     patch output.
   - [x] Staged similarity thresholds, copy detection, and non-exact rename
     scoring for `diff --cached -M/-C` summary and patch output.
-  - [ ] Worktree rename/copy detection, `--find-copies-harder`, rename limits,
-    and advanced Git diffcore parity.
+  - [x] Staged `--find-copies-harder` copy detection from unchanged HEAD
+    sources.
+  - [ ] Worktree rename/copy detection, rename limits, and advanced Git
+    diffcore parity.
 - [x] Binary diff accounting for summary modes.
 
 Completion criteria:

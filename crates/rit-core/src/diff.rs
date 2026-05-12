@@ -317,6 +317,8 @@ pub struct DiffOptions {
     pub find_renames: bool,
     /// Detect copies from modified paths to added paths.
     pub find_copies: bool,
+    /// Also consider unchanged HEAD paths as copy sources.
+    pub find_copies_harder: bool,
     /// Minimum similarity score for rename detection.
     pub rename_similarity_threshold: u8,
     /// Minimum similarity score for copy detection.
@@ -329,6 +331,7 @@ impl DiffOptions {
         Self {
             find_renames: false,
             find_copies: false,
+            find_copies_harder: false,
             rename_similarity_threshold: 50,
             copy_similarity_threshold: 50,
         }
@@ -669,7 +672,7 @@ impl Repository {
             detect_patch_renames(&mut files, options)?;
         }
         if options.find_copies {
-            detect_patch_copies(&mut files, options)?;
+            self.detect_patch_copies(&mut files, &head_entries, &index_entries, options)?;
         }
 
         Ok(DiffPatch { files })
@@ -823,28 +826,18 @@ impl Repository {
                 continue;
             };
             let new_object = self.read_blob(new_entry.object_id)?;
-            let Some(match_candidate) = best_similarity_match(
+            let Some(match_candidate) = self.best_copy_match(
                 files,
-                |file| file.status == 'M',
-                |file| {
-                    old_entries
-                        .get(&file.path)
-                        .is_some_and(|old_entry| old_entry.mode == new_entry.mode)
-                },
-                |file| {
-                    let old_entry = old_entries
-                        .get(&file.path)
-                        .ok_or_else(|| RitError::invalid_input("copy source disappeared"))?;
-                    let old_object = self.read_blob(old_entry.object_id)?;
-                    similarity_score(&old_object.data, &new_object.data)
-                },
-                options.copy_similarity_threshold,
+                old_entries,
+                new_entry,
+                &new_object.data,
+                options,
                 add_index,
             )?
             else {
                 continue;
             };
-            let old_path = files[match_candidate.index].path.clone();
+            let old_path = match_candidate.path;
             let old_entry = old_entries
                 .get(&old_path)
                 .ok_or_else(|| RitError::invalid_input("copy source disappeared"))?;
@@ -861,6 +854,98 @@ impl Repository {
                 binary,
                 old_size: old_object.data.len(),
                 new_size: new_object.data.len(),
+            };
+        }
+        Ok(())
+    }
+
+    fn best_copy_match(
+        &self,
+        files: &[DiffFileStat],
+        old_entries: &BTreeMap<String, DiffTreeEntry>,
+        new_entry: &DiffTreeEntry,
+        new_data: &[u8],
+        options: &DiffOptions,
+        excluded_index: usize,
+    ) -> Result<Option<CopyMatch>> {
+        let mut best = None;
+        for (path, old_entry) in old_entries {
+            if old_entry.mode != new_entry.mode {
+                continue;
+            }
+            if !options.find_copies_harder {
+                let Some(index) = files
+                    .iter()
+                    .position(|file| file.path == *path && file.status == 'M')
+                else {
+                    continue;
+                };
+                if index == excluded_index {
+                    continue;
+                }
+            }
+            let old_object = self.read_blob(old_entry.object_id)?;
+            let candidate_score = similarity_score(&old_object.data, new_data)?;
+            if candidate_score < options.copy_similarity_threshold {
+                continue;
+            }
+            let should_replace = best
+                .as_ref()
+                .map(|best: &CopyMatch| candidate_score > best.score)
+                .unwrap_or(true);
+            if should_replace {
+                best = Some(CopyMatch {
+                    path: path.clone(),
+                    score: candidate_score,
+                });
+            }
+        }
+        Ok(best)
+    }
+
+    fn detect_patch_copies(
+        &self,
+        files: &mut [DiffPatchFile],
+        old_entries: &BTreeMap<String, DiffTreeEntry>,
+        new_entries: &BTreeMap<String, DiffTreeEntry>,
+        options: &DiffOptions,
+    ) -> Result<()> {
+        for add_index in 0..files.len() {
+            if files[add_index].status != 'A' {
+                continue;
+            }
+            let new_path = files[add_index].path.clone();
+            let Some(new_entry) = new_entries.get(&new_path) else {
+                continue;
+            };
+            let new_object_id = files[add_index].new_object_id;
+            let new_data = files[add_index].new_data.clone();
+            let Some(match_candidate) = self.best_copy_match(
+                &patch_files_to_stats(files),
+                old_entries,
+                new_entry,
+                &new_data,
+                options,
+                add_index,
+            )?
+            else {
+                continue;
+            };
+            let old_entry = old_entries
+                .get(&match_candidate.path)
+                .ok_or_else(|| RitError::invalid_input("copy source disappeared"))?;
+            let old_object = self.read_blob(old_entry.object_id)?;
+
+            files[add_index] = DiffPatchFile {
+                status: 'C',
+                old_path: Some(match_candidate.path),
+                path: new_path,
+                similarity_score: Some(match_candidate.score),
+                old_object_id: Some(old_entry.object_id),
+                new_object_id,
+                mode: new_entry.mode,
+                old_data: old_object.data,
+                new_data,
             };
         }
         Ok(())
@@ -915,49 +1000,33 @@ fn detect_patch_renames(files: &mut Vec<DiffPatchFile>, options: &DiffOptions) -
     Ok(())
 }
 
-fn detect_patch_copies(files: &mut [DiffPatchFile], options: &DiffOptions) -> Result<()> {
-    for add_index in 0..files.len() {
-        if files[add_index].status != 'A' {
-            continue;
-        }
-        let new_path = files[add_index].path.clone();
-        let new_object_id = files[add_index].new_object_id;
-        let new_data = files[add_index].new_data.clone();
-        let new_mode = files[add_index].mode;
-        let Some(match_candidate) = best_similarity_match(
-            files,
-            |file| file.status == 'M' && file.mode == new_mode,
-            |file| file.old_object_id.is_some(),
-            |file| similarity_score(&file.old_data, &new_data),
-            options.copy_similarity_threshold,
-            add_index,
-        )?
-        else {
-            continue;
-        };
-        let source_path = files[match_candidate.index].path.clone();
-        let source_object_id = files[match_candidate.index].old_object_id;
-        let source_data = files[match_candidate.index].old_data.clone();
-
-        files[add_index] = DiffPatchFile {
-            status: 'C',
-            old_path: Some(source_path),
-            path: new_path,
-            similarity_score: Some(match_candidate.score),
-            old_object_id: source_object_id,
-            new_object_id,
-            mode: new_mode,
-            old_data: source_data,
-            new_data,
-        };
-    }
-    Ok(())
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct SimilarityMatch {
     index: usize,
     score: u8,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct CopyMatch {
+    path: String,
+    score: u8,
+}
+
+fn patch_files_to_stats(files: &[DiffPatchFile]) -> Vec<DiffFileStat> {
+    files
+        .iter()
+        .map(|file| DiffFileStat {
+            status: file.status,
+            old_path: file.old_path.clone(),
+            path: file.path.clone(),
+            similarity_score: file.similarity_score,
+            insertions: 0,
+            deletions: 0,
+            binary: is_binary_data(&file.old_data) || is_binary_data(&file.new_data),
+            old_size: file.old_data.len(),
+            new_size: file.new_data.len(),
+        })
+        .collect()
 }
 
 fn best_similarity_match<T>(

@@ -54,6 +54,8 @@
 - 2026-05-12 SSH session slice checked `git fetch -h`, `git push -h`, and the
   existing SSH command model; added process-backed upload-pack session I/O
   without invoking external `git`.
+- 2026-05-12 copy-detection-hard slice checked `git diff -h` and direct Git
+  comparisons for `diff --cached --find-copies-harder`.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
   `--pathspec-file-nul`, including a quoted pathspec entry.
@@ -512,10 +514,11 @@
   `:(icase)` pathspec magic. `-M[<n>]`/`--find-renames[=<n>]` supports staged
   exact and non-exact rename detection in cached diff output. `-C[<n>]` and
   `--find-copies[=<n>]` support staged copy detection from modified source
-  files.
+  files. `--find-copies-harder` also considers unchanged HEAD files as staged
+  copy sources.
 - Unsupported options: commit/tree/blob arguments, pathspec files,
-  worktree rename/copy detection, `--find-copies-harder`, rename limits, and
-  many advanced patch formatting options.
+  worktree rename/copy detection, rename limits, and many advanced patch
+  formatting options.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files.
 - Git-compatible behavior: cached diff scope compares the index against `HEAD`.
 - Intentional differences: advanced patch formatting and custom diff drivers

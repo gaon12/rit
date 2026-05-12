@@ -122,6 +122,37 @@ fn diff_cached_copy_outputs_match_git() {
 }
 
 #[test]
+fn diff_cached_find_copies_harder_outputs_match_git() {
+    let fixture = HardCopyFixture::new("cached-hard-copy");
+
+    for args in [
+        vec!["diff", "--cached", "--find-copies-harder", "--name-status"],
+        vec![
+            "diff",
+            "--cached",
+            "-C",
+            "--find-copies-harder",
+            "--name-status",
+        ],
+        vec!["diff", "--cached", "-C", "--find-copies-harder"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached hard copy {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn binary_diff_summary_outputs_match_git() {
     let fixture = BinaryDiffFixture::new("binary-diff");
 
@@ -1022,6 +1053,41 @@ impl CopyFixture {
 }
 
 impl Drop for CopyFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct HardCopyFixture {
+    path: PathBuf,
+}
+
+impl HardCopyFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("old.txt"), "one\ntwo\nthree\nfour\nfive\n")
+            .expect("base file should be written");
+        run_git(&path, ["add", "old.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+        fs::write(path.join("copy.txt"), "one\ntwo\nthree\nfour\nfive\n")
+            .expect("copy file should be written");
+        run_git(&path, ["add", "copy.txt"]);
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for HardCopyFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }
