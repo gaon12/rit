@@ -1835,16 +1835,12 @@ mod tests {
     }
 
     #[test]
-    fn push_rejects_non_http_locations() {
-        let (code, stdout, stderr) = run_with(&[
-            "push",
-            "git@example.test:org/repo.git",
-            "HEAD:refs/heads/main",
-        ]);
+    fn push_rejects_local_locations() {
+        let (code, stdout, stderr) = run_with(&["push", "../repo.git", "HEAD:refs/heads/main"]);
 
         assert_eq!(code, ExitCode::from(129));
         assert_eq!(stdout, "");
-        assert!(stderr.contains("only http:// or https:// smart remotes"));
+        assert!(stderr.contains("http://, https://, or SSH smart remotes"));
     }
 
     #[test]

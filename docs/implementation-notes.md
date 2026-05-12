@@ -59,6 +59,9 @@
 - 2026-05-12 SSH fetch wiring slice checked `git fetch -h`; wired
   single-round SSH upload-pack advertisement parsing, pack ingestion, and
   `FETCH_HEAD`/destination ref updates without invoking external `git`.
+- 2026-05-12 SSH push wiring slice checked `git push -h`; wired
+  single-ref SSH receive-pack advertisement parsing, request serialization,
+  pack sending, and report-status validation without invoking external `git`.
 - 2026-05-12 copy-detection-hard slice checked `git diff -h` and direct Git
   comparisons for `diff --cached --find-copies-harder`.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
@@ -232,8 +235,11 @@
   the same session, and extracts the returned pack.
 - `rit fetch` now routes SSH/scp-like remotes through the SSH upload-pack
   fetch path, ingests the received pack, and writes `FETCH_HEAD`.
-- Still unsupported: SSH receive-pack push workflow, auth/SSH option parity,
-  multi-round negotiation, and thin-pack fixups.
+- Added a process-backed interactive SSH receive-pack executor and routed
+  `rit push` for SSH/scp-like remotes through one source-to-destination refspec
+  update with report-status validation.
+- Still unsupported: auth/SSH option parity, multi-round negotiation, and
+  thin-pack fixups.
 
 ### M8: Merge-state local workflows
 

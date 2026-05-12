@@ -210,24 +210,11 @@ pub fn push_command(
     }
 
     if positional.len() != 2 {
-        writeln!(
-            stderr,
-            "rit: push expects <http-repository> and <src>:<dst>"
-        )?;
+        writeln!(stderr, "rit: push expects <repository> and <src>:<dst>")?;
         return Ok(ExitCode::from(129));
     }
 
     let location = rit_core::TransportLocation::parse(&positional[0]);
-    if !matches!(
-        location.protocol(),
-        rit_core::TransportProtocol::Http | rit_core::TransportProtocol::Https
-    ) {
-        writeln!(
-            stderr,
-            "rit: push currently supports only http:// or https:// smart remotes"
-        )?;
-        return Ok(ExitCode::from(129));
-    }
     let refspec = match rit_core::FetchRefSpec::parse(&positional[1]) {
         Ok(refspec) => refspec,
         Err(error) => {
@@ -240,7 +227,20 @@ pub fn push_command(
         None => return Ok(ExitCode::from(128)),
     };
     let options = rit_core::RemotePushOptions::new(location, refspec);
-    match repository.push_remote_http(&options) {
+    let result = match options.location.protocol() {
+        rit_core::TransportProtocol::Http | rit_core::TransportProtocol::Https => {
+            repository.push_remote_http(&options)
+        }
+        rit_core::TransportProtocol::Ssh => repository.push_remote_ssh(&options),
+        rit_core::TransportProtocol::Local => {
+            writeln!(
+                stderr,
+                "rit: push currently supports only http://, https://, or SSH smart remotes"
+            )?;
+            return Ok(ExitCode::from(129));
+        }
+    };
+    match result {
         Ok(result) => {
             if !quiet {
                 writeln!(stdout, "To {}", options.location.original())?;

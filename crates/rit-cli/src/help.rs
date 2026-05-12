@@ -68,9 +68,9 @@ Fetch objects from a local, smart HTTP(S), or SSH repository and write FETCH_HEA
 ";
 
 const PUSH_HELP: &str = "\
-rit push [-q|--quiet] <http-repository> <src>:<dst>
+rit push [-q|--quiet] <repository> <src>:<dst>
 
-Push one local source ref or revision to a plain smart HTTP repository.
+Push one local source ref or revision to a smart HTTP(S) or SSH repository.
 ";
 
 const REV_PARSE_HELP: &str = "\

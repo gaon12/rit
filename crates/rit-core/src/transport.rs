@@ -143,6 +143,18 @@ pub trait SshUploadPackExecutor {
     ) -> Result<RemotePackNegotiation>;
 }
 
+/// Executes an interactive SSH receive-pack session.
+pub trait SshReceivePackExecutor {
+    /// Sends one receive-pack update and parses the report-status response.
+    fn send_receive_pack(
+        &self,
+        location: &TransportLocation,
+        ref_name: &str,
+        new_id: ObjectId,
+        pack_data: Vec<u8>,
+    ) -> Result<ReceivePackStatus>;
+}
+
 /// SSH executor backed by the system `ssh` program.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ProcessSshServiceExecutor;
@@ -251,6 +263,69 @@ impl SshUploadPackExecutor for ProcessSshServiceExecutor {
             response,
             pack_bytes,
         })
+    }
+}
+
+impl SshReceivePackExecutor for ProcessSshServiceExecutor {
+    fn send_receive_pack(
+        &self,
+        location: &TransportLocation,
+        ref_name: &str,
+        new_id: ObjectId,
+        pack_data: Vec<u8>,
+    ) -> Result<ReceivePackStatus> {
+        let command = location.ssh_service_command(SmartHttpService::ReceivePack)?;
+        let mut child = Command::new("ssh")
+            .arg(command.target())
+            .arg(&command.remote_command)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| RitError::invalid_input("SSH receive-pack stdout was not captured"))?;
+        let mut stdout = BufReader::new(stdout);
+        let mut advertisement_bytes = Vec::new();
+        read_ssh_advertisement(&mut stdout, &mut advertisement_bytes, &command.host)?;
+        let advertisement = SmartHttpAdvertisement::parse_git_protocol(
+            SmartHttpService::ReceivePack,
+            &advertisement_bytes,
+        )?;
+        let old_id = advertised_ref_id(&advertisement, ref_name).unwrap_or_else(zero_object_id);
+        let receive_command = ReceivePackCommand::new(old_id, new_id, ref_name.to_owned())?;
+        let request = ReceivePackRequest::new(vec![receive_command])?
+            .with_capabilities(select_receive_pack_capabilities(
+                &advertisement.capabilities,
+            ))
+            .with_pack_data(pack_data);
+
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin
+                .write_all(&request.to_bytes())
+                .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+        }
+
+        let mut response_bytes = Vec::new();
+        stdout
+            .read_to_end(&mut response_bytes)
+            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+        let output = child
+            .wait_with_output()
+            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(RitError::invalid_input(format!(
+                "SSH receive-pack failed for {}: {}",
+                command.host,
+                stderr.trim()
+            )));
+        }
+
+        ReceivePackStatus::parse(&response_bytes)
     }
 }
 
@@ -629,6 +704,17 @@ fn select_upload_pack_capabilities(advertised: &[String]) -> Vec<String> {
     selected
 }
 
+fn select_receive_pack_capabilities(advertised: &[String]) -> Vec<String> {
+    if advertised
+        .iter()
+        .any(|capability| capability == "report-status")
+    {
+        vec!["report-status".to_owned()]
+    } else {
+        Vec::new()
+    }
+}
+
 fn push_capability_if_advertised(advertised: &[String], selected: &mut Vec<String>, name: &str) {
     if advertised.iter().any(|capability| capability == name) {
         selected.push(name.to_owned());
@@ -687,6 +773,10 @@ fn advertised_ref_id(advertisement: &SmartHttpAdvertisement, wanted_ref: &str) -
                 None
             }
         })
+}
+
+fn zero_object_id() -> ObjectId {
+    ObjectId::from_bytes([0; 20])
 }
 
 pub(super) fn parse_pkt_lines(bytes: &[u8]) -> Result<Vec<Vec<u8>>> {

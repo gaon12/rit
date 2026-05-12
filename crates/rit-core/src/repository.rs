@@ -3,8 +3,8 @@ use crate::{
     BlockingSmartHttpClient, FetchRefSpec, GitAttributes, GitConfig, GitObject, LooseObjectDb,
     ObjectId, ObjectKind, PartialClonePolicy, ProcessSshServiceExecutor, ReceivePackCommand,
     ReceivePackCommandStatus, ReceivePackRequest, ReceivePackStatus, Result, RitConfig, RitError,
-    SmartHttpAdvertisement, SmartHttpService, SparseCheckout, SshUploadPackExecutor,
-    TransportLocation, TransportProtocol, parse_commit,
+    SmartHttpAdvertisement, SmartHttpService, SparseCheckout, SshReceivePackExecutor,
+    SshUploadPackExecutor, TransportLocation, TransportProtocol, parse_commit,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -425,6 +425,43 @@ impl Repository {
             .with_capabilities(receive_pack_capabilities(&advertisement.capabilities))
             .with_pack_data(pack_data);
         let status = client.post_receive_pack(&options.location, &request)?;
+        validate_receive_pack_status(&status, &options.refspec.destination)?;
+
+        Ok(RemotePushResult {
+            destination: options.refspec.destination.clone(),
+            new_id,
+            object_count: object_ids.len(),
+            status,
+        })
+    }
+
+    /// Pushes one source ref or revision to an SSH remote.
+    pub fn push_remote_ssh(&self, options: &RemotePushOptions) -> Result<RemotePushResult> {
+        self.push_remote_ssh_with_executor(options, &ProcessSshServiceExecutor)
+    }
+
+    /// Pushes one source ref or revision to an SSH remote using an explicit executor.
+    pub fn push_remote_ssh_with_executor(
+        &self,
+        options: &RemotePushOptions,
+        executor: &impl SshReceivePackExecutor,
+    ) -> Result<RemotePushResult> {
+        if options.location.protocol() != TransportProtocol::Ssh {
+            return Err(RitError::invalid_input(
+                "SSH push requires an ssh:// or scp-like remote",
+            ));
+        }
+        validate_full_ref_name(&options.refspec.destination)?;
+
+        let new_id = self.resolve_revision(&options.refspec.source)?;
+        let object_ids = self.collect_reachable_object_ids(new_id)?;
+        let pack_data = self.loose_objects().build_pack_from_objects(&object_ids)?;
+        let status = executor.send_receive_pack(
+            &options.location,
+            &options.refspec.destination,
+            new_id,
+            pack_data,
+        )?;
         validate_receive_pack_status(&status, &options.refspec.destination)?;
 
         Ok(RemotePushResult {
@@ -1024,7 +1061,8 @@ fn validate_branch_name(branch_name: &str) -> Result<()> {
 mod tests {
     use super::{InitOptions, RemoteFetchOptions, RemotePushOptions, Repository};
     use crate::{
-        FetchRefSpec, ObjectKind, RemotePackNegotiation, SmartHttpAdvertisement, SmartHttpService,
+        FetchRefSpec, ObjectKind, ReceivePackCommandStatus, ReceivePackStatus,
+        RemotePackNegotiation, SmartHttpAdvertisement, SmartHttpService, SshReceivePackExecutor,
         SshUploadPackExecutor, TransportLocation, hash_object, object::sha1_bytes,
     };
     use flate2::{Compression, write::ZlibEncoder};
@@ -1424,6 +1462,40 @@ mod tests {
         remove_dir_all(&temp);
     }
 
+    #[test]
+    fn push_remote_ssh_sends_pack_and_checks_status() {
+        let temp = temp_path("remote-ssh-push");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        let object_id = repository
+            .loose_objects()
+            .write_object(ObjectKind::Blob, b"hello")
+            .expect("source object");
+        let refspec =
+            FetchRefSpec::parse(&format!("{object_id}:refs/heads/main")).expect("refspec");
+        let location = TransportLocation::parse("git@example.test:org/repo.git");
+        let executor = FakeSshReceivePackExecutor {
+            ref_name: "refs/heads/main".to_owned(),
+            new_id: object_id,
+            status: ReceivePackStatus {
+                unpack_error: None,
+                commands: vec![ReceivePackCommandStatus::Ok {
+                    ref_name: "refs/heads/main".to_owned(),
+                }],
+            },
+        };
+        let options = RemotePushOptions::new(location, refspec);
+
+        let result = repository
+            .push_remote_ssh_with_executor(&options, &executor)
+            .expect("remote push should succeed");
+
+        assert_eq!(result.destination, "refs/heads/main");
+        assert_eq!(result.new_id, object_id);
+        assert_eq!(result.object_count, 1);
+
+        remove_dir_all(&temp);
+    }
+
     fn upload_pack_advertisement(object_id: crate::ObjectId) -> Vec<u8> {
         let mut body = Vec::new();
         test_pkt_line(&mut body, b"# service=git-upload-pack\n");
@@ -1503,6 +1575,28 @@ mod tests {
             assert_eq!(location.protocol(), crate::TransportProtocol::Ssh);
             assert_eq!(wanted_ref, self.negotiation.wanted_ref);
             Ok(self.negotiation.clone())
+        }
+    }
+
+    struct FakeSshReceivePackExecutor {
+        ref_name: String,
+        new_id: crate::ObjectId,
+        status: ReceivePackStatus,
+    }
+
+    impl SshReceivePackExecutor for FakeSshReceivePackExecutor {
+        fn send_receive_pack(
+            &self,
+            location: &TransportLocation,
+            ref_name: &str,
+            new_id: crate::ObjectId,
+            pack_data: Vec<u8>,
+        ) -> crate::Result<ReceivePackStatus> {
+            assert_eq!(location.protocol(), crate::TransportProtocol::Ssh);
+            assert_eq!(ref_name, self.ref_name);
+            assert_eq!(new_id, self.new_id);
+            assert!(pack_data.starts_with(b"PACK"));
+            Ok(self.status.clone())
         }
     }
 

@@ -266,8 +266,9 @@ Completion criteria:
   - [x] Process-based SSH upload-pack session I/O model.
   - [x] SSH fetch workflow wiring for a single advertised ref, including
     pack ingestion and `FETCH_HEAD` updates.
-  - [ ] SSH fetch/push workflow wiring, receive-pack session I/O, and auth
-    option parity.
+  - [x] SSH receive-pack session I/O and push workflow wiring for one
+    source-to-destination refspec.
+  - [ ] SSH auth option parity and advanced SSH transport configuration.
 - [~] Fetch refs negotiation.
   - [x] Single local fetch refspec updates a destination ref after copying
     objects.
