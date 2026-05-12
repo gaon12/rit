@@ -75,6 +75,7 @@ fn diff_cached_similarity_rename_outputs_match_git() {
 
     for args in [
         vec!["diff", "--cached", "-M", "--name-status"],
+        vec!["diff", "--cached", "-M", "-l0", "--name-status"],
         vec!["diff", "--cached", "-M79%", "--name-status"],
         vec!["diff", "--cached", "--find-renames=79", "--stat"],
         vec!["diff", "--cached", "-M"],

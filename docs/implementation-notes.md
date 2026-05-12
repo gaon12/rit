@@ -69,6 +69,8 @@
   SSH fetch/push process execution.
 - 2026-05-12 copy-detection-hard slice checked `git diff -h` and direct Git
   comparisons for `diff --cached --find-copies-harder`.
+- 2026-05-12 rename-limit slice checked `git diff -h` and direct Git
+  comparisons for `diff --cached -M -l0`.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
   `--pathspec-file-nul`, including a quoted pathspec entry.
@@ -218,6 +220,9 @@
   insertion/deletion totals.
 - Added exact staged rename detection for `diff --cached -M` summary and patch
   output.
+- Added `-l<n>` parsing and a conservative candidate limit model for
+  rename/copy detection. A limit of `0` is treated as unlimited, matching
+  Git's command shape.
 - Added local write compatibility coverage that compares Git and rit porcelain
   state after directory pathspec `add`, `restore`, and `reset`.
 - Added local write compatibility coverage for simple wildcard and

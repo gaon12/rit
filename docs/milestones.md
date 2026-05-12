@@ -133,6 +133,7 @@ Completion criteria:
     scoring for `diff --cached -M/-C` summary and patch output.
   - [x] Staged `--find-copies-harder` copy detection from unchanged HEAD
     sources.
+  - [x] Rename/copy candidate limit model and CLI parsing for `-l<n>`.
   - [ ] Worktree rename/copy detection, rename limits, and advanced Git
     diffcore parity.
 - [x] Binary diff accounting for summary modes.

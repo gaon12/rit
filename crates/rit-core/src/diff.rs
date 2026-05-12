@@ -323,6 +323,8 @@ pub struct DiffOptions {
     pub rename_similarity_threshold: u8,
     /// Minimum similarity score for copy detection.
     pub copy_similarity_threshold: u8,
+    /// Optional cap for rename/copy candidate paths. `0` means unlimited.
+    pub rename_limit: Option<usize>,
 }
 
 impl DiffOptions {
@@ -334,6 +336,7 @@ impl DiffOptions {
             find_copies_harder: false,
             rename_similarity_threshold: 50,
             copy_similarity_threshold: 50,
+            rename_limit: None,
         }
     }
 }
@@ -749,6 +752,9 @@ impl Repository {
         new_entries: &BTreeMap<String, DiffTreeEntry>,
         options: &DiffOptions,
     ) -> Result<()> {
+        if rename_limit_exceeded(files.iter().map(|file| file.status), options) {
+            return Ok(());
+        }
         let mut remove_indexes = Vec::new();
         for delete_index in 0..files.len() {
             if files[delete_index].status != 'D' {
@@ -817,6 +823,9 @@ impl Repository {
         new_entries: &BTreeMap<String, DiffTreeEntry>,
         options: &DiffOptions,
     ) -> Result<()> {
+        if rename_limit_exceeded(files.iter().map(|file| file.status), options) {
+            return Ok(());
+        }
         for add_index in 0..files.len() {
             if files[add_index].status != 'A' {
                 continue;
@@ -953,6 +962,9 @@ impl Repository {
 }
 
 fn detect_patch_renames(files: &mut Vec<DiffPatchFile>, options: &DiffOptions) -> Result<()> {
+    if rename_limit_exceeded(files.iter().map(|file| file.status), options) {
+        return Ok(());
+    }
     let mut remove_indexes = Vec::new();
     for delete_index in 0..files.len() {
         if files[delete_index].status != 'D' {
@@ -998,6 +1010,19 @@ fn detect_patch_renames(files: &mut Vec<DiffPatchFile>, options: &DiffOptions) -
         files.remove(index);
     }
     Ok(())
+}
+
+fn rename_limit_exceeded(statuses: impl Iterator<Item = char>, options: &DiffOptions) -> bool {
+    let Some(limit) = options.rename_limit else {
+        return false;
+    };
+    if limit == 0 {
+        return false;
+    }
+    let candidate_count = statuses
+        .filter(|status| matches!(status, 'A' | 'D' | 'M'))
+        .count();
+    candidate_count > limit
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1361,7 +1386,8 @@ fn plural(count: usize, singular: &str, plural: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        DiffFileStat, DiffSummary, file_delta, line_delta, similarity_score, unified_hunk,
+        DiffFileStat, DiffOptions, DiffSummary, file_delta, line_delta, rename_limit_exceeded,
+        similarity_score, unified_hunk,
     };
     use crate::{InitOptions, Repository};
     use std::fs;
@@ -1453,6 +1479,26 @@ mod tests {
         };
 
         assert_eq!(summary.to_name_status_text(), "C079\told.txt\tcopy.txt\n");
+    }
+
+    #[test]
+    fn rename_limit_counts_candidate_paths_and_zero_is_unlimited() {
+        let options = DiffOptions {
+            rename_limit: Some(2),
+            ..DiffOptions::default()
+        };
+
+        assert!(rename_limit_exceeded(['A', 'D', 'M'].into_iter(), &options));
+
+        let unlimited = DiffOptions {
+            rename_limit: Some(0),
+            ..DiffOptions::default()
+        };
+
+        assert!(!rename_limit_exceeded(
+            ['A', 'D', 'M'].into_iter(),
+            &unlimited
+        ));
     }
 
     #[test]

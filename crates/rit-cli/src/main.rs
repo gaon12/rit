@@ -537,6 +537,7 @@ fn diff_command(
     let mut find_copies_harder = false;
     let mut rename_similarity_threshold = 50;
     let mut copy_similarity_threshold = 50;
+    let mut rename_limit = None;
     let mut output_mode = None;
     let mut pathspec_args = Vec::new();
     let mut after_separator = false;
@@ -550,6 +551,15 @@ fn diff_command(
             "--find-copies-harder" if !after_separator => {
                 find_copies = true;
                 find_copies_harder = true;
+            }
+            option if option.starts_with("-l") && !after_separator => {
+                match parse_rename_limit_option(option) {
+                    Ok(limit) => rename_limit = Some(limit),
+                    Err(error) => {
+                        writeln!(stderr, "rit: {error}")?;
+                        return Ok(ExitCode::from(129));
+                    }
+                }
             }
             option
                 if (option.starts_with("-M") || option.starts_with("--find-renames="))
@@ -620,6 +630,7 @@ fn diff_command(
         find_copies_harder,
         rename_similarity_threshold,
         copy_similarity_threshold,
+        rename_limit,
     };
     if output_mode == "--patch" {
         let patch_result = if cached {
@@ -692,6 +703,20 @@ fn parse_similarity_option(
         ));
     }
     Ok(threshold)
+}
+
+fn parse_rename_limit_option(option: &str) -> Result<usize, String> {
+    let raw_value = if let Some(value) = option.strip_prefix("-l") {
+        value
+    } else {
+        return Err(format!("invalid rename limit option '{option}'"));
+    };
+    if raw_value.is_empty() {
+        return Err(format!("missing rename limit in '{option}'"));
+    }
+    raw_value
+        .parse::<usize>()
+        .map_err(|_| format!("invalid rename limit in '{option}'"))
 }
 
 fn log_command(
