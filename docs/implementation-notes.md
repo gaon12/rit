@@ -63,6 +63,9 @@
   `--pathspec-file-nul`, including a quoted pathspec entry.
 - 2026-05-12 stdin pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file=-`.
+- 2026-05-12 stdin NUL pathspec-file slice checked `git add -h`,
+  `git restore -h`, `git reset -h`, and direct Git comparisons for
+  `--pathspec-from-file=- --pathspec-file-nul`.
 - 2026-05-12 merge-state model slice checked `git merge -h`,
   `git cherry-pick -h`, `git rebase -h`, and `git stash -h`.
 - 2026-05-12 large-file backend trait slice checked the AGENTS large-object
@@ -210,6 +213,8 @@
   bracket-class pathspecs in `add`, `restore`, and `reset`.
 - Added `--pathspec-from-file` and `--pathspec-file-nul` CLI parsing for
   `add`, `restore`, and `reset`, backed by the existing pathspec expansion.
+- Added Git comparison coverage for stdin-delivered NUL-separated pathspecs
+  in `add`, `restore`, and `reset`.
 - Added C-style quoted pathspec-file entry parsing for common escapes.
 - Still unsupported: full Git pathspec-file edge cases, similarity-threshold
   rename scoring, copy detection, and `show` path filtering for patch output.
