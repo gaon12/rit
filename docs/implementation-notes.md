@@ -136,6 +136,10 @@
   canonical `.git/index` checksum, mtime, and size in `cache_state`.
   `rit indexdb status` reports stale index snapshots, and `rit indexdb`
   refreshes the stored index snapshot without making IndexDB a source of truth.
+- 2026-05-13 IndexDB pack-state reconciliation slice: IndexDB records the
+  `.git/objects/pack` `.pack`/`.idx` file list, size, and mtime as a compact
+  cache snapshot. Stale pack snapshots are reported and refreshed by
+  `rit indexdb` without parsing pack data during status.
 - 2026-05-12 large-file backend trait slice checked the AGENTS large-object
   backend guidance; no external `git-lfs` binary is used.
 - 2026-05-12 LFS pointer slice checked installed `git-lfs/3.7.1` and the

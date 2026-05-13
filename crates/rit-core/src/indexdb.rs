@@ -126,6 +126,8 @@ impl<'repo> IndexDb<'repo> {
             stale_reasons.push("refs snapshot is stale".to_owned());
         } else if index_snapshot_is_stale(&connection, self.repository)? {
             stale_reasons.push("index snapshot is stale".to_owned());
+        } else if pack_snapshot_is_stale(&connection, self.repository)? {
+            stale_reasons.push("pack snapshot is stale".to_owned());
         }
         let stale = !stale_reasons.is_empty();
 
@@ -275,6 +277,11 @@ fn refresh_indexdb(connection: &mut Connection, repository: &Repository) -> Resu
             .map(|size| size.to_string())
             .unwrap_or_else(|| "-".to_owned()),
     )?;
+    write_cache_value(
+        &transaction,
+        "pack_snapshot",
+        &current_pack_snapshot(repository)?,
+    )?;
     refresh_refs_snapshot(&transaction, &refs_snapshot)?;
     let commits_indexed = refresh_commits(&transaction, repository, &refs_snapshot)?;
     transaction.commit().map_err(sqlite_error)?;
@@ -407,6 +414,51 @@ fn option_from_cache_value(value: Option<String>) -> Option<String> {
 
 fn index_snapshot_is_stale(connection: &Connection, repository: &Repository) -> Result<bool> {
     Ok(stored_index_snapshot(connection)? != current_index_snapshot(repository)?)
+}
+
+fn current_pack_snapshot(repository: &Repository) -> Result<String> {
+    let pack_dir = repository.common_dir().join("objects").join("pack");
+    if !pack_dir.exists() {
+        return Ok("-".to_owned());
+    }
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(&pack_dir).map_err(|source| RitError::io(&pack_dir, source))? {
+        let entry = entry.map_err(|source| RitError::io(&pack_dir, source))?;
+        let path = entry.path();
+        let Some(extension) = path.extension().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if extension != "pack" && extension != "idx" {
+            continue;
+        }
+        let metadata = fs::metadata(&path).map_err(|source| RitError::io(&path, source))?;
+        let mtime = metadata
+            .modified()
+            .ok()
+            .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+            .map(|duration| format!("{}.{:09}", duration.as_secs(), duration.subsec_nanos()))
+            .unwrap_or_else(|| "-".to_owned());
+        let file_name = path
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default();
+        entries.push(format!(
+            "{}:{}:{}",
+            hex(file_name.as_bytes()),
+            metadata.len(),
+            mtime
+        ));
+    }
+    if entries.is_empty() {
+        return Ok("-".to_owned());
+    }
+    entries.sort();
+    Ok(entries.join(","))
+}
+
+fn pack_snapshot_is_stale(connection: &Connection, repository: &Repository) -> Result<bool> {
+    let stored = read_cache_value(connection, "pack_snapshot")?.unwrap_or_else(|| "-".to_owned());
+    Ok(stored != current_pack_snapshot(repository)?)
 }
 
 fn refresh_refs_snapshot(connection: &Connection, refs_snapshot: &[RefSnapshotRow]) -> Result<()> {

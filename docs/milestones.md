@@ -274,12 +274,12 @@ Completion criteria:
 - [x] Implement `rit indexdb vacuum`.
 - [x] Implement write-through updates after `rit` creates commits, refs, tags,
   or checkout state changes.
-- [ ] Implement lightweight reconciliation when external Git-compatible tools
+- [x] Implement lightweight reconciliation when external Git-compatible tools
   changed refs, index, or pack snapshots.
   - [x] Detect and refresh stale `HEAD`, local branch, and lightweight tag
     snapshots.
   - [x] Detect stale index checksum and mtime.
-  - [ ] Detect stale packfile list, size, and mtime.
+  - [x] Detect stale packfile list, size, and mtime.
 - [ ] Implement fallback to canonical Git object/index/refs data when indexdb
   is missing, stale, or corrupted.
 - [ ] Add indexed commit query API.
@@ -640,7 +640,8 @@ Completion criteria:
    planning.
 2. Continue M16 operation journal with reversible patches and command-aware
    undo for index-only/worktree-changing operations.
-3. Continue indexdb lightweight reconciliation with pack snapshot detection.
+3. Add indexdb fallback/query APIs for missing, stale, or corrupted auxiliary
+   data.
 4. Add indexdb corruption, stale cache, and external Git reconciliation test
    plan.
 5. Keep M6 case-sensitivity parity under verification as new path lookup

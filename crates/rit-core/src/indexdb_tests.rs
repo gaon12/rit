@@ -220,6 +220,44 @@ fn indexdb_status_detects_index_changes_and_ensure_reconciles_them() {
 }
 
 #[test]
+fn indexdb_status_detects_pack_snapshot_changes_and_ensure_reconciles_them() {
+    let temp = temp_path("external-pack");
+    let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+    write_user_config(&repository);
+    fs::write(temp.join("file.txt"), "one\n").expect("file should be written");
+    repository
+        .add_paths(&["file.txt".to_owned()])
+        .expect("add should work");
+    repository
+        .commit_index("first")
+        .expect("commit should work");
+    repository.indexdb().ensure().expect("ensure should work");
+    let pack_dir = repository.common_dir().join("objects").join("pack");
+    fs::create_dir_all(&pack_dir).expect("pack directory should exist");
+    fs::write(
+        pack_dir.join("pack-1111111111111111111111111111111111111111.pack"),
+        b"pack snapshot only",
+    )
+    .expect("pack marker should be written");
+
+    let stale_status = repository.indexdb().status().expect("status should work");
+    assert!(stale_status.healthy);
+    assert!(stale_status.stale);
+    assert!(
+        stale_status
+            .stale_reasons
+            .iter()
+            .any(|reason| reason.contains("pack snapshot is stale"))
+    );
+
+    repository.indexdb().ensure().expect("ensure should update");
+    let fresh_status = repository.indexdb().status().expect("status should work");
+    assert!(fresh_status.healthy);
+    assert!(!fresh_status.stale);
+    remove_dir_all(&temp);
+}
+
+#[test]
 fn indexdb_write_through_ignores_corrupted_database() {
     let temp = temp_path("write-through-corrupt");
     let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
