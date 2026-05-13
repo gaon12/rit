@@ -120,6 +120,15 @@ pub enum MergeResult {
     AlreadyUpToDate { commit_id: ObjectId },
     /// HEAD moved forward without creating a merge commit.
     FastForward { old_id: ObjectId, new_id: ObjectId },
+    /// A non-fast-forward merge completed by creating a merge commit.
+    MergeCommit {
+        /// Previous `HEAD` commit.
+        old_id: ObjectId,
+        /// Target commit requested by the user.
+        target_id: ObjectId,
+        /// Newly written merge commit.
+        commit_id: ObjectId,
+    },
     /// A non-fast-forward merge started and left conflict stages in the index.
     Conflicts {
         /// Target commit requested by the user.
@@ -789,9 +798,19 @@ impl Repository {
             let merge_workflow =
                 non_fast_forward_merge_workflow_plan(&base_entries, &head_entries, &target_entries);
             if merge_workflow.conflict_stages.is_empty() {
-                return Err(RitError::invalid_input(
-                    "not possible to fast-forward; merge requires a merge commit",
-                ));
+                let commit_id = self.create_clean_merge_commit(
+                    target,
+                    old_id,
+                    new_id,
+                    &base_entries,
+                    &head_entries,
+                    &target_entries,
+                )?;
+                return Ok(MergeResult::MergeCommit {
+                    old_id,
+                    target_id: new_id,
+                    commit_id,
+                });
             }
             self.start_conflicted_merge(ConflictedMergeStart {
                 target,
@@ -813,6 +832,52 @@ impl Repository {
         self.update_head(new_id)?;
         self.refresh_indexdb_after_git_write();
         Ok(MergeResult::FastForward { old_id, new_id })
+    }
+
+    fn create_clean_merge_commit(
+        &self,
+        target: &str,
+        old_id: ObjectId,
+        target_id: ObjectId,
+        base_entries: &[IndexEntry],
+        head_entries: &[IndexEntry],
+        target_entries: &[IndexEntry],
+    ) -> Result<ObjectId> {
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "merge must be run in a repository with a working tree",
+            ));
+        };
+        let symlinks_enabled = self.core_symlinks_enabled()?;
+        let merged_entries = self.non_fast_forward_merge_index_entries(
+            base_entries,
+            head_entries,
+            target_entries,
+            &[],
+        )?;
+        let conflict_paths = BTreeSet::new();
+        write_non_conflicting_merge_worktree_changes(
+            self,
+            worktree,
+            head_entries,
+            &merged_entries,
+            &conflict_paths,
+            symlinks_enabled,
+        )?;
+        write_text_atomically(&self.git_dir().join("ORIG_HEAD"), &format!("{old_id}\n"))?;
+        Index {
+            entries: merged_entries,
+            extensions: Vec::new(),
+        }
+        .write(&self.git_dir().join("index"))?;
+        let message = format!("Merge commit '{target}'");
+        let result = self.commit_index_with_parents(
+            &message,
+            &CommitOptions::default(),
+            &[old_id, target_id],
+            true,
+        )?;
+        Ok(result.commit_id)
     }
 
     /// Fast-forwards the current branch to `target` when possible.
@@ -844,7 +909,7 @@ impl Repository {
             ));
         };
         let symlinks_enabled = self.core_symlinks_enabled()?;
-        let merged_entries = self.conflicted_merge_index_entries(
+        let merged_entries = self.non_fast_forward_merge_index_entries(
             input.base_entries,
             input.head_entries,
             input.target_entries,
@@ -932,7 +997,7 @@ impl Repository {
         Ok(result)
     }
 
-    fn conflicted_merge_index_entries(
+    fn non_fast_forward_merge_index_entries(
         &self,
         base_entries: &[IndexEntry],
         head_entries: &[IndexEntry],
@@ -2885,6 +2950,71 @@ mod tests {
         assert_eq!(
             fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
             "resolved\n"
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn merge_creates_clean_non_fast_forward_merge_commit() {
+        let temp = temp_path("merge-clean-non-ff");
+        let repository = committed_nested_repository(&temp);
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "topic\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("topic add should work");
+        let topic = repository
+            .commit_index("topic")
+            .expect("topic commit should work")
+            .commit_id;
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(temp.join("nested").join("b.txt"), "master\n").expect("file should be written");
+        repository
+            .add_paths(&["nested/b.txt".to_owned()])
+            .expect("master add should work");
+        let master = repository
+            .commit_index("master")
+            .expect("master commit should work")
+            .commit_id;
+
+        let result = repository
+            .merge("topic")
+            .expect("clean non-fast-forward merge should commit");
+
+        let super::MergeResult::MergeCommit {
+            old_id,
+            target_id,
+            commit_id,
+        } = result
+        else {
+            panic!("expected clean merge commit result");
+        };
+        assert_eq!(old_id, master);
+        assert_eq!(target_id, topic);
+        let object = repository
+            .read_object(commit_id)
+            .expect("merge commit should read");
+        let commit = parse_commit(&object.data).expect("merge commit should parse");
+        assert_eq!(commit.parents, vec![master, topic]);
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
+            "topic\n"
+        );
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("b.txt")).expect("file should read"),
+            "master\n"
+        );
+        assert!(!repository.git_dir().join("MERGE_HEAD").exists());
+        assert_eq!(
+            repository
+                .status_porcelain_v1()
+                .expect("status should read")
+                .to_porcelain_v1(),
+            ""
         );
         remove_dir_all(&temp);
     }

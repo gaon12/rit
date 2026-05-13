@@ -2068,6 +2068,28 @@ fn merge_command(
             writeln!(stdout, "Fast-forward")?;
             Ok(ExitCode::SUCCESS)
         }
+        Ok(rit_core::MergeResult::MergeCommit {
+            old_id,
+            target_id,
+            commit_id,
+        }) => {
+            record_operation(
+                &repository,
+                "merge",
+                &format!("merge commit {target}"),
+                before,
+                vec![commit_id],
+                stderr,
+            )?;
+            writeln!(
+                stdout,
+                "Merged {} and {} into {}",
+                &old_id.to_hex()[..7],
+                &target_id.to_hex()[..7],
+                &commit_id.to_hex()[..7]
+            )?;
+            Ok(ExitCode::SUCCESS)
+        }
         Ok(rit_core::MergeResult::Conflicts {
             target_id,
             conflict_paths,

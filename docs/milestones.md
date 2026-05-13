@@ -386,8 +386,9 @@ Completion criteria:
     entries for conflicting paths without writing conflict index stages.
   - [x] Index parser/writer preserves Git index stage bits for future conflict
     entries.
-  - [ ] Automatic clean merge commits, full conflict handling, hooks, and
-    strategies.
+  - [x] Automatic clean merge commits for non-fast-forward merges without
+    conflicts.
+  - [ ] Full conflict handling, merge hooks, and strategies.
 - [ ] `rit cherry-pick`
 - [ ] `rit rebase`
 - [ ] `rit stash`

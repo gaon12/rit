@@ -347,9 +347,11 @@
 - `rit merge --continue` commits a resolved merge using `HEAD` plus
   `MERGE_HEAD` as parents, clears merge state files, and records the created
   merge commit in the operation journal.
-- Still unsupported: automatic clean merge commits, binary/delete/mode conflict
-  materialization, strategies, merge hooks, `cherry-pick`, `rebase`, and
-  `stash`.
+- Clean non-fast-forward merges without conflict candidates now materialize the
+  merged index/worktree and create a merge commit with `HEAD` and the target as
+  parents.
+- Still unsupported: binary/delete/mode conflict materialization, strategies,
+  merge hooks, `cherry-pick`, `rebase`, and `stash`.
 
 ### M16: Operation journal and universal undo
 
@@ -937,9 +939,9 @@
   one target branch or revision, conflicted non-fast-forward index-stage
   starts, `--abort`, `--continue`, plus rit-specific `--plan` and
   `merge explain <target>`.
-- Unsupported options: automatic clean merge commits, binary/delete/mode conflict
-  materialization, strategies, stat output, hooks, squash, quit, autostash,
-  signing, and verification options.
+- Unsupported options: binary/delete/mode conflict materialization, strategies,
+  stat output, hooks, squash, quit, autostash, signing, and verification
+  options.
 - Git-compatible behavior: fast-forward final `HEAD`, index, and worktree state
   match Git for simple clean repositories.
 - rit-specific behavior: `--plan` prints whether the merge would be already
@@ -957,8 +959,10 @@
   merge state files, but does not yet handle autostash or `--quit`.
 - rit-specific behavior: `--continue` creates a merge commit from the current
   resolved index and existing merge message without launching an editor.
-- Intentional differences: output is simplified; clean non-fast-forward merges
-  without conflicts are still rejected instead of creating a merge commit.
+- rit-specific behavior: clean non-fast-forward merges create a merge commit
+  immediately when the simple tree merge has no conflict candidates.
+- Intentional differences: output is simplified and no editor is launched for
+  generated merge messages.
 - Repository mutation: yes, updates `HEAD` or the current branch ref for
   fast-forward and continued merges, or writes unmerged index entries and merge
   state files for conflicted non-fast-forward merges.
