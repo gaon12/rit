@@ -1283,6 +1283,40 @@ fn merge_plan_prints_fast_forward_without_changing_head() {
 }
 
 #[test]
+fn merge_explain_prints_fast_forward_reason_without_changing_head() {
+    let fixture = temp_path("merge-explain-fixture");
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    fs::write(fixture.join("tracked.txt"), "base\n").expect("base file should be written");
+    run_git(&fixture, ["add", "tracked.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    let base = run_capture("git", ["rev-parse", "HEAD"], &fixture).0;
+    run_git(&fixture, ["checkout", "--quiet", "-b", "topic"]);
+    fs::write(fixture.join("tracked.txt"), "topic\n").expect("topic file should be written");
+    run_git(&fixture, ["add", "tracked.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "topic"]);
+    run_git(&fixture, ["checkout", "--quiet", "master"]);
+
+    let output = run_capture(rit_binary(), ["merge", "explain", "topic"], &fixture).0;
+
+    assert!(output.contains("merge: explain\n"));
+    assert!(output.contains("target: topic\n"));
+    assert!(output.contains("action: fast-forward\n"));
+    assert!(output.contains("reason: HEAD is an ancestor of the target commit\n"));
+    assert!(output.contains("update: tracked.txt\n"));
+    assert_eq!(run_capture("git", ["rev-parse", "HEAD"], &fixture).0, base);
+    assert_eq!(
+        fs::read_to_string(fixture.join("tracked.txt")).expect("file should read"),
+        "base\n"
+    );
+    assert_eq!(run_capture(rit_binary(), ["op", "log"], &fixture).0, "");
+    let _ = fs::remove_dir_all(fixture);
+}
+
+#[test]
 fn branch_delete_refuses_unmerged_branch_like_git() {
     let fixture = LocalWriteFixture::new(
         "branch-delete-unmerged",

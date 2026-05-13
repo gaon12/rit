@@ -69,6 +69,7 @@ rit reset [--plan] <pathspec>...
 rit checkout <branch-or-commit>
 rit switch
 rit merge [--plan] [--ff-only] <target>
+rit merge explain <target>
 rit op log
 rit op restore <id>
 rit undo

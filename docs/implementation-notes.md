@@ -99,6 +99,10 @@
 - 2026-05-13 ignore explain slice checked `git check-ignore -h`; `rit ignore
   explain <path>` reuses rit's ignore parser and matcher to report matching
   `.gitignore` and `.git/info/exclude` rules without invoking external `git`.
+- 2026-05-13 merge explain slice checked `git merge -h`; `rit merge explain
+  <target>` reuses the fast-forward merge planner to explain already-up-to-date,
+  fast-forward, and unsupported merge decisions without writing refs, index, or
+  worktree files.
 - 2026-05-12 large-file backend trait slice checked the AGENTS large-object
   backend guidance; no external `git-lfs` binary is used.
 - 2026-05-12 LFS pointer slice checked installed `git-lfs/3.7.1` and the
@@ -865,7 +869,8 @@
 
 - Baseline command checked: `git merge -h`
 - Supported options: default fast-forward shape and explicit `--ff-only` with
-  one target branch or revision, plus rit-specific `--plan`.
+  one target branch or revision, plus rit-specific `--plan` and
+  `merge explain <target>`.
 - Unsupported options: merge commits, conflict handling, strategies, stat
   output, hooks, squash, abort, quit, continue, autostash, signing, and
   verification options.
@@ -874,6 +879,9 @@
 - rit-specific behavior: `--plan` prints whether the merge would be already
   up-to-date or fast-forward, the old and new commit IDs, and paths that would
   be updated or removed without changing `HEAD`, refs, index, or worktree.
+- rit-specific behavior: `merge explain` prints the fast-forward reason or why
+  the currently supported fast-forward path cannot apply without changing
+  repository state.
 - Intentional differences: output is simplified and non-fast-forward merges are
   rejected instead of attempting a merge commit.
 - Repository mutation: yes, updates `HEAD` or the current branch ref, writes

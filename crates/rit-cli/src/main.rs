@@ -1753,6 +1753,41 @@ fn merge_command(
             Err(error) => write_command_error(stderr, error),
         };
     }
+    if merge_args.explain {
+        writeln!(stdout, "merge: explain")?;
+        writeln!(stdout, "target: {}", merge_args.target)?;
+        return match repository.plan_merge_ff_only(&merge_args.target) {
+            Ok(rit_core::MergePlan::AlreadyUpToDate { commit_id }) => {
+                writeln!(stdout, "action: already-up-to-date")?;
+                writeln!(stdout, "head: {}", &commit_id.to_hex()[..7])?;
+                writeln!(stdout, "reason: HEAD already equals the target commit")?;
+                Ok(ExitCode::SUCCESS)
+            }
+            Ok(rit_core::MergePlan::FastForward {
+                old_id,
+                new_id,
+                paths_to_update,
+                paths_to_remove,
+            }) => {
+                writeln!(stdout, "action: fast-forward")?;
+                writeln!(stdout, "old: {}", &old_id.to_hex()[..7])?;
+                writeln!(stdout, "new: {}", &new_id.to_hex()[..7])?;
+                writeln!(stdout, "reason: HEAD is an ancestor of the target commit")?;
+                for path in paths_to_update {
+                    writeln!(stdout, "update: {path}")?;
+                }
+                for path in paths_to_remove {
+                    writeln!(stdout, "remove: {path}")?;
+                }
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => {
+                writeln!(stdout, "action: unsupported")?;
+                writeln!(stdout, "reason: {error}")?;
+                Ok(ExitCode::SUCCESS)
+            }
+        };
+    }
     let before = capture_operation_snapshot(&repository, stderr)?;
     match repository.merge_ff_only(&merge_args.target) {
         Ok(rit_core::MergeResult::AlreadyUpToDate { .. }) => {
@@ -1792,6 +1827,7 @@ fn merge_command(
 struct ParsedMergeArgs {
     target: String,
     plan: bool,
+    explain: bool,
 }
 
 fn parse_merge_args(
@@ -1799,11 +1835,26 @@ fn parse_merge_args(
     stderr: &mut dyn Write,
 ) -> io::Result<Option<ParsedMergeArgs>> {
     let mut plan = false;
+    let mut explain = false;
     let mut target = None;
-    for arg in args {
+    let mut index = 0;
+    while index < args.len() {
+        let arg = &args[index];
         if arg == "--plan" {
             plan = true;
         } else if arg == "--ff-only" {
+        } else if arg == "explain" && target.is_none() {
+            explain = true;
+            index += 1;
+            let Some(next_target) = args.get(index) else {
+                writeln!(stderr, "rit: merge explain requires a target revision")?;
+                return Ok(None);
+            };
+            if next_target.starts_with('-') {
+                writeln!(stderr, "rit: merge explain requires a target revision")?;
+                return Ok(None);
+            }
+            target = Some(next_target.clone());
         } else if arg.starts_with('-') {
             writeln!(stderr, "rit: unsupported merge option '{arg}'")?;
             return Ok(None);
@@ -1816,12 +1867,17 @@ fn parse_merge_args(
         } else {
             target = Some(arg.clone());
         }
+        index += 1;
     }
     let Some(target) = target else {
         writeln!(stderr, "rit: merge requires a target revision")?;
         return Ok(None);
     };
-    Ok(Some(ParsedMergeArgs { target, plan }))
+    Ok(Some(ParsedMergeArgs {
+        target,
+        plan,
+        explain,
+    }))
 }
 
 fn op_command(

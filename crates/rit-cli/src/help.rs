@@ -172,8 +172,9 @@ Switch to an existing branch, or create and switch to a new branch.
 
 const MERGE_HELP: &str = "\
 rit merge [--plan] [--ff-only] <target>
+rit merge explain <target>
 
-Fast-forward the current branch to a local branch or revision, or print the planned fast-forward without writing. Merge commits and conflict handling are not implemented yet.
+Fast-forward the current branch to a local branch or revision, print the planned fast-forward, or explain the fast-forward decision without writing. Merge commits and conflict handling are not implemented yet.
 ";
 
 const OP_HELP: &str = "\

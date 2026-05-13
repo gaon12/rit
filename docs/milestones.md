@@ -571,7 +571,7 @@ Completion criteria:
 - [ ] Extend `status --explain` model beyond the current roadmap sketch.
 - [x] Add `rit ignore explain <path>`.
 - [x] Add `rit pathspec explain <pathspec>`.
-- [ ] Add `rit merge explain <target>`.
+- [x] Add `rit merge explain <target>`.
 - [ ] Add `rit auth explain <url>`.
 - [ ] Add explain output for LFS/Xet/workspace decisions.
 
