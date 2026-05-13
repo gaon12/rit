@@ -1172,8 +1172,25 @@ fn add_command(
             Err(error) => write_command_error(stderr, error),
         };
     }
+    let before = capture_operation_snapshot(&repository, stderr)?;
+    let planned_paths = repository
+        .plan_add_paths_with_options(&add_args.paths, &add_args.options)
+        .ok()
+        .map(|plan| merge_changed_paths(plan.paths_to_add, plan.paths_to_remove))
+        .unwrap_or_else(|| add_args.paths.clone());
     match repository.add_paths_with_options(&add_args.paths, &add_args.options) {
-        Ok(_) => Ok(ExitCode::SUCCESS),
+        Ok(_) => {
+            record_operation_with_changed_paths(
+                &repository,
+                "add",
+                &format!("paths {}", add_args.paths.join(" ")),
+                before,
+                planned_paths,
+                Vec::new(),
+                stderr,
+            )?;
+            Ok(ExitCode::SUCCESS)
+        }
         Err(error) => {
             writeln!(stderr, "rit: {error}")?;
             Ok(ExitCode::from(1))
@@ -1466,6 +1483,16 @@ fn restore_command(args: &[String], stderr: &mut dyn Write) -> io::Result<ExitCo
         return Ok(ExitCode::from(129));
     }
 
+    let before = capture_operation_snapshot(&repository, stderr)?;
+    let planned_paths = if staged {
+        repository
+            .plan_restore_staged_paths_from_head(&paths)
+            .ok()
+            .map(|plan| merge_changed_paths(plan.paths_to_restore, plan.paths_to_remove))
+            .unwrap_or_else(|| paths.clone())
+    } else {
+        paths.clone()
+    };
     let result = if staged {
         repository
             .restore_staged_paths_from_head(&paths)
@@ -1474,7 +1501,22 @@ fn restore_command(args: &[String], stderr: &mut dyn Write) -> io::Result<ExitCo
         repository.restore_worktree_paths(&paths)
     };
     match result {
-        Ok(()) => Ok(ExitCode::SUCCESS),
+        Ok(()) => {
+            record_operation_with_changed_paths(
+                &repository,
+                "restore",
+                if staged {
+                    "staged paths"
+                } else {
+                    "worktree paths"
+                },
+                before,
+                planned_paths,
+                Vec::new(),
+                stderr,
+            )?;
+            Ok(ExitCode::SUCCESS)
+        }
         Err(error) => write_command_error(stderr, error),
     }
 }
@@ -1559,6 +1601,12 @@ fn reset_command(
             Err(error) => write_command_error(stderr, error),
         };
     }
+    let before = capture_operation_snapshot(&repository, stderr)?;
+    let planned_paths = repository
+        .plan_restore_staged_paths_from_head(&reset_args.paths)
+        .ok()
+        .map(|plan| merge_changed_paths(plan.paths_to_restore, plan.paths_to_remove))
+        .unwrap_or_else(|| reset_args.paths.clone());
     match repository.restore_staged_paths_from_head(&reset_args.paths) {
         Ok(unstaged) => {
             if !unstaged.is_empty() {
@@ -1567,6 +1615,15 @@ fn reset_command(
                     writeln!(stdout, "{line}")?;
                 }
             }
+            record_operation_with_changed_paths(
+                &repository,
+                "reset",
+                &format!("paths {}", reset_args.paths.join(" ")),
+                before,
+                planned_paths,
+                Vec::new(),
+                stderr,
+            )?;
             Ok(ExitCode::SUCCESS)
         }
         Err(error) => write_command_error(stderr, error),
@@ -2179,6 +2236,48 @@ fn record_operation(
         writeln!(stderr, "rit: warning: could not record operation: {error}")?;
     }
     Ok(())
+}
+
+fn record_operation_with_changed_paths(
+    repository: &rit_core::Repository,
+    command: &str,
+    summary: &str,
+    before: Option<rit_core::OperationSnapshot>,
+    changed_paths: Vec<String>,
+    created_object_ids: Vec<rit_core::ObjectId>,
+    stderr: &mut dyn Write,
+) -> io::Result<()> {
+    let Some(before) = before else {
+        return Ok(());
+    };
+    let after = match repository.operations().snapshot() {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            writeln!(
+                stderr,
+                "rit: warning: could not snapshot operation result: {error}"
+            )?;
+            return Ok(());
+        }
+    };
+    if let Err(error) = repository.operations().record_with_details(
+        command,
+        summary,
+        before,
+        after,
+        changed_paths,
+        created_object_ids,
+    ) {
+        writeln!(stderr, "rit: warning: could not record operation: {error}")?;
+    }
+    Ok(())
+}
+
+fn merge_changed_paths(left: Vec<String>, right: Vec<String>) -> Vec<String> {
+    let mut paths = left.into_iter().chain(right).collect::<Vec<_>>();
+    paths.sort();
+    paths.dedup();
+    paths
 }
 
 fn short_head(head: Option<rit_core::ObjectId>) -> String {

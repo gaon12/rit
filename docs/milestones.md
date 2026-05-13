@@ -546,8 +546,11 @@ Completion criteria:
 - [x] Record created object IDs.
 - [ ] Store reversible patches for index-only and worktree-changing
   operations.
-- [ ] Add journal records for `add`, `restore`, `reset`, `branch`, `tag`,
+- [~] Add journal records for `add`, `restore`, `reset`, `branch`, `tag`,
   `fetch`, and `push` where applicable.
+  - [x] Record successful `add`, `restore`, and `reset` operations.
+  - [ ] Record successful `branch`, `tag`, `fetch`, and `push` operations
+    where applicable.
 - [ ] Make undo semantics command-aware, such as commit undo that can preserve
   changes when requested.
 - [x] Add corruption handling for malformed operation journal lines.

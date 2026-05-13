@@ -358,6 +358,9 @@
 - Malformed operation journal lines are skipped with diagnostics from
   `log_with_warnings`; `rit op log` reports warnings on stderr while preserving
   valid records.
+- Successful `rit add`, `rit restore`, and pathspec `rit reset` operations now
+  append operation records with command-provided changed path metadata, covering
+  the first index-only/worktree-changing journal slice.
 - Still unsupported: command-aware undo modes, reversible patches for
   index-only/worktree-only operations, complete object creation inventories,
   and JSON output.
@@ -944,6 +947,8 @@
 - Supported options: `rit op log`, `rit op restore <id>`, and `rit undo`.
 - Supported metadata: before/after HEAD snapshots, current branch snapshots,
   index checksums, changed paths, and known created object IDs.
+- Recorded commands: commit, checkout, switch, fast-forward merge, add,
+  restore, and pathspec reset.
 - Malformed operation journal lines are skipped with warnings and do not block
   reading later valid records.
 - Unsupported options: JSON output, filtering, complete object creation

@@ -917,10 +917,9 @@ fn commit_plan_prints_staged_paths_without_advancing_head() {
         run_capture(rit_binary(), ["status", "--porcelain=v1"], fixture.path()).0,
         "M  nested/tracked.txt\n"
     );
-    assert_eq!(
-        run_capture(rit_binary(), ["op", "log"], fixture.path()).0,
-        ""
-    );
+    let log = run_capture(rit_binary(), ["op", "log"], fixture.path()).0;
+    assert!(log.contains(" add "));
+    assert!(!log.contains(" commit "));
 }
 
 #[test]
@@ -1169,6 +1168,43 @@ fn operation_journal_records_commit_and_undo_restores_head() {
         run_capture(rit_binary(), ["status", "--porcelain=v1"], fixture.path()).0,
         ""
     );
+}
+
+#[test]
+fn operation_journal_records_index_and_worktree_commands() {
+    let fixture = LocalWriteFixture::new(
+        "operation-journal-index",
+        LocalWriteFixtureKind::NestedTracked,
+    )
+    .expect("fixture should build");
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "staged\n",
+    )
+    .expect("tracked file should be modified");
+
+    run_capture(rit_binary(), ["add", "nested/tracked.txt"], fixture.path());
+    let log = run_capture(rit_binary(), ["op", "log"], fixture.path()).0;
+    assert!(log.contains(" add "));
+    assert!(log.contains("paths: nested/tracked.txt"));
+
+    run_capture(
+        rit_binary(),
+        ["reset", "nested/tracked.txt"],
+        fixture.path(),
+    );
+    let log = run_capture(rit_binary(), ["op", "log"], fixture.path()).0;
+    assert!(log.contains(" reset "));
+    assert!(log.contains("paths: nested/tracked.txt"));
+
+    run_capture(
+        rit_binary(),
+        ["restore", "nested/tracked.txt"],
+        fixture.path(),
+    );
+    let log = run_capture(rit_binary(), ["op", "log"], fixture.path()).0;
+    assert!(log.contains(" restore "));
+    assert!(log.contains("paths: nested/tracked.txt"));
 }
 
 #[test]
