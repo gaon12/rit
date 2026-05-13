@@ -33,6 +33,7 @@ Core commands:
   undo          Undo the last restorable rit operation
   show          Show one object
   ls-files      Show files in the index
+  ignore        Explain ignore rule decisions
   pathspec      Explain pathspec parsing and matching
   workspace     Inspect workspace profile operations
   doctor        Check repository health without modifying it
@@ -200,6 +201,12 @@ rit ls-files [--stage] [--] [<pathspec>...]
 Show files tracked in the index.
 ";
 
+const IGNORE_HELP: &str = "\
+rit ignore explain <path>
+
+Explain which .gitignore or info/exclude rules decide whether a path is ignored.
+";
+
 const PATHSPEC_HELP: &str = "\
 rit pathspec explain <pathspec>...
 
@@ -255,6 +262,7 @@ pub fn print_command_help(
         "undo" => stdout.write_all(UNDO_HELP.as_bytes())?,
         "show" => stdout.write_all(SHOW_HELP.as_bytes())?,
         "ls-files" => stdout.write_all(LS_FILES_HELP.as_bytes())?,
+        "ignore" => stdout.write_all(IGNORE_HELP.as_bytes())?,
         "pathspec" => stdout.write_all(PATHSPEC_HELP.as_bytes())?,
         "workspace" => stdout.write_all(WORKSPACE_HELP.as_bytes())?,
         "doctor" => stdout.write_all(DOCTOR_HELP.as_bytes())?,

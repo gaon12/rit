@@ -59,6 +59,30 @@ pub struct StatusOptions {
     pub include_ignored: bool,
 }
 
+/// Explanation of why one path is or is not ignored.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IgnoreExplanation {
+    /// Repository-relative path using `/` separators.
+    pub path: String,
+    /// Final ignore decision after applying matching rules in order.
+    pub ignored: bool,
+    /// Matching ignore rules in the order they were applied.
+    pub matching_rules: Vec<IgnoreRuleExplanation>,
+}
+
+/// One ignore rule that matched an explained path.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IgnoreRuleExplanation {
+    /// Ignore file that provided the rule.
+    pub source: String,
+    /// One-based line number in the ignore file.
+    pub line_number: usize,
+    /// Normalized ignore pattern.
+    pub pattern: String,
+    /// Whether this rule negates a previous ignore match.
+    pub negated: bool,
+}
+
 impl Default for StatusOptions {
     fn default() -> Self {
         Self {
@@ -277,6 +301,35 @@ impl Repository {
         }
 
         Ok(PorcelainStatus { branch, entries })
+    }
+
+    /// Explains the ignore decision for one repository-relative path.
+    pub fn explain_ignore_path(&self, path: &str) -> Result<IgnoreExplanation> {
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "ignore explain must be run in a repository with a working tree",
+            ));
+        };
+        let normalized_path = normalize_explain_path(path);
+        let mut matching_rules = Vec::new();
+        let mut ignored = false;
+        collect_matching_ignore_rules(
+            &worktree.join(".gitignore"),
+            &normalized_path,
+            &mut ignored,
+            &mut matching_rules,
+        )?;
+        collect_matching_ignore_rules(
+            &self.common_dir().join("info").join("exclude"),
+            &normalized_path,
+            &mut ignored,
+            &mut matching_rules,
+        )?;
+        Ok(IgnoreExplanation {
+            path: normalized_path,
+            ignored,
+            matching_rules,
+        })
     }
 
     fn status_branch_header(&self) -> Result<StatusBranchHeader> {
@@ -656,6 +709,34 @@ fn read_ignore_file(path: &Path, rules: &mut Vec<IgnoreRule>) -> Result<()> {
     Ok(())
 }
 
+fn collect_matching_ignore_rules(
+    source: &Path,
+    path: &str,
+    ignored: &mut bool,
+    output: &mut Vec<IgnoreRuleExplanation>,
+) -> Result<()> {
+    if !source.exists() {
+        return Ok(());
+    }
+    let contents =
+        fs::read_to_string(source).map_err(|source_error| RitError::io(source, source_error))?;
+    for (line_index, line) in contents.lines().enumerate() {
+        let Some(rule) = parse_ignore_rule(line) else {
+            continue;
+        };
+        if ignore_rule_matches(&rule, path) {
+            *ignored = !rule.negated;
+            output.push(IgnoreRuleExplanation {
+                source: source.display().to_string(),
+                line_number: line_index + 1,
+                pattern: rule.pattern,
+                negated: rule.negated,
+            });
+        }
+    }
+    Ok(())
+}
+
 fn parse_ignore_rule(line: &str) -> Option<IgnoreRule> {
     let mut pattern = line.trim().to_owned();
     if pattern.is_empty() || pattern.starts_with('#') {
@@ -676,6 +757,13 @@ fn parse_ignore_rule(line: &str) -> Option<IgnoreRule> {
         pattern: pattern.replace('\\', "/"),
         negated,
     })
+}
+
+fn normalize_explain_path(path: &str) -> String {
+    path.replace('\\', "/")
+        .trim_start_matches("./")
+        .trim_start_matches('/')
+        .to_owned()
 }
 
 fn ignore_rule_matches(rule: &IgnoreRule, path: &str) -> bool {
@@ -834,14 +922,11 @@ mod tests {
         untracked_status_paths,
     };
     #[cfg(unix)]
-    use crate::{AddOptions, FileModeOverride, InitOptions, Repository};
-    use crate::{GitAttributes, PathspecSet};
+    use crate::{AddOptions, FileModeOverride};
+    use crate::{GitAttributes, InitOptions, PathspecSet, Repository};
     use std::collections::BTreeSet;
-    #[cfg(unix)]
     use std::fs;
-    #[cfg(unix)]
     use std::path::{Path, PathBuf};
-    #[cfg(unix)]
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -1073,6 +1158,31 @@ mod tests {
         assert_eq!(paths, set(["ignored/"]));
     }
 
+    #[test]
+    fn explains_ignore_rules_in_order() {
+        let temp = temp_path("ignore-explain");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        fs::write(temp.join(".gitignore"), "*.log\n!important.log\n")
+            .expect("gitignore should be written");
+
+        let ignored = repository
+            .explain_ignore_path("debug.log")
+            .expect("ignore explanation should work");
+        let negated = repository
+            .explain_ignore_path("important.log")
+            .expect("ignore explanation should work");
+
+        assert!(ignored.ignored);
+        assert_eq!(ignored.matching_rules.len(), 1);
+        assert_eq!(ignored.matching_rules[0].pattern, "*.log");
+        assert!(!ignored.matching_rules[0].negated);
+        assert!(!negated.ignored);
+        assert_eq!(negated.matching_rules.len(), 2);
+        assert_eq!(negated.matching_rules[1].pattern, "important.log");
+        assert!(negated.matching_rules[1].negated);
+        remove_dir_all(&temp);
+    }
+
     #[cfg(unix)]
     #[test]
     fn status_reports_worktree_executable_bit_mismatch() {
@@ -1140,7 +1250,6 @@ mod tests {
         paths.into_iter().map(ToOwned::to_owned).collect()
     }
 
-    #[cfg(unix)]
     fn temp_path(name: &str) -> PathBuf {
         let unique = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -1156,7 +1265,6 @@ mod tests {
             .expect("test permissions should be set");
     }
 
-    #[cfg(unix)]
     fn remove_dir_all(path: &Path) {
         if path.exists() {
             fs::remove_dir_all(path).expect("temporary directory should be removed");

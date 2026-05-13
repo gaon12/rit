@@ -96,6 +96,9 @@
   prints normalized patterns, matching mode, exclusions, wildcard use,
   case-sensitivity, and attribute requirements without touching repository
   state.
+- 2026-05-13 ignore explain slice checked `git check-ignore -h`; `rit ignore
+  explain <path>` reuses rit's ignore parser and matcher to report matching
+  `.gitignore` and `.git/info/exclude` rules without invoking external `git`.
 - 2026-05-12 large-file backend trait slice checked the AGENTS large-object
   backend guidance; no external `git-lfs` binary is used.
 - 2026-05-12 LFS pointer slice checked installed `git-lfs/3.7.1` and the

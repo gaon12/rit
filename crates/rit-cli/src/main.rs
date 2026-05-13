@@ -57,6 +57,7 @@ fn run(
         [command, rest @ ..] if command == "merge" => merge_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "show" => show_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ls-files" => ls_files_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "ignore" => ignore_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "pathspec" => pathspec_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "workspace" => workspace_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "doctor" => doctor::doctor_command(rest, stdout, stderr),
@@ -192,6 +193,51 @@ fn pathspec_command(
         }
     }
     Ok(ExitCode::SUCCESS)
+}
+
+fn ignore_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let path = match args {
+        [subcommand, path] if subcommand == "explain" && !path.starts_with('-') => path,
+        [subcommand] if subcommand == "explain" => {
+            writeln!(stderr, "rit: ignore explain requires one path")?;
+            return Ok(ExitCode::from(129));
+        }
+        [subcommand, ..] => {
+            writeln!(stderr, "rit: unsupported ignore subcommand '{subcommand}'")?;
+            return Ok(ExitCode::from(129));
+        }
+        [] => {
+            writeln!(stderr, "rit: ignore requires a subcommand")?;
+            return Ok(ExitCode::from(129));
+        }
+    };
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    match repository.explain_ignore_path(path) {
+        Ok(explanation) => {
+            writeln!(stdout, "ignore: explain")?;
+            writeln!(stdout, "path: {}", explanation.path)?;
+            writeln!(stdout, "ignored: {}", explanation.ignored)?;
+            if explanation.matching_rules.is_empty() {
+                writeln!(stdout, "reason: no matching ignore rules")?;
+            }
+            for rule in explanation.matching_rules {
+                writeln!(
+                    stdout,
+                    "rule: {}:{} pattern={} negated={}",
+                    rule.source, rule.line_number, rule.pattern, rule.negated
+                )?;
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(error) => write_command_error(stderr, error),
+    }
 }
 
 fn init_command(
@@ -2424,6 +2470,15 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit ls-files"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn ignore_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "ignore"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit ignore explain"));
         assert_eq!(stderr, "");
     }
 

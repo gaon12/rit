@@ -53,6 +53,34 @@ fn add_plan_prints_paths_without_writing_index() {
 }
 
 #[test]
+fn ignore_explain_prints_matching_rules() {
+    let fixture = LocalWriteFixture::new("ignore-explain", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
+    fs::write(fixture.path().join(".gitignore"), "*.log\n!important.log\n")
+        .expect("gitignore should be written");
+
+    let ignored = run_capture(
+        rit_binary(),
+        ["ignore", "explain", "debug.log"],
+        fixture.path(),
+    )
+    .0;
+    let negated = run_capture(
+        rit_binary(),
+        ["ignore", "explain", "important.log"],
+        fixture.path(),
+    )
+    .0;
+
+    assert!(ignored.contains("ignore: explain\n"));
+    assert!(ignored.contains("path: debug.log\n"));
+    assert!(ignored.contains("ignored: true\n"));
+    assert!(ignored.contains("pattern=*.log negated=false\n"));
+    assert!(negated.contains("ignored: false\n"));
+    assert!(negated.contains("pattern=important.log negated=true\n"));
+}
+
+#[test]
 fn add_wildcard_pathspec_matches_git_status() {
     let fixture = LocalWriteFixture::new("add-wildcard", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");

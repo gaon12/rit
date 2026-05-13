@@ -72,6 +72,7 @@ rit merge [--plan] [--ff-only] <target>
 rit op log
 rit op restore <id>
 rit undo
+rit ignore explain <path>
 rit pathspec explain <pathspec>...
 ```
 

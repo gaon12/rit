@@ -105,7 +105,8 @@ pub use semantic_typescript::{
 };
 pub use sparse::{SparseCheckout, SparseCheckoutMode, SparseCheckoutPattern};
 pub use status::{
-    PorcelainStatus, StatusBranchHeader, StatusEntry, StatusOptions, UntrackedFilesMode,
+    IgnoreExplanation, IgnoreRuleExplanation, PorcelainStatus, StatusBranchHeader, StatusEntry,
+    StatusOptions, UntrackedFilesMode,
 };
 pub use transport::{
     AdvertisedRef, BlockingSmartHttpClient, FetchRefSpec, ProcessSshServiceExecutor,

@@ -569,7 +569,7 @@ Completion criteria:
 ## M18: Explainable Git Expansion
 
 - [ ] Extend `status --explain` model beyond the current roadmap sketch.
-- [ ] Add `rit ignore explain <path>`.
+- [x] Add `rit ignore explain <path>`.
 - [x] Add `rit pathspec explain <pathspec>`.
 - [ ] Add `rit merge explain <target>`.
 - [ ] Add `rit auth explain <url>`.
