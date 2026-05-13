@@ -407,8 +407,10 @@ Completion criteria:
       for both `HEAD`-deleted and target-deleted cases.
     - [x] Delete/modify conflicts print Git-shaped `modify/delete` conflict
       result messages for both directions.
-    - [ ] Binary conflict, mode conflict, symlink conflict, and remaining full
-      conflict result messages.
+    - [x] Binary content conflicts leave the `HEAD` version in the working tree
+      and print a Git-shaped binary merge warning.
+    - [ ] Mode conflict, symlink conflict, and remaining full conflict result
+      messages.
 
 Completion criteria:
 - Interrupted operations leave clear state and can be continued, aborted, or

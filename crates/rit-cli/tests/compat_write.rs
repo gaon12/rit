@@ -1513,6 +1513,47 @@ fn merge_delete_modify_conflict_leaves_head_file_when_target_deleted() {
 }
 
 #[test]
+fn merge_binary_conflict_reports_warning_and_keeps_head_file() {
+    let fixture = temp_path("merge-binary-conflict-fixture");
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    fs::write(fixture.join("blob.bin"), [0, 1, 2, 3, 4]).expect("base blob should be written");
+    run_git(&fixture, ["add", "blob.bin"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    run_git(&fixture, ["checkout", "--quiet", "-b", "topic"]);
+    fs::write(fixture.join("blob.bin"), [0, 1, 2, 9, 4]).expect("topic blob should be written");
+    run_git(&fixture, ["add", "blob.bin"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "topic"]);
+    run_git(&fixture, ["checkout", "--quiet", "master"]);
+    fs::write(fixture.join("blob.bin"), [0, 1, 2, 8, 4]).expect("head blob should be written");
+    run_git(&fixture, ["add", "blob.bin"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "master"]);
+
+    let merge = Command::new(rit_binary())
+        .args(["merge", "topic"])
+        .current_dir(&fixture)
+        .output()
+        .expect("rit merge should start");
+
+    assert!(!merge.status.success());
+    let stdout = String::from_utf8_lossy(&merge.stdout);
+    assert!(stdout.contains("warning: Cannot merge binary files: blob.bin (HEAD vs. topic)\n"));
+    assert!(stdout.contains("CONFLICT (content): Merge conflict in blob.bin\n"));
+    assert_eq!(
+        fs::read(fixture.join("blob.bin")).expect("head blob should exist"),
+        vec![0, 1, 2, 8, 4]
+    );
+    assert_eq!(
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &fixture).0,
+        "UU blob.bin\n"
+    );
+    let _ = fs::remove_dir_all(fixture);
+}
+
+#[test]
 fn merge_ff_only_rejects_conflict_without_writing_merge_state() {
     let fixture = temp_path("merge-ff-only-conflict-fixture");
     fs::create_dir_all(&fixture).expect("fixture should be created");

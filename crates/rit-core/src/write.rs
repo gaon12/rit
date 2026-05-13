@@ -155,6 +155,9 @@ pub enum MergeConflictKind {
     /// Both sides changed file content or shape in a way this merge slice
     /// cannot automatically combine.
     Content,
+    /// Both sides changed a binary file. Git leaves the `HEAD` version in the
+    /// working tree and asks the user to resolve it manually.
+    BinaryContent,
     /// One side deleted a path while the other side modified it.
     ModifyDelete {
         /// Side that deleted the path.
@@ -862,7 +865,7 @@ impl Repository {
             return Ok(MergeResult::Conflicts {
                 target_id: new_id,
                 conflict_paths: merge_workflow.conflict_paths,
-                conflict_reports: merge_conflict_reports(&merge_workflow.conflict_stages),
+                conflict_reports: self.merge_conflict_reports(&merge_workflow.conflict_stages)?,
             });
         }
 
@@ -1108,6 +1111,58 @@ impl Repository {
             file_size: object.size().min(u32::MAX as usize) as u32,
             path: path.to_owned(),
         })
+    }
+
+    fn merge_conflict_reports(
+        &self,
+        conflict_stages: &[MergeConflictStagePlan],
+    ) -> Result<Vec<MergeConflictReport>> {
+        conflict_stages
+            .iter()
+            .map(|stage| {
+                Ok(MergeConflictReport {
+                    path: stage.path.clone(),
+                    kind: self.merge_conflict_kind(stage)?,
+                })
+            })
+            .collect()
+    }
+
+    fn merge_conflict_kind(&self, stage: &MergeConflictStagePlan) -> Result<MergeConflictKind> {
+        match (stage.base, stage.head, stage.target) {
+            (Some(_), None, Some(_)) => Ok(MergeConflictKind::ModifyDelete {
+                deleted_side: MergeConflictSide::Head,
+                modified_side: MergeConflictSide::Target,
+                worktree_side: MergeConflictSide::Target,
+            }),
+            (Some(_), Some(_), None) => Ok(MergeConflictKind::ModifyDelete {
+                deleted_side: MergeConflictSide::Target,
+                modified_side: MergeConflictSide::Head,
+                worktree_side: MergeConflictSide::Head,
+            }),
+            (_, Some(head), Some(target)) => {
+                if self.conflict_stage_is_binary(head)? || self.conflict_stage_is_binary(target)? {
+                    Ok(MergeConflictKind::BinaryContent)
+                } else {
+                    Ok(MergeConflictKind::Content)
+                }
+            }
+            _ => Ok(MergeConflictKind::Content),
+        }
+    }
+
+    fn conflict_stage_is_binary(&self, entry: MergeConflictStageEntry) -> Result<bool> {
+        if !matches!(entry.mode, 0o100644 | 0o100755) {
+            return Ok(false);
+        }
+        let object = self.read_object(entry.object_id)?;
+        if object.kind != ObjectKind::Blob {
+            return Err(RitError::invalid_input(format!(
+                "object {} is {}, not blob",
+                entry.object_id, object.kind
+            )));
+        }
+        Ok(object.data.contains(&0) || std::str::from_utf8(&object.data).is_err())
     }
 
     fn resolve_merge_target(&self, target: &str) -> Result<ObjectId> {
@@ -1606,32 +1661,6 @@ fn conflict_stage_entry(entry: Option<&IndexEntry>) -> Option<MergeConflictStage
         mode: entry.mode,
         object_id: entry.object_id,
     })
-}
-
-fn merge_conflict_reports(conflict_stages: &[MergeConflictStagePlan]) -> Vec<MergeConflictReport> {
-    conflict_stages
-        .iter()
-        .map(|stage| MergeConflictReport {
-            path: stage.path.clone(),
-            kind: merge_conflict_kind(stage),
-        })
-        .collect()
-}
-
-fn merge_conflict_kind(stage: &MergeConflictStagePlan) -> MergeConflictKind {
-    match (stage.base, stage.head, stage.target) {
-        (Some(_), None, Some(_)) => MergeConflictKind::ModifyDelete {
-            deleted_side: MergeConflictSide::Head,
-            modified_side: MergeConflictSide::Target,
-            worktree_side: MergeConflictSide::Target,
-        },
-        (Some(_), Some(_), None) => MergeConflictKind::ModifyDelete {
-            deleted_side: MergeConflictSide::Target,
-            modified_side: MergeConflictSide::Head,
-            worktree_side: MergeConflictSide::Head,
-        },
-        _ => MergeConflictKind::Content,
-    }
 }
 
 fn write_non_conflicting_merge_worktree_changes(
@@ -3115,6 +3144,68 @@ mod tests {
             .map(|entry| entry.stage)
             .collect::<Vec<_>>();
         assert_eq!(stages, vec![1, 2]);
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn merge_reports_binary_content_conflict_and_keeps_head_bytes() {
+        let temp = temp_path("merge-binary-conflict");
+        let repository = committed_nested_repository(&temp);
+        fs::write(temp.join("nested").join("bin.dat"), [0, 1, 2, 3, 4])
+            .expect("binary file should be written");
+        repository
+            .add_paths(&["nested/bin.dat".to_owned()])
+            .expect("binary add should work");
+        repository
+            .commit_index("binary base")
+            .expect("binary base commit should work");
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("bin.dat"), [0, 1, 2, 9, 4])
+            .expect("topic binary should be written");
+        repository
+            .add_paths(&["nested/bin.dat".to_owned()])
+            .expect("topic binary add should work");
+        repository
+            .commit_index("topic")
+            .expect("topic commit should work");
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(temp.join("nested").join("bin.dat"), [0, 1, 2, 8, 4])
+            .expect("head binary should be written");
+        repository
+            .add_paths(&["nested/bin.dat".to_owned()])
+            .expect("head binary add should work");
+        repository
+            .commit_index("master")
+            .expect("master commit should work");
+
+        let result = repository
+            .merge("topic")
+            .expect("binary merge should start");
+
+        let super::MergeResult::Conflicts {
+            conflict_paths,
+            conflict_reports,
+            ..
+        } = result
+        else {
+            panic!("expected conflicted merge");
+        };
+        assert_eq!(conflict_paths, vec!["nested/bin.dat".to_owned()]);
+        assert_eq!(
+            conflict_reports,
+            vec![MergeConflictReport {
+                path: "nested/bin.dat".to_owned(),
+                kind: MergeConflictKind::BinaryContent,
+            }]
+        );
+        assert_eq!(
+            fs::read(temp.join("nested").join("bin.dat")).expect("binary should read"),
+            vec![0, 1, 2, 8, 4]
+        );
         remove_dir_all(&temp);
     }
 

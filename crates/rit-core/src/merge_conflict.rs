@@ -73,6 +73,9 @@ fn read_text_blob(
             entry.object_id, object.kind
         )));
     }
+    if object.data.contains(&0) {
+        return Ok(None);
+    }
     Ok(String::from_utf8(object.data).ok())
 }
 
