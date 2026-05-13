@@ -28,6 +28,9 @@ Core commands:
   reset         Reset staged file entries
   checkout      Switch branches
   switch        Switch branches
+  merge         Fast-forward a branch or revision
+  op            Inspect or restore rit operation journal entries
+  undo          Undo the last restorable rit operation
   show          Show one object
   ls-files      Show files in the index
   workspace     Inspect workspace profile operations
@@ -165,6 +168,25 @@ rit switch -c <branch>
 Switch to an existing branch, or create and switch to a new branch.
 ";
 
+const MERGE_HELP: &str = "\
+rit merge [--ff-only] <target>
+
+Fast-forward the current branch to a local branch or revision. Merge commits and conflict handling are not implemented yet.
+";
+
+const OP_HELP: &str = "\
+rit op log
+rit op restore <id>
+
+Inspect or restore the rit operation journal stored under .git/rit/ops.log.
+";
+
+const UNDO_HELP: &str = "\
+rit undo
+
+Restore HEAD and the working tree to the state captured before the last restorable rit operation.
+";
+
 const SHOW_HELP: &str = "\
 rit show [--no-patch] [<revision>] [--] [<pathspec>...]
 
@@ -221,6 +243,9 @@ pub fn print_command_help(
         "reset" => stdout.write_all(RESET_HELP.as_bytes())?,
         "checkout" => stdout.write_all(CHECKOUT_HELP.as_bytes())?,
         "switch" => stdout.write_all(SWITCH_HELP.as_bytes())?,
+        "merge" => stdout.write_all(MERGE_HELP.as_bytes())?,
+        "op" => stdout.write_all(OP_HELP.as_bytes())?,
+        "undo" => stdout.write_all(UNDO_HELP.as_bytes())?,
         "show" => stdout.write_all(SHOW_HELP.as_bytes())?,
         "ls-files" => stdout.write_all(LS_FILES_HELP.as_bytes())?,
         "workspace" => stdout.write_all(WORKSPACE_HELP.as_bytes())?,

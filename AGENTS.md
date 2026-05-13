@@ -312,6 +312,15 @@ semantic = false
 [policy]
 deny_secrets = true
 protect_branches = ["main", "master"]
+
+[indexdb]
+enabled = false
+auto_update = true
+auto_build_on_explicit_command = true
+auto_build_on_normal_command = false
+path = ".git/rit/indexdb.sqlite"
+batch_size = 5000
+use_bundled_sqlite = true
 ```
 
 설정 파일이 없을 때 기본값은 보수적으로 동작해야 한다.
@@ -376,6 +385,12 @@ crates/
 
   rit-policy/
     저장소 정책, 파일 크기 제한, secret 검사, branch 보호
+
+  rit-indexdb/
+    SQLite 기반 선택적 보조 인덱스. commit metadata, commit graph,
+    file change history, refs snapshot, working tree cache를 관리한다.
+    Git object database를 대체하지 않으며, 모든 데이터는 원본 Git 저장소에서
+    재생성 가능해야 한다.
 
   rit-testkit/
     기존 git과 rit의 결과 비교 도구
@@ -746,6 +761,51 @@ index, refs, config, packed-refs, LFS/Xet metadata는 특히 조심해서 쓴다
 * 이해하기 어려운 매크로 최적화
 * 플랫폼별 동작을 깨뜨리는 최적화
 * Git 호환성을 깨뜨리는 최적화
+
+---
+
+## 13.x SQLite IndexDB 원칙
+
+`rit`는 선택적으로 SQLite 기반 보조 인덱스인 `indexdb`를 제공할 수 있다.
+
+`indexdb`는 Git 저장소의 진실의 원천이 아니다. 항상 다음 원칙을 지킨다.
+
+* 저장소의 진실은 `.git/objects`, refs, `.git/index`, working tree이다.
+* `indexdb`는 언제든 삭제해도 된다.
+* `indexdb`는 원본 Git 데이터에서 언제든 재생성 가능해야 한다.
+* `indexdb`가 없거나 오래되었거나 깨졌을 때도 기본 Git 호환 명령은 정상 동작해야 한다.
+* `indexdb` 때문에 Git과 관찰 가능한 결과가 달라지면 안 된다.
+* `indexdb`가 의심스러운 경우에는 느리더라도 원본 Git 데이터에서 다시 계산한다.
+
+권장 저장 위치는 다음이다.
+
+```text
+.git/rit/indexdb.sqlite
+.git/rit/indexdb.lock
+```
+
+linked worktree에서는 공유 가능한 저장소 DB와 worktree별 캐시를 분리한다.
+
+```text
+.git/rit/indexdb.sqlite
+.git/rit/worktrees/<worktree-id>/worktree-cache.sqlite
+```
+
+초기 기본 테이블은 다음을 제공한다.
+
+```text
+commits
+commit_parents
+file_changes
+refs_snapshot
+cache_state
+```
+
+Git object id는 SHA-1 40자리 문자열에 고정하지 않는다. 장기적으로 SHA-256 저장소를 고려해 object id는 binary value와 hash kind를 함께 저장한다.
+
+`rit indexdb`의 기본 의미는 `rit indexdb ensure`이다. DB가 없으면 build, 최신이면 no-op, stale이면 update, migration 가능하면 migrate, 불가능하면 rebuild 안내, 깨졌으면 repair 안내를 제공한다. 일반 `rit log`, `rit status`, `rit diff` 같은 명령은 사용자가 요청하지 않은 무거운 full build를 자동으로 수행하지 않는다.
+
+`indexdb` 쓰기는 transaction과 lock을 사용한다. DB 갱신 실패가 Git 저장소 쓰기 성공 여부를 뒤집으면 안 되며, 다음 실행에서 repair 또는 update로 복구할 수 있어야 한다.
 
 ---
 

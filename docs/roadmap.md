@@ -40,12 +40,25 @@ For day-to-day status, active queues, and completion checklists, update
 - Add local, HTTP, and SSH transport with auth separated from transport.
 - Add LFS, Xet, sparse checkout, partial clone, and workspace profiles behind
   feature gates where appropriate.
+- Add optional SQLite `indexdb` as a reproducible acceleration layer, never as
+  the source of truth.
 
 ## M14-M18: rit Differentiators and Release
 
 - Add semantic diff, policy engine, VFS, doctor/repair, and release packaging.
 - Provide `rit-min` and `rit-full` build profiles.
 - Finish README, module docs, compatibility docs, and release notes.
+
+## M16-M25: Product Differentiators
+
+- Add Operation Journal and Universal Undo on top of safe `.git/rit/`
+  metadata.
+- Add Transaction Plan / Dry-run APIs for every write command.
+- Expand Explainable Git to ignore, pathspec, merge, auth, LFS/Xet, and
+  workspace decisions.
+- Add Smartlog / Local Work Graph, Doctor fix plans, workspace recommendation,
+  impact analysis, stable JSON schema commands, compatibility oracle, and
+  large-file audit/migration planning.
 
 ## Commit Discipline
 

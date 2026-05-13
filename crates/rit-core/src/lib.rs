@@ -18,6 +18,7 @@ pub mod large_files;
 pub mod merge_state;
 pub mod object;
 pub mod odb;
+pub mod operations;
 pub mod partial_clone;
 pub mod pathspec;
 pub mod policy;
@@ -73,6 +74,9 @@ pub use large_files::{
 pub use merge_state::{MergeState, RebaseState};
 pub use object::{GitObject, ObjectId, ObjectKind, TreeEntry, hash_object};
 pub use odb::{IngestedPack, LooseObjectDb, StoredPack, StoredPackIndex};
+pub use operations::{
+    OperationRecord, OperationRestoreResult, OperationSnapshot, RepositoryOperations,
+};
 pub use partial_clone::{PartialClonePolicy, PromisorRemote};
 pub use pathspec::PathspecSet;
 pub use policy::{PolicyConfig, PolicyEnforcement, parse_size_limit};
@@ -123,7 +127,8 @@ pub use workspace_profile::{
     LazyMaterializationPolicy, RitConfig, WorkspacePrefetchPlan, WorkspaceProfile,
 };
 pub use write::{
-    AddOptions, CommitOptions, CommitResult, FileModeOverride, SignatureIdentity, SignatureTime,
+    AddOptions, CommitOptions, CommitResult, FileModeOverride, MergeResult, SignatureIdentity,
+    SignatureTime,
 };
 
 /// Returns the crate version used by the CLI and tests.

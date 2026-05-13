@@ -1005,6 +1005,48 @@ fn post_commit_hook_runs_after_success_like_git() {
 }
 
 #[test]
+fn operation_journal_records_commit_and_undo_restores_head() {
+    let fixture = LocalWriteFixture::new(
+        "operation-journal-commit",
+        LocalWriteFixtureKind::NestedTracked,
+    )
+    .expect("fixture should build");
+    let base = run_capture("git", ["rev-parse", "HEAD"], fixture.path()).0;
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "journaled\n",
+    )
+    .expect("tracked file should be modified");
+
+    run_capture(rit_binary(), ["add", "nested/tracked.txt"], fixture.path());
+    run_capture(rit_binary(), ["commit", "-m", "journaled"], fixture.path());
+
+    let log = run_capture(rit_binary(), ["op", "log"], fixture.path()).0;
+    assert!(log.contains(" commit "));
+    assert!(log.contains("journaled"));
+    assert_ne!(
+        run_capture("git", ["rev-parse", "HEAD"], fixture.path()).0,
+        base
+    );
+
+    run_capture(rit_binary(), ["undo"], fixture.path());
+
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], fixture.path()).0,
+        base
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.path().join("nested").join("tracked.txt"))
+            .expect("tracked file should read"),
+        "base\n"
+    );
+    assert_eq!(
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], fixture.path()).0,
+        ""
+    );
+}
+
+#[test]
 fn checkout_detached_commit_matches_git_state() {
     let fixture =
         LocalWriteFixture::new("detached-checkout", LocalWriteFixtureKind::DetachedCheckout)
@@ -1050,6 +1092,42 @@ fn checkout_detached_commit_matches_git_state() {
         fs::read_to_string(outcome.git_repo.join("tracked.txt")).expect("git file should read"),
         fs::read_to_string(outcome.rit_repo.join("tracked.txt")).expect("rit file should read")
     );
+}
+
+#[test]
+fn merge_ff_only_matches_git_final_state() {
+    let fixture = temp_path("merge-ff-only-fixture");
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    run_git(&fixture, ["config", "core.eol", "lf"]);
+    fs::write(fixture.join("tracked.txt"), "base\n").expect("base file should be written");
+    run_git(&fixture, ["add", "tracked.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    run_git(&fixture, ["checkout", "--quiet", "-b", "topic"]);
+    fs::write(fixture.join("tracked.txt"), "topic\n").expect("topic file should be written");
+    run_git(&fixture, ["add", "tracked.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "topic"]);
+    run_git(&fixture, ["checkout", "--quiet", "master"]);
+
+    let outcome = compare_after_command(
+        &fixture,
+        command_words("git", ["merge", "--ff-only", "topic"]),
+        command_words(rit_binary(), ["merge", "--ff-only", "topic"]),
+    );
+
+    assert_eq!(outcome.git_status, outcome.rit_status);
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &outcome.git_repo).0,
+        run_capture("git", ["rev-parse", "HEAD"], &outcome.rit_repo).0
+    );
+    assert_eq!(
+        fs::read_to_string(outcome.git_repo.join("tracked.txt")).expect("git file should read"),
+        fs::read_to_string(outcome.rit_repo.join("tracked.txt")).expect("rit file should read")
+    );
+    let _ = fs::remove_dir_all(fixture);
 }
 
 #[test]

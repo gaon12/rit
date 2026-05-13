@@ -6,7 +6,7 @@ and implementation notes may use Git as the reference implementation.
 
 ## Checked Baseline
 
-- Date checked: 2026-05-10
+- Date checked: 2026-05-13
 - Git version: `git version 2.52.0.windows.1`
 - Command list checked with: `git help -a`
 - Command help checked with: `git <command> -h`
@@ -47,8 +47,9 @@ The current codebase implements an early local Git subset:
   `diff --name-status`, `diff --numstat`, `diff --stat`,
   `diff --cached --name-only`, `diff --cached --name-status`,
   `diff --cached --numstat`, `diff --cached --stat`, `log`, `add`, `commit`,
-  `branch`, `tag`, `restore`, `reset`, `checkout`, `switch`, and
-  `clone --local --no-checkout`, plus local-path and smart HTTP(S) `fetch`.
+  `branch`, `tag`, `restore`, `reset`, `checkout`, `switch`,
+  fast-forward-only `merge`, and `clone --local --no-checkout`, plus
+  local-path, smart HTTP(S), and one-refspec SSH `fetch` and `push`.
 - Small text patch output is supported for default `diff`, `diff -p`, and
   `diff --cached`.
 - Cached diff supports staged rename/copy detection with `-M[<n>]`,
@@ -130,7 +131,8 @@ cached and staged output. Positive `:(literal)`, `:(glob)`, `:(top)`, and
 `:(icase)` is covered for status, diff, and add. Exclude `:!`, `:^`, and
 `:(exclude)` is covered for status, diff, ls-files, and add. Attr magic is
 covered for root `.gitattributes` set/unset/value/unspecified requirements in
-status, diff, ls-files, and add. Pathspec-file input remains unsupported.
+status, diff, ls-files, and add. Pathspec-file input is covered for `add`,
+`restore`, and `reset`, including stdin and NUL-separated input.
 Local write compatibility tests cover `core.ignorecase=true` for a
 mismatched-case `add` pathspec that Git accepts as a no-op.
 
@@ -181,6 +183,13 @@ materialized.
 Local fetch compatibility tests cover `fetch <local-repository>` and one
 `fetch <local-repository> <src>:<dst>` refspec in quiet mode by comparing
 `FETCH_HEAD`, updated refs, and fetched commit contents.
+
+Fast-forward merge compatibility coverage compares final `HEAD`, porcelain
+status, and worktree contents for `merge --ff-only`.
+
+Operation journal tests cover rit-specific `.git/rit/ops.log` metadata and
+`rit undo`; this metadata is intentionally outside Git compatibility snapshots
+and must be safe to delete.
 
 Local write compatibility tests currently cover directory pathspec behavior and
 simple wildcard/bracket-class pathspec behavior for `add`, `restore`, and

@@ -11,6 +11,7 @@ path = "src/lib.rs"
 
 [features]
 default = []
+indexdb = []
 large-files = ["lfs", "xet"]
 lfs = ["dep:serde", "dep:serde_json", "dep:sha2"]
 semantic-json = ["dep:serde", "dep:serde_json"]

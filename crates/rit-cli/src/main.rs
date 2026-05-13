@@ -54,11 +54,14 @@ fn run(
         [command, rest @ ..] if command == "reset" => reset_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "checkout" => checkout_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "switch" => switch_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "merge" => merge_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "show" => show_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ls-files" => ls_files_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "workspace" => workspace_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "doctor" => doctor::doctor_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "repair" => repair::repair_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "op" => op_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "undo" => undo_command(rest, stdout, stderr),
         [command] if command == "help" => {
             stdout.write_all(help::GENERAL_HELP.as_bytes())?;
             Ok(ExitCode::SUCCESS)
@@ -1103,8 +1106,16 @@ fn commit_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
+    let before = capture_operation_snapshot(&repository, stderr)?;
     match repository.commit_index_with_options(&commit_args.message, &commit_args.options) {
         Ok(result) => {
+            record_operation(
+                &repository,
+                "commit",
+                first_message_line(&commit_args.message),
+                before,
+                stderr,
+            )?;
             writeln!(
                 stdout,
                 "[{}] {}",
@@ -1427,8 +1438,16 @@ fn checkout_existing_branch(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
+    let before = capture_operation_snapshot(&repository, stderr)?;
     match repository.checkout_branch(branch) {
         Ok(_) => {
+            record_operation(
+                &repository,
+                "checkout",
+                &format!("branch {branch}"),
+                before,
+                stderr,
+            )?;
             writeln!(stdout, "{message_prefix} '{branch}'")?;
             Ok(ExitCode::SUCCESS)
         }
@@ -1445,9 +1464,17 @@ fn checkout_existing_branch_or_revision(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
+    let before = capture_operation_snapshot(&repository, stderr)?;
     if repository.branch_target(target).is_ok() {
         match repository.checkout_branch(target) {
             Ok(_) => {
+                record_operation(
+                    &repository,
+                    "checkout",
+                    &format!("branch {target}"),
+                    before,
+                    stderr,
+                )?;
                 writeln!(stdout, "Switched to branch '{target}'")?;
                 Ok(ExitCode::SUCCESS)
             }
@@ -1456,6 +1483,13 @@ fn checkout_existing_branch_or_revision(
     } else {
         match repository.checkout_detached(target) {
             Ok(commit_id) => {
+                record_operation(
+                    &repository,
+                    "checkout",
+                    &format!("detach {}", &commit_id.to_hex()[..7]),
+                    before,
+                    stderr,
+                )?;
                 writeln!(stdout, "HEAD is now at {}", &commit_id.to_hex()[..7])?;
                 Ok(ExitCode::SUCCESS)
             }
@@ -1474,13 +1508,210 @@ fn checkout_new_branch(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
+    let before = capture_operation_snapshot(&repository, stderr)?;
     match repository.checkout_new_branch(branch) {
         Ok(_) => {
+            record_operation(
+                &repository,
+                "checkout",
+                &format!("new branch {branch}"),
+                before,
+                stderr,
+            )?;
             writeln!(stdout, "{message_prefix} '{branch}'")?;
             Ok(ExitCode::SUCCESS)
         }
         Err(error) => write_command_error(stderr, error),
     }
+}
+
+fn merge_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let target = match args {
+        [target] if !target.starts_with('-') => target,
+        [flag, target] if flag == "--ff-only" && !target.starts_with('-') => target,
+        [unsupported, ..] if unsupported.starts_with('-') => {
+            writeln!(stderr, "rit: unsupported merge option '{unsupported}'")?;
+            return Ok(ExitCode::from(129));
+        }
+        [] => {
+            writeln!(stderr, "rit: merge requires a target revision")?;
+            return Ok(ExitCode::from(129));
+        }
+        _ => {
+            writeln!(
+                stderr,
+                "rit: merge currently supports only fast-forward merges"
+            )?;
+            return Ok(ExitCode::from(129));
+        }
+    };
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    let before = capture_operation_snapshot(&repository, stderr)?;
+    match repository.merge_ff_only(target) {
+        Ok(rit_core::MergeResult::AlreadyUpToDate { .. }) => {
+            record_operation(
+                &repository,
+                "merge",
+                &format!("already up to date with {target}"),
+                before,
+                stderr,
+            )?;
+            writeln!(stdout, "Already up to date.")?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Ok(rit_core::MergeResult::FastForward { old_id, new_id }) => {
+            record_operation(
+                &repository,
+                "merge",
+                &format!("fast-forward {target}"),
+                before,
+                stderr,
+            )?;
+            writeln!(
+                stdout,
+                "Updating {}..{}",
+                &old_id.to_hex()[..7],
+                &new_id.to_hex()[..7]
+            )?;
+            writeln!(stdout, "Fast-forward")?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(error) => write_command_error(stderr, error),
+    }
+}
+
+fn op_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    match args {
+        [subcommand] if subcommand == "log" => match repository.operations().log() {
+            Ok(records) => {
+                for record in records.iter().rev() {
+                    writeln!(
+                        stdout,
+                        "{} {} {} -> {} {}",
+                        record.id,
+                        record.command,
+                        short_head(record.before.head),
+                        short_head(record.after.head),
+                        record.summary
+                    )?;
+                }
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_command_error(stderr, error),
+        },
+        [subcommand, id] if subcommand == "restore" => match repository.operations().restore(id) {
+            Ok(result) => {
+                writeln!(
+                    stdout,
+                    "Restored operation {} to {}",
+                    result.id,
+                    &result.restored_head.to_hex()[..7]
+                )?;
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_command_error(stderr, error),
+        },
+        [subcommand, ..] => {
+            writeln!(stderr, "rit: unsupported op subcommand '{subcommand}'")?;
+            Ok(ExitCode::from(129))
+        }
+        [] => {
+            writeln!(stderr, "rit: op requires a subcommand")?;
+            Ok(ExitCode::from(129))
+        }
+    }
+}
+
+fn undo_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    if !args.is_empty() {
+        writeln!(stderr, "rit: undo does not accept arguments yet")?;
+        return Ok(ExitCode::from(129));
+    }
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    match repository.operations().undo_last() {
+        Ok(result) => {
+            writeln!(
+                stdout,
+                "Undid operation {} and restored {}",
+                result.id,
+                &result.restored_head.to_hex()[..7]
+            )?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(error) => write_command_error(stderr, error),
+    }
+}
+
+fn capture_operation_snapshot(
+    repository: &rit_core::Repository,
+    stderr: &mut dyn Write,
+) -> io::Result<Option<rit_core::OperationSnapshot>> {
+    match repository.operations().snapshot() {
+        Ok(snapshot) => Ok(Some(snapshot)),
+        Err(error) => {
+            writeln!(
+                stderr,
+                "rit: warning: could not snapshot operation: {error}"
+            )?;
+            Ok(None)
+        }
+    }
+}
+
+fn record_operation(
+    repository: &rit_core::Repository,
+    command: &str,
+    summary: &str,
+    before: Option<rit_core::OperationSnapshot>,
+    stderr: &mut dyn Write,
+) -> io::Result<()> {
+    let Some(before) = before else {
+        return Ok(());
+    };
+    let after = match repository.operations().snapshot() {
+        Ok(snapshot) => snapshot,
+        Err(error) => {
+            writeln!(
+                stderr,
+                "rit: warning: could not snapshot operation result: {error}"
+            )?;
+            return Ok(());
+        }
+    };
+    if let Err(error) = repository
+        .operations()
+        .record(command, summary, before, after)
+    {
+        writeln!(stderr, "rit: warning: could not record operation: {error}")?;
+    }
+    Ok(())
+}
+
+fn short_head(head: Option<rit_core::ObjectId>) -> String {
+    head.map(|object_id| object_id.to_hex()[..7].to_owned())
+        .unwrap_or_else(|| "-".to_owned())
 }
 
 fn write_command_error(stderr: &mut dyn Write, error: rit_core::RitError) -> io::Result<ExitCode> {

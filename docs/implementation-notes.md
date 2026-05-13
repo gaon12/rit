@@ -81,6 +81,11 @@
   `--pathspec-from-file=- --pathspec-file-nul`.
 - 2026-05-12 merge-state model slice checked `git merge -h`,
   `git cherry-pick -h`, `git rebase -h`, and `git stash -h`.
+- 2026-05-13 fast-forward merge slice checked `git merge -h`; implemented
+  `rit merge [--ff-only] <target>` for clean fast-forward-only updates.
+- 2026-05-13 operation journal slice checked `git --version` and
+  `git help -a`; this feature is rit-specific metadata under `.git/rit/` and
+  does not use Git command output as a compatibility target.
 - 2026-05-12 large-file backend trait slice checked the AGENTS large-object
   backend guidance; no external `git-lfs` binary is used.
 - 2026-05-12 LFS pointer slice checked installed `git-lfs/3.7.1` and the
@@ -262,9 +267,32 @@
 - Reads `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `MERGE_MSG`,
   `SQUASH_MSG`, `rebase-apply`, and `rebase-merge` from the repository
   operation state directory.
-- Still unsupported: the `rit merge`, `rit cherry-pick`, `rit rebase`, and
-  `rit stash` commands themselves, conflict stage generation, and
-  continue/abort/skip workflows.
+- Added `Repository::merge_ff_only(target)` and `rit merge [--ff-only]
+  <target>` for the first merge command slice. It requires a clean worktree,
+  resolves a local branch or revision, verifies the current `HEAD` is an
+  ancestor of the target, checks out the target tree, and advances the current
+  branch or detached `HEAD`.
+- Still unsupported: merge commits, conflict stage generation, strategies,
+  merge hooks, `--abort`, `--continue`, `cherry-pick`, `rebase`, and `stash`.
+
+### M16: Operation journal and universal undo
+
+- Added `Repository::operations()` as the public entry point for rit-specific
+  operation metadata.
+- Operation records are appended to `.git/rit/ops.log`; this file is never a
+  source of truth for Git compatibility and can be deleted without changing the
+  underlying repository.
+- The first snapshot model records `HEAD`, the current branch, and a raw index
+  checksum before and after a user operation.
+- `rit commit`, `rit checkout`, `rit switch`, and fast-forward `rit merge`
+  record successful operations from the CLI.
+- Added `rit op log` to print operation records newest-first.
+- Added `rit op restore <id>` and `rit undo` for records with a restorable
+  previous `HEAD`; restore updates the previous branch or detached `HEAD`,
+  checks out that commit tree, and rewrites the index from that tree.
+- Still unsupported: command-aware undo modes, reversible patches for
+  index-only/worktree-only operations, changed path lists, created object ID
+  lists, JSON output, and malformed-journal repair.
 
 ### M9: Large-file backends
 
@@ -615,10 +643,9 @@
   the link target text.
 - Git-compatible behavior: when `core.symlinks=false`, `rit add` records a
   worktree symlink as a regular `100644` blob containing the link target text.
-- Intentional differences: ignored-file checks and
-  `--pathspec-from-file=-` are not implemented yet. On Windows, worktree
-  executable bits remain filemode-insensitive like Git's usual `core.filemode`
-  behavior there.
+- Intentional differences: ignored-file checks are not implemented yet. On
+  Windows, worktree executable bits remain filemode-insensitive like Git's
+  usual `core.filemode` behavior there.
 - Repository mutation: yes, writes loose objects and `.git/index` using lock/rename.
 - Risk: low for explicit files; missing paths remove matching index entries.
 
@@ -788,9 +815,9 @@
 ### `rit push`
 
 - Baseline command checked: `git push -h`
-- Supported options: `--quiet`/`-q` with one `http://` or `https://` smart
-  HTTP repository and one simple `<src>:<dst>` refspec.
-- Unsupported options: SSH, named remotes, multiple refspecs, delete/mirror/all
+- Supported options: `--quiet`/`-q` with one `http://`, `https://`, `ssh://`,
+  or scp-like SSH repository and one simple `<src>:<dst>` refspec.
+- Unsupported options: named remotes, multiple refspecs, delete/mirror/all
   /tags, dry-run, force/lease semantics, upstream config, hooks,
   signed/atomic pushes, push options, and submodule behavior.
 - Implemented smart HTTP behavior: discovers receive-pack refs, resolves the
@@ -805,6 +832,37 @@
   receive-pack.
 - Risk: moderate; the first push path is protocol-limited and avoids external
   `git`.
+
+### `rit merge`
+
+- Baseline command checked: `git merge -h`
+- Supported options: default fast-forward shape and explicit `--ff-only` with
+  one target branch or revision.
+- Unsupported options: merge commits, conflict handling, strategies, stat
+  output, hooks, squash, abort, quit, continue, autostash, signing, and
+  verification options.
+- Git-compatible behavior: fast-forward final `HEAD`, index, and worktree state
+  match Git for simple clean repositories.
+- Intentional differences: output is simplified and non-fast-forward merges are
+  rejected instead of attempting a merge commit.
+- Repository mutation: yes, updates `HEAD` or the current branch ref, writes
+  the index, and materializes the target tree.
+- Risk: moderate; requires a clean worktree before writing.
+
+### `rit op` and `rit undo`
+
+- Baseline command checked: rit-specific command, no Git equivalent.
+- Supported options: `rit op log`, `rit op restore <id>`, and `rit undo`.
+- Unsupported options: JSON output, filtering, changed path display, and
+  command-aware undo policies.
+- Git-compatible behavior: metadata is stored under `.git/rit/` and does not
+  replace Git refs, objects, index, or working tree state.
+- Intentional differences: this is a rit differentiator, not a Git-compatible
+  porcelain command.
+- Repository mutation: `op log` is read-only; `op restore` and `undo` restore
+  a previous `HEAD` snapshot and check out its tree.
+- Risk: moderate; current restore is HEAD/worktree-oriented and does not yet
+  reconstruct index-only operations.
 
 ### Transport model
 
@@ -826,14 +884,12 @@
   command/request bodies and `report-status` parsing.
 - Supported SSH model: parse `ssh://user@host/path` and `user@host:path`
   locations, build quoted `git-upload-pack` / `git-receive-pack` remote
-  commands, and run one upload-pack pkt-line request through a process-backed
-  `ssh` session executor.
-- Unsupported behavior: SSH fetch/push CLI wiring, SSH receive-pack session
-  I/O, multi-round negotiation, thin-pack fixups, push object minimization, and
-  advanced push options are not implemented yet. `rit fetch` accepts local
-  paths plus `http://` and `https://` smart HTTP remotes; `rit push` accepts
-  `http://` and `https://` smart HTTP remotes; SSH is still rejected at the CLI
-  workflow layer with a clear error.
+  commands, run one upload-pack or receive-pack request through a
+  process-backed `ssh` session executor, and wire one-refspec SSH fetch/push
+  through the CLI.
+- Unsupported behavior: SSH auth option parity, broad SSH config support,
+  multi-round negotiation, thin-pack fixups, push object minimization, and
+  advanced push options are not implemented yet.
 - Repository mutation: HTTP/HTTPS fetch ingests received packs and writes
   `FETCH_HEAD`; other transport APIs remain request/response models.
 - Risk: moderate for fetch ingestion, low for request/response-only transport

@@ -68,6 +68,10 @@ rit restore <pathspec>...
 rit reset <pathspec>...
 rit checkout <branch-or-commit>
 rit switch
+rit merge [--ff-only] <target>
+rit op log
+rit op restore <id>
+rit undo
 ```
 
 Many options are intentionally still unsupported. Unsupported behavior should
@@ -79,6 +83,7 @@ fail clearly rather than guessing and risking repository damage.
 crates/
   rit-cli/       CLI entry point and command formatting
   rit-core/      Git data models and repository operations
+  rit-indexdb/   Planned optional SQLite auxiliary index
   rit-testkit/   Git-vs-rit compatibility harness
 
 docs/

@@ -14,7 +14,7 @@ drift.
 
 ## Current Baseline
 
-- Date: 2026-05-10
+- Date: 2026-05-13
 - Reference Git: `git version 2.52.0.windows.1`
 - Required recurring checks:
   - `git --version`
@@ -26,19 +26,25 @@ drift.
 
 ## Milestone Verification
 
-Verified on 2026-05-10 before continuing implementation:
+Verified on 2026-05-13 before continuing implementation:
 
 - Production crates do not execute `git`; `Command::new` usage is limited to
-  `rit-testkit` and compatibility tests.
-- M1 local write compatibility coverage exists as generated Git-vs-rit
-  scenarios, but reusable checked-in local write fixtures are still not present.
-- M2 linked worktree/common-dir support was marked incomplete and was also
-  incomplete in code: `Repository::common_dir` always pointed at `git_dir`.
-- M2 config parsing was previously split across repository format and user
-  identity reads; it now has a shared parser for scalar config reads.
-- M3/M4 pathspec and diff gaps in this file match the implementation notes:
-  ordinary literal, wildcard, positive magic, icase, and exclude pathspecs
-  exist; attr pathspec magic and pathspec files remain open.
+  test infrastructure, hook execution, credential helper subprocesses, and SSH
+  process transport. No production command shells out to `git`.
+- M1 reusable local write fixture builders are present in `rit-testkit`; the
+  older verification note saying they were missing is stale and corrected here.
+- M2 linked worktree/common-dir support is implemented through `.git` gitdir
+  files and `commondir`; shared objects, refs, config, and packed refs use the
+  common directory.
+- M3/M4 pathspec-file support is implemented for `add`, `restore`, and `reset`,
+  including stdin and NUL-separated input; older compatibility prose saying it
+  was unsupported is stale.
+- M7 SSH fetch/push workflow wiring exists for one refspec via process-backed
+  SSH service sessions. Remaining gaps are advanced SSH option/auth parity,
+  multi-round negotiation, thin-pack fixups, and broader push/fetch options.
+- M8 had an uncommitted fast-forward-only merge core in `write.rs`; this pass
+  completed CLI wiring, operation journaling, tests, and notes for that first
+  merge slice.
 
 ## M0: Baseline And Rules
 
@@ -245,6 +251,57 @@ Completion criteria:
 - Status/add/diff path selection matches Git for ordinary pathspec and ignore
   usage.
 
+## M6.5: SQLite Auxiliary IndexDB
+
+- [x] Add `indexdb` Cargo feature.
+- [ ] Add `rit-indexdb` crate or internal module behind the `indexdb` feature.
+- [ ] Define indexdb storage location under `.git/rit/`.
+- [ ] Define shared repository DB and worktree-specific cache layout.
+- [ ] Add schema versioning and migration model.
+- [ ] Add `cache_state` table.
+- [ ] Add `commits` table.
+- [ ] Add `commit_parents` table with parent order preservation.
+- [ ] Add `file_changes` table.
+- [ ] Add `refs_snapshot` table or snapshot hash model.
+- [ ] Store object IDs as hash-kind-aware binary values, not SHA-1-only strings.
+- [ ] Implement `rit indexdb` as the default ensure command.
+- [ ] Implement `rit indexdb status`.
+- [ ] Implement `rit indexdb build`.
+- [ ] Implement `rit indexdb update`.
+- [ ] Implement `rit indexdb repair`.
+- [ ] Implement `rit indexdb rebuild`.
+- [ ] Implement `rit indexdb drop`.
+- [ ] Implement `rit indexdb vacuum`.
+- [ ] Implement write-through updates after `rit` creates commits, refs, tags,
+  or checkout state changes.
+- [ ] Implement lightweight reconciliation when external Git-compatible tools
+  changed refs, index, or pack snapshots.
+- [ ] Implement fallback to canonical Git object/index/refs data when indexdb
+  is missing, stale, or corrupted.
+- [ ] Add indexed commit query API.
+- [ ] Add indexed file history API.
+- [ ] Add indexed refs snapshot API.
+- [ ] Add optional indexed path history command such as `rit file-history <path>`.
+- [ ] Add compatibility tests proving indexdb does not change Git-compatible
+  command output.
+- [ ] Add corruption tests proving broken indexdb never corrupts the repository.
+- [ ] Add linked worktree tests proving worktree cache isolation.
+- [ ] Add benchmark tests for large commit history and file history queries.
+
+Completion criteria:
+- `rit indexdb` creates or updates `.git/rit/indexdb.sqlite` without changing
+  Git repository semantics.
+- Basic Git-compatible commands still work when indexdb is missing, stale,
+  dropped, or corrupted.
+- New commits made by `rit` are reflected in indexdb through write-through
+  updates.
+- Commits made by external `git` are detected and reconciled incrementally on
+  the next relevant `rit` run.
+- File history queries can use indexdb without walking every commit tree from
+  scratch.
+- All indexdb data is reproducible from `.git/objects`, refs, `.git/index`,
+  and working tree state.
+
 ## M7: Transport Foundation
 
 - [x] Local clone/fetch object transfer.
@@ -312,7 +369,13 @@ Completion criteria:
 - [x] Merge state model.
   - [x] Read `MERGE_HEAD`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `MERGE_MSG`,
     `SQUASH_MSG`, `rebase-apply`, and `rebase-merge` state.
-- [ ] `rit merge`
+- [~] `rit merge`
+  - [x] Fast-forward-only merge core API.
+  - [x] `rit merge [--ff-only] <target>` CLI for clean worktrees.
+  - [x] Compatibility test for fast-forward final HEAD, status, and worktree
+    contents.
+  - [ ] Merge commits, conflict index stages, hooks, strategies, abort, and
+    continue workflows.
 - [ ] `rit cherry-pick`
 - [ ] `rit rebase`
 - [ ] `rit stash`
@@ -409,6 +472,7 @@ Completion criteria:
 - [x] TypeScript semantic adapter.
 - [x] Python semantic adapter.
 - [x] JSON output model.
+- [ ] Use indexdb as an optional acceleration layer for semantic impact queries.
 
 Completion criteria:
 - Semantic output is structured and can distinguish code-only changes from
@@ -422,6 +486,10 @@ Completion criteria:
 - [x] Protected branch policy.
 - [x] `rit doctor`
 - [x] `rit repair`
+- [ ] `rit doctor` checks indexdb state, schema version, staleness, and
+  corruption.
+- [ ] `rit repair` can rebuild or drop corrupted indexdb without touching Git
+  objects.
 
 Completion criteria:
 - Policy defaults warn conservatively and blocking behavior requires explicit
@@ -445,17 +513,128 @@ Completion criteria:
 - [x] Release archive layout.
 - [x] README release instructions.
 - [x] License and attribution audit.
+- [x] Document which release builds include the `indexdb` feature.
+- [x] Document SQLite dependency and bundled/non-bundled build choices.
 
 Completion criteria:
 - A release can be built as a single binary with documented feature choices.
 
+## M16: Operation Journal And Universal Undo
+
+- [x] Define `.git/rit/ops.log` as separate rit metadata that does not replace
+  Git refs, objects, index, or working tree state.
+- [x] Add `Repository::operations()` API.
+- [x] Capture before/after HEAD, current branch, and index checksum snapshots.
+- [x] Record successful `rit commit`, `rit checkout`, `rit switch`, and
+  fast-forward `rit merge` operations from the CLI.
+- [x] Implement `rit op log`.
+- [x] Implement `rit op restore <id>` for restorable HEAD snapshots.
+- [x] Implement `rit undo` as restore-last-operation.
+- [x] Add tests proving commit undo restores HEAD, index, and tracked worktree
+  content for the first supported slice.
+- [ ] Record changed path lists.
+- [ ] Record created object IDs.
+- [ ] Store reversible patches for index-only and worktree-changing
+  operations.
+- [ ] Add journal records for `add`, `restore`, `reset`, `branch`, `tag`,
+  `fetch`, and `push` where applicable.
+- [ ] Make undo semantics command-aware, such as commit undo that can preserve
+  changes when requested.
+- [ ] Add corruption handling for malformed operation journal lines.
+- [ ] Add linked-worktree journal isolation tests.
+- [ ] Add JSON output for operation records.
+
+Completion criteria:
+- Operation metadata lives only under `.git/rit/` and can be deleted without
+  breaking Git compatibility.
+- `repo.operations().undo_last()?` provides a simple API for supported
+  restorable operations.
+- Broken or missing operation metadata never corrupts Git repository state.
+
+## M17: Transaction Plan And Dry-Run API
+
+- [ ] Add structured plan type for write operations.
+- [ ] Add `repo.add(...).plan()?` style API or equivalent builder.
+- [ ] Add `rit add --plan`.
+- [ ] Add `rit commit --plan`.
+- [ ] Add `rit reset --plan`.
+- [ ] Add `rit merge --plan`.
+- [ ] Ensure plans describe refs, index paths, worktree paths, object writes,
+  hooks, and policy checks before applying changes.
+
+## M18: Explainable Git Expansion
+
+- [ ] Extend `status --explain` model beyond the current roadmap sketch.
+- [ ] Add `rit ignore explain <path>`.
+- [ ] Add `rit pathspec explain <pathspec>`.
+- [ ] Add `rit merge explain <target>`.
+- [ ] Add `rit auth explain <url>`.
+- [ ] Add explain output for LFS/Xet/workspace decisions.
+
+## M19: Smartlog And Local Work Graph
+
+- [ ] Add local graph model for HEAD, local branches, upstreams, stashes,
+  worktrees, unpushed commits, and diverged branches.
+- [ ] Add `rit smartlog` or `rit graph`.
+- [ ] Add JSON output for local graph consumers.
+
+## M20: Doctor Fix Plans
+
+- [ ] Add `rit doctor --explain`.
+- [ ] Add `rit doctor --json`.
+- [ ] Add `rit doctor --fix-plan`.
+- [ ] Explain performance and maintenance findings such as loose objects,
+  pack/index state, commit graph, and stale rit metadata.
+
+## M21: Workspace Recommendation
+
+- [ ] Add `rit workspace suggest`.
+- [ ] Add `rit workspace from-change`.
+- [ ] Add `rit workspace from-package <path>`.
+- [ ] Use changed files, package manifests, CODEOWNERS, and import/build graph
+  hints where available.
+
+## M22: Impact Analysis And CI Helper
+
+- [ ] Add `rit impact <range>`.
+- [ ] Return changed packages, affected tests, public API changes, docs-only
+  status, large-file changes, and reviewer hints.
+- [ ] Reuse semantic diff and optional indexdb acceleration.
+
+## M23: Stable JSON Schema And Typed API
+
+- [ ] Define stable JSON schemas for status, diff, doctor, operations, impact,
+  and indexdb.
+- [ ] Add `rit schema status`.
+- [ ] Add `rit schema diff`.
+- [ ] Add `rit schema doctor`.
+- [ ] Expose the same typed models from Rust APIs.
+
+## M24: Compatibility Oracle
+
+- [ ] Add `rit compat check <command>`.
+- [ ] Add `rit compat report --since <rev>`.
+- [ ] Add `rit compat fixture generate`.
+- [ ] Let users validate Git compatibility against their own repositories.
+
+## M25: Large File Audit And Migration Plan
+
+- [ ] Add `rit large-files audit`.
+- [ ] Report large blobs in current history.
+- [ ] Recommend LFS/Xet tracking patterns.
+- [ ] Produce a safe migration plan before any rewrite or tracking change.
+
 ## Active Queue
 
-1. Keep M6 case-sensitivity parity under verification as new path lookup
+1. Continue M8 merge with conflict index stages and non-fast-forward planning.
+2. Continue M16 operation journal with changed paths, object IDs, index-only
+   undo, and malformed-journal recovery.
+3. Design M6.5 SQLite Auxiliary IndexDB schema and source-of-truth rules.
+4. Add `rit indexdb` command shape and ensure/build/update/status behavior.
+5. Add indexdb corruption, stale cache, and external Git reconciliation test
+   plan.
+6. Keep M6 case-sensitivity parity under verification as new path lookup
    surfaces are added.
-2. Continue M7 with HTTP transport planning and fetch negotiation boundaries.
-3. Keep large implementation files moving toward focused modules before adding
-   more transport or command surface area.
 
 ## Implementation Notes
 

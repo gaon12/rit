@@ -4,7 +4,7 @@ use crate::{
     GitAttributes, GitConfig, ObjectId, ObjectKind, PathspecSet, Repository, Result, RitError,
     Signature, parse_commit, refs::validate_ref_short_name,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -50,6 +50,15 @@ pub struct CommitResult {
     pub commit_id: ObjectId,
     /// Number of files tracked by the committed index.
     pub file_count: usize,
+}
+
+/// Result of a merge operation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MergeResult {
+    /// HEAD already points at the requested commit.
+    AlreadyUpToDate { commit_id: ObjectId },
+    /// HEAD moved forward without creating a merge commit.
+    FastForward { old_id: ObjectId, new_id: ObjectId },
 }
 
 /// Options that affect commit metadata without changing the committed tree.
@@ -463,6 +472,51 @@ impl Repository {
         Ok(target)
     }
 
+    /// Fast-forwards the current branch to `target` when possible.
+    pub fn merge_ff_only(&self, target: &str) -> Result<MergeResult> {
+        ensure_clean_for_checkout(self)?;
+        let old_id = self
+            .resolve_head()?
+            .ok_or_else(|| RitError::invalid_input("merge requires an existing HEAD"))?;
+        let new_id = if self.branch_target(target).is_ok() {
+            self.branch_target(target)?
+        } else {
+            self.resolve_revision(target)?
+        };
+        if old_id == new_id {
+            return Ok(MergeResult::AlreadyUpToDate { commit_id: old_id });
+        }
+        if !self.commit_is_ancestor(old_id, new_id)? {
+            return Err(RitError::invalid_input(
+                "not possible to fast-forward; merge requires a merge commit",
+            ));
+        }
+
+        self.checkout_commit_tree(new_id)?;
+        self.update_head(new_id)?;
+        Ok(MergeResult::FastForward { old_id, new_id })
+    }
+
+    fn commit_is_ancestor(&self, ancestor: ObjectId, descendant: ObjectId) -> Result<bool> {
+        let mut stack = vec![descendant];
+        let mut seen = HashSet::new();
+        while let Some(commit_id) = stack.pop() {
+            if !seen.insert(commit_id) {
+                continue;
+            }
+            if commit_id == ancestor {
+                return Ok(true);
+            }
+            let object = self.read_object(commit_id)?;
+            if object.kind != ObjectKind::Commit {
+                continue;
+            }
+            let commit = parse_commit(&object.data)?;
+            stack.extend(commit.parents);
+        }
+        Ok(false)
+    }
+
     fn write_tree_from_index(&self, index: &Index) -> Result<ObjectId> {
         let mut root = TreeNode::default();
         for entry in &index.entries {
@@ -560,7 +614,7 @@ impl Repository {
         Ok(())
     }
 
-    fn checkout_commit_tree(&self, commit_id: ObjectId) -> Result<()> {
+    pub(crate) fn checkout_commit_tree(&self, commit_id: ObjectId) -> Result<()> {
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
                 "checkout must be run in a repository with a working tree",
