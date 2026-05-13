@@ -72,6 +72,7 @@ rit switch
 rit merge [--plan] [--ff-only] <target>
 rit merge explain <target>
 rit auth explain <url>
+rit indexdb [status|build|update|repair|rebuild|drop|vacuum]
 rit op log
 rit op restore <id>
 rit undo

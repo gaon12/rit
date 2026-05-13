@@ -106,6 +106,21 @@
 - 2026-05-13 status explain slice checked `git status -h`; `rit status
   --explain <path>` is a rit-specific read-only explanation layer over HEAD,
   index, worktree, and ignore-rule classification.
+- 2026-05-13 IndexDB slice checked `git --version` and `git help -a`; IndexDB
+  is rit-specific and has no Git command baseline. Added feature-gated SQLite
+  support with `rit indexdb`, `status`, `build`, `update`, `repair`, `rebuild`,
+  `drop`, and `vacuum`.
+- IndexDB storage is `.git/rit/indexdb.sqlite` using the repository common
+  directory. `.git/rit/indexdb.lock` is reserved in the public storage layout.
+- IndexDB schema version 1 creates `cache_state`, `commits`,
+  `commit_parents`, `file_changes`, and `refs_snapshot`. Object IDs are stored
+  as `hash_kind` plus binary object-id bytes, not fixed SHA-1 text columns.
+- Source of truth: IndexDB stores reproducible metadata only. `drop` removes
+  the SQLite file without touching Git objects, refs, `.git/index`, or working
+  tree files. Normal Git-compatible commands do not require IndexDB.
+- Unsupported behavior: worktree-specific cache DBs, write-through updates,
+  external Git reconciliation, indexed file-history queries, corruption repair
+  beyond rebuild, and migration beyond rebuild guidance.
 - 2026-05-12 large-file backend trait slice checked the AGENTS large-object
   backend guidance; no external `git-lfs` binary is used.
 - 2026-05-12 LFS pointer slice checked installed `git-lfs/3.7.1` and the

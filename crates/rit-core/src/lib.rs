@@ -13,6 +13,10 @@ pub mod doctor;
 pub mod error;
 pub mod history;
 pub mod index;
+#[cfg(feature = "indexdb")]
+pub mod indexdb;
+#[cfg(all(test, feature = "indexdb"))]
+mod indexdb_tests;
 #[cfg(any(feature = "lfs", feature = "xet"))]
 pub mod large_files;
 pub mod merge_state;
@@ -56,6 +60,8 @@ pub use index::{
     ResolveUndo, ResolveUndoEntry, ResolveUndoStage, SparseDirectory, SplitIndexLink,
     UntrackedCache, UntrackedCacheDirectoryBlock, UntrackedCacheStat, UntrackedCacheTail,
 };
+#[cfg(feature = "indexdb")]
+pub use indexdb::{IndexDb, IndexDbEnsureResult, IndexDbStatus, IndexDbStorage};
 #[cfg(feature = "lfs")]
 pub use large_files::{
     GitLfsBackend, LFS_BATCH_MEDIA_TYPE, LfsBatchAction, LfsBatchObject, LfsBatchObjectError,

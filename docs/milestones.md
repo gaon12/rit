@@ -254,24 +254,24 @@ Completion criteria:
 ## M6.5: SQLite Auxiliary IndexDB
 
 - [x] Add `indexdb` Cargo feature.
-- [ ] Add `rit-indexdb` crate or internal module behind the `indexdb` feature.
-- [ ] Define indexdb storage location under `.git/rit/`.
+- [x] Add `rit-indexdb` crate or internal module behind the `indexdb` feature.
+- [x] Define indexdb storage location under `.git/rit/`.
 - [ ] Define shared repository DB and worktree-specific cache layout.
-- [ ] Add schema versioning and migration model.
-- [ ] Add `cache_state` table.
-- [ ] Add `commits` table.
-- [ ] Add `commit_parents` table with parent order preservation.
-- [ ] Add `file_changes` table.
-- [ ] Add `refs_snapshot` table or snapshot hash model.
-- [ ] Store object IDs as hash-kind-aware binary values, not SHA-1-only strings.
-- [ ] Implement `rit indexdb` as the default ensure command.
-- [ ] Implement `rit indexdb status`.
-- [ ] Implement `rit indexdb build`.
-- [ ] Implement `rit indexdb update`.
-- [ ] Implement `rit indexdb repair`.
-- [ ] Implement `rit indexdb rebuild`.
-- [ ] Implement `rit indexdb drop`.
-- [ ] Implement `rit indexdb vacuum`.
+- [x] Add schema versioning and migration model.
+- [x] Add `cache_state` table.
+- [x] Add `commits` table.
+- [x] Add `commit_parents` table with parent order preservation.
+- [x] Add `file_changes` table.
+- [x] Add `refs_snapshot` table or snapshot hash model.
+- [x] Store object IDs as hash-kind-aware binary values, not SHA-1-only strings.
+- [x] Implement `rit indexdb` as the default ensure command.
+- [x] Implement `rit indexdb status`.
+- [x] Implement `rit indexdb build`.
+- [x] Implement `rit indexdb update`.
+- [x] Implement `rit indexdb repair`.
+- [x] Implement `rit indexdb rebuild`.
+- [x] Implement `rit indexdb drop`.
+- [x] Implement `rit indexdb vacuum`.
 - [ ] Implement write-through updates after `rit` creates commits, refs, tags,
   or checkout state changes.
 - [ ] Implement lightweight reconciliation when external Git-compatible tools
@@ -633,8 +633,8 @@ Completion criteria:
 1. Continue M8 merge with conflict index stages and non-fast-forward planning.
 2. Continue M16 operation journal with changed paths, object IDs, index-only
    undo, and malformed-journal recovery.
-3. Design M6.5 SQLite Auxiliary IndexDB schema and source-of-truth rules.
-4. Add `rit indexdb` command shape and ensure/build/update/status behavior.
+3. Add indexdb write-through updates for rit-created commits and ref changes.
+4. Add indexdb lightweight reconciliation for external Git-compatible changes.
 5. Add indexdb corruption, stale cache, and external Git reconciliation test
    plan.
 6. Keep M6 case-sensitivity parity under verification as new path lookup

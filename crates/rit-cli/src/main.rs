@@ -5,6 +5,7 @@ use std::process::ExitCode;
 mod auth;
 mod doctor;
 mod help;
+mod indexdb;
 mod pathspec_args;
 mod remote;
 mod repair;
@@ -57,6 +58,9 @@ fn run(
         [command, rest @ ..] if command == "switch" => switch_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "merge" => merge_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "auth" => auth::auth_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "indexdb" => {
+            indexdb::indexdb_command(rest, stdout, stderr)
+        }
         [command, rest @ ..] if command == "show" => show_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ls-files" => ls_files_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ignore" => ignore_command(rest, stdout, stderr),
@@ -2630,6 +2634,25 @@ mod tests {
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit auth explain"));
         assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn indexdb_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "indexdb"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit indexdb"));
+        assert_eq!(stderr, "");
+    }
+
+    #[cfg(not(feature = "indexdb"))]
+    #[test]
+    fn indexdb_command_reports_missing_feature() {
+        let (code, stdout, stderr) = run_with(&["indexdb", "status"]);
+
+        assert_eq!(code, ExitCode::from(1));
+        assert_eq!(stdout, "");
+        assert!(stderr.contains("does not include indexdb support"));
     }
 
     #[test]

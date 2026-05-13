@@ -12,5 +12,9 @@ path = "src/main.rs"
 [dependencies]
 rit-core = { path = "../rit-core" }
 
+[features]
+default = []
+indexdb = ["rit-core/indexdb"]
+
 [dev-dependencies]
 rit-testkit = { path = "../rit-testkit" }

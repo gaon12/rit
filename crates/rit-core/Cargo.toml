@@ -11,7 +11,7 @@ path = "src/lib.rs"
 
 [features]
 default = []
-indexdb = []
+indexdb = ["dep:rusqlite"]
 large-files = ["lfs", "xet"]
 lfs = ["dep:serde", "dep:serde_json", "dep:sha2"]
 semantic-json = ["dep:serde", "dep:serde_json"]
@@ -25,6 +25,7 @@ xet = ["dep:serde"]
 [dependencies]
 flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
 native-tls = "0.2"
+rusqlite = { version = "0.39.0", features = ["bundled"], optional = true }
 serde = { version = "1.0.228", features = ["derive"], optional = true }
 serde_json = { version = "1.0.147", optional = true }
 sha2 = { version = "0.10.9", optional = true }
