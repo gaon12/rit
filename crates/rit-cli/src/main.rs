@@ -2431,6 +2431,10 @@ fn format_merge_conflict_report(report: &rit_core::MergeConflictReport, target: 
         rit_core::MergeConflictKind::AddAdd => {
             format!("CONFLICT (add/add): Merge conflict in {}", report.path)
         }
+        rit_core::MergeConflictKind::DistinctTypes => format!(
+            "CONFLICT (distinct types): {} had different types on each side; renamed one of them so each can be recorded somewhere.",
+            report.path
+        ),
         rit_core::MergeConflictKind::ModifyDelete {
             deleted_side,
             modified_side,

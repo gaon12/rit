@@ -160,6 +160,9 @@ pub enum MergeConflictKind {
     BinaryContent,
     /// Both sides independently added the same path.
     AddAdd,
+    /// The same path has different file types on each side, such as a regular
+    /// file on one side and a symbolic link on the other side.
+    DistinctTypes,
     /// One side deleted a path while the other side modified it.
     ModifyDelete {
         /// Side that deleted the path.
@@ -897,6 +900,7 @@ impl Repository {
             head_entries,
             target_entries,
             &[],
+            target,
         )?;
         let conflict_paths = BTreeSet::new();
         write_non_conflicting_merge_worktree_changes(
@@ -957,6 +961,7 @@ impl Repository {
             input.head_entries,
             input.target_entries,
             input.conflict_stages,
+            input.target,
         )?;
         let conflict_paths = input
             .conflict_stages
@@ -1046,6 +1051,7 @@ impl Repository {
         head_entries: &[IndexEntry],
         target_entries: &[IndexEntry],
         conflict_stages: &[MergeConflictStagePlan],
+        target_label: &str,
     ) -> Result<Vec<IndexEntry>> {
         let base_by_path = index_entries_by_path(base_entries);
         let head_by_path = index_entries_by_path(head_entries);
@@ -1088,6 +1094,13 @@ impl Repository {
         }
 
         for conflict in conflict_stages {
+            if self.write_distinct_type_conflict_index_entries(
+                &mut entries,
+                conflict,
+                target_label,
+            )? {
+                continue;
+            }
             if let Some(base) = conflict.base {
                 entries.push(self.conflict_index_entry(&conflict.path, 1, base)?);
             }
@@ -1100,6 +1113,49 @@ impl Repository {
         }
 
         Ok(entries)
+    }
+
+    fn write_distinct_type_conflict_index_entries(
+        &self,
+        entries: &mut Vec<IndexEntry>,
+        conflict: &MergeConflictStagePlan,
+        target_label: &str,
+    ) -> Result<bool> {
+        let (Some(head), Some(target)) = (conflict.head, conflict.target) else {
+            return Ok(false);
+        };
+        if !entry_modes_have_distinct_file_types(head.mode, target.mode) {
+            return Ok(false);
+        }
+
+        if mode_is_regular_file(head.mode) && !mode_is_regular_file(target.mode) {
+            if let Some(base) = conflict.base {
+                entries.push(self.conflict_index_entry(
+                    &head_side_conflict_path(&conflict.path),
+                    1,
+                    base,
+                )?);
+            }
+            entries.push(self.conflict_index_entry(
+                &head_side_conflict_path(&conflict.path),
+                2,
+                head,
+            )?);
+            entries.push(self.conflict_index_entry(&conflict.path, 3, target)?);
+            return Ok(true);
+        }
+
+        if !mode_is_regular_file(head.mode) && mode_is_regular_file(target.mode) {
+            let target_path = target_side_conflict_path(&conflict.path, target_label);
+            entries.push(self.conflict_index_entry(&conflict.path, 2, head)?);
+            if let Some(base) = conflict.base {
+                entries.push(self.conflict_index_entry(&target_path, 1, base)?);
+            }
+            entries.push(self.conflict_index_entry(&target_path, 3, target)?);
+            return Ok(true);
+        }
+
+        Ok(false)
     }
 
     fn conflict_index_entry(
@@ -1147,7 +1203,11 @@ impl Repository {
                 worktree_side: MergeConflictSide::Head,
             }),
             (_, Some(head), Some(target)) => {
-                if self.conflict_stage_is_binary(head)? || self.conflict_stage_is_binary(target)? {
+                if entry_modes_have_distinct_file_types(head.mode, target.mode) {
+                    Ok(MergeConflictKind::DistinctTypes)
+                } else if self.conflict_stage_is_binary(head)?
+                    || self.conflict_stage_is_binary(target)?
+                {
                     Ok(MergeConflictKind::BinaryContent)
                 } else if stage.base.is_none() {
                     Ok(MergeConflictKind::AddAdd)
@@ -1666,6 +1726,49 @@ fn tree_entries_equal(left: Option<&IndexEntry>, right: Option<&IndexEntry>) -> 
         (None, None) => true,
         (Some(_), None) | (None, Some(_)) => false,
     }
+}
+
+fn entry_modes_have_distinct_file_types(left_mode: u32, right_mode: u32) -> bool {
+    file_type_from_mode(left_mode) != file_type_from_mode(right_mode)
+}
+
+fn file_type_from_mode(mode: u32) -> FileTypeFromMode {
+    if mode_is_regular_file(mode) {
+        FileTypeFromMode::Regular
+    } else if mode == 0o120000 {
+        FileTypeFromMode::Symlink
+    } else {
+        FileTypeFromMode::Other
+    }
+}
+
+fn mode_is_regular_file(mode: u32) -> bool {
+    matches!(mode, 0o100644 | 0o100755)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FileTypeFromMode {
+    Regular,
+    Symlink,
+    Other,
+}
+
+fn head_side_conflict_path(path: &str) -> String {
+    format!("{path}~HEAD")
+}
+
+fn target_side_conflict_path(path: &str, target_label: &str) -> String {
+    format!("{path}~{}", conflict_path_label(target_label))
+}
+
+fn conflict_path_label(label: &str) -> String {
+    label
+        .chars()
+        .map(|character| match character {
+            '/' | '\\' => '_',
+            _ => character,
+        })
+        .collect()
 }
 
 fn clean_mode_content_merge_entry(
@@ -3495,6 +3598,91 @@ mod tests {
             .expect("merged blob should read");
         assert_eq!(object.data, b"head\n");
         assert!(!repository.git_dir().join("MERGE_HEAD").exists());
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn merge_reports_distinct_type_conflict_for_regular_file_and_symlink() {
+        let temp = temp_path("merge-distinct-type-conflict");
+        let repository = committed_nested_repository(&temp);
+        fs::write(
+            repository.git_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n\tsymlinks = false\n[user]\n\tname = Rit Test\n\temail = rit@example.test\n",
+        )
+        .expect("config should be written");
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        let target_object_id = repository
+            .loose_objects()
+            .write_object(ObjectKind::Blob, b"target")
+            .expect("symlink target blob should be written");
+        let mut index =
+            Index::read(&repository.git_dir().join("index")).expect("index should read");
+        let entry = index
+            .entries
+            .iter_mut()
+            .find(|entry| entry.path == "nested/a.txt")
+            .expect("tracked entry should exist");
+        entry.mode = 0o120000;
+        entry.object_id = target_object_id;
+        entry.file_size = b"target".len() as u32;
+        index
+            .write(&repository.git_dir().join("index"))
+            .expect("index should write");
+        repository
+            .commit_index("symlink")
+            .expect("topic commit should work");
+        fs::write(temp.join("nested").join("a.txt"), "target")
+            .expect("plain symlink target should be materialized");
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(temp.join("nested").join("a.txt"), "head\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("content add should work");
+        repository
+            .commit_index("content")
+            .expect("master commit should work");
+
+        let result = repository
+            .merge("topic")
+            .expect("distinct type merge should start");
+
+        let super::MergeResult::Conflicts {
+            conflict_reports, ..
+        } = result
+        else {
+            panic!("expected distinct type conflict result");
+        };
+        assert_eq!(
+            conflict_reports,
+            vec![MergeConflictReport {
+                path: "nested/a.txt".to_owned(),
+                kind: MergeConflictKind::DistinctTypes,
+            }]
+        );
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        assert!(index.entries.iter().any(|entry| {
+            entry.path == "nested/a.txt" && entry.stage == 3 && entry.mode == 0o120000
+        }));
+        assert!(index.entries.iter().any(|entry| {
+            entry.path == "nested/a.txt~HEAD" && entry.stage == 1 && entry.mode == 0o100644
+        }));
+        assert!(index.entries.iter().any(|entry| {
+            entry.path == "nested/a.txt~HEAD" && entry.stage == 2 && entry.mode == 0o100644
+        }));
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("a.txt"))
+                .expect("target side should be written"),
+            "target"
+        );
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("a.txt~HEAD"))
+                .expect("head side should be written"),
+            "head\n"
+        );
         remove_dir_all(&temp);
     }
 

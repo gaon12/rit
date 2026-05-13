@@ -413,8 +413,9 @@ Completion criteria:
       message.
     - [x] Mode-only changes combine cleanly with content-only changes instead
       of creating false conflicts.
-    - [ ] True mode conflict, symlink conflict, and remaining full conflict
-      result messages.
+    - [x] Regular-file/symlink distinct-type conflicts split the sides into
+      Git-shaped index/worktree paths and print `distinct types` messages.
+    - [ ] True mode conflict and remaining full conflict result messages.
 
 Completion criteria:
 - Interrupted operations leave clear state and can be continued, aborted, or

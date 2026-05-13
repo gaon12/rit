@@ -1592,6 +1592,83 @@ fn merge_add_add_conflict_reports_add_add_message() {
 }
 
 #[test]
+fn merge_distinct_type_conflict_splits_regular_file_and_symlink_paths() {
+    let fixture = temp_path("merge-distinct-type-conflict-fixture");
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    run_git(&fixture, ["config", "core.symlinks", "false"]);
+    fs::write(fixture.join("a.txt"), "base\n").expect("base file should be written");
+    run_git(&fixture, ["add", "a.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    run_git(&fixture, ["checkout", "--quiet", "-b", "topic"]);
+    let mut hash_child = Command::new("git")
+        .args(["hash-object", "-w", "--stdin"])
+        .current_dir(&fixture)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("git hash-object should start");
+    hash_child
+        .stdin
+        .as_mut()
+        .expect("hash stdin should open")
+        .write_all(b"target")
+        .expect("hash stdin should write");
+    let hash_output = hash_child
+        .wait_with_output()
+        .expect("git hash-object should finish");
+    assert!(hash_output.status.success());
+    let target_blob = String::from_utf8_lossy(&hash_output.stdout)
+        .trim()
+        .to_owned();
+    let cacheinfo = format!("120000,{target_blob},a.txt");
+    let update = Command::new("git")
+        .args(["update-index", "--add", "--cacheinfo", &cacheinfo])
+        .current_dir(&fixture)
+        .output()
+        .expect("git update-index should start");
+    assert!(update.status.success());
+    run_git(&fixture, ["commit", "--quiet", "-m", "symlink"]);
+    run_git(&fixture, ["checkout", "--force", "--quiet", "master"]);
+    fs::write(fixture.join("a.txt"), "head\n").expect("head file should be written");
+    run_git(&fixture, ["add", "a.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "content"]);
+
+    let merge = Command::new(rit_binary())
+        .args(["merge", "topic"])
+        .current_dir(&fixture)
+        .output()
+        .expect("rit merge should start");
+
+    assert!(!merge.status.success());
+    let stdout = String::from_utf8_lossy(&merge.stdout);
+    assert!(stdout.contains(
+        "CONFLICT (distinct types): a.txt had different types on each side; renamed one of them so each can be recorded somewhere.\n"
+    ));
+    assert_eq!(
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &fixture).0,
+        "UA a.txt\nUD a.txt~HEAD\n"
+    );
+    let ls_files = run_capture(rit_binary(), ["ls-files", "--stage"], &fixture).0;
+    assert!(ls_files.contains("120000 "));
+    assert!(ls_files.contains(" 3\ta.txt\n"));
+    assert!(ls_files.contains(" 1\ta.txt~HEAD\n"));
+    assert!(ls_files.contains(" 2\ta.txt~HEAD\n"));
+    assert_eq!(
+        fs::read_to_string(fixture.join("a.txt")).expect("target side should read"),
+        "target"
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.join("a.txt~HEAD")).expect("head side should read"),
+        "head\n"
+    );
+    let _ = fs::remove_dir_all(fixture);
+}
+
+#[test]
 fn merge_ff_only_rejects_conflict_without_writing_merge_state() {
     let fixture = temp_path("merge-ff-only-conflict-fixture");
     fs::create_dir_all(&fixture).expect("fixture should be created");

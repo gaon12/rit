@@ -362,9 +362,13 @@
 - Clean non-fast-forward merges now combine mode-only changes on one side with
   content-only changes on the other side, producing a regular merge commit with
   the content-side blob and the mode-side file mode.
-- Still unsupported: true mode conflict and symlink conflict materialization
-  and messages, remaining full conflict message parity, strategies, merge
-  hooks, `cherry-pick`, `rebase`, and `stash`.
+- Regular-file/symlink distinct-type conflicts now follow Git's split-path
+  shape: the non-regular side stays at the original path, the regular side is
+  written to a suffixed path such as `~HEAD`, and the CLI prints a
+  `CONFLICT (distinct types)` message.
+- Still unsupported: true mode conflict handling, remaining full conflict
+  message parity, strategies, merge hooks, `cherry-pick`, `rebase`, and
+  `stash`.
 
 ### M16: Operation journal and universal undo
 
