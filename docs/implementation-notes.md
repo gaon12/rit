@@ -344,8 +344,12 @@
   `=======`, and `>>>>>>> <target>` markers in the working tree.
 - `rit merge --abort` restores the `ORIG_HEAD` tree, clears merge state files,
   refreshes the index/worktree, and records the operation journal entry.
-- Still unsupported: merge commits, binary/delete/mode conflict materialization,
-  strategies, merge hooks, `--continue`, `cherry-pick`, `rebase`, and `stash`.
+- `rit merge --continue` commits a resolved merge using `HEAD` plus
+  `MERGE_HEAD` as parents, clears merge state files, and records the created
+  merge commit in the operation journal.
+- Still unsupported: automatic clean merge commits, binary/delete/mode conflict
+  materialization, strategies, merge hooks, `cherry-pick`, `rebase`, and
+  `stash`.
 
 ### M16: Operation journal and universal undo
 
@@ -931,10 +935,11 @@
 - Baseline command checked: `git merge -h`
 - Supported options: default fast-forward shape and explicit `--ff-only` with
   one target branch or revision, conflicted non-fast-forward index-stage
-  starts, `--abort`, plus rit-specific `--plan` and `merge explain <target>`.
-- Unsupported options: merge commits, binary/delete/mode conflict
-  materialization, strategies, stat output, hooks, squash, quit, continue,
-  autostash, signing, and verification options.
+  starts, `--abort`, `--continue`, plus rit-specific `--plan` and
+  `merge explain <target>`.
+- Unsupported options: automatic clean merge commits, binary/delete/mode conflict
+  materialization, strategies, stat output, hooks, squash, quit, autostash,
+  signing, and verification options.
 - Git-compatible behavior: fast-forward final `HEAD`, index, and worktree state
   match Git for simple clean repositories.
 - rit-specific behavior: `--plan` prints whether the merge would be already
@@ -950,11 +955,13 @@
   for regular text content conflicts.
 - rit-specific behavior: `--abort` restores the `ORIG_HEAD` tree and removes
   merge state files, but does not yet handle autostash or `--quit`.
+- rit-specific behavior: `--continue` creates a merge commit from the current
+  resolved index and existing merge message without launching an editor.
 - Intentional differences: output is simplified; clean non-fast-forward merges
   without conflicts are still rejected instead of creating a merge commit.
 - Repository mutation: yes, updates `HEAD` or the current branch ref for
-  fast-forward merges, or writes unmerged index entries and merge state files
-  for conflicted non-fast-forward merges.
+  fast-forward and continued merges, or writes unmerged index entries and merge
+  state files for conflicted non-fast-forward merges.
 - Risk: moderate; requires a clean worktree before writing.
 
 ### `rit op` and `rit undo`

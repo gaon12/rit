@@ -176,9 +176,10 @@ Switch to an existing branch, or create and switch to a new branch.
 const MERGE_HELP: &str = "\
 rit merge [--plan] [--ff-only] <target>
 rit merge --abort
+rit merge --continue
 rit merge explain <target>
 
-Fast-forward the current branch to a local branch or revision, start a conflicted text merge, abort an in-progress merge, print a dry-run plan, or explain the merge decision without writing. Merge commits and continue are not implemented yet.
+Fast-forward the current branch to a local branch or revision, start a conflicted text merge, abort or continue an in-progress merge, print a dry-run plan, or explain the merge decision without writing.
 ";
 
 const AUTH_HELP: &str = "\

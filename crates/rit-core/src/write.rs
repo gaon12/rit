@@ -472,13 +472,24 @@ impl Repository {
         message: &str,
         options: &CommitOptions,
     ) -> Result<CommitResult> {
+        let parents = self.resolve_head()?.into_iter().collect::<Vec<_>>();
+        self.commit_index_with_parents(message, options, &parents, false)
+    }
+
+    fn commit_index_with_parents(
+        &self,
+        message: &str,
+        options: &CommitOptions,
+        parents: &[ObjectId],
+        allow_same_tree: bool,
+    ) -> Result<CommitResult> {
         let index = Index::read(&self.git_dir().join("index"))?;
         if index.entries.is_empty() {
             return Err(RitError::invalid_input("nothing to commit"));
         }
         let tree_id = self.write_tree_from_index(&index)?;
-        let parent = self.resolve_head()?;
-        if let Some(parent_id) = parent {
+        if !allow_same_tree && parents.len() == 1 {
+            let parent_id = parents[0];
             let parent_object = self.read_object(parent_id)?;
             let parent_commit = parse_commit(&parent_object.data)?;
             if parent_commit.tree == tree_id {
@@ -491,7 +502,7 @@ impl Repository {
         let signatures = read_commit_signatures(self, options)?;
         let mut commit = Vec::new();
         commit.extend_from_slice(format!("tree {tree_id}\n").as_bytes());
-        if let Some(parent_id) = parent {
+        for parent_id in parents {
             commit.extend_from_slice(format!("parent {parent_id}\n").as_bytes());
         }
         commit.extend_from_slice(
@@ -897,6 +908,28 @@ impl Repository {
         remove_file_if_exists(&self.git_dir().join("MERGE_MODE"))?;
         self.refresh_indexdb_after_git_write();
         Ok(original_head)
+    }
+
+    /// Commits a resolved in-progress merge.
+    pub fn continue_merge(&self, options: &CommitOptions) -> Result<CommitResult> {
+        let state = self.merge_state()?;
+        if state.merge_heads.is_empty() {
+            return Err(RitError::invalid_input("no merge to continue"));
+        }
+        let head_id = self
+            .resolve_head()?
+            .ok_or_else(|| RitError::invalid_input("merge continue requires an existing HEAD"))?;
+        let Some(message) = state.merge_message.as_deref() else {
+            return Err(RitError::invalid_input("merge message is missing"));
+        };
+        let mut parents = vec![head_id];
+        parents.extend(state.merge_heads);
+        let result = self.commit_index_with_parents(message, options, &parents, true)?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_HEAD"))?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_MODE"))?;
+        self.refresh_indexdb_after_git_write();
+        Ok(result)
     }
 
     fn conflicted_merge_index_entries(
@@ -2792,6 +2825,66 @@ mod tests {
                 .expect("status should read")
                 .to_porcelain_v1(),
             ""
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn merge_continue_creates_merge_commit_after_resolution() {
+        let temp = temp_path("merge-continue");
+        let repository = committed_nested_repository(&temp);
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "topic\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("topic add should work");
+        let topic = repository
+            .commit_index("topic")
+            .expect("topic commit should work")
+            .commit_id;
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(temp.join("nested").join("a.txt"), "master\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("master add should work");
+        let master = repository
+            .commit_index("master")
+            .expect("master commit should work")
+            .commit_id;
+        repository
+            .merge("topic")
+            .expect("conflicted merge should start");
+        fs::write(temp.join("nested").join("a.txt"), "resolved\n")
+            .expect("resolution should be written");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("resolution should be staged");
+
+        let result = repository
+            .continue_merge(&super::CommitOptions::default())
+            .expect("merge continue should commit");
+
+        let object = repository
+            .read_object(result.commit_id)
+            .expect("merge commit should read");
+        let commit = parse_commit(&object.data).expect("merge commit should parse");
+        assert_eq!(commit.parents, vec![master, topic]);
+        assert!(!repository.git_dir().join("MERGE_HEAD").exists());
+        assert!(!repository.git_dir().join("MERGE_MSG").exists());
+        assert_eq!(
+            repository
+                .status_porcelain_v1()
+                .expect("status should read")
+                .to_porcelain_v1(),
+            ""
+        );
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
+            "resolved\n"
         );
         remove_dir_all(&temp);
     }

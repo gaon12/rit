@@ -386,8 +386,8 @@ Completion criteria:
     entries for conflicting paths without writing conflict index stages.
   - [x] Index parser/writer preserves Git index stage bits for future conflict
     entries.
-  - [ ] Merge commits, full conflict handling, hooks, strategies, abort, and
-    continue workflows.
+  - [ ] Automatic clean merge commits, full conflict handling, hooks, and
+    strategies.
 - [ ] `rit cherry-pick`
 - [ ] `rit rebase`
 - [ ] `rit stash`
@@ -399,6 +399,7 @@ Completion criteria:
   - [x] Write simple worktree conflict markers for regular text content
     conflicts.
   - [x] Abort conflicted merge state with `rit merge --abort`.
+  - [x] Continue resolved conflicted merge state with `rit merge --continue`.
   - [ ] Write binary/delete/mode conflict worktree states and full merge result
     contents.
 
@@ -547,8 +548,8 @@ Completion criteria:
 - [x] Add `Repository::operations()` API.
 - [x] Capture before/after HEAD, current branch, and index checksum snapshots.
 - [x] Record successful `rit commit`, `rit checkout`, `rit switch`,
-  fast-forward/conflicted `rit merge`, and `rit merge --abort` operations from
-  the CLI.
+  fast-forward/conflicted `rit merge`, `rit merge --abort`, and
+  `rit merge --continue` operations from the CLI.
 - [x] Implement `rit op log`.
 - [x] Implement `rit op restore <id>` for restorable HEAD snapshots.
 - [x] Implement `rit undo` as restore-last-operation.

@@ -1860,6 +1860,24 @@ fn merge_command(
             Err(error) => write_command_error(stderr, error),
         };
     }
+    if merge_args.continue_merge {
+        let before = capture_operation_snapshot(&repository, stderr)?;
+        return match repository.continue_merge(&rit_core::CommitOptions::default()) {
+            Ok(result) => {
+                record_operation(
+                    &repository,
+                    "merge",
+                    "continue merge",
+                    before,
+                    vec![result.commit_id],
+                    stderr,
+                )?;
+                writeln!(stdout, "[{}] merge commit", &result.commit_id.to_hex()[..7])?;
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_command_error(stderr, error),
+        };
+    }
     let Some(target) = merge_args.target.as_deref() else {
         writeln!(stderr, "rit: merge requires a target revision")?;
         return Ok(ExitCode::from(129));
@@ -2087,6 +2105,7 @@ struct ParsedMergeArgs {
     explain: bool,
     ff_only: bool,
     abort: bool,
+    continue_merge: bool,
 }
 
 fn parse_merge_args(
@@ -2097,6 +2116,7 @@ fn parse_merge_args(
     let mut explain = false;
     let mut ff_only = false;
     let mut abort = false;
+    let mut continue_merge = false;
     let mut target = None;
     let mut index = 0;
     while index < args.len() {
@@ -2107,6 +2127,8 @@ fn parse_merge_args(
             ff_only = true;
         } else if arg == "--abort" {
             abort = true;
+        } else if arg == "--continue" {
+            continue_merge = true;
         } else if arg == "explain" && target.is_none() {
             explain = true;
             index += 1;
@@ -2133,11 +2155,22 @@ fn parse_merge_args(
         }
         index += 1;
     }
-    if abort && target.is_some() {
-        writeln!(stderr, "rit: merge --abort does not take a target revision")?;
+    if abort && continue_merge {
+        writeln!(
+            stderr,
+            "rit: merge cannot use --abort and --continue together"
+        )?;
         return Ok(None);
     }
-    if !abort && target.is_none() {
+    if (abort || continue_merge) && target.is_some() {
+        let option = if abort { "--abort" } else { "--continue" };
+        writeln!(
+            stderr,
+            "rit: merge {option} does not take a target revision"
+        )?;
+        return Ok(None);
+    }
+    if !(abort || continue_merge) && target.is_none() {
         writeln!(stderr, "rit: merge requires a target revision")?;
         return Ok(None);
     }
@@ -2147,6 +2180,7 @@ fn parse_merge_args(
         explain,
         ff_only,
         abort,
+        continue_merge,
     }))
 }
 

@@ -1461,6 +1461,55 @@ fn merge_ff_only_rejects_conflict_without_writing_merge_state() {
 }
 
 #[test]
+fn merge_continue_commits_resolved_conflict() {
+    let fixture = temp_path("merge-continue-fixture");
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    fs::write(fixture.join("tracked.txt"), "base\n").expect("base file should be written");
+    run_git(&fixture, ["add", "tracked.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    run_git(&fixture, ["checkout", "--quiet", "-b", "topic"]);
+    fs::write(fixture.join("tracked.txt"), "topic\n").expect("topic file should be written");
+    run_git(&fixture, ["add", "tracked.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "topic"]);
+    run_git(&fixture, ["checkout", "--quiet", "master"]);
+    fs::write(fixture.join("tracked.txt"), "master\n").expect("master file should be written");
+    run_git(&fixture, ["add", "tracked.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "master"]);
+    let topic = run_capture("git", ["rev-parse", "topic"], &fixture).0;
+    let master = run_capture("git", ["rev-parse", "master"], &fixture).0;
+    let merge = Command::new(rit_binary())
+        .args(["merge", "topic"])
+        .current_dir(&fixture)
+        .output()
+        .expect("rit merge should start");
+    assert!(!merge.status.success());
+    fs::write(fixture.join("tracked.txt"), "resolved\n").expect("resolution should be written");
+    run_capture(rit_binary(), ["add", "tracked.txt"], &fixture);
+
+    let output = run_capture(rit_binary(), ["merge", "--continue"], &fixture).0;
+
+    assert!(output.contains("merge commit"));
+    assert!(!fixture.join(".git").join("MERGE_HEAD").exists());
+    assert_eq!(
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &fixture).0,
+        ""
+    );
+    let parents = run_capture(
+        "git",
+        ["rev-list", "--parents", "-n", "1", "HEAD"],
+        &fixture,
+    )
+    .0;
+    assert!(parents.contains(master.trim()));
+    assert!(parents.contains(topic.trim()));
+    let _ = fs::remove_dir_all(fixture);
+}
+
+#[test]
 fn merge_explain_prints_fast_forward_reason_without_changing_head() {
     let fixture = temp_path("merge-explain-fixture");
     fs::create_dir_all(&fixture).expect("fixture should be created");
