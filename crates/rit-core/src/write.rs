@@ -137,6 +137,15 @@ pub enum MergePlan {
         /// Paths that would be removed from the index and worktree.
         paths_to_remove: Vec<String>,
     },
+    /// The target is not a descendant of `HEAD`; a merge commit would be needed.
+    NonFastForward {
+        /// Current `HEAD` commit.
+        head_id: ObjectId,
+        /// Target commit requested by the user.
+        target_id: ObjectId,
+        /// First common ancestor found by the simple graph walk.
+        merge_base: Option<ObjectId>,
+    },
 }
 
 /// Options that affect commit metadata without changing the committed tree.
@@ -667,9 +676,11 @@ impl Repository {
             return Ok(MergePlan::AlreadyUpToDate { commit_id: old_id });
         }
         if !self.commit_is_ancestor(old_id, new_id)? {
-            return Err(RitError::invalid_input(
-                "not possible to fast-forward; merge requires a merge commit",
-            ));
+            return Ok(MergePlan::NonFastForward {
+                head_id: old_id,
+                target_id: new_id,
+                merge_base: self.find_merge_base(old_id, new_id)?,
+            });
         }
         let old_entries = self.commit_index_entries(old_id)?;
         let new_entries = self.commit_index_entries(new_id)?;
@@ -729,6 +740,44 @@ impl Repository {
             stack.extend(commit.parents);
         }
         Ok(false)
+    }
+
+    fn find_merge_base(&self, left: ObjectId, right: ObjectId) -> Result<Option<ObjectId>> {
+        let left_ancestors = self.commit_ancestor_set(left)?;
+        let mut stack = vec![right];
+        let mut seen = HashSet::new();
+        while let Some(commit_id) = stack.pop() {
+            if !seen.insert(commit_id) {
+                continue;
+            }
+            if left_ancestors.contains(&commit_id) {
+                return Ok(Some(commit_id));
+            }
+            let object = self.read_object(commit_id)?;
+            if object.kind != ObjectKind::Commit {
+                continue;
+            }
+            let commit = parse_commit(&object.data)?;
+            stack.extend(commit.parents);
+        }
+        Ok(None)
+    }
+
+    fn commit_ancestor_set(&self, start: ObjectId) -> Result<HashSet<ObjectId>> {
+        let mut ancestors = HashSet::new();
+        let mut stack = vec![start];
+        while let Some(commit_id) = stack.pop() {
+            if !ancestors.insert(commit_id) {
+                continue;
+            }
+            let object = self.read_object(commit_id)?;
+            if object.kind != ObjectKind::Commit {
+                continue;
+            }
+            let commit = parse_commit(&object.data)?;
+            stack.extend(commit.parents);
+        }
+        Ok(ancestors)
     }
 
     fn write_tree_from_index(&self, index: &Index) -> Result<ObjectId> {
@@ -2154,6 +2203,63 @@ mod tests {
         assert_eq!(
             fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
             "base\n"
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn merge_plan_reports_non_fast_forward_without_changing_head() {
+        let temp = temp_path("merge-plan-non-ff");
+        let repository = committed_nested_repository(&temp);
+        let base = repository
+            .resolve_head()
+            .expect("HEAD should resolve")
+            .expect("HEAD should exist");
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "topic\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("topic add should work");
+        let topic = repository
+            .commit_index("topic")
+            .expect("topic commit should work")
+            .commit_id;
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(temp.join("nested").join("a.txt"), "master\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("master add should work");
+        let master = repository
+            .commit_index("master")
+            .expect("master commit should work")
+            .commit_id;
+
+        let plan = repository
+            .plan_merge_ff_only("topic")
+            .expect("merge plan should work");
+
+        assert_eq!(
+            plan,
+            super::MergePlan::NonFastForward {
+                head_id: master,
+                target_id: topic,
+                merge_base: Some(base),
+            }
+        );
+        assert_eq!(
+            repository
+                .resolve_head()
+                .expect("HEAD should resolve")
+                .expect("HEAD should exist"),
+            master
+        );
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
+            "master\n"
         );
         remove_dir_all(&temp);
     }

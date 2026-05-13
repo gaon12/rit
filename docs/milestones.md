@@ -378,6 +378,8 @@ Completion criteria:
   - [x] `rit merge [--ff-only] <target>` CLI for clean worktrees.
   - [x] Compatibility test for fast-forward final HEAD, status, and worktree
     contents.
+  - [x] Non-fast-forward `--plan` reports `HEAD`, target, and merge-base
+    without writing repository state.
   - [ ] Merge commits, conflict index stages, hooks, strategies, abort, and
     continue workflows.
 - [ ] `rit cherry-pick`
@@ -634,7 +636,8 @@ Completion criteria:
 
 ## Active Queue
 
-1. Continue M8 merge with conflict index stages and non-fast-forward planning.
+1. Continue M8 merge with conflict index stages and merge-commit workflow
+   planning.
 2. Continue M16 operation journal with changed paths, object IDs, index-only
    undo, and malformed-journal recovery.
 3. Continue indexdb lightweight reconciliation with index checksum and pack

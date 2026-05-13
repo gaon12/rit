@@ -1283,6 +1283,45 @@ fn merge_plan_prints_fast_forward_without_changing_head() {
 }
 
 #[test]
+fn merge_plan_prints_non_fast_forward_without_changing_head() {
+    let fixture = temp_path("merge-plan-non-ff-fixture");
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    fs::write(fixture.join("tracked.txt"), "base\n").expect("base file should be written");
+    run_git(&fixture, ["add", "tracked.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    run_git(&fixture, ["checkout", "--quiet", "-b", "topic"]);
+    fs::write(fixture.join("tracked.txt"), "topic\n").expect("topic file should be written");
+    run_git(&fixture, ["add", "tracked.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "topic"]);
+    run_git(&fixture, ["checkout", "--quiet", "master"]);
+    fs::write(fixture.join("tracked.txt"), "master\n").expect("master file should be written");
+    run_git(&fixture, ["add", "tracked.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "master"]);
+    let master = run_capture("git", ["rev-parse", "HEAD"], &fixture).0;
+
+    let output = run_capture(rit_binary(), ["merge", "--plan", "topic"], &fixture).0;
+
+    assert!(output.contains("merge: plan\n"));
+    assert!(output.contains("action: non-fast-forward\n"));
+    assert!(output.contains("merge-base: "));
+    assert!(output.contains("requires: merge-commit\n"));
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &fixture).0,
+        master
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.join("tracked.txt")).expect("file should read"),
+        "master\n"
+    );
+    assert_eq!(run_capture(rit_binary(), ["op", "log"], &fixture).0, "");
+    let _ = fs::remove_dir_all(fixture);
+}
+
+#[test]
 fn merge_explain_prints_fast_forward_reason_without_changing_head() {
     let fixture = temp_path("merge-explain-fixture");
     fs::create_dir_all(&fixture).expect("fixture should be created");

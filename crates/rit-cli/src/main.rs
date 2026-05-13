@@ -1807,6 +1807,24 @@ fn merge_command(
                 }
                 Ok(ExitCode::SUCCESS)
             }
+            Ok(rit_core::MergePlan::NonFastForward {
+                head_id,
+                target_id,
+                merge_base,
+            }) => {
+                writeln!(stdout, "merge: plan")?;
+                writeln!(stdout, "action: non-fast-forward")?;
+                writeln!(stdout, "head: {}", &head_id.to_hex()[..7])?;
+                writeln!(stdout, "target: {}", &target_id.to_hex()[..7])?;
+                match merge_base {
+                    Some(commit_id) => {
+                        writeln!(stdout, "merge-base: {}", &commit_id.to_hex()[..7])?
+                    }
+                    None => writeln!(stdout, "merge-base: <none>")?,
+                }
+                writeln!(stdout, "requires: merge-commit")?;
+                Ok(ExitCode::SUCCESS)
+            }
             Err(error) => write_command_error(stderr, error),
         };
     }
@@ -1836,6 +1854,27 @@ fn merge_command(
                 for path in paths_to_remove {
                     writeln!(stdout, "remove: {path}")?;
                 }
+                Ok(ExitCode::SUCCESS)
+            }
+            Ok(rit_core::MergePlan::NonFastForward {
+                head_id,
+                target_id,
+                merge_base,
+            }) => {
+                writeln!(stdout, "action: non-fast-forward")?;
+                writeln!(stdout, "head: {}", &head_id.to_hex()[..7])?;
+                writeln!(stdout, "target: {}", &target_id.to_hex()[..7])?;
+                match merge_base {
+                    Some(commit_id) => {
+                        writeln!(stdout, "merge-base: {}", &commit_id.to_hex()[..7])?
+                    }
+                    None => writeln!(stdout, "merge-base: <none>")?,
+                }
+                writeln!(
+                    stdout,
+                    "reason: HEAD is not an ancestor of the target commit"
+                )?;
+                writeln!(stdout, "requires: merge-commit")?;
                 Ok(ExitCode::SUCCESS)
             }
             Err(error) => {

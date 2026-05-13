@@ -318,6 +318,9 @@
   resolves a local branch or revision, verifies the current `HEAD` is an
   ancestor of the target, checks out the target tree, and advances the current
   branch or detached `HEAD`.
+- Added non-fast-forward merge planning for `rit merge --plan <target>` and
+  `rit merge explain <target>`. This reports `HEAD`, target, and a simple
+  graph-walk merge base without writing refs, index, or worktree files.
 - Still unsupported: merge commits, conflict stage generation, strategies,
   merge hooks, `--abort`, `--continue`, `cherry-pick`, `rebase`, and `stash`.
 
@@ -906,11 +909,12 @@
 - Git-compatible behavior: fast-forward final `HEAD`, index, and worktree state
   match Git for simple clean repositories.
 - rit-specific behavior: `--plan` prints whether the merge would be already
-  up-to-date or fast-forward, the old and new commit IDs, and paths that would
-  be updated or removed without changing `HEAD`, refs, index, or worktree.
-- rit-specific behavior: `merge explain` prints the fast-forward reason or why
-  the currently supported fast-forward path cannot apply without changing
-  repository state.
+  up-to-date, fast-forward, or non-fast-forward. Fast-forward plans include
+  paths that would be updated or removed; non-fast-forward plans include
+  `HEAD`, target, merge-base, and the merge-commit requirement without
+  changing `HEAD`, refs, index, or worktree.
+- rit-specific behavior: `merge explain` prints the fast-forward or
+  non-fast-forward reason without changing repository state.
 - Intentional differences: output is simplified and non-fast-forward merges are
   rejected instead of attempting a merge commit.
 - Repository mutation: yes, updates `HEAD` or the current branch ref, writes

@@ -177,7 +177,7 @@ const MERGE_HELP: &str = "\
 rit merge [--plan] [--ff-only] <target>
 rit merge explain <target>
 
-Fast-forward the current branch to a local branch or revision, print the planned fast-forward, or explain the fast-forward decision without writing. Merge commits and conflict handling are not implemented yet.
+Fast-forward the current branch to a local branch or revision, print a dry-run plan for fast-forward or non-fast-forward cases, or explain the merge decision without writing. Merge commits and conflict handling are not implemented yet.
 ";
 
 const AUTH_HELP: &str = "\
