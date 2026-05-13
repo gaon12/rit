@@ -1114,6 +1114,7 @@ fn commit_command(
                 "commit",
                 first_message_line(&commit_args.message),
                 before,
+                vec![result.commit_id],
                 stderr,
             )?;
             writeln!(
@@ -1446,6 +1447,7 @@ fn checkout_existing_branch(
                 "checkout",
                 &format!("branch {branch}"),
                 before,
+                Vec::new(),
                 stderr,
             )?;
             writeln!(stdout, "{message_prefix} '{branch}'")?;
@@ -1473,6 +1475,7 @@ fn checkout_existing_branch_or_revision(
                     "checkout",
                     &format!("branch {target}"),
                     before,
+                    Vec::new(),
                     stderr,
                 )?;
                 writeln!(stdout, "Switched to branch '{target}'")?;
@@ -1488,6 +1491,7 @@ fn checkout_existing_branch_or_revision(
                     "checkout",
                     &format!("detach {}", &commit_id.to_hex()[..7]),
                     before,
+                    Vec::new(),
                     stderr,
                 )?;
                 writeln!(stdout, "HEAD is now at {}", &commit_id.to_hex()[..7])?;
@@ -1516,6 +1520,7 @@ fn checkout_new_branch(
                 "checkout",
                 &format!("new branch {branch}"),
                 before,
+                Vec::new(),
                 stderr,
             )?;
             writeln!(stdout, "{message_prefix} '{branch}'")?;
@@ -1561,6 +1566,7 @@ fn merge_command(
                 "merge",
                 &format!("already up to date with {target}"),
                 before,
+                Vec::new(),
                 stderr,
             )?;
             writeln!(stdout, "Already up to date.")?;
@@ -1572,6 +1578,7 @@ fn merge_command(
                 "merge",
                 &format!("fast-forward {target}"),
                 before,
+                Vec::new(),
                 stderr,
             )?;
             writeln!(
@@ -1609,6 +1616,18 @@ fn op_command(
                         short_head(record.after.head),
                         record.summary
                     )?;
+                    if !record.changed_paths.is_empty() {
+                        writeln!(stdout, "  paths: {}", record.changed_paths.join(", "))?;
+                    }
+                    if !record.created_object_ids.is_empty() {
+                        let object_ids = record
+                            .created_object_ids
+                            .iter()
+                            .map(|object_id| object_id.to_hex()[..7].to_owned())
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        writeln!(stdout, "  objects: {object_ids}")?;
+                    }
                 }
                 Ok(ExitCode::SUCCESS)
             }
@@ -1685,6 +1704,7 @@ fn record_operation(
     command: &str,
     summary: &str,
     before: Option<rit_core::OperationSnapshot>,
+    created_object_ids: Vec<rit_core::ObjectId>,
     stderr: &mut dyn Write,
 ) -> io::Result<()> {
     let Some(before) = before else {
@@ -1700,10 +1720,27 @@ fn record_operation(
             return Ok(());
         }
     };
-    if let Err(error) = repository
+    let changed_paths = match repository
         .operations()
-        .record(command, summary, before, after)
+        .changed_paths_between(&before, &after)
     {
+        Ok(paths) => paths,
+        Err(error) => {
+            writeln!(
+                stderr,
+                "rit: warning: could not compute operation paths: {error}"
+            )?;
+            Vec::new()
+        }
+    };
+    if let Err(error) = repository.operations().record_with_details(
+        command,
+        summary,
+        before,
+        after,
+        changed_paths,
+        created_object_ids,
+    ) {
         writeln!(stderr, "rit: warning: could not record operation: {error}")?;
     }
     Ok(())

@@ -1024,6 +1024,8 @@ fn operation_journal_records_commit_and_undo_restores_head() {
     let log = run_capture(rit_binary(), ["op", "log"], fixture.path()).0;
     assert!(log.contains(" commit "));
     assert!(log.contains("journaled"));
+    assert!(log.contains("paths: nested/tracked.txt"));
+    assert!(log.contains("objects: "));
     assert_ne!(
         run_capture("git", ["rev-parse", "HEAD"], fixture.path()).0,
         base

@@ -290,9 +290,12 @@
 - Added `rit op restore <id>` and `rit undo` for records with a restorable
   previous `HEAD`; restore updates the previous branch or detached `HEAD`,
   checks out that commit tree, and rewrites the index from that tree.
+- Operation records now include changed path lists computed by comparing the
+  before/after commit trees. They also include known created object IDs; the
+  first wired caller records the new commit object ID after `rit commit`.
 - Still unsupported: command-aware undo modes, reversible patches for
-  index-only/worktree-only operations, changed path lists, created object ID
-  lists, JSON output, and malformed-journal repair.
+  index-only/worktree-only operations, complete object creation inventories,
+  JSON output, and malformed-journal repair.
 
 ### M9: Large-file backends
 
@@ -853,8 +856,10 @@
 
 - Baseline command checked: rit-specific command, no Git equivalent.
 - Supported options: `rit op log`, `rit op restore <id>`, and `rit undo`.
-- Unsupported options: JSON output, filtering, changed path display, and
-  command-aware undo policies.
+- Supported metadata: before/after HEAD snapshots, current branch snapshots,
+  index checksums, changed paths, and known created object IDs.
+- Unsupported options: JSON output, filtering, complete object creation
+  inventories, and command-aware undo policies.
 - Git-compatible behavior: metadata is stored under `.git/rit/` and does not
   replace Git refs, objects, index, or working tree state.
 - Intentional differences: this is a rit differentiator, not a Git-compatible

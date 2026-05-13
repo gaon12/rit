@@ -532,8 +532,8 @@ Completion criteria:
 - [x] Implement `rit undo` as restore-last-operation.
 - [x] Add tests proving commit undo restores HEAD, index, and tracked worktree
   content for the first supported slice.
-- [ ] Record changed path lists.
-- [ ] Record created object IDs.
+- [x] Record changed path lists.
+- [x] Record created object IDs.
 - [ ] Store reversible patches for index-only and worktree-changing
   operations.
 - [ ] Add journal records for `add`, `restore`, `reset`, `branch`, `tag`,

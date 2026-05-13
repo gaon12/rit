@@ -1,4 +1,8 @@
-use crate::{ObjectId, Repository, Result, RitError, object::sha1_bytes};
+use crate::{
+    ObjectId, ObjectKind, Repository, Result, RitError, object::parse_tree_entries,
+    object::sha1_bytes, parse_commit,
+};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -28,6 +32,10 @@ pub struct OperationRecord {
     pub before: OperationSnapshot,
     /// Repository state captured after the operation.
     pub after: OperationSnapshot,
+    /// Repository-relative paths changed by this operation.
+    pub changed_paths: Vec<String>,
+    /// Git object IDs created by this operation and known to rit.
+    pub created_object_ids: Vec<ObjectId>,
 }
 
 /// Result of restoring a journal entry.
@@ -69,15 +77,69 @@ impl RepositoryOperations<'_> {
         before: OperationSnapshot,
         after: OperationSnapshot,
     ) -> Result<OperationRecord> {
+        self.record_with_details(command, summary, before, after, Vec::new(), Vec::new())
+    }
+
+    /// Appends one operation record with changed paths and created object IDs.
+    pub fn record_with_details(
+        &self,
+        command: &str,
+        summary: &str,
+        before: OperationSnapshot,
+        after: OperationSnapshot,
+        changed_paths: Vec<String>,
+        created_object_ids: Vec<ObjectId>,
+    ) -> Result<OperationRecord> {
         let record = OperationRecord {
             id: next_operation_id(),
             command: command.to_owned(),
             summary: summary.to_owned(),
             before,
             after,
+            changed_paths,
+            created_object_ids,
         };
         append_record(self.repository, &record)?;
         Ok(record)
+    }
+
+    /// Returns paths whose tree entries differ between two operation snapshots.
+    pub fn changed_paths_between(
+        &self,
+        before: &OperationSnapshot,
+        after: &OperationSnapshot,
+    ) -> Result<Vec<String>> {
+        let before_entries = match before.head {
+            Some(head) => self.tree_entries_for_commit(head)?,
+            None => BTreeMap::new(),
+        };
+        let after_entries = match after.head {
+            Some(head) => self.tree_entries_for_commit(head)?,
+            None => BTreeMap::new(),
+        };
+        let mut paths = before_entries.keys().cloned().collect::<BTreeSet<_>>();
+        paths.extend(after_entries.keys().cloned());
+        Ok(paths
+            .into_iter()
+            .filter(|path| before_entries.get(path) != after_entries.get(path))
+            .collect())
+    }
+
+    fn tree_entries_for_commit(
+        &self,
+        commit_id: ObjectId,
+    ) -> Result<BTreeMap<String, TreeEntryKey>> {
+        let object = self.repository.read_object(commit_id)?;
+        if object.kind != ObjectKind::Commit {
+            return Err(RitError::invalid_input(format!(
+                "object {commit_id} is {}, not commit",
+                object.kind
+            )));
+        }
+        let commit = parse_commit(&object.data)?;
+        let mut entries = BTreeMap::new();
+        collect_tree_entries(self.repository, "", commit.tree, &mut entries)?;
+        Ok(entries)
     }
 
     /// Reads operation records in append order.
@@ -184,15 +246,17 @@ fn format_record_line(record: &OperationRecord) -> String {
         escape(&record.summary),
         format_snapshot(&record.before),
         format_snapshot(&record.after),
+        format_hex_string_list(&record.changed_paths),
+        format_object_id_list(&record.created_object_ids),
     ]
     .join("\t")
 }
 
 fn parse_record_line(line: &str) -> Result<OperationRecord> {
     let fields = split_escaped_tabs(line);
-    if fields.len() != 5 {
+    if fields.len() != 5 && fields.len() != 7 {
         return Err(RitError::invalid_input(format!(
-            "operation journal line has {} fields, expected 5",
+            "operation journal line has {} fields, expected 5 or 7",
             fields.len()
         )));
     }
@@ -202,6 +266,16 @@ fn parse_record_line(line: &str) -> Result<OperationRecord> {
         summary: unescape(&fields[2])?,
         before: parse_snapshot(&fields[3])?,
         after: parse_snapshot(&fields[4])?,
+        changed_paths: fields
+            .get(5)
+            .map(|field| parse_hex_string_list(field))
+            .transpose()?
+            .unwrap_or_default(),
+        created_object_ids: fields
+            .get(6)
+            .map(|field| parse_object_id_list(field))
+            .transpose()?
+            .unwrap_or_default(),
     })
 }
 
@@ -250,6 +324,87 @@ fn parse_snapshot(input: &str) -> Result<OperationSnapshot> {
         branch,
         index_checksum,
     })
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct TreeEntryKey {
+    mode: u32,
+    object_id: ObjectId,
+}
+
+fn collect_tree_entries(
+    repository: &Repository,
+    prefix: &str,
+    tree_id: ObjectId,
+    output: &mut BTreeMap<String, TreeEntryKey>,
+) -> Result<()> {
+    let tree = repository.read_object(tree_id)?;
+    if tree.kind != ObjectKind::Tree {
+        return Err(RitError::invalid_input(format!(
+            "object {tree_id} is {}, not tree",
+            tree.kind
+        )));
+    }
+    for entry in parse_tree_entries(&tree.data)? {
+        let path = if prefix.is_empty() {
+            entry.name_lossy()
+        } else {
+            format!("{prefix}/{}", entry.name_lossy())
+        };
+        if entry.kind == ObjectKind::Tree {
+            collect_tree_entries(repository, &path, entry.object_id, output)?;
+        } else {
+            output.insert(
+                path,
+                TreeEntryKey {
+                    mode: parse_tree_mode(&entry.mode)?,
+                    object_id: entry.object_id,
+                },
+            );
+        }
+    }
+    Ok(())
+}
+
+fn parse_tree_mode(mode: &str) -> Result<u32> {
+    u32::from_str_radix(mode, 8)
+        .map_err(|_| RitError::invalid_input(format!("tree entry mode is invalid: {mode}")))
+}
+
+fn format_hex_string_list(values: &[String]) -> String {
+    if values.is_empty() {
+        return "-".to_owned();
+    }
+    values
+        .iter()
+        .map(|value| hex(value.as_bytes()))
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn parse_hex_string_list(input: &str) -> Result<Vec<String>> {
+    if input == "-" {
+        return Ok(Vec::new());
+    }
+    input.split(',').map(unhex_utf8).collect()
+}
+
+fn format_object_id_list(values: &[ObjectId]) -> String {
+    if values.is_empty() {
+        return "-".to_owned();
+    }
+    values
+        .iter()
+        .map(|object_id| object_id.to_hex())
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn parse_object_id_list(input: &str) -> Result<Vec<ObjectId>> {
+    if input == "-" {
+        return Ok(Vec::new());
+    }
+    input.split(',').map(ObjectId::from_hex).collect()
 }
 
 fn split_escaped_tabs(line: &str) -> Vec<String> {
@@ -405,8 +560,22 @@ mod tests {
             .expect("snapshot should work");
         repository
             .operations()
-            .record("commit", "next", before, after)
+            .record_with_details(
+                "commit",
+                "next",
+                before,
+                after,
+                vec!["tracked.txt".to_owned()],
+                vec![next],
+            )
             .expect("record should append");
+
+        let records = repository
+            .operations()
+            .log()
+            .expect("operation log should read");
+        assert_eq!(records[0].changed_paths, vec!["tracked.txt"]);
+        assert_eq!(records[0].created_object_ids, vec![next]);
 
         assert_eq!(
             repository.resolve_head().expect("head should read"),
