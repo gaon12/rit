@@ -102,6 +102,7 @@ fn print_status(status: &rit_core::IndexDbStatus, stdout: &mut dyn Write) -> io:
         None => writeln!(stdout, "schema-version: <none>")?,
     }
     writeln!(stdout, "healthy: {}", status.healthy)?;
+    writeln!(stdout, "stale: {}", status.stale)?;
     if status.stale_reasons.is_empty() {
         writeln!(stdout, "stale-reason: <none>")?;
     } else {

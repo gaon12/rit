@@ -29,6 +29,8 @@ pub struct IndexDbStatus {
     pub schema_version: Option<i64>,
     /// Whether the file could be opened and has the expected schema version.
     pub healthy: bool,
+    /// Whether the database is older than canonical Git repository state.
+    pub stale: bool,
     /// Reasons the database needs build, rebuild, or repair work.
     pub stale_reasons: Vec<String>,
 }
@@ -78,6 +80,7 @@ impl<'repo> IndexDb<'repo> {
                 exists: false,
                 schema_version: None,
                 healthy: false,
+                stale: true,
                 stale_reasons: vec!["indexdb is missing".to_owned()],
             });
         }
@@ -93,6 +96,7 @@ impl<'repo> IndexDb<'repo> {
                     exists: true,
                     schema_version: None,
                     healthy: false,
+                    stale: true,
                     stale_reasons: vec![format!("indexdb could not be opened: {error}")],
                 });
             }
@@ -105,24 +109,29 @@ impl<'repo> IndexDb<'repo> {
                     exists: true,
                     schema_version: None,
                     healthy: false,
+                    stale: true,
                     stale_reasons: vec![format!("schema version could not be read: {error}")],
                 });
             }
         };
+        let healthy = schema_version == Some(INDEXDB_SCHEMA_VERSION);
         let mut stale_reasons = Vec::new();
-        if schema_version != Some(INDEXDB_SCHEMA_VERSION) {
+        if !healthy {
             stale_reasons.push(format!(
                 "schema version is {}, expected {INDEXDB_SCHEMA_VERSION}",
                 schema_version.unwrap_or_default()
             ));
+        } else if refs_snapshot_is_stale(&connection, self.repository)? {
+            stale_reasons.push("refs snapshot is stale".to_owned());
         }
-        let healthy = stale_reasons.is_empty();
+        let stale = !stale_reasons.is_empty();
 
         Ok(IndexDbStatus {
             storage,
             exists: true,
             schema_version,
             healthy,
+            stale,
             stale_reasons,
         })
     }
@@ -231,6 +240,7 @@ fn initialize_and_refresh(connection: &mut Connection, repository: &Repository) 
 
 fn refresh_indexdb(connection: &mut Connection, repository: &Repository) -> Result<usize> {
     let transaction = connection.transaction().map_err(sqlite_error)?;
+    let refs_snapshot = current_refs_snapshot(repository)?;
     transaction
         .execute(
             "INSERT OR REPLACE INTO cache_state(key, value) VALUES (?1, ?2)",
@@ -243,64 +253,111 @@ fn refresh_indexdb(connection: &mut Connection, repository: &Repository) -> Resu
             params!["last_update_utc"],
         )
         .map_err(sqlite_error)?;
-    refresh_refs_snapshot(&transaction, repository)?;
-    let commits_indexed = refresh_commits(&transaction, repository)?;
+    refresh_refs_snapshot(&transaction, &refs_snapshot)?;
+    let commits_indexed = refresh_commits(&transaction, repository, &refs_snapshot)?;
     transaction.commit().map_err(sqlite_error)?;
     Ok(commits_indexed)
 }
 
-fn refresh_refs_snapshot(connection: &Connection, repository: &Repository) -> Result<()> {
-    connection
-        .execute("DELETE FROM refs_snapshot", [])
-        .map_err(sqlite_error)?;
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct RefSnapshotRow {
+    name: String,
+    hash_kind: Option<String>,
+    object_id: Option<Vec<u8>>,
+    target: Option<String>,
+}
+
+fn current_refs_snapshot(repository: &Repository) -> Result<Vec<RefSnapshotRow>> {
+    let mut rows = Vec::new();
     if let Some(head) = repository.resolve_head()? {
         let target = repository
             .current_branch_name()?
             .map(|branch| format!("refs/heads/{branch}"));
-        insert_ref_snapshot(connection, "HEAD", Some(head), target.as_deref())?;
+        rows.push(RefSnapshotRow {
+            name: "HEAD".to_owned(),
+            hash_kind: Some("sha1".to_owned()),
+            object_id: Some(head.as_bytes().to_vec()),
+            target,
+        });
     }
     for branch in repository.list_branches()? {
-        insert_ref_snapshot(
-            connection,
-            &format!("refs/heads/{}", branch.name),
-            Some(branch.target),
-            None,
-        )?;
+        rows.push(RefSnapshotRow {
+            name: format!("refs/heads/{}", branch.name),
+            hash_kind: Some("sha1".to_owned()),
+            object_id: Some(branch.target.as_bytes().to_vec()),
+            target: None,
+        });
     }
     for tag in repository.list_tags()? {
-        insert_ref_snapshot(
-            connection,
-            &format!("refs/tags/{}", tag.name),
-            Some(tag.target),
-            None,
-        )?;
+        rows.push(RefSnapshotRow {
+            name: format!("refs/tags/{}", tag.name),
+            hash_kind: Some("sha1".to_owned()),
+            object_id: Some(tag.target.as_bytes().to_vec()),
+            target: None,
+        });
+    }
+    rows.sort();
+    Ok(rows)
+}
+
+fn stored_refs_snapshot(connection: &Connection) -> Result<Vec<RefSnapshotRow>> {
+    let mut statement = connection
+        .prepare("SELECT name, hash_kind, object_id, target FROM refs_snapshot ORDER BY name")
+        .map_err(sqlite_error)?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok(RefSnapshotRow {
+                name: row.get(0)?,
+                hash_kind: row.get(1)?,
+                object_id: row.get(2)?,
+                target: row.get(3)?,
+            })
+        })
+        .map_err(sqlite_error)?;
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(sqlite_error)
+}
+
+fn refs_snapshot_is_stale(connection: &Connection, repository: &Repository) -> Result<bool> {
+    Ok(stored_refs_snapshot(connection)? != current_refs_snapshot(repository)?)
+}
+
+fn refresh_refs_snapshot(connection: &Connection, refs_snapshot: &[RefSnapshotRow]) -> Result<()> {
+    connection
+        .execute("DELETE FROM refs_snapshot", [])
+        .map_err(sqlite_error)?;
+    for row in refs_snapshot {
+        insert_ref_snapshot(connection, row)?;
     }
     Ok(())
 }
 
-fn insert_ref_snapshot(
-    connection: &Connection,
-    name: &str,
-    object_id: Option<ObjectId>,
-    target: Option<&str>,
-) -> Result<()> {
-    let object_bytes = object_id.map(|id| id.as_bytes().to_vec());
+fn insert_ref_snapshot(connection: &Connection, row: &RefSnapshotRow) -> Result<()> {
     connection
         .execute(
             "INSERT OR REPLACE INTO refs_snapshot(name, hash_kind, object_id, target) VALUES (?1, ?2, ?3, ?4)",
-            params![name, object_id.map(|_| "sha1"), object_bytes, target],
+            params![
+                row.name.as_str(),
+                row.hash_kind.as_deref(),
+                row.object_id.as_deref(),
+                row.target.as_deref()
+            ],
         )
         .map_err(sqlite_error)?;
     Ok(())
 }
 
-fn refresh_commits(connection: &Connection, repository: &Repository) -> Result<usize> {
-    let Some(head) = repository.resolve_head()? else {
-        return Ok(0);
-    };
+fn refresh_commits(
+    connection: &Connection,
+    repository: &Repository,
+    refs_snapshot: &[RefSnapshotRow],
+) -> Result<usize> {
     let mut indexed = 0;
     let mut seen = HashSet::new();
-    let mut stack = vec![head];
+    let mut stack = refs_snapshot
+        .iter()
+        .filter_map(|row| object_id_from_snapshot_bytes(row.object_id.as_deref()))
+        .collect::<Vec<_>>();
     while let Some(object_id) = stack.pop() {
         if !seen.insert(object_id) {
             continue;
@@ -318,6 +375,12 @@ fn refresh_commits(connection: &Connection, repository: &Repository) -> Result<u
         indexed += 1;
     }
     Ok(indexed)
+}
+
+fn object_id_from_snapshot_bytes(bytes: Option<&[u8]>) -> Option<ObjectId> {
+    let bytes = bytes?;
+    let object_id: [u8; 20] = bytes.try_into().ok()?;
+    Some(ObjectId::from_bytes(object_id))
 }
 
 fn insert_commit(

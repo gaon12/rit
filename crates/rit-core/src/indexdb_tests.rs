@@ -1,5 +1,5 @@
 use crate::indexdb::INDEXDB_SCHEMA_VERSION;
-use crate::{InitOptions, Repository};
+use crate::{InitOptions, ObjectKind, Repository, parse_commit};
 use rusqlite::{Connection, params};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -43,6 +43,7 @@ fn indexdb_ensure_creates_schema_and_indexes_head_commit() {
     assert_eq!(result.commits_indexed, 1);
     assert!(status.exists);
     assert!(status.healthy);
+    assert!(!status.stale);
     assert_eq!(status.schema_version, Some(INDEXDB_SCHEMA_VERSION));
     assert!(status.storage.database_path.exists());
     remove_dir_all(&temp);
@@ -143,6 +144,47 @@ fn indexdb_write_through_records_refs_and_checkout_state() {
 }
 
 #[test]
+fn indexdb_status_detects_external_ref_changes_and_ensure_reconciles_them() {
+    let temp = temp_path("external-ref");
+    let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+    write_user_config(&repository);
+    fs::write(temp.join("file.txt"), "one\n").expect("file should be written");
+    repository
+        .add_paths(&["file.txt".to_owned()])
+        .expect("add should work");
+    let first = repository
+        .commit_index("first")
+        .expect("commit should work")
+        .commit_id;
+    repository.indexdb().ensure().expect("ensure should work");
+
+    let second = write_external_compatible_commit(&repository, first);
+    move_current_branch_ref(&repository, second);
+
+    let stale_status = repository.indexdb().status().expect("status should work");
+    assert!(stale_status.healthy);
+    assert!(stale_status.stale);
+    assert!(
+        stale_status
+            .stale_reasons
+            .iter()
+            .any(|reason| reason.contains("refs snapshot is stale"))
+    );
+
+    let result = repository.indexdb().ensure().expect("ensure should update");
+    assert!(result.updated);
+    let fresh_status = repository.indexdb().status().expect("status should work");
+    assert!(fresh_status.healthy);
+    assert!(!fresh_status.stale);
+    {
+        let connection =
+            Connection::open(repository.indexdb().storage().database_path).expect("db should open");
+        assert!(commit_exists(&connection, second));
+    }
+    remove_dir_all(&temp);
+}
+
+#[test]
 fn indexdb_write_through_ignores_corrupted_database() {
     let temp = temp_path("write-through-corrupt");
     let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
@@ -208,6 +250,39 @@ fn ref_target(connection: &Connection, name: &str) -> Option<String> {
             |row| row.get::<_, Option<String>>(0),
         )
         .expect("ref target query should work")
+}
+
+fn write_external_compatible_commit(
+    repository: &Repository,
+    parent: crate::ObjectId,
+) -> crate::ObjectId {
+    let parent_object = repository
+        .read_object(parent)
+        .expect("parent commit should be readable");
+    let parent_commit = parse_commit(&parent_object.data).expect("parent commit should parse");
+    let commit = format!(
+        "tree {}\nparent {parent}\nauthor External Tool <external@example.test> 1700000000 +0000\ncommitter External Tool <external@example.test> 1700000000 +0000\n\nexternal compatible commit\n",
+        parent_commit.tree
+    );
+    repository
+        .loose_objects()
+        .write_object(ObjectKind::Commit, commit.as_bytes())
+        .expect("external-compatible commit object should be written")
+}
+
+fn move_current_branch_ref(repository: &Repository, target: crate::ObjectId) {
+    let branch = repository
+        .current_branch_name()
+        .expect("branch should be readable")
+        .expect("repository should be on a branch");
+    let mut ref_path = repository.common_dir().join("refs").join("heads");
+    for part in branch.split('/') {
+        ref_path = ref_path.join(part);
+    }
+    if let Some(parent) = ref_path.parent() {
+        fs::create_dir_all(parent).expect("ref parent should exist");
+    }
+    fs::write(ref_path, format!("{target}\n")).expect("branch ref should be moved");
 }
 
 fn write_user_config(repository: &Repository) {

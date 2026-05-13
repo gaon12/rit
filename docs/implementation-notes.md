@@ -118,15 +118,20 @@
 - Source of truth: IndexDB stores reproducible metadata only. `drop` removes
   the SQLite file without touching Git objects, refs, `.git/index`, or working
   tree files. Normal Git-compatible commands do not require IndexDB.
-- Unsupported behavior: worktree-specific cache DBs, external Git
-  reconciliation, indexed file-history queries, corruption repair beyond
-  rebuild, and migration beyond rebuild guidance.
+- Unsupported behavior: worktree-specific cache DBs, indexed file-history
+  queries, corruption repair beyond rebuild, and migration beyond rebuild
+  guidance.
 - 2026-05-13 IndexDB write-through slice: when the `indexdb` feature is built
   and `.git/rit/indexdb.sqlite` already exists, successful rit-created commits,
   branch/tag ref changes, checkout state changes, and fast-forward merges
   refresh IndexDB on a best-effort basis. A failed or corrupted IndexDB refresh
   never rolls back the already-successful Git repository write.
 - Ref snapshots now include `HEAD`, local branches, and lightweight tags.
+- 2026-05-13 IndexDB reconciliation slice: `rit indexdb status` now separates
+  schema health from freshness and reports stale ref snapshots. `rit indexdb`
+  reconciles external Git-compatible HEAD/ref changes by refreshing the
+  snapshot and indexing newly reachable commit objects from canonical
+  `.git/objects` data.
 - 2026-05-12 large-file backend trait slice checked the AGENTS large-object
   backend guidance; no external `git-lfs` binary is used.
 - 2026-05-12 LFS pointer slice checked installed `git-lfs/3.7.1` and the

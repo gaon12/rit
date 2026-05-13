@@ -276,6 +276,10 @@ Completion criteria:
   or checkout state changes.
 - [ ] Implement lightweight reconciliation when external Git-compatible tools
   changed refs, index, or pack snapshots.
+  - [x] Detect and refresh stale `HEAD`, local branch, and lightweight tag
+    snapshots.
+  - [ ] Detect stale index checksum and mtime.
+  - [ ] Detect stale packfile list, size, and mtime.
 - [ ] Implement fallback to canonical Git object/index/refs data when indexdb
   is missing, stale, or corrupted.
 - [ ] Add indexed commit query API.
@@ -633,7 +637,8 @@ Completion criteria:
 1. Continue M8 merge with conflict index stages and non-fast-forward planning.
 2. Continue M16 operation journal with changed paths, object IDs, index-only
    undo, and malformed-journal recovery.
-3. Add indexdb lightweight reconciliation for external Git-compatible changes.
+3. Continue indexdb lightweight reconciliation with index checksum and pack
+   snapshot detection.
 4. Add indexdb corruption, stale cache, and external Git reconciliation test
    plan.
 5. Keep M6 case-sensitivity parity under verification as new path lookup
