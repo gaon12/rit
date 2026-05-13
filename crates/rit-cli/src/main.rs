@@ -1838,8 +1838,34 @@ fn merge_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
+    if merge_args.abort {
+        let before = capture_operation_snapshot(&repository, stderr)?;
+        return match repository.abort_merge() {
+            Ok(original_head) => {
+                record_operation(
+                    &repository,
+                    "merge",
+                    "abort merge",
+                    before,
+                    Vec::new(),
+                    stderr,
+                )?;
+                writeln!(
+                    stdout,
+                    "Aborted merge; restored {}",
+                    &original_head.to_hex()[..7]
+                )?;
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_command_error(stderr, error),
+        };
+    }
+    let Some(target) = merge_args.target.as_deref() else {
+        writeln!(stderr, "rit: merge requires a target revision")?;
+        return Ok(ExitCode::from(129));
+    };
     if merge_args.plan {
-        return match repository.plan_merge_ff_only(&merge_args.target) {
+        return match repository.plan_merge_ff_only(target) {
             Ok(rit_core::MergePlan::AlreadyUpToDate { commit_id }) => {
                 writeln!(stdout, "merge: plan")?;
                 writeln!(stdout, "action: already-up-to-date")?;
@@ -1910,8 +1936,8 @@ fn merge_command(
     }
     if merge_args.explain {
         writeln!(stdout, "merge: explain")?;
-        writeln!(stdout, "target: {}", merge_args.target)?;
-        return match repository.plan_merge_ff_only(&merge_args.target) {
+        writeln!(stdout, "target: {target}")?;
+        return match repository.plan_merge_ff_only(target) {
             Ok(rit_core::MergePlan::AlreadyUpToDate { commit_id }) => {
                 writeln!(stdout, "action: already-up-to-date")?;
                 writeln!(stdout, "head: {}", &commit_id.to_hex()[..7])?;
@@ -1989,16 +2015,16 @@ fn merge_command(
     }
     let before = capture_operation_snapshot(&repository, stderr)?;
     let merge_result = if merge_args.ff_only {
-        repository.merge_ff_only(&merge_args.target)
+        repository.merge_ff_only(target)
     } else {
-        repository.merge(&merge_args.target)
+        repository.merge(target)
     };
     match merge_result {
         Ok(rit_core::MergeResult::AlreadyUpToDate { .. }) => {
             record_operation(
                 &repository,
                 "merge",
-                &format!("already up to date with {}", merge_args.target),
+                &format!("already up to date with {target}"),
                 before,
                 Vec::new(),
                 stderr,
@@ -2010,7 +2036,7 @@ fn merge_command(
             record_operation(
                 &repository,
                 "merge",
-                &format!("fast-forward {}", merge_args.target),
+                &format!("fast-forward {target}"),
                 before,
                 Vec::new(),
                 stderr,
@@ -2031,7 +2057,7 @@ fn merge_command(
             record_operation_with_changed_paths(
                 &repository,
                 "merge",
-                &format!("conflicted merge {}", merge_args.target),
+                &format!("conflicted merge {target}"),
                 before,
                 conflict_paths.clone(),
                 Vec::new(),
@@ -2056,10 +2082,11 @@ fn merge_command(
 }
 
 struct ParsedMergeArgs {
-    target: String,
+    target: Option<String>,
     plan: bool,
     explain: bool,
     ff_only: bool,
+    abort: bool,
 }
 
 fn parse_merge_args(
@@ -2069,6 +2096,7 @@ fn parse_merge_args(
     let mut plan = false;
     let mut explain = false;
     let mut ff_only = false;
+    let mut abort = false;
     let mut target = None;
     let mut index = 0;
     while index < args.len() {
@@ -2077,6 +2105,8 @@ fn parse_merge_args(
             plan = true;
         } else if arg == "--ff-only" {
             ff_only = true;
+        } else if arg == "--abort" {
+            abort = true;
         } else if arg == "explain" && target.is_none() {
             explain = true;
             index += 1;
@@ -2103,15 +2133,20 @@ fn parse_merge_args(
         }
         index += 1;
     }
-    let Some(target) = target else {
+    if abort && target.is_some() {
+        writeln!(stderr, "rit: merge --abort does not take a target revision")?;
+        return Ok(None);
+    }
+    if !abort && target.is_none() {
         writeln!(stderr, "rit: merge requires a target revision")?;
         return Ok(None);
-    };
+    }
     Ok(Some(ParsedMergeArgs {
         target,
         plan,
         explain,
         ff_only,
+        abort,
     }))
 }
 

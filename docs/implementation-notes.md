@@ -342,9 +342,10 @@
   entry, and refuses to commit while the index contains unmerged entries.
 - Regular text content conflicts now materialize simple `<<<<<<< HEAD`,
   `=======`, and `>>>>>>> <target>` markers in the working tree.
+- `rit merge --abort` restores the `ORIG_HEAD` tree, clears merge state files,
+  refreshes the index/worktree, and records the operation journal entry.
 - Still unsupported: merge commits, binary/delete/mode conflict materialization,
-  strategies, merge hooks, `--abort`, `--continue`, `cherry-pick`, `rebase`,
-  and `stash`.
+  strategies, merge hooks, `--continue`, `cherry-pick`, `rebase`, and `stash`.
 
 ### M16: Operation journal and universal undo
 
@@ -930,10 +931,10 @@
 - Baseline command checked: `git merge -h`
 - Supported options: default fast-forward shape and explicit `--ff-only` with
   one target branch or revision, conflicted non-fast-forward index-stage
-  starts, plus rit-specific `--plan` and `merge explain <target>`.
+  starts, `--abort`, plus rit-specific `--plan` and `merge explain <target>`.
 - Unsupported options: merge commits, binary/delete/mode conflict
-  materialization, strategies, stat output, hooks, squash, abort, quit,
-  continue, autostash, signing, and verification options.
+  materialization, strategies, stat output, hooks, squash, quit, continue,
+  autostash, signing, and verification options.
 - Git-compatible behavior: fast-forward final `HEAD`, index, and worktree state
   match Git for simple clean repositories.
 - rit-specific behavior: `--plan` prints whether the merge would be already
@@ -947,6 +948,8 @@
 - rit-specific behavior: conflicted non-fast-forward merges leave stage 1/2/3
   entries in the index, merge state files, and simple worktree conflict markers
   for regular text content conflicts.
+- rit-specific behavior: `--abort` restores the `ORIG_HEAD` tree and removes
+  merge state files, but does not yet handle autostash or `--quit`.
 - Intentional differences: output is simplified; clean non-fast-forward merges
   without conflicts are still rejected instead of creating a merge commit.
 - Repository mutation: yes, updates `HEAD` or the current branch ref for
@@ -960,8 +963,8 @@
 - Supported options: `rit op log`, `rit op restore <id>`, and `rit undo`.
 - Supported metadata: before/after HEAD snapshots, current branch snapshots,
   index checksums, changed paths, and known created object IDs.
-- Recorded commands: commit, checkout, switch, fast-forward merge, add,
-  restore, and pathspec reset.
+- Recorded commands: commit, checkout, switch, fast-forward and conflicted
+  merge, merge abort, add, restore, and pathspec reset.
 - Malformed operation journal lines are skipped with warnings and do not block
   reading later valid records.
 - Unsupported options: JSON output, filtering, complete object creation

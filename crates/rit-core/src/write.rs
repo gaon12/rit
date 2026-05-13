@@ -187,6 +187,16 @@ pub struct MergeConflictStageEntry {
     pub object_id: ObjectId,
 }
 
+struct ConflictedMergeStart<'a> {
+    target: &'a str,
+    target_id: ObjectId,
+    head_id: ObjectId,
+    base_entries: &'a [IndexEntry],
+    head_entries: &'a [IndexEntry],
+    target_entries: &'a [IndexEntry],
+    conflict_stages: &'a [MergeConflictStagePlan],
+}
+
 /// Options that affect commit metadata without changing the committed tree.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommitOptions {
@@ -772,14 +782,15 @@ impl Repository {
                     "not possible to fast-forward; merge requires a merge commit",
                 ));
             }
-            self.start_conflicted_merge(
+            self.start_conflicted_merge(ConflictedMergeStart {
                 target,
-                new_id,
-                &base_entries,
-                &head_entries,
-                &target_entries,
-                &merge_workflow.conflict_stages,
-            )?;
+                target_id: new_id,
+                head_id: old_id,
+                base_entries: &base_entries,
+                head_entries: &head_entries,
+                target_entries: &target_entries,
+                conflict_stages: &merge_workflow.conflict_stages,
+            })?;
             self.refresh_indexdb_after_git_write();
             return Ok(MergeResult::Conflicts {
                 target_id: new_id,
@@ -815,15 +826,7 @@ impl Repository {
         Ok(MergeResult::FastForward { old_id, new_id })
     }
 
-    fn start_conflicted_merge(
-        &self,
-        target: &str,
-        target_id: ObjectId,
-        base_entries: &[IndexEntry],
-        head_entries: &[IndexEntry],
-        target_entries: &[IndexEntry],
-        conflict_stages: &[MergeConflictStagePlan],
-    ) -> Result<()> {
+    fn start_conflicted_merge(&self, input: ConflictedMergeStart<'_>) -> Result<()> {
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
                 "merge must be run in a repository with a working tree",
@@ -831,25 +834,36 @@ impl Repository {
         };
         let symlinks_enabled = self.core_symlinks_enabled()?;
         let merged_entries = self.conflicted_merge_index_entries(
-            base_entries,
-            head_entries,
-            target_entries,
-            conflict_stages,
+            input.base_entries,
+            input.head_entries,
+            input.target_entries,
+            input.conflict_stages,
         )?;
-        let conflict_paths = conflict_stages
+        let conflict_paths = input
+            .conflict_stages
             .iter()
             .map(|stage| stage.path.as_str())
             .collect::<BTreeSet<_>>();
         write_non_conflicting_merge_worktree_changes(
             self,
             worktree,
-            head_entries,
+            input.head_entries,
             &merged_entries,
             &conflict_paths,
             symlinks_enabled,
         )?;
-        write_conflict_markers(self, worktree, conflict_stages, target, symlinks_enabled)?;
+        write_conflict_markers(
+            self,
+            worktree,
+            input.conflict_stages,
+            input.target,
+            symlinks_enabled,
+        )?;
 
+        write_text_atomically(
+            &self.git_dir().join("ORIG_HEAD"),
+            &format!("{}\n", input.head_id),
+        )?;
         Index {
             entries: merged_entries,
             extensions: Vec::new(),
@@ -857,12 +871,32 @@ impl Repository {
         .write(&self.git_dir().join("index"))?;
         write_text_atomically(
             &self.git_dir().join("MERGE_HEAD"),
-            &format!("{target_id}\n"),
+            &format!("{}\n", input.target_id),
         )?;
         write_text_atomically(
             &self.git_dir().join("MERGE_MSG"),
-            &merge_message_with_conflicts(target, &conflict_paths),
+            &merge_message_with_conflicts(input.target, &conflict_paths),
         )
+    }
+
+    /// Aborts an in-progress merge and restores the tree saved in `ORIG_HEAD`.
+    pub fn abort_merge(&self) -> Result<ObjectId> {
+        let merge_head_path = self.git_dir().join("MERGE_HEAD");
+        if !merge_head_path.exists() {
+            return Err(RitError::invalid_input("no merge to abort"));
+        }
+        let original_head_path = self.git_dir().join("ORIG_HEAD");
+        let original_head_text = fs::read_to_string(&original_head_path)
+            .map_err(|source| RitError::io(&original_head_path, source))?;
+        let original_head = ObjectId::from_hex(original_head_text.trim())?;
+
+        self.checkout_commit_tree(original_head)?;
+        self.update_head(original_head)?;
+        remove_file_if_exists(&merge_head_path)?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_MODE"))?;
+        self.refresh_indexdb_after_git_write();
+        Ok(original_head)
     }
 
     fn conflicted_merge_index_entries(
@@ -1503,6 +1537,14 @@ fn merge_message_with_conflicts(target: &str, conflict_paths: &BTreeSet<&str>) -
         message.push('\n');
     }
     message
+}
+
+fn remove_file_if_exists(path: &Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(source) => Err(RitError::io(path, source)),
+    }
 }
 
 fn worktree_path_matches_exact_case(root: &Path, slash_path: &str) -> bool {
@@ -2682,9 +2724,10 @@ mod tests {
         repository
             .add_paths(&["nested/a.txt".to_owned()])
             .expect("master add should work");
-        repository
+        let master = repository
             .commit_index("master")
-            .expect("master commit should work");
+            .expect("master commit should work")
+            .commit_id;
 
         let result = repository
             .merge("topic")
@@ -2724,6 +2767,31 @@ mod tests {
                 .expect_err("unmerged index should not commit")
                 .to_string(),
             "cannot write tree with unmerged index entry: nested/a.txt"
+        );
+
+        let restored = repository.abort_merge().expect("abort should restore");
+
+        assert_eq!(restored, master);
+        assert!(!repository.git_dir().join("MERGE_HEAD").exists());
+        assert!(!repository.git_dir().join("MERGE_MSG").exists());
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        let stages = index
+            .entries
+            .iter()
+            .filter(|entry| entry.path == "nested/a.txt")
+            .map(|entry| entry.stage)
+            .collect::<Vec<_>>();
+        assert_eq!(stages, vec![0]);
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
+            "master\n"
+        );
+        assert_eq!(
+            repository
+                .status_porcelain_v1()
+                .expect("status should read")
+                .to_porcelain_v1(),
+            ""
         );
         remove_dir_all(&temp);
     }

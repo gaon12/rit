@@ -398,6 +398,7 @@ Completion criteria:
   - [x] Write `MERGE_HEAD` and `MERGE_MSG` for conflicted merge starts.
   - [x] Write simple worktree conflict markers for regular text content
     conflicts.
+  - [x] Abort conflicted merge state with `rit merge --abort`.
   - [ ] Write binary/delete/mode conflict worktree states and full merge result
     contents.
 
@@ -545,8 +546,9 @@ Completion criteria:
   Git refs, objects, index, or working tree state.
 - [x] Add `Repository::operations()` API.
 - [x] Capture before/after HEAD, current branch, and index checksum snapshots.
-- [x] Record successful `rit commit`, `rit checkout`, `rit switch`, and
-  fast-forward `rit merge` operations from the CLI.
+- [x] Record successful `rit commit`, `rit checkout`, `rit switch`,
+  fast-forward/conflicted `rit merge`, and `rit merge --abort` operations from
+  the CLI.
 - [x] Implement `rit op log`.
 - [x] Implement `rit op restore <id>` for restorable HEAD snapshots.
 - [x] Implement `rit undo` as restore-last-operation.

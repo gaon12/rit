@@ -1414,6 +1414,17 @@ fn merge_conflict_writes_index_stages_and_operation_record() {
     let op_log = run_capture(rit_binary(), ["op", "log"], &fixture).0;
     assert!(op_log.contains("merge"));
     assert!(op_log.contains("tracked.txt"));
+    let abort_output = run_capture(rit_binary(), ["merge", "--abort"], &fixture).0;
+    assert!(abort_output.contains("Aborted merge; restored "));
+    assert!(!fixture.join(".git").join("MERGE_HEAD").exists());
+    assert_eq!(
+        fs::read_to_string(fixture.join("tracked.txt")).expect("file should read"),
+        "master\n"
+    );
+    assert_eq!(
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &fixture).0,
+        ""
+    );
     let _ = fs::remove_dir_all(fixture);
 }
 
