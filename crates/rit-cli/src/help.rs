@@ -148,9 +148,9 @@ Restore working tree files from the index, or staged files from HEAD.
 ";
 
 const RESET_HELP: &str = "\
-rit reset [--pathspec-from-file <file>] [--pathspec-file-nul] <file>...
+rit reset [--plan] [--pathspec-from-file <file>] [--pathspec-file-nul] <file>...
 
-Reset staged file entries from HEAD.
+Reset staged file entries from HEAD, or print the planned index changes without writing.
 ";
 
 const CHECKOUT_HELP: &str = "\

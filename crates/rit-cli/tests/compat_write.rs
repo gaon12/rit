@@ -639,6 +639,30 @@ fn reset_directory_pathspec_matches_git_status() {
 }
 
 #[test]
+fn reset_plan_prints_index_changes_without_writing_index() {
+    let fixture = LocalWriteFixture::new("reset-plan", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "changed\n",
+    )
+    .expect("tracked file should be modified");
+    fs::write(fixture.path().join("nested").join("new.txt"), "new\n")
+        .expect("new file should be written");
+    run_capture(rit_binary(), ["add", "nested"], fixture.path());
+
+    let output = run_capture(rit_binary(), ["reset", "--plan", "nested"], fixture.path()).0;
+
+    assert!(output.contains("reset: plan\n"));
+    assert!(output.contains("restore-index: nested/tracked.txt\n"));
+    assert!(output.contains("remove-index: nested/new.txt\n"));
+    assert_eq!(
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], fixture.path()).0,
+        "A  nested/new.txt\nM  nested/tracked.txt\n"
+    );
+}
+
+#[test]
 fn reset_wildcard_pathspec_matches_git_status() {
     let fixture = LocalWriteFixture::new("reset-wildcard", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");

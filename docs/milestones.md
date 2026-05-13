@@ -559,7 +559,8 @@ Completion criteria:
 - [x] Add `rit add --plan`.
 - [x] Add structured plan type for `rit commit`.
 - [x] Add `rit commit --plan`.
-- [ ] Add `rit reset --plan`.
+- [x] Add structured plan type for `rit reset`.
+- [x] Add `rit reset --plan`.
 - [ ] Add `rit merge --plan`.
 - [ ] Ensure plans describe refs, index paths, worktree paths, object writes,
   hooks, and policy checks before applying changes.

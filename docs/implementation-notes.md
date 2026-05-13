@@ -86,9 +86,10 @@
 - 2026-05-13 operation journal slice checked `git --version` and
   `git help -a`; this feature is rit-specific metadata under `.git/rit/` and
   does not use Git command output as a compatibility target.
-- 2026-05-13 transaction plan slice checked `git add -h`; implemented
-  `rit add --plan` as a rit-specific dry-run view over the same pathspec
-  expansion used by `rit add`.
+- 2026-05-13 transaction plan slices checked `git add -h`,
+  `git commit -h`, and `git reset -h`; implemented `rit add --plan`,
+  `rit commit --plan`, and `rit reset --plan` as rit-specific dry-run views
+  over the same selection logic used by the applying commands.
 - 2026-05-12 large-file backend trait slice checked the AGENTS large-object
   backend guidance; no external `git-lfs` binary is used.
 - 2026-05-12 LFS pointer slice checked installed `git-lfs/3.7.1` and the
@@ -744,12 +745,15 @@
   and bracket-class wildcard pathspecs plus positive `:(literal)`, `:(glob)`,
   `:(top)`, `:/`, and `:(icase)` pathspec magic, equivalent to unstaging matching paths
   from `HEAD`, plus `--pathspec-from-file`, `--pathspec-from-file=-`, and
-  `--pathspec-file-nul`.
+  `--pathspec-file-nul`, and `--plan`.
 - Unsupported options: commit-moving resets, soft/mixed/hard/merge/keep modes,
   patch mode, full Git pathspec-file edge cases.
 - Git-compatible behavior: unstages explicit paths and reports remaining unstaged modifications.
 - Git-compatible behavior: clean tracked paths refresh cached index stat
   metadata during `status --porcelain=v1`.
+- rit-specific behavior: `--plan` prints which index entries would be restored
+  from `HEAD` or removed because they do not exist in `HEAD` without writing
+  `.git/index`.
 - Intentional differences: full index extension parsing remains limited, but
   raw extension bytes are preserved when status only refreshes stat fields.
 - Repository mutation: writes `.git/index`.

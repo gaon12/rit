@@ -128,7 +128,7 @@ pub use workspace_profile::{
 };
 pub use write::{
     AddOptions, AddPlan, CommitOptions, CommitPlan, CommitResult, FileModeOverride, MergeResult,
-    SignatureIdentity, SignatureTime,
+    ResetPlan, SignatureIdentity, SignatureTime,
 };
 
 /// Returns the crate version used by the CLI and tests.

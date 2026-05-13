@@ -96,6 +96,22 @@ impl CommitPlan {
     }
 }
 
+/// Dry-run plan for path-based `rit reset`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ResetPlan {
+    /// Paths whose index entries would be restored from `HEAD`.
+    pub paths_to_restore: Vec<String>,
+    /// Paths whose index entries would be removed because they do not exist in `HEAD`.
+    pub paths_to_remove: Vec<String>,
+}
+
+impl ResetPlan {
+    /// Returns true when no index paths would be restored or removed.
+    pub fn is_empty(&self) -> bool {
+        self.paths_to_restore.is_empty() && self.paths_to_remove.is_empty()
+    }
+}
+
 /// Result of a merge operation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MergeResult {
@@ -468,6 +484,24 @@ impl Repository {
         Ok(())
     }
 
+    /// Builds a dry-run path reset plan without writing the index.
+    pub fn plan_restore_staged_paths_from_head(&self, paths: &[String]) -> Result<ResetPlan> {
+        let selection = self.reset_path_selection_from_head(paths)?;
+        let mut paths_to_restore = Vec::new();
+        let mut paths_to_remove = Vec::new();
+        for path in selection.target_paths {
+            if selection.head_entries.contains_key(&path) {
+                paths_to_restore.push(path);
+            } else {
+                paths_to_remove.push(path);
+            }
+        }
+        Ok(ResetPlan {
+            paths_to_restore,
+            paths_to_remove,
+        })
+    }
+
     /// Restores index entries from `HEAD`, returning paths still modified in the worktree.
     pub fn restore_staged_paths_from_head(&self, paths: &[String]) -> Result<Vec<String>> {
         let Some(worktree) = self.worktree() else {
@@ -475,12 +509,7 @@ impl Repository {
                 "reset must be run in a repository with a working tree",
             ));
         };
-        if paths.is_empty() {
-            return Err(RitError::invalid_input("reset requires at least one path"));
-        }
-        let pathspecs = PathspecSet::from_args(paths)?;
-        let attributes = self.root_attributes()?;
-
+        let selection = self.reset_path_selection_from_head(paths)?;
         let index_path = self.git_dir().join("index");
         let index = Index::read(&index_path)?;
         let mut index_entries = index
@@ -488,23 +517,10 @@ impl Repository {
             .into_iter()
             .map(|entry| (entry.path.clone(), entry))
             .collect::<BTreeMap<_, _>>();
-        let head_entries = self.head_blob_entries()?;
-        let target_paths = index_entries
-            .keys()
-            .chain(head_entries.keys())
-            .filter(|path| pathspecs.matches_with_attributes(path, Some(&attributes)))
-            .cloned()
-            .collect::<BTreeSet<_>>();
-        if target_paths.is_empty() {
-            return Err(RitError::invalid_input(format!(
-                "pathspec did not match any file known to git: {}",
-                paths.join(" ")
-            )));
-        }
         let mut unstaged = Vec::new();
 
-        for normalized in target_paths {
-            match head_entries.get(&normalized) {
+        for normalized in selection.target_paths {
+            match selection.head_entries.get(&normalized) {
                 Some(head_entry) => {
                     index_entries.insert(
                         normalized.clone(),
@@ -539,6 +555,42 @@ impl Repository {
         }
         .write(&index_path)?;
         Ok(unstaged)
+    }
+
+    fn reset_path_selection_from_head(&self, paths: &[String]) -> Result<ResetPathSelection> {
+        if self.worktree().is_none() {
+            return Err(RitError::invalid_input(
+                "reset must be run in a repository with a working tree",
+            ));
+        }
+        if paths.is_empty() {
+            return Err(RitError::invalid_input("reset requires at least one path"));
+        }
+        let pathspecs = PathspecSet::from_args(paths)?;
+        let attributes = self.root_attributes()?;
+        let index = Index::read(&self.git_dir().join("index"))?;
+        let index_entries = index
+            .entries
+            .into_iter()
+            .map(|entry| (entry.path.clone(), entry))
+            .collect::<BTreeMap<_, _>>();
+        let head_entries = self.head_blob_entries()?;
+        let target_paths = index_entries
+            .keys()
+            .chain(head_entries.keys())
+            .filter(|path| pathspecs.matches_with_attributes(path, Some(&attributes)))
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        if target_paths.is_empty() {
+            return Err(RitError::invalid_input(format!(
+                "pathspec did not match any file known to git: {}",
+                paths.join(" ")
+            )));
+        }
+        Ok(ResetPathSelection {
+            head_entries,
+            target_paths,
+        })
     }
 
     /// Checks out an existing local branch into a clean working tree.
@@ -899,6 +951,11 @@ fn expand_add_pathspecs<'a>(
 struct AddPathSelection {
     files_to_add: BTreeSet<String>,
     paths_to_remove: BTreeSet<String>,
+}
+
+struct ResetPathSelection {
+    head_entries: BTreeMap<String, HeadBlobEntry>,
+    target_paths: BTreeSet<String>,
 }
 
 fn staged_paths_different_from_head(
@@ -1937,6 +1994,32 @@ mod tests {
             .status_porcelain_v1()
             .expect("status should be readable");
         assert_eq!(status.to_porcelain_v1(), " M nested/a.txt\n");
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn reset_plan_reports_index_changes_without_writing_index() {
+        let temp = temp_path("reset-plan");
+        let repository = committed_nested_repository(&temp);
+        fs::write(temp.join("nested").join("a.txt"), "changed\n").expect("file should be changed");
+        fs::write(temp.join("nested").join("new.txt"), "new\n").expect("file should be written");
+        repository
+            .add_paths(&["nested".to_owned()])
+            .expect("add should work");
+
+        let plan = repository
+            .plan_restore_staged_paths_from_head(&["nested".to_owned()])
+            .expect("reset plan should work");
+
+        assert_eq!(plan.paths_to_restore, vec!["nested/a.txt"]);
+        assert_eq!(plan.paths_to_remove, vec!["nested/new.txt"]);
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        let paths = index
+            .entries
+            .iter()
+            .map(|entry| entry.path.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(paths, vec!["nested/a.txt", "nested/new.txt"]);
         remove_dir_all(&temp);
     }
 

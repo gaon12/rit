@@ -1378,10 +1378,10 @@ fn reset_command(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    let Some(paths) = parse_plain_path_args(args, "reset", stderr)? else {
+    let Some(reset_args) = parse_reset_args(args, stderr)? else {
         return Ok(ExitCode::from(129));
     };
-    if paths.is_empty() {
+    if reset_args.paths.is_empty() {
         writeln!(
             stderr,
             "rit: reset currently supports only ordinary file or directory pathspecs"
@@ -1392,7 +1392,22 @@ fn reset_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    match repository.restore_staged_paths_from_head(&paths) {
+    if reset_args.plan {
+        return match repository.plan_restore_staged_paths_from_head(&reset_args.paths) {
+            Ok(plan) => {
+                writeln!(stdout, "reset: plan")?;
+                for path in plan.paths_to_restore {
+                    writeln!(stdout, "restore-index: {path}")?;
+                }
+                for path in plan.paths_to_remove {
+                    writeln!(stdout, "remove-index: {path}")?;
+                }
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_command_error(stderr, error),
+        };
+    }
+    match repository.restore_staged_paths_from_head(&reset_args.paths) {
         Ok(unstaged) => {
             if !unstaged.is_empty() {
                 writeln!(stdout, "Unstaged changes after reset:")?;
@@ -1406,12 +1421,17 @@ fn reset_command(
     }
 }
 
-fn parse_plain_path_args(
+struct ParsedResetArgs {
+    paths: Vec<String>,
+    plan: bool,
+}
+
+fn parse_reset_args(
     args: &[String],
-    command: &str,
     stderr: &mut dyn Write,
-) -> io::Result<Option<Vec<String>>> {
+) -> io::Result<Option<ParsedResetArgs>> {
     let mut paths = Vec::new();
+    let mut plan = false;
     let mut pathspec_file = None;
     let mut pathspec_file_nul = false;
     let mut after_separator = false;
@@ -1427,8 +1447,10 @@ fn parse_plain_path_args(
             &mut pathspec_file,
             &mut pathspec_file_nul,
         )? {
+        } else if arg == "--plan" && !after_separator {
+            plan = true;
         } else if arg.starts_with('-') && !after_separator {
-            writeln!(stderr, "rit: unsupported {command} option '{arg}'")?;
+            writeln!(stderr, "rit: unsupported reset option '{arg}'")?;
             return Ok(None);
         } else {
             paths.push(arg.clone());
@@ -1439,7 +1461,7 @@ fn parse_plain_path_args(
         let Some(file_pathspecs) = pathspec_args::read_pathspecs_from_file(
             &file_name,
             pathspec_file_nul,
-            command,
+            "reset",
             stderr,
         )?
         else {
@@ -1447,7 +1469,7 @@ fn parse_plain_path_args(
         };
         paths.extend(file_pathspecs);
     }
-    Ok(Some(paths))
+    Ok(Some(ParsedResetArgs { paths, plan }))
 }
 
 fn checkout_command(
