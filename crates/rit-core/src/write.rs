@@ -152,7 +152,31 @@ pub enum MergePlan {
         /// Paths changed differently on both sides and likely to need conflict
         /// stages when merge commits are implemented.
         conflict_paths: Vec<String>,
+        /// Candidate stage entries for each conflicting path.
+        conflict_stages: Vec<MergeConflictStagePlan>,
     },
+}
+
+/// Planned conflict stages for one path in a future non-fast-forward merge.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MergeConflictStagePlan {
+    /// Repository-relative path.
+    pub path: String,
+    /// Stage 1, the merge-base version.
+    pub base: Option<MergeConflictStageEntry>,
+    /// Stage 2, the current `HEAD` version.
+    pub head: Option<MergeConflictStageEntry>,
+    /// Stage 3, the target version.
+    pub target: Option<MergeConflictStageEntry>,
+}
+
+/// One planned conflict-stage entry.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MergeConflictStageEntry {
+    /// Git file mode for this stage.
+    pub mode: u32,
+    /// Blob object ID for this stage.
+    pub object_id: ObjectId,
 }
 
 /// Options that affect commit metadata without changing the committed tree.
@@ -699,6 +723,7 @@ impl Repository {
                 head_changed_paths: merge_workflow.head_changed_paths,
                 target_changed_paths: merge_workflow.target_changed_paths,
                 conflict_paths: merge_workflow.conflict_paths,
+                conflict_stages: merge_workflow.conflict_stages,
             });
         }
         let old_entries = self.commit_index_entries(old_id)?;
@@ -1148,6 +1173,7 @@ struct NonFastForwardMergeWorkflowPlan {
     head_changed_paths: Vec<String>,
     target_changed_paths: Vec<String>,
     conflict_paths: Vec<String>,
+    conflict_stages: Vec<MergeConflictStagePlan>,
 }
 
 fn non_fast_forward_merge_workflow_plan(
@@ -1167,6 +1193,7 @@ fn non_fast_forward_merge_workflow_plan(
     let mut head_changed_paths = Vec::new();
     let mut target_changed_paths = Vec::new();
     let mut conflict_paths = Vec::new();
+    let mut conflict_stages = Vec::new();
     for path in paths {
         let base_entry = base_by_path.get(path).copied();
         let head_entry = head_by_path.get(path).copied();
@@ -1181,12 +1208,19 @@ fn non_fast_forward_merge_workflow_plan(
         }
         if head_changed && target_changed && !tree_entries_equal(head_entry, target_entry) {
             conflict_paths.push(path.to_owned());
+            conflict_stages.push(MergeConflictStagePlan {
+                path: path.to_owned(),
+                base: conflict_stage_entry(base_entry),
+                head: conflict_stage_entry(head_entry),
+                target: conflict_stage_entry(target_entry),
+            });
         }
     }
     NonFastForwardMergeWorkflowPlan {
         head_changed_paths,
         target_changed_paths,
         conflict_paths,
+        conflict_stages,
     }
 }
 
@@ -1207,6 +1241,13 @@ fn tree_entries_equal(left: Option<&IndexEntry>, right: Option<&IndexEntry>) -> 
         (None, None) => true,
         (Some(_), None) | (None, Some(_)) => false,
     }
+}
+
+fn conflict_stage_entry(entry: Option<&IndexEntry>) -> Option<MergeConflictStageEntry> {
+    entry.map(|entry| MergeConflictStageEntry {
+        mode: entry.mode,
+        object_id: entry.object_id,
+    })
 }
 
 fn worktree_path_matches_exact_case(root: &Path, slash_path: &str) -> bool {
@@ -2326,17 +2367,29 @@ mod tests {
             .plan_merge_ff_only("topic")
             .expect("merge plan should work");
 
-        assert_eq!(
-            plan,
-            super::MergePlan::NonFastForward {
-                head_id: master,
-                target_id: topic,
-                merge_base: Some(base),
-                head_changed_paths: vec!["nested/a.txt".to_owned()],
-                target_changed_paths: vec!["nested/a.txt".to_owned()],
-                conflict_paths: vec!["nested/a.txt".to_owned()],
-            }
-        );
+        let super::MergePlan::NonFastForward {
+            head_id,
+            target_id,
+            merge_base,
+            head_changed_paths,
+            target_changed_paths,
+            conflict_paths,
+            conflict_stages,
+        } = plan
+        else {
+            panic!("expected non-fast-forward merge plan");
+        };
+        assert_eq!(head_id, master);
+        assert_eq!(target_id, topic);
+        assert_eq!(merge_base, Some(base));
+        assert_eq!(head_changed_paths, vec!["nested/a.txt"]);
+        assert_eq!(target_changed_paths, vec!["nested/a.txt"]);
+        assert_eq!(conflict_paths, vec!["nested/a.txt"]);
+        assert_eq!(conflict_stages.len(), 1);
+        assert_eq!(conflict_stages[0].path, "nested/a.txt");
+        assert!(conflict_stages[0].base.is_some());
+        assert!(conflict_stages[0].head.is_some());
+        assert!(conflict_stages[0].target.is_some());
         assert_eq!(
             repository
                 .resolve_head()

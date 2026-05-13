@@ -1814,6 +1814,7 @@ fn merge_command(
                 head_changed_paths,
                 target_changed_paths,
                 conflict_paths,
+                conflict_stages,
             }) => {
                 writeln!(stdout, "merge: plan")?;
                 writeln!(stdout, "action: non-fast-forward")?;
@@ -1833,6 +1834,16 @@ fn merge_command(
                 }
                 for path in conflict_paths {
                     writeln!(stdout, "conflict-candidate: {path}")?;
+                }
+                for stage in conflict_stages {
+                    writeln!(
+                        stdout,
+                        "conflict-stage: {} base={} head={} target={}",
+                        stage.path,
+                        format_merge_stage(stage.base),
+                        format_merge_stage(stage.head),
+                        format_merge_stage(stage.target)
+                    )?;
                 }
                 writeln!(stdout, "requires: merge-commit")?;
                 Ok(ExitCode::SUCCESS)
@@ -1875,6 +1886,7 @@ fn merge_command(
                 head_changed_paths,
                 target_changed_paths,
                 conflict_paths,
+                conflict_stages,
             }) => {
                 writeln!(stdout, "action: non-fast-forward")?;
                 writeln!(stdout, "head: {}", &head_id.to_hex()[..7])?;
@@ -1897,6 +1909,16 @@ fn merge_command(
                 }
                 for path in conflict_paths {
                     writeln!(stdout, "conflict-candidate: {path}")?;
+                }
+                for stage in conflict_stages {
+                    writeln!(
+                        stdout,
+                        "conflict-stage: {} base={} head={} target={}",
+                        stage.path,
+                        format_merge_stage(stage.base),
+                        format_merge_stage(stage.head),
+                        format_merge_stage(stage.target)
+                    )?;
                 }
                 writeln!(stdout, "requires: merge-commit")?;
                 Ok(ExitCode::SUCCESS)
@@ -2161,6 +2183,12 @@ fn record_operation(
 
 fn short_head(head: Option<rit_core::ObjectId>) -> String {
     head.map(|object_id| object_id.to_hex()[..7].to_owned())
+        .unwrap_or_else(|| "-".to_owned())
+}
+
+fn format_merge_stage(stage: Option<rit_core::MergeConflictStageEntry>) -> String {
+    stage
+        .map(|stage| format!("{:o}:{}", stage.mode, &stage.object_id.to_hex()[..7]))
         .unwrap_or_else(|| "-".to_owned())
 }
 

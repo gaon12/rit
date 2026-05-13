@@ -382,6 +382,8 @@ Completion criteria:
     without writing repository state.
   - [x] Non-fast-forward `--plan` reports head-side changes, target-side
     changes, and conflict candidates without writing repository state.
+  - [x] Non-fast-forward `--plan` reports candidate base/head/target stage
+    entries for conflicting paths without writing conflict index stages.
   - [ ] Merge commits, conflict index stages, hooks, strategies, abort, and
     continue workflows.
 - [ ] `rit cherry-pick`
