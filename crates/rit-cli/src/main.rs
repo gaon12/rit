@@ -2093,6 +2093,7 @@ fn merge_command(
         Ok(rit_core::MergeResult::Conflicts {
             target_id,
             conflict_paths,
+            conflict_reports,
         }) => {
             record_operation_with_changed_paths(
                 &repository,
@@ -2103,8 +2104,8 @@ fn merge_command(
                 Vec::new(),
                 stderr,
             )?;
-            for path in &conflict_paths {
-                writeln!(stdout, "CONFLICT (content): Merge conflict in {path}")?;
+            for report in &conflict_reports {
+                writeln!(stdout, "{}", format_merge_conflict_report(report, target))?;
             }
             writeln!(
                 stdout,
@@ -2416,6 +2417,33 @@ fn format_merge_stage(stage: Option<rit_core::MergeConflictStageEntry>) -> Strin
     stage
         .map(|stage| format!("{:o}:{}", stage.mode, &stage.object_id.to_hex()[..7]))
         .unwrap_or_else(|| "-".to_owned())
+}
+
+fn format_merge_conflict_report(report: &rit_core::MergeConflictReport, target: &str) -> String {
+    match report.kind {
+        rit_core::MergeConflictKind::Content => {
+            format!("CONFLICT (content): Merge conflict in {}", report.path)
+        }
+        rit_core::MergeConflictKind::ModifyDelete {
+            deleted_side,
+            modified_side,
+            worktree_side,
+        } => format!(
+            "CONFLICT (modify/delete): {} deleted in {} and modified in {}. Version {} of {} left in tree.",
+            report.path,
+            format_merge_side(deleted_side, target),
+            format_merge_side(modified_side, target),
+            format_merge_side(worktree_side, target),
+            report.path
+        ),
+    }
+}
+
+fn format_merge_side(side: rit_core::MergeConflictSide, target: &str) -> &str {
+    match side {
+        rit_core::MergeConflictSide::Head => "HEAD",
+        rit_core::MergeConflictSide::Target => target,
+    }
 }
 
 fn write_command_error(stderr: &mut dyn Write, error: rit_core::RitError) -> io::Result<ExitCode> {

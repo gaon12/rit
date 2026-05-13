@@ -1455,6 +1455,10 @@ fn merge_delete_modify_conflict_leaves_target_file_when_head_deleted() {
         .expect("rit merge should start");
 
     assert!(!merge.status.success());
+    let stdout = String::from_utf8_lossy(&merge.stdout);
+    assert!(stdout.contains(
+        "CONFLICT (modify/delete): a.txt deleted in HEAD and modified in topic. Version topic of a.txt left in tree.\n"
+    ));
     assert_eq!(
         fs::read_to_string(fixture.join("a.txt")).expect("target file should exist"),
         "topic\n"

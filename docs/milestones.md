@@ -405,8 +405,10 @@ Completion criteria:
     contents.
     - [x] Delete/modify conflicts where `HEAD` deleted the path leave the
       target version in the working tree.
-    - [ ] Binary conflict, mode conflict, symlink conflict, and full conflict
-      result messages.
+    - [x] Delete/modify conflicts print a Git-shaped `modify/delete` conflict
+      result message.
+    - [ ] Binary conflict, mode conflict, symlink conflict, and remaining full
+      conflict result messages.
 
 Completion criteria:
 - Interrupted operations leave clear state and can be continued, aborted, or

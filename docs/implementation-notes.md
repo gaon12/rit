@@ -352,9 +352,11 @@
   parents.
 - Delete/modify conflicts where `HEAD` deleted the path and the target modified
   it now leave the target version in the working tree while preserving stage 1
-  and stage 3 index entries.
-- Still unsupported: binary/mode/symlink conflict materialization, strategies,
-  merge hooks, `cherry-pick`, `rebase`, and `stash`.
+  and stage 3 index entries. Merge results now carry structured conflict
+  reports so the CLI can print Git-shaped `modify/delete` messages instead of
+  treating every conflict as content-only.
+- Still unsupported: binary/mode/symlink conflict materialization and messages,
+  strategies, merge hooks, `cherry-pick`, `rebase`, and `stash`.
 
 ### M16: Operation journal and universal undo
 
@@ -942,9 +944,9 @@
   one target branch or revision, conflicted non-fast-forward index-stage
   starts, `--abort`, `--continue`, plus rit-specific `--plan` and
   `merge explain <target>`.
-- Unsupported options: binary/mode/symlink conflict materialization, strategies,
-  stat output, hooks, squash, quit, autostash, signing, and verification
-  options.
+- Unsupported options: binary/mode/symlink conflict materialization and
+  messages, strategies, stat output, hooks, squash, quit, autostash, signing,
+  and verification options.
 - Git-compatible behavior: fast-forward final `HEAD`, index, and worktree state
   match Git for simple clean repositories.
 - rit-specific behavior: `--plan` prints whether the merge would be already
@@ -958,7 +960,8 @@
 - rit-specific behavior: conflicted non-fast-forward merges leave stage 1/2/3
   entries in the index, merge state files, and simple worktree conflict markers
   for regular text content conflicts. Delete/modify conflicts where `HEAD`
-  deleted the path leave the target version in the working tree.
+  deleted the path leave the target version in the working tree and print a
+  `modify/delete` conflict message.
 - rit-specific behavior: `--abort` restores the `ORIG_HEAD` tree and removes
   merge state files, but does not yet handle autostash or `--quit`.
 - rit-specific behavior: `--continue` creates a merge commit from the current

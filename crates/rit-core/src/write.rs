@@ -135,7 +135,44 @@ pub enum MergeResult {
         target_id: ObjectId,
         /// Paths with unmerged stage entries in the index.
         conflict_paths: Vec<String>,
+        /// Structured descriptions of each conflict for porcelain output.
+        conflict_reports: Vec<MergeConflictReport>,
     },
+}
+
+/// One merge conflict that `rit merge` left for the user to resolve.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MergeConflictReport {
+    /// Repository-relative path.
+    pub path: String,
+    /// High-level conflict type.
+    pub kind: MergeConflictKind,
+}
+
+/// High-level conflict classification for user-facing merge output.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MergeConflictKind {
+    /// Both sides changed file content or shape in a way this merge slice
+    /// cannot automatically combine.
+    Content,
+    /// One side deleted a path while the other side modified it.
+    ModifyDelete {
+        /// Side that deleted the path.
+        deleted_side: MergeConflictSide,
+        /// Side that modified the path.
+        modified_side: MergeConflictSide,
+        /// Version left in the working tree for the user to inspect.
+        worktree_side: MergeConflictSide,
+    },
+}
+
+/// One side of a two-parent merge conflict.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum MergeConflictSide {
+    /// Current `HEAD`.
+    Head,
+    /// Merge target requested by the user.
+    Target,
 }
 
 /// Dry-run plan for the currently supported fast-forward merge path.
@@ -825,6 +862,7 @@ impl Repository {
             return Ok(MergeResult::Conflicts {
                 target_id: new_id,
                 conflict_paths: merge_workflow.conflict_paths,
+                conflict_reports: merge_conflict_reports(&merge_workflow.conflict_stages),
             });
         }
 
@@ -1570,6 +1608,32 @@ fn conflict_stage_entry(entry: Option<&IndexEntry>) -> Option<MergeConflictStage
     })
 }
 
+fn merge_conflict_reports(conflict_stages: &[MergeConflictStagePlan]) -> Vec<MergeConflictReport> {
+    conflict_stages
+        .iter()
+        .map(|stage| MergeConflictReport {
+            path: stage.path.clone(),
+            kind: merge_conflict_kind(stage),
+        })
+        .collect()
+}
+
+fn merge_conflict_kind(stage: &MergeConflictStagePlan) -> MergeConflictKind {
+    match (stage.base, stage.head, stage.target) {
+        (Some(_), None, Some(_)) => MergeConflictKind::ModifyDelete {
+            deleted_side: MergeConflictSide::Head,
+            modified_side: MergeConflictSide::Target,
+            worktree_side: MergeConflictSide::Target,
+        },
+        (Some(_), Some(_), None) => MergeConflictKind::ModifyDelete {
+            deleted_side: MergeConflictSide::Target,
+            modified_side: MergeConflictSide::Head,
+            worktree_side: MergeConflictSide::Head,
+        },
+        _ => MergeConflictKind::Content,
+    }
+}
+
 fn write_non_conflicting_merge_worktree_changes(
     repository: &Repository,
     worktree: &Path,
@@ -2209,8 +2273,8 @@ fn write_worktree_symlink_atomically(path: &Path, target: &[u8]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        AddOptions, FileModeOverride, SignatureIdentity, SignatureTime, parse_tree_entries,
-        read_config_value,
+        AddOptions, FileModeOverride, MergeConflictKind, MergeConflictReport, MergeConflictSide,
+        SignatureIdentity, SignatureTime, parse_tree_entries, read_config_value,
     };
     use crate::{
         Index, IndexEntry, InitOptions, ObjectKind, Repository, index::IndexEntryStat, parse_commit,
@@ -2836,6 +2900,10 @@ mod tests {
             super::MergeResult::Conflicts {
                 target_id: topic,
                 conflict_paths: vec!["nested/a.txt".to_owned()],
+                conflict_reports: vec![MergeConflictReport {
+                    path: "nested/a.txt".to_owned(),
+                    kind: MergeConflictKind::Content,
+                }],
             }
         );
         let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
@@ -2937,10 +3005,26 @@ mod tests {
             .merge("topic")
             .expect("delete/modify merge should start");
 
-        let super::MergeResult::Conflicts { conflict_paths, .. } = result else {
+        let super::MergeResult::Conflicts {
+            conflict_paths,
+            conflict_reports,
+            ..
+        } = result
+        else {
             panic!("expected conflicted merge");
         };
         assert_eq!(conflict_paths, vec!["nested/a.txt".to_owned()]);
+        assert_eq!(
+            conflict_reports,
+            vec![MergeConflictReport {
+                path: "nested/a.txt".to_owned(),
+                kind: MergeConflictKind::ModifyDelete {
+                    deleted_side: MergeConflictSide::Head,
+                    modified_side: MergeConflictSide::Target,
+                    worktree_side: MergeConflictSide::Target,
+                },
+            }]
+        );
         assert_eq!(
             fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
             "topic\n"
