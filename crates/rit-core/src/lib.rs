@@ -140,12 +140,13 @@ pub use attributes::{
     AttributeAssignment, AttributeMacro, AttributeRule, AttributeState, GitAttributes,
 };
 pub use auth::{
-    AuthInteractionPolicy, Credential, CredentialKind, CredentialProvider, CredentialRequest,
-    DEFAULT_TOKEN_ENV_VARS, EnvironmentToken, EnvironmentTokenProvider, GitCredentialHelper,
-    GitCredentialHelperExecutor, GitCredentialHelperOperation, GitCredentialHelperProvider,
-    GitCredentialMessage, KeychainProviderKind, ProcessGitCredentialHelperExecutor, SecretString,
-    SshAgentClient, SshAgentConfig, SshAgentIdentity, SshAgentSignFlags, SshAgentSignature,
-    SystemKeychainConfig, SystemKeychainProvider,
+    AuthExplanation, AuthInteractionPolicy, AuthProtocol, Credential, CredentialKind,
+    CredentialProvider, CredentialRequest, DEFAULT_TOKEN_ENV_VARS, EnvironmentToken,
+    EnvironmentTokenProvider, GitCredentialHelper, GitCredentialHelperExecutor,
+    GitCredentialHelperOperation, GitCredentialHelperProvider, GitCredentialMessage,
+    KeychainProviderKind, ProcessGitCredentialHelperExecutor, SecretString, SshAgentClient,
+    SshAgentConfig, SshAgentIdentity, SshAgentSignFlags, SshAgentSignature, SystemKeychainConfig,
+    SystemKeychainProvider, explain_auth_location, explain_auth_location_with_env,
 };
 pub use commit::{Commit, Signature, parse_commit};
 pub use config::{GitConfig, GitConfigEntry};

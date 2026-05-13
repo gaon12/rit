@@ -70,6 +70,7 @@ rit checkout <branch-or-commit>
 rit switch
 rit merge [--plan] [--ff-only] <target>
 rit merge explain <target>
+rit auth explain <url>
 rit op log
 rit op restore <id>
 rit undo

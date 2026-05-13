@@ -2,6 +2,7 @@ use std::env;
 use std::io::{self, Write};
 use std::process::ExitCode;
 
+mod auth;
 mod doctor;
 mod help;
 mod pathspec_args;
@@ -55,6 +56,7 @@ fn run(
         [command, rest @ ..] if command == "checkout" => checkout_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "switch" => switch_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "merge" => merge_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "auth" => auth::auth_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "show" => show_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ls-files" => ls_files_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ignore" => ignore_command(rest, stdout, stderr),
@@ -2558,6 +2560,31 @@ mod tests {
         assert!(stdout.contains("mode: glob\n"));
         assert!(stdout.contains("ignore-case: true\n"));
         assert!(stdout.contains("exclude: true\n"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn auth_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "auth"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit auth explain"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn auth_explain_prints_remote_request_without_secret_values() {
+        let (code, stdout, stderr) =
+            run_with(&["auth", "explain", "https://alice@example.test/org/repo.git"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("auth: explain\n"));
+        assert!(stdout.contains("protocol: https\n"));
+        assert!(stdout.contains("credential-lookup: true\n"));
+        assert!(stdout.contains("request-host: example.test\n"));
+        assert!(stdout.contains("request-path: org/repo.git\n"));
+        assert!(stdout.contains("request-username: alice\n"));
+        assert!(!stdout.contains("secret"));
         assert_eq!(stderr, "");
     }
 

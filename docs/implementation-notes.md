@@ -1043,3 +1043,18 @@
 - Behavior change: none intended; this keeps remote command parsing and
   dispatch together while reducing the CLI entrypoint after the plain HTTP push
   workflow landed.
+
+### Auth explain
+
+- Baseline command checked: `git credential -h` on Git 2.52.0.windows.1.
+- Supported command: `rit auth explain <url>`.
+- Supported behavior: classifies local, HTTP, HTTPS, SSH URL, and scp-like SSH
+  locations; prints the credential request protocol, host, path, and username
+  when applicable; reports which default token environment variables are set by
+  name only.
+- Secret handling: environment token values are never stored in the explanation
+  and are never printed.
+- Unsupported behavior: resolving full Git credential-helper precedence, SSH
+  config expansion, interactive prompts, keychain lookups, OAuth/device flows,
+  and host-specific auth provider selection.
+- Repository mutation: no.

@@ -29,6 +29,7 @@ Core commands:
   checkout      Switch branches
   switch        Switch branches
   merge         Fast-forward a branch or revision
+  auth          Explain remote authentication selection
   op            Inspect or restore rit operation journal entries
   undo          Undo the last restorable rit operation
   show          Show one object
@@ -177,6 +178,12 @@ rit merge explain <target>
 Fast-forward the current branch to a local branch or revision, print the planned fast-forward, or explain the fast-forward decision without writing. Merge commits and conflict handling are not implemented yet.
 ";
 
+const AUTH_HELP: &str = "\
+rit auth explain <url>
+
+Explain remote auth protocol selection, credential request fields, and available redacted token sources without reading or printing secrets.
+";
+
 const OP_HELP: &str = "\
 rit op log
 rit op restore <id>
@@ -259,6 +266,7 @@ pub fn print_command_help(
         "checkout" => stdout.write_all(CHECKOUT_HELP.as_bytes())?,
         "switch" => stdout.write_all(SWITCH_HELP.as_bytes())?,
         "merge" => stdout.write_all(MERGE_HELP.as_bytes())?,
+        "auth" => stdout.write_all(AUTH_HELP.as_bytes())?,
         "op" => stdout.write_all(OP_HELP.as_bytes())?,
         "undo" => stdout.write_all(UNDO_HELP.as_bytes())?,
         "show" => stdout.write_all(SHOW_HELP.as_bytes())?,

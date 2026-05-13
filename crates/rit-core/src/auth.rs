@@ -1,5 +1,6 @@
 mod credential;
 mod environment;
+mod explain;
 mod git_credential;
 mod git_credential_process;
 #[cfg(test)]
@@ -15,6 +16,9 @@ pub use credential::{
     Credential, CredentialKind, CredentialProvider, CredentialRequest, SecretString,
 };
 pub use environment::{DEFAULT_TOKEN_ENV_VARS, EnvironmentToken, EnvironmentTokenProvider};
+pub use explain::{
+    AuthExplanation, AuthProtocol, explain_auth_location, explain_auth_location_with_env,
+};
 pub use git_credential::{GitCredentialHelper, GitCredentialMessage};
 pub use git_credential_process::{
     GitCredentialHelperExecutor, GitCredentialHelperOperation, GitCredentialHelperProvider,
