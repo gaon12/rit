@@ -18,6 +18,24 @@ pub struct AddOptions {
     pub mode_override: Option<FileModeOverride>,
 }
 
+/// Dry-run plan for `rit add`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AddPlan {
+    /// Existing or new worktree files that would be written to the index.
+    pub paths_to_add: Vec<String>,
+    /// Tracked index paths that match the pathspec but no longer exist.
+    pub paths_to_remove: Vec<String>,
+    /// Optional executable-bit override that would be applied to regular files.
+    pub mode_override: Option<FileModeOverride>,
+}
+
+impl AddPlan {
+    /// Returns true when no existing, new, or removed paths matched the add request.
+    pub fn is_empty(&self) -> bool {
+        self.paths_to_add.is_empty() && self.paths_to_remove.is_empty()
+    }
+}
+
 impl AddOptions {
     /// Builds default add options.
     pub fn new() -> Self {
@@ -171,17 +189,28 @@ impl Repository {
         self.add_paths_with_options(paths, &AddOptions::default())
     }
 
+    /// Builds a dry-run add plan without writing objects or the index.
+    pub fn plan_add_paths_with_options(
+        &self,
+        paths: &[String],
+        options: &AddOptions,
+    ) -> Result<AddPlan> {
+        let selection = self.add_path_selection(paths)?;
+        Ok(AddPlan {
+            paths_to_add: selection.files_to_add.into_iter().collect(),
+            paths_to_remove: selection.paths_to_remove.into_iter().collect(),
+            mode_override: options.mode_override,
+        })
+    }
+
     /// Adds files matching ordinary pathspecs to the index with explicit options.
     pub fn add_paths_with_options(&self, paths: &[String], options: &AddOptions) -> Result<usize> {
+        let selection = self.add_path_selection(paths)?;
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
                 "add must be run in a repository with a working tree",
             ));
         };
-        if paths.is_empty() {
-            return Err(RitError::invalid_input("add requires at least one path"));
-        }
-        let pathspecs = PathspecSet::from_args(paths)?;
 
         let index_path = self.git_dir().join("index");
         let mut index = Index::read(&index_path)?;
@@ -190,18 +219,9 @@ impl Repository {
             .into_iter()
             .map(|entry| (entry.path.clone(), entry))
             .collect::<BTreeMap<_, _>>();
-        let ignore_case = self.core_ignorecase_enabled()?;
-        let attributes = self.root_attributes()?;
-        let files_to_add = expand_add_pathspecs(
-            worktree,
-            &pathspecs,
-            entries.keys(),
-            ignore_case,
-            &attributes,
-        )?;
         let symlinks_enabled = self.core_symlinks_enabled()?;
 
-        for relative_path in files_to_add {
+        for relative_path in selection.files_to_add {
             let full_path = join_slash_path(worktree, &relative_path);
             let metadata = fs::symlink_metadata(&full_path)
                 .map_err(|source| RitError::io(&full_path, source))?;
@@ -240,12 +260,8 @@ impl Repository {
             );
         }
 
-        for path in entries.keys().cloned().collect::<Vec<_>>() {
-            if pathspecs.matches_with_attributes(&path, Some(&attributes))
-                && !join_slash_path(worktree, &path).exists()
-            {
-                entries.remove(&path);
-            }
+        for path in selection.paths_to_remove {
+            entries.remove(&path);
         }
 
         index = Index {
@@ -255,6 +271,45 @@ impl Repository {
         let count = index.entries.len();
         index.write(&index_path)?;
         Ok(count)
+    }
+
+    fn add_path_selection(&self, paths: &[String]) -> Result<AddPathSelection> {
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "add must be run in a repository with a working tree",
+            ));
+        };
+        if paths.is_empty() {
+            return Err(RitError::invalid_input("add requires at least one path"));
+        }
+        let pathspecs = PathspecSet::from_args(paths)?;
+        let index = Index::read(&self.git_dir().join("index"))?;
+        let entries = index
+            .entries
+            .into_iter()
+            .map(|entry| (entry.path.clone(), entry))
+            .collect::<BTreeMap<_, _>>();
+        let ignore_case = self.core_ignorecase_enabled()?;
+        let attributes = self.root_attributes()?;
+        let files_to_add = expand_add_pathspecs(
+            worktree,
+            &pathspecs,
+            entries.keys(),
+            ignore_case,
+            &attributes,
+        )?;
+        let paths_to_remove = entries
+            .keys()
+            .filter(|path| {
+                pathspecs.matches_with_attributes(path, Some(&attributes))
+                    && !join_slash_path(worktree, path).exists()
+            })
+            .cloned()
+            .collect();
+        Ok(AddPathSelection {
+            files_to_add,
+            paths_to_remove,
+        })
     }
 
     /// Creates a commit from the current index and advances `HEAD`.
@@ -783,6 +838,11 @@ fn expand_add_pathspecs<'a>(
     files.retain(|path| pathspecs.matches_with_attributes(path, Some(attributes)));
 
     Ok(files)
+}
+
+struct AddPathSelection {
+    files_to_add: BTreeSet<String>,
+    paths_to_remove: BTreeSet<String>,
 }
 
 fn worktree_path_matches_exact_case(root: &Path, slash_path: &str) -> bool {
@@ -1451,6 +1511,30 @@ mod tests {
             .map(|entry| entry.path.as_str())
             .collect::<Vec<_>>();
         assert_eq!(paths, vec!["nested/a.txt", "nested/deeper/b.txt"]);
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn add_plan_reports_paths_without_writing_index() {
+        let temp = temp_path("add-plan");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        fs::create_dir_all(temp.join("nested")).expect("nested directory should be written");
+        fs::write(temp.join("nested").join("a.txt"), "one\n").expect("file should be written");
+
+        let plan = repository
+            .plan_add_paths_with_options(
+                &["nested".to_owned()],
+                &AddOptions {
+                    mode_override: Some(FileModeOverride::Executable),
+                },
+            )
+            .expect("add plan should work");
+
+        assert_eq!(plan.paths_to_add, vec!["nested/a.txt"]);
+        assert_eq!(plan.paths_to_remove, Vec::<String>::new());
+        assert_eq!(plan.mode_override, Some(FileModeOverride::Executable));
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        assert!(index.entries.is_empty());
         remove_dir_all(&temp);
     }
 

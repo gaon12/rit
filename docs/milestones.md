@@ -554,8 +554,9 @@ Completion criteria:
 ## M17: Transaction Plan And Dry-Run API
 
 - [ ] Add structured plan type for write operations.
-- [ ] Add `repo.add(...).plan()?` style API or equivalent builder.
-- [ ] Add `rit add --plan`.
+- [x] Add `repo.add(...).plan()?` style API or equivalent builder.
+- [x] Add structured plan type for `rit add`.
+- [x] Add `rit add --plan`.
 - [ ] Add `rit commit --plan`.
 - [ ] Add `rit reset --plan`.
 - [ ] Add `rit merge --plan`.

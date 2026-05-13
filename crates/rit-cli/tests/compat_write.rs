@@ -30,6 +30,29 @@ fn add_directory_pathspec_matches_git_status() {
 }
 
 #[test]
+fn add_plan_prints_paths_without_writing_index() {
+    let fixture = LocalWriteFixture::new("add-plan", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "changed\n",
+    )
+    .expect("tracked file should be modified");
+    fs::write(fixture.path().join("nested").join("new.txt"), "new\n")
+        .expect("new file should be written");
+
+    let output = run_capture(rit_binary(), ["add", "--plan", "nested"], fixture.path()).0;
+
+    assert!(output.contains("add: plan\n"));
+    assert!(output.contains("add: nested/new.txt\n"));
+    assert!(output.contains("add: nested/tracked.txt\n"));
+    assert_eq!(
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], fixture.path()).0,
+        " M nested/tracked.txt\n?? nested/new.txt\n"
+    );
+}
+
+#[test]
 fn add_wildcard_pathspec_matches_git_status() {
     let fixture = LocalWriteFixture::new("add-wildcard", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");

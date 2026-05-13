@@ -113,9 +113,9 @@ Show commits reachable from HEAD by following the first parent.
 ";
 
 const ADD_HELP: &str = "\
-rit add [--chmod=(+|-)x] [--pathspec-from-file <file>] [--pathspec-file-nul] <file>...
+rit add [--plan] [--chmod=(+|-)x] [--pathspec-from-file <file>] [--pathspec-file-nul] <file>...
 
-Add regular files to the index.
+Add regular files to the index, or print the planned index changes without writing.
 ";
 
 const COMMIT_HELP: &str = "\

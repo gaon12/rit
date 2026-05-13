@@ -60,7 +60,7 @@ rit diff --cached --numstat
 rit diff --cached --stat
 rit diff [--cached] <summary-mode> -- <pathspec>
 rit log [--oneline] [--] [<pathspec>...]
-rit add <pathspec>...
+rit add [--plan] <pathspec>...
 rit commit
 rit branch
 rit tag

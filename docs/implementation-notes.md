@@ -86,6 +86,9 @@
 - 2026-05-13 operation journal slice checked `git --version` and
   `git help -a`; this feature is rit-specific metadata under `.git/rit/` and
   does not use Git command output as a compatibility target.
+- 2026-05-13 transaction plan slice checked `git add -h`; implemented
+  `rit add --plan` as a rit-specific dry-run view over the same pathspec
+  expansion used by `rit add`.
 - 2026-05-12 large-file backend trait slice checked the AGENTS large-object
   backend guidance; no external `git-lfs` binary is used.
 - 2026-05-12 LFS pointer slice checked installed `git-lfs/3.7.1` and the
@@ -624,7 +627,7 @@
 ### `rit add`
 
 - Baseline command checked: `git add -h`
-- Supported options: ordinary literal file, directory, `.`, simple `*`, `?`,
+- Supported options: `--plan`, ordinary literal file, directory, `.`, simple `*`, `?`,
   and bracket-class wildcard pathspecs, positive `:(literal)`, `:(glob)`,
   `:(top)`, `:/`, and `:(icase)` pathspec magic, plus `--chmod=+x`, `--chmod=-x`,
   `--chmod +x`, `--chmod -x`, `--pathspec-from-file`, `--pathspec-from-file=-`, and
@@ -646,6 +649,8 @@
   the link target text.
 - Git-compatible behavior: when `core.symlinks=false`, `rit add` records a
   worktree symlink as a regular `100644` blob containing the link target text.
+- rit-specific behavior: `--plan` prints paths that would be added or removed
+  from the index without writing objects or `.git/index`.
 - Intentional differences: ignored-file checks are not implemented yet. On
   Windows, worktree executable bits remain filemode-insensitive like Git's
   usual `core.filemode` behavior there.

@@ -984,7 +984,7 @@ fn print_commit_no_patch(
 
 fn add_command(
     args: &[String],
-    _stdout: &mut dyn Write,
+    stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
     let Some(add_args) = parse_add_args(args, stderr)? else {
@@ -1002,6 +1002,24 @@ fn add_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
+    if add_args.plan {
+        return match repository.plan_add_paths_with_options(&add_args.paths, &add_args.options) {
+            Ok(plan) => {
+                writeln!(stdout, "add: plan")?;
+                if let Some(mode) = plan.mode_override {
+                    writeln!(stdout, "chmod: {}", chmod_mode_text(mode))?;
+                }
+                for path in plan.paths_to_add {
+                    writeln!(stdout, "add: {path}")?;
+                }
+                for path in plan.paths_to_remove {
+                    writeln!(stdout, "remove: {path}")?;
+                }
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_command_error(stderr, error),
+        };
+    }
     match repository.add_paths_with_options(&add_args.paths, &add_args.options) {
         Ok(_) => Ok(ExitCode::SUCCESS),
         Err(error) => {
@@ -1015,11 +1033,13 @@ fn add_command(
 struct ParsedAddArgs {
     paths: Vec<String>,
     options: rit_core::AddOptions,
+    plan: bool,
 }
 
 fn parse_add_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Option<ParsedAddArgs>> {
     let mut paths = Vec::new();
     let mut options = rit_core::AddOptions::default();
+    let mut plan = false;
     let mut pathspec_file = None;
     let mut pathspec_file_nul = false;
     let mut after_separator = false;
@@ -1036,6 +1056,8 @@ fn parse_add_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Option<
             &mut pathspec_file,
             &mut pathspec_file_nul,
         )? {
+        } else if arg == "--plan" && !after_separator {
+            plan = true;
         } else if arg == "--chmod" && !after_separator {
             index += 1;
             let Some(value) = args.get(index) else {
@@ -1071,7 +1093,11 @@ fn parse_add_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Option<
         paths.extend(file_pathspecs);
     }
 
-    Ok(Some(ParsedAddArgs { paths, options }))
+    Ok(Some(ParsedAddArgs {
+        paths,
+        options,
+        plan,
+    }))
 }
 
 fn parse_chmod_mode(value: &str) -> Option<rit_core::FileModeOverride> {
@@ -1079,6 +1105,13 @@ fn parse_chmod_mode(value: &str) -> Option<rit_core::FileModeOverride> {
         "+x" => Some(rit_core::FileModeOverride::Executable),
         "-x" => Some(rit_core::FileModeOverride::Regular),
         _ => None,
+    }
+}
+
+fn chmod_mode_text(mode: rit_core::FileModeOverride) -> &'static str {
+    match mode {
+        rit_core::FileModeOverride::Executable => "+x",
+        rit_core::FileModeOverride::Regular => "-x",
     }
 }
 
