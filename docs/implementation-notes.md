@@ -357,6 +357,8 @@
   every conflict as content-only.
 - Binary content conflicts now leave the `HEAD` version in the working tree,
   preserve conflict stages, and print a Git-shaped binary merge warning.
+- Add/add conflicts now carry a structured conflict kind and print a
+  Git-shaped `add/add` conflict result message.
 - Still unsupported: mode/symlink conflict materialization and messages,
   remaining full conflict message parity, strategies, merge hooks,
   `cherry-pick`, `rebase`, and `stash`.
@@ -965,7 +967,8 @@
   for regular text content conflicts. Delete/modify conflicts leave the
   modified side in the working tree and print a `modify/delete` conflict
   message. Binary content conflicts leave the `HEAD` version in the working
-  tree and print a binary merge warning.
+  tree and print a binary merge warning. Add/add conflicts print an `add/add`
+  conflict message.
 - rit-specific behavior: `--abort` restores the `ORIG_HEAD` tree and removes
   merge state files, but does not yet handle autostash or `--quit`.
 - rit-specific behavior: `--continue` creates a merge commit from the current

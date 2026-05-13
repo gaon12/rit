@@ -2428,6 +2428,9 @@ fn format_merge_conflict_report(report: &rit_core::MergeConflictReport, target: 
             "warning: Cannot merge binary files: {} (HEAD vs. {target})\nCONFLICT (content): Merge conflict in {}",
             report.path, report.path
         ),
+        rit_core::MergeConflictKind::AddAdd => {
+            format!("CONFLICT (add/add): Merge conflict in {}", report.path)
+        }
         rit_core::MergeConflictKind::ModifyDelete {
             deleted_side,
             modified_side,

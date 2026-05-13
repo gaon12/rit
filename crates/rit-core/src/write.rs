@@ -158,6 +158,8 @@ pub enum MergeConflictKind {
     /// Both sides changed a binary file. Git leaves the `HEAD` version in the
     /// working tree and asks the user to resolve it manually.
     BinaryContent,
+    /// Both sides independently added the same path.
+    AddAdd,
     /// One side deleted a path while the other side modified it.
     ModifyDelete {
         /// Side that deleted the path.
@@ -1143,6 +1145,8 @@ impl Repository {
             (_, Some(head), Some(target)) => {
                 if self.conflict_stage_is_binary(head)? || self.conflict_stage_is_binary(target)? {
                     Ok(MergeConflictKind::BinaryContent)
+                } else if stage.base.is_none() {
+                    Ok(MergeConflictKind::AddAdd)
                 } else {
                     Ok(MergeConflictKind::Content)
                 }
@@ -3205,6 +3209,67 @@ mod tests {
         assert_eq!(
             fs::read(temp.join("nested").join("bin.dat")).expect("binary should read"),
             vec![0, 1, 2, 8, 4]
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn merge_reports_add_add_conflict_for_independent_adds() {
+        let temp = temp_path("merge-add-add-conflict");
+        let repository = committed_nested_repository(&temp);
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("c.txt"), "topic\n").expect("topic file should write");
+        repository
+            .add_paths(&["nested/c.txt".to_owned()])
+            .expect("topic add should work");
+        repository
+            .commit_index("topic")
+            .expect("topic commit should work");
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(temp.join("nested").join("c.txt"), "head\n").expect("head file should write");
+        repository
+            .add_paths(&["nested/c.txt".to_owned()])
+            .expect("head add should work");
+        repository
+            .commit_index("head")
+            .expect("head commit should work");
+
+        let result = repository
+            .merge("topic")
+            .expect("add/add merge should start");
+
+        let super::MergeResult::Conflicts {
+            conflict_paths,
+            conflict_reports,
+            ..
+        } = result
+        else {
+            panic!("expected conflicted merge");
+        };
+        assert_eq!(conflict_paths, vec!["nested/c.txt".to_owned()]);
+        assert_eq!(
+            conflict_reports,
+            vec![MergeConflictReport {
+                path: "nested/c.txt".to_owned(),
+                kind: MergeConflictKind::AddAdd,
+            }]
+        );
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        let stages = index
+            .entries
+            .iter()
+            .filter(|entry| entry.path == "nested/c.txt")
+            .map(|entry| entry.stage)
+            .collect::<Vec<_>>();
+        assert_eq!(stages, vec![2, 3]);
+        assert!(
+            fs::read_to_string(temp.join("nested").join("c.txt"))
+                .expect("conflict file should read")
+                .contains("<<<<<<< HEAD\nhead\n=======\ntopic\n>>>>>>> topic\n")
         );
         remove_dir_all(&temp);
     }

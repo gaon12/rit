@@ -409,6 +409,8 @@ Completion criteria:
       result messages for both directions.
     - [x] Binary content conflicts leave the `HEAD` version in the working tree
       and print a Git-shaped binary merge warning.
+    - [x] Add/add conflicts print a Git-shaped `add/add` conflict result
+      message.
     - [ ] Mode conflict, symlink conflict, and remaining full conflict result
       messages.
 
