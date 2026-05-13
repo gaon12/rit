@@ -401,8 +401,12 @@ Completion criteria:
     conflicts.
   - [x] Abort conflicted merge state with `rit merge --abort`.
   - [x] Continue resolved conflicted merge state with `rit merge --continue`.
-  - [ ] Write binary/delete/mode conflict worktree states and full merge result
+  - [~] Write binary/delete/mode conflict worktree states and full merge result
     contents.
+    - [x] Delete/modify conflicts where `HEAD` deleted the path leave the
+      target version in the working tree.
+    - [ ] Binary conflict, mode conflict, symlink conflict, and full conflict
+      result messages.
 
 Completion criteria:
 - Interrupted operations leave clear state and can be continued, aborted, or

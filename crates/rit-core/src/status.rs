@@ -193,9 +193,11 @@ impl Repository {
         };
         let index_path = self.git_dir().join("index");
         let mut index = Index::read(&index_path)?;
+        let unmerged_entries = unmerged_index_entries(&index.entries);
         let index_entries = index
             .entries
             .iter()
+            .filter(|entry| entry.stage == 0)
             .map(|entry| {
                 (
                     entry.path.clone(),
@@ -210,6 +212,7 @@ impl Repository {
             .entries
             .iter()
             .enumerate()
+            .filter(|(_, entry)| entry.stage == 0)
             .map(|(position, entry)| (entry.path.clone(), position))
             .collect::<BTreeMap<_, _>>();
         let head_entries = self.head_tree_entries()?;
@@ -222,11 +225,23 @@ impl Repository {
         let mut index_refreshed = false;
         let tracked_paths = index_entries
             .keys()
+            .chain(unmerged_entries.keys())
             .chain(head_entries.keys())
             .cloned()
             .collect::<BTreeSet<_>>();
 
         for path in &tracked_paths {
+            if let Some(stages) = unmerged_entries.get(path) {
+                let (index_status, worktree_status) = unmerged_status_columns(stages);
+                if pathspecs.matches_with_attributes(path, Some(&attributes)) {
+                    entries.push(StatusEntry {
+                        index_status,
+                        worktree_status,
+                        path: path.clone(),
+                    });
+                }
+                continue;
+            }
             let head_object = head_entries.get(path);
             let index_object = index_entries.get(path);
             let index_status = status_index_column(head_object, index_object);
@@ -485,6 +500,36 @@ impl Repository {
 struct TreeBlobEntry {
     object_id: ObjectId,
     mode: u32,
+}
+
+fn unmerged_index_entries(entries: &[crate::index::IndexEntry]) -> BTreeMap<String, BTreeSet<u8>> {
+    let mut by_path = BTreeMap::new();
+    for entry in entries {
+        if entry.stage == 0 {
+            continue;
+        }
+        by_path
+            .entry(entry.path.clone())
+            .or_insert_with(BTreeSet::new)
+            .insert(entry.stage);
+    }
+    by_path
+}
+
+fn unmerged_status_columns(stages: &BTreeSet<u8>) -> (char, char) {
+    let base = stages.contains(&1);
+    let ours = stages.contains(&2);
+    let theirs = stages.contains(&3);
+    match (base, ours, theirs) {
+        (false, true, true) => ('A', 'A'),
+        (false, true, false) => ('A', 'U'),
+        (false, false, true) => ('U', 'A'),
+        (true, true, true) => ('U', 'U'),
+        (true, true, false) => ('U', 'D'),
+        (true, false, true) => ('D', 'U'),
+        (true, false, false) => ('D', 'D'),
+        (false, false, false) => ('U', 'U'),
+    }
 }
 
 fn status_index_column(

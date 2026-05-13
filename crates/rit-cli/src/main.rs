@@ -2169,7 +2169,7 @@ fn parse_merge_args(
         } else if target.is_some() {
             writeln!(
                 stderr,
-                "rit: merge currently supports only fast-forward merges"
+                "rit: merge currently supports only one target revision"
             )?;
             return Ok(None);
         } else {

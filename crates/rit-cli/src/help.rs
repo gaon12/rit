@@ -28,7 +28,7 @@ Core commands:
   reset         Reset staged file entries
   checkout      Switch branches
   switch        Switch branches
-  merge         Fast-forward a branch or revision
+  merge         Merge a branch or revision into the current branch
   auth          Explain remote authentication selection
   indexdb       Manage optional SQLite auxiliary index metadata
   op            Inspect or restore rit operation journal entries

@@ -13,10 +13,11 @@ pub(crate) fn write_conflict_markers(
     symlinks_enabled: bool,
 ) -> Result<()> {
     for conflict in conflict_stages {
-        let Some(head) = conflict.head else {
+        let Some(target) = conflict.target else {
             continue;
         };
-        let Some(target) = conflict.target else {
+        let Some(head) = conflict.head else {
+            write_available_side(repository, worktree, conflict, target, symlinks_enabled)?;
             continue;
         };
         if !is_regular_file_mode(head.mode) || !is_regular_file_mode(target.mode) {
@@ -37,6 +38,28 @@ pub(crate) fn write_conflict_markers(
         )?;
     }
     Ok(())
+}
+
+fn write_available_side(
+    repository: &Repository,
+    worktree: &Path,
+    conflict: &MergeConflictStagePlan,
+    target: MergeConflictStageEntry,
+    symlinks_enabled: bool,
+) -> Result<()> {
+    let object = repository.read_object(target.object_id)?;
+    if object.kind != ObjectKind::Blob {
+        return Err(RitError::invalid_input(format!(
+            "object {} is {}, not blob",
+            target.object_id, object.kind
+        )));
+    }
+    write_worktree_entry_atomically(
+        &join_slash_path(worktree, &conflict.path),
+        &object.data,
+        target.mode,
+        symlinks_enabled,
+    )
 }
 
 fn read_text_blob(
