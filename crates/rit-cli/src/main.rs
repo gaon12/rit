@@ -1986,9 +1986,16 @@ fn op_command(
         None => return Ok(ExitCode::from(128)),
     };
     match args {
-        [subcommand] if subcommand == "log" => match repository.operations().log() {
-            Ok(records) => {
-                for record in records.iter().rev() {
+        [subcommand] if subcommand == "log" => match repository.operations().log_with_warnings() {
+            Ok(log) => {
+                for warning in &log.warnings {
+                    writeln!(
+                        stderr,
+                        "rit: warning: skipped malformed operation journal line {}: {}",
+                        warning.line_number, warning.message
+                    )?;
+                }
+                for record in log.records.iter().rev() {
                     writeln!(
                         stdout,
                         "{} {} {} -> {} {}",

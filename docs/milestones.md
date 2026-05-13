@@ -546,7 +546,7 @@ Completion criteria:
   `fetch`, and `push` where applicable.
 - [ ] Make undo semantics command-aware, such as commit undo that can preserve
   changes when requested.
-- [ ] Add corruption handling for malformed operation journal lines.
+- [x] Add corruption handling for malformed operation journal lines.
 - [ ] Add linked-worktree journal isolation tests.
 - [ ] Add JSON output for operation records.
 
@@ -638,8 +638,8 @@ Completion criteria:
 
 1. Continue M8 merge with conflict index stages and merge-commit workflow
    planning.
-2. Continue M16 operation journal with changed paths, object IDs, index-only
-   undo, and malformed-journal recovery.
+2. Continue M16 operation journal with reversible patches and command-aware
+   undo for index-only/worktree-changing operations.
 3. Continue indexdb lightweight reconciliation with index checksum and pack
    snapshot detection.
 4. Add indexdb corruption, stale cache, and external Git reconciliation test

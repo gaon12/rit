@@ -38,6 +38,24 @@ pub struct OperationRecord {
     pub created_object_ids: Vec<ObjectId>,
 }
 
+/// A malformed operation-journal line skipped while reading the log.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct OperationJournalWarning {
+    /// One-based line number in `.git/rit/ops.log`.
+    pub line_number: usize,
+    /// Human-readable parse error.
+    pub message: String,
+}
+
+/// Operation records plus non-fatal journal read warnings.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct OperationLog {
+    /// Valid operation records in append order.
+    pub records: Vec<OperationRecord>,
+    /// Malformed lines that were ignored.
+    pub warnings: Vec<OperationJournalWarning>,
+}
+
 /// Result of restoring a journal entry.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OperationRestoreResult {
@@ -144,16 +162,33 @@ impl RepositoryOperations<'_> {
 
     /// Reads operation records in append order.
     pub fn log(&self) -> Result<Vec<OperationRecord>> {
+        Ok(self.log_with_warnings()?.records)
+    }
+
+    /// Reads operation records and reports malformed lines without failing the
+    /// whole journal. A broken rit metadata line must not block supported undo
+    /// for earlier or later valid records.
+    pub fn log_with_warnings(&self) -> Result<OperationLog> {
         let path = log_path(self.repository);
         if !path.exists() {
-            return Ok(Vec::new());
+            return Ok(OperationLog::default());
         }
         let contents = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
-        contents
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .map(parse_record_line)
-            .collect()
+        let mut records = Vec::new();
+        let mut warnings = Vec::new();
+        for (index, line) in contents.lines().enumerate() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            match parse_record_line(line) {
+                Ok(record) => records.push(record),
+                Err(error) => warnings.push(OperationJournalWarning {
+                    line_number: index + 1,
+                    message: error.to_string(),
+                }),
+            }
+        }
+        Ok(OperationLog { records, warnings })
     }
 
     /// Restores the state captured before the operation with `id`.
@@ -597,6 +632,97 @@ mod tests {
             "base\n"
         );
         remove_dir_all(&root);
+    }
+
+    #[test]
+    fn operation_journal_skips_malformed_lines_with_warnings() {
+        let root = temp_path("operation-journal-malformed");
+        let repository = Repository::init(&InitOptions::new(&root)).expect("repo should init");
+        write_identity(&repository);
+        fs::write(root.join("tracked.txt"), "base\n").expect("base file should be written");
+        repository
+            .add_paths(&["tracked.txt".to_owned()])
+            .expect("base file should be added");
+        repository
+            .commit_index("base")
+            .expect("base commit should work");
+        let before = repository
+            .operations()
+            .snapshot()
+            .expect("snapshot should work");
+        repository
+            .operations()
+            .record("commit", "base", before.clone(), before)
+            .expect("record should append");
+        append_raw_log_line(&repository, "not\ta\tvalid\toperation\tjournal\tline\t!");
+
+        let log = repository
+            .operations()
+            .log_with_warnings()
+            .expect("journal should read");
+
+        assert_eq!(log.records.len(), 1);
+        assert_eq!(log.warnings.len(), 1);
+        assert_eq!(log.warnings[0].line_number, 2);
+        assert!(
+            log.warnings[0]
+                .message
+                .contains("operation snapshot field is malformed")
+        );
+        assert_eq!(
+            repository
+                .operations()
+                .log()
+                .expect("plain log should return valid records")
+                .len(),
+            1
+        );
+        remove_dir_all(&root);
+    }
+
+    #[test]
+    fn undo_ignores_malformed_only_journal_without_changing_head() {
+        let root = temp_path("operation-journal-malformed-only");
+        let repository = Repository::init(&InitOptions::new(&root)).expect("repo should init");
+        write_identity(&repository);
+        fs::write(root.join("tracked.txt"), "base\n").expect("base file should be written");
+        repository
+            .add_paths(&["tracked.txt".to_owned()])
+            .expect("base file should be added");
+        let head = repository
+            .commit_index("base")
+            .expect("base commit should work")
+            .commit_id;
+        append_raw_log_line(&repository, "not an operation record");
+
+        let error = repository
+            .operations()
+            .undo_last()
+            .expect_err("malformed-only journal should not be restorable");
+
+        assert!(error.to_string().contains("operation journal is empty"));
+        assert_eq!(
+            repository.resolve_head().expect("head should read"),
+            Some(head)
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("tracked.txt")).expect("file should read"),
+            "base\n"
+        );
+        remove_dir_all(&root);
+    }
+
+    fn append_raw_log_line(repository: &Repository, line: &str) {
+        let path = log_path(repository);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("log parent should exist");
+        }
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .expect("log should open");
+        writeln!(file, "{line}").expect("log line should write");
     }
 
     fn write_identity(repository: &Repository) {

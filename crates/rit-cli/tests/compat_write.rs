@@ -1139,6 +1139,16 @@ fn operation_journal_records_commit_and_undo_restores_head() {
     assert!(log.contains("journaled"));
     assert!(log.contains("paths: nested/tracked.txt"));
     assert!(log.contains("objects: "));
+    {
+        let mut log_file = fs::OpenOptions::new()
+            .append(true)
+            .open(fixture.path().join(".git").join("rit").join("ops.log"))
+            .expect("operation log should open");
+        writeln!(log_file, "not an operation record").expect("malformed line should append");
+    }
+    let (log_after_bad_line, warning) = run_capture(rit_binary(), ["op", "log"], fixture.path());
+    assert!(log_after_bad_line.contains("journaled"));
+    assert!(warning.contains("skipped malformed operation journal line"));
     assert_ne!(
         run_capture("git", ["rev-parse", "HEAD"], fixture.path()).0,
         base

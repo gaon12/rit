@@ -342,9 +342,12 @@
 - Operation records now include changed path lists computed by comparing the
   before/after commit trees. They also include known created object IDs; the
   first wired caller records the new commit object ID after `rit commit`.
+- Malformed operation journal lines are skipped with diagnostics from
+  `log_with_warnings`; `rit op log` reports warnings on stderr while preserving
+  valid records.
 - Still unsupported: command-aware undo modes, reversible patches for
   index-only/worktree-only operations, complete object creation inventories,
-  JSON output, and malformed-journal repair.
+  and JSON output.
 
 ### M9: Large-file backends
 
@@ -927,6 +930,8 @@
 - Supported options: `rit op log`, `rit op restore <id>`, and `rit undo`.
 - Supported metadata: before/after HEAD snapshots, current branch snapshots,
   index checksums, changed paths, and known created object IDs.
+- Malformed operation journal lines are skipped with warnings and do not block
+  reading later valid records.
 - Unsupported options: JSON output, filtering, complete object creation
   inventories, and command-aware undo policies.
 - Git-compatible behavior: metadata is stored under `.git/rit/` and does not
