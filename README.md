@@ -48,6 +48,7 @@ rit show
 rit show --no-patch -- <pathspec>
 rit status --porcelain=v1
 rit status --porcelain=v1 -- <pathspec>
+rit status --explain <path>
 rit diff --name-only
 rit diff
 rit diff -p

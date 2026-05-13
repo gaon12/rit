@@ -103,6 +103,9 @@
   <target>` reuses the fast-forward merge planner to explain already-up-to-date,
   fast-forward, and unsupported merge decisions without writing refs, index, or
   worktree files.
+- 2026-05-13 status explain slice checked `git status -h`; `rit status
+  --explain <path>` is a rit-specific read-only explanation layer over HEAD,
+  index, worktree, and ignore-rule classification.
 - 2026-05-12 large-file backend trait slice checked the AGENTS large-object
   backend guidance; no external `git-lfs` binary is used.
 - 2026-05-12 LFS pointer slice checked installed `git-lfs/3.7.1` and the

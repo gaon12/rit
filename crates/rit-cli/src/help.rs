@@ -99,8 +99,9 @@ List entries in a loose tree object.
 
 const STATUS_HELP: &str = "\
 rit status --porcelain[=v1] [-b] [-z] [--ignored] [-uno|-unormal|-uall] [--] [<pathspec>...]
+rit status --explain <path>
 
-Show a conservative porcelain v1 status.
+Show a conservative porcelain v1 status, or explain how one path is classified.
 ";
 
 const DIFF_HELP: &str = "\

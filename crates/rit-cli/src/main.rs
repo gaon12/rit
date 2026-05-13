@@ -536,6 +536,31 @@ fn status_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
+    if let Some(path) = status_args.explain_path {
+        return match repository.explain_status_path(&path) {
+            Ok(explanation) => {
+                writeln!(stdout, "status: explain")?;
+                writeln!(stdout, "path: {}", explanation.path)?;
+                writeln!(
+                    stdout,
+                    "status: {}{}",
+                    explanation.index_status, explanation.worktree_status
+                )?;
+                writeln!(stdout, "in-head: {}", explanation.in_head)?;
+                writeln!(stdout, "in-index: {}", explanation.in_index)?;
+                writeln!(stdout, "in-worktree: {}", explanation.in_worktree)?;
+                writeln!(stdout, "ignored: {}", explanation.ignored)?;
+                for reason in explanation.reasons {
+                    writeln!(stdout, "reason: {reason}")?;
+                }
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => {
+                writeln!(stderr, "rit: {error}")?;
+                Ok(ExitCode::from(1))
+            }
+        };
+    }
     match repository.status_porcelain_v1_with_options(
         &pathspecs,
         rit_core::StatusOptions {
@@ -566,6 +591,7 @@ struct StatusArgs {
     null_terminated: bool,
     include_branch_header: bool,
     include_ignored: bool,
+    explain_path: Option<String>,
 }
 
 fn parse_status_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Option<StatusArgs>> {
@@ -576,13 +602,36 @@ fn parse_status_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Opti
     let mut null_terminated = false;
     let mut include_branch_header = false;
     let mut include_ignored = false;
+    let mut explain_path = None;
+    let mut index = 0;
 
-    for arg in args {
+    while index < args.len() {
+        let arg = &args[index];
         match arg.as_str() {
             "--" if !after_separator => after_separator = true,
             "--porcelain" | "--porcelain=v1" | "-s" if !after_separator => has_porcelain = true,
             "-z" if !after_separator => null_terminated = true,
             "-b" | "--branch" if !after_separator => include_branch_header = true,
+            "--explain" if !after_separator => {
+                index += 1;
+                let Some(path) = args.get(index) else {
+                    writeln!(stderr, "rit: status --explain requires one path")?;
+                    return Ok(None);
+                };
+                if path.starts_with('-') {
+                    writeln!(stderr, "rit: status --explain requires one path")?;
+                    return Ok(None);
+                }
+                explain_path = Some(path.to_owned());
+            }
+            value if value.starts_with("--explain=") && !after_separator => {
+                let path = value.trim_start_matches("--explain=");
+                if path.is_empty() {
+                    writeln!(stderr, "rit: status --explain requires one path")?;
+                    return Ok(None);
+                }
+                explain_path = Some(path.to_owned());
+            }
             "--ignored" | "--ignored=traditional" | "--ignored=matching" if !after_separator => {
                 include_ignored = true;
             }
@@ -610,15 +659,17 @@ fn parse_status_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Opti
             }
             pathspec => pathspecs.push(pathspec.to_owned()),
         }
+        index += 1;
     }
 
-    if has_porcelain {
+    if explain_path.is_some() || has_porcelain {
         Ok(Some(StatusArgs {
             pathspecs,
             untracked_files,
             null_terminated,
             include_branch_header,
             include_ignored,
+            explain_path,
         }))
     } else {
         writeln!(stderr, "rit: status currently supports only --porcelain=v1")?;
@@ -2448,6 +2499,15 @@ mod tests {
         assert_eq!(code, ExitCode::from(129));
         assert_eq!(stdout, "");
         assert!(stderr.contains("--porcelain=v1"));
+    }
+
+    #[test]
+    fn status_help_mentions_explain() {
+        let (code, stdout, stderr) = run_with(&["help", "status"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit status --explain <path>"));
+        assert_eq!(stderr, "");
     }
 
     #[test]

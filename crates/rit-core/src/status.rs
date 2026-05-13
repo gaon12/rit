@@ -37,6 +37,27 @@ pub struct PorcelainStatus {
     pub entries: Vec<StatusEntry>,
 }
 
+/// Explanation of how status classifies one path.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StatusExplanation {
+    /// Repository-relative path using `/` separators.
+    pub path: String,
+    /// Index status column that porcelain v1 would use.
+    pub index_status: char,
+    /// Working tree status column that porcelain v1 would use.
+    pub worktree_status: char,
+    /// Whether the path exists in HEAD.
+    pub in_head: bool,
+    /// Whether the path exists in the index.
+    pub in_index: bool,
+    /// Whether the path exists in the working tree.
+    pub in_worktree: bool,
+    /// Whether ignore rules currently mark the path ignored.
+    pub ignored: bool,
+    /// Human-readable reasons for the classification.
+    pub reasons: Vec<String>,
+}
+
 /// Controls how porcelain status reports untracked files.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UntrackedFilesMode {
@@ -208,24 +229,20 @@ impl Repository {
         for path in &tracked_paths {
             let head_object = head_entries.get(path);
             let index_object = index_entries.get(path);
-            let index_status = match (head_object, index_object) {
-                (None, Some(_)) => 'A',
-                (Some(_), None) => 'D',
-                (Some(head), Some(index)) if head != index => 'M',
-                _ => ' ',
-            };
+            let index_status = status_index_column(head_object, index_object);
 
             let worktree_status = match index_object {
                 None => ' ',
                 Some(index_object) => {
                     let full_path = join_slash_path(worktree, path);
-                    if fs::symlink_metadata(&full_path).is_err() {
-                        'D'
-                    } else if hash_worktree_entry(&full_path, index_object.mode, symlinks_enabled)?
-                        != index_object.object_id
-                    {
-                        'M'
-                    } else {
+                    let metadata = fs::symlink_metadata(&full_path).ok();
+                    let status = status_worktree_column(
+                        &full_path,
+                        metadata.as_ref(),
+                        index_object,
+                        symlinks_enabled,
+                    )?;
+                    if status == ' ' {
                         let metadata = fs::symlink_metadata(&full_path)
                             .map_err(|source| RitError::io(&full_path, source))?;
                         if !worktree_mode_matches_index(
@@ -248,6 +265,8 @@ impl Repository {
                             }
                             ' '
                         }
+                    } else {
+                        status
                     }
                 }
             };
@@ -332,6 +351,74 @@ impl Repository {
         })
     }
 
+    /// Explains how status classifies one repository-relative path.
+    pub fn explain_status_path(&self, path: &str) -> Result<StatusExplanation> {
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "status explain must be run in a repository with a working tree",
+            ));
+        };
+        let normalized_path = normalize_explain_path(path);
+        let index = Index::read(&self.git_dir().join("index"))?;
+        let index_entries = index
+            .entries
+            .iter()
+            .map(|entry| {
+                (
+                    entry.path.clone(),
+                    TreeBlobEntry {
+                        object_id: entry.object_id,
+                        mode: entry.mode,
+                    },
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let head_entries = self.head_tree_entries()?;
+        let ignore_rules = IgnoreRules::read(worktree, self.common_dir())?;
+        let symlinks_enabled = self.core_symlinks_enabled()?;
+        let head_object = head_entries.get(&normalized_path);
+        let index_object = index_entries.get(&normalized_path);
+        let full_path = join_slash_path(worktree, &normalized_path);
+        let worktree_metadata = fs::symlink_metadata(&full_path).ok();
+        let in_head = head_object.is_some();
+        let in_index = index_object.is_some();
+        let in_worktree = worktree_metadata.is_some();
+        let ignored = ignore_rules.matches(&normalized_path);
+        let index_status = status_index_column(head_object, index_object);
+        let worktree_status = match index_object {
+            Some(index_object) => status_worktree_column(
+                &full_path,
+                worktree_metadata.as_ref(),
+                index_object,
+                symlinks_enabled,
+            )?,
+            None if in_worktree && ignored => '!',
+            None if in_worktree => '?',
+            None => ' ',
+        };
+        let reasons = status_explanation_reasons(StatusReasonInput {
+            in_head,
+            in_index,
+            in_worktree,
+            ignored,
+            head_object,
+            index_object,
+            index_status,
+            worktree_status,
+        });
+
+        Ok(StatusExplanation {
+            path: normalized_path,
+            index_status,
+            worktree_status,
+            in_head,
+            in_index,
+            in_worktree,
+            ignored,
+            reasons,
+        })
+    }
+
     fn status_branch_header(&self) -> Result<StatusBranchHeader> {
         match (self.current_branch_name()?, self.resolve_head()?) {
             (Some(name), Some(_)) => Ok(StatusBranchHeader::Branch(name)),
@@ -398,6 +485,103 @@ impl Repository {
 struct TreeBlobEntry {
     object_id: ObjectId,
     mode: u32,
+}
+
+fn status_index_column(
+    head_object: Option<&TreeBlobEntry>,
+    index_object: Option<&TreeBlobEntry>,
+) -> char {
+    match (head_object, index_object) {
+        (None, Some(_)) => 'A',
+        (Some(_), None) => 'D',
+        (Some(head), Some(index)) if head != index => 'M',
+        _ => ' ',
+    }
+}
+
+fn status_worktree_column(
+    full_path: &Path,
+    metadata: Option<&fs::Metadata>,
+    index_object: &TreeBlobEntry,
+    symlinks_enabled: bool,
+) -> Result<char> {
+    let Some(metadata) = metadata else {
+        return Ok('D');
+    };
+    if hash_worktree_entry(full_path, index_object.mode, symlinks_enabled)?
+        != index_object.object_id
+    {
+        return Ok('M');
+    }
+    if !worktree_mode_matches_index(metadata, index_object.mode, symlinks_enabled) {
+        return Ok('M');
+    }
+    Ok(' ')
+}
+
+struct StatusReasonInput<'a> {
+    in_head: bool,
+    in_index: bool,
+    in_worktree: bool,
+    ignored: bool,
+    head_object: Option<&'a TreeBlobEntry>,
+    index_object: Option<&'a TreeBlobEntry>,
+    index_status: char,
+    worktree_status: char,
+}
+
+fn status_explanation_reasons(input: StatusReasonInput<'_>) -> Vec<String> {
+    let StatusReasonInput {
+        in_head,
+        in_index,
+        in_worktree,
+        ignored,
+        head_object,
+        index_object,
+        index_status,
+        worktree_status,
+    } = input;
+    let mut reasons = Vec::new();
+    reasons.push(presence_reason("HEAD", in_head));
+    reasons.push(presence_reason("the index", in_index));
+    reasons.push(presence_reason("the working tree", in_worktree));
+
+    match index_status {
+        'A' => reasons.push("the path is added in the index because it is not in HEAD".to_owned()),
+        'D' => reasons.push("the path is deleted in the index because it is missing from the index but exists in HEAD".to_owned()),
+        'M' => reasons.push("the index object or mode differs from HEAD".to_owned()),
+        _ if head_object.is_some() && index_object.is_some() => {
+            reasons.push("HEAD and the index agree for this path".to_owned());
+        }
+        _ => {}
+    }
+
+    match worktree_status {
+        'M' => reasons.push("the working tree content or file mode differs from the index".to_owned()),
+        'D' => reasons.push("the path is deleted in the working tree because the index tracks it but the file is missing".to_owned()),
+        '?' => reasons.push("the path is untracked because it exists in the working tree but not in HEAD or the index".to_owned()),
+        '!' => reasons.push("the path is ignored because ignore rules match it and it is not tracked".to_owned()),
+        _ if in_index && in_worktree => {
+            reasons.push("the working tree matches the index for this path".to_owned());
+        }
+        _ => {}
+    }
+
+    if ignored && in_index {
+        reasons.push("ignore rules match this path, but tracked paths remain tracked".to_owned());
+    }
+    if index_status == ' ' && worktree_status == ' ' {
+        reasons.push("status has no changes to report for this path".to_owned());
+    }
+    reasons
+}
+
+fn presence_reason(place: &str, present: bool) -> String {
+    if present {
+        format!("the path exists in {place}")
+    } else {
+        format!("the path does not exist in {place}")
+    }
 }
 
 fn parse_tree_mode(mode: &str) -> Result<u32> {
@@ -1180,6 +1364,62 @@ mod tests {
         assert_eq!(negated.matching_rules.len(), 2);
         assert_eq!(negated.matching_rules[1].pattern, "important.log");
         assert!(negated.matching_rules[1].negated);
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn explains_modified_status_for_tracked_path() {
+        let temp = temp_path("status-explain-modified");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        fs::write(
+            repository.git_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n[user]\n\tname = Rit Test\n\temail = rit@example.test\n",
+        )
+        .expect("config should be written");
+        fs::write(temp.join("tracked.txt"), "before\n").expect("file should be written");
+        repository
+            .add_paths(&["tracked.txt".to_owned()])
+            .expect("file should be added");
+        repository
+            .commit_index("add tracked")
+            .expect("commit should be created");
+        fs::write(temp.join("tracked.txt"), "after\n").expect("file should be modified");
+
+        let explanation = repository
+            .explain_status_path("tracked.txt")
+            .expect("status explanation should work");
+
+        assert_eq!(explanation.index_status, ' ');
+        assert_eq!(explanation.worktree_status, 'M');
+        assert!(explanation.in_head);
+        assert!(explanation.in_index);
+        assert!(explanation.in_worktree);
+        assert!(
+            explanation
+                .reasons
+                .iter()
+                .any(|reason| reason.contains("working tree content or file mode differs"))
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn explains_ignored_untracked_status() {
+        let temp = temp_path("status-explain-ignored");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        fs::write(temp.join(".gitignore"), "*.log\n").expect("gitignore should be written");
+        fs::write(temp.join("debug.log"), "ignored\n").expect("file should be written");
+
+        let explanation = repository
+            .explain_status_path("debug.log")
+            .expect("status explanation should work");
+
+        assert_eq!(explanation.index_status, ' ');
+        assert_eq!(explanation.worktree_status, '!');
+        assert!(!explanation.in_head);
+        assert!(!explanation.in_index);
+        assert!(explanation.in_worktree);
+        assert!(explanation.ignored);
         remove_dir_all(&temp);
     }
 
