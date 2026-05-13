@@ -659,10 +659,13 @@
 
 ### `rit commit`
 
-- Baseline command checked: `git commit -h`
+- Baseline command checked: `git help commit` and `git commit -h`; this
+  Windows environment produced no standard output for `git help commit`, so
+  option details were confirmed with `git commit -h`.
 - Supported options: `-m <message>`, `--message <message>`,
   `--message=<message>`, `--author=<author>`, `--author <author>`,
-  `--date=<date>`, `--date <date>`, `-n`, `--no-verify`, `--verify`.
+  `--date=<date>`, `--date <date>`, `-n`, `--no-verify`, `--verify`,
+  `--plan`.
 - Supported environment: `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL`,
   `GIT_AUTHOR_DATE`, `GIT_COMMITTER_NAME`, `GIT_COMMITTER_EMAIL`, and
   `GIT_COMMITTER_DATE`.
@@ -678,6 +681,10 @@
   into tree objects from the index.
 - Git-compatible behavior: committed symlink entries are written as `120000`
   blob tree entries.
+- rit-specific behavior: `--plan` compares `.git/index` with `HEAD` and
+  prints the parent, message summary, hook mode, indexed file count, and staged
+  paths that would be committed without writing tree objects, commit objects,
+  refs, operation metadata, or running hooks.
 - Intentional differences: default commit timestamps use UTC `+0000`;
   Windows hook execution looks for common Git for Windows `sh.exe` locations
   when running shebang hook scripts.

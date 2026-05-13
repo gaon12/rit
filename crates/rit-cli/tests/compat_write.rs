@@ -834,6 +834,44 @@ fn commit_author_and_date_overrides_match_git_object() {
 }
 
 #[test]
+fn commit_plan_prints_staged_paths_without_advancing_head() {
+    let fixture = LocalWriteFixture::new("commit-plan", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
+    let base = run_capture("git", ["rev-parse", "HEAD"], fixture.path()).0;
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "planned\n",
+    )
+    .expect("tracked file should be modified");
+    run_capture(rit_binary(), ["add", "nested/tracked.txt"], fixture.path());
+
+    let output = run_capture(
+        rit_binary(),
+        ["commit", "--plan", "--no-verify", "-m", "planned"],
+        fixture.path(),
+    )
+    .0;
+
+    assert!(output.contains("commit: plan\n"));
+    assert!(output.contains("message: planned\n"));
+    assert!(output.contains("hooks: no-verify\n"));
+    assert!(output.contains("files: 1\n"));
+    assert!(output.contains("path: nested/tracked.txt\n"));
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], fixture.path()).0,
+        base
+    );
+    assert_eq!(
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], fixture.path()).0,
+        "M  nested/tracked.txt\n"
+    );
+    assert_eq!(
+        run_capture(rit_binary(), ["op", "log"], fixture.path()).0,
+        ""
+    );
+}
+
+#[test]
 fn commit_msg_hook_modifies_message_like_git() {
     let fixture = LocalWriteFixture::new("commit-msg-hook", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");

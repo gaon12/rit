@@ -119,9 +119,9 @@ Add regular files to the index, or print the planned index changes without writi
 ";
 
 const COMMIT_HELP: &str = "\
-rit commit -m <message>
+rit commit [-m <message>] [--plan]
 
-Create a commit from the current index and advance HEAD.
+Create a commit from the current index and advance HEAD, or print the planned commit without writing.
 ";
 
 const BRANCH_HELP: &str = "\

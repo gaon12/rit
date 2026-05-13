@@ -61,7 +61,7 @@ rit diff --cached --stat
 rit diff [--cached] <summary-mode> -- <pathspec>
 rit log [--oneline] [--] [<pathspec>...]
 rit add [--plan] <pathspec>...
-rit commit
+rit commit [--plan]
 rit branch
 rit tag
 rit restore <pathspec>...

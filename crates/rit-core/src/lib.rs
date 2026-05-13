@@ -127,7 +127,7 @@ pub use workspace_profile::{
     LazyMaterializationPolicy, RitConfig, WorkspacePrefetchPlan, WorkspaceProfile,
 };
 pub use write::{
-    AddOptions, AddPlan, CommitOptions, CommitResult, FileModeOverride, MergeResult,
+    AddOptions, AddPlan, CommitOptions, CommitPlan, CommitResult, FileModeOverride, MergeResult,
     SignatureIdentity, SignatureTime,
 };
 

@@ -70,6 +70,32 @@ pub struct CommitResult {
     pub file_count: usize,
 }
 
+/// Dry-run plan for `rit commit`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CommitPlan {
+    /// First line of the commit message that would be used for summaries.
+    pub message_summary: String,
+    /// Current `HEAD` commit that would become the parent, if any.
+    pub parent_id: Option<ObjectId>,
+    /// Number of files tracked by the index that would be committed.
+    pub file_count: usize,
+    /// Repository-relative paths whose staged tree entries differ from `HEAD`.
+    pub paths_to_commit: Vec<String>,
+    /// Whether commit hooks would run when applying the commit.
+    pub verify: bool,
+    /// Author override that would be applied to the commit, if any.
+    pub author: Option<SignatureIdentity>,
+    /// Author date override that would be applied to the commit, if any.
+    pub author_date: Option<SignatureTime>,
+}
+
+impl CommitPlan {
+    /// Returns true when the index tree has no changes compared with `HEAD`.
+    pub fn is_empty(&self) -> bool {
+        self.paths_to_commit.is_empty()
+    }
+}
+
 /// Result of a merge operation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MergeResult {
@@ -315,6 +341,36 @@ impl Repository {
     /// Creates a commit from the current index and advances `HEAD`.
     pub fn commit_index(&self, message: &str) -> Result<CommitResult> {
         self.commit_index_with_options(message, &CommitOptions::default())
+    }
+
+    /// Builds a dry-run commit plan without writing tree or commit objects.
+    pub fn plan_commit_index_with_options(
+        &self,
+        message: &str,
+        options: &CommitOptions,
+    ) -> Result<CommitPlan> {
+        let index = Index::read(&self.git_dir().join("index"))?;
+        if index.entries.is_empty() {
+            return Err(RitError::invalid_input("nothing to commit"));
+        }
+        let parent_id = self.resolve_head()?;
+        let parent_entries = match parent_id {
+            Some(commit_id) => self.commit_index_entries(commit_id)?,
+            None => Vec::new(),
+        };
+        let paths_to_commit = staged_paths_different_from_head(&index.entries, &parent_entries);
+        if paths_to_commit.is_empty() {
+            return Err(RitError::invalid_input("nothing to commit"));
+        }
+        Ok(CommitPlan {
+            message_summary: message.lines().next().unwrap_or("").to_owned(),
+            parent_id,
+            file_count: index.entries.len(),
+            paths_to_commit,
+            verify: options.verify,
+            author: options.author.clone(),
+            author_date: options.author_date.clone(),
+        })
     }
 
     /// Creates a commit from the current index with explicit metadata options.
@@ -843,6 +899,39 @@ fn expand_add_pathspecs<'a>(
 struct AddPathSelection {
     files_to_add: BTreeSet<String>,
     paths_to_remove: BTreeSet<String>,
+}
+
+fn staged_paths_different_from_head(
+    index_entries: &[IndexEntry],
+    parent_entries: &[IndexEntry],
+) -> Vec<String> {
+    let index_by_path = index_entries
+        .iter()
+        .map(|entry| (entry.path.as_str(), entry))
+        .collect::<BTreeMap<_, _>>();
+    let parent_by_path = parent_entries
+        .iter()
+        .map(|entry| (entry.path.as_str(), entry))
+        .collect::<BTreeMap<_, _>>();
+    let paths = index_by_path
+        .keys()
+        .chain(parent_by_path.keys())
+        .copied()
+        .collect::<BTreeSet<_>>();
+    paths
+        .into_iter()
+        .filter(
+            |path| match (index_by_path.get(path), parent_by_path.get(path)) {
+                (Some(index_entry), Some(parent_entry)) => {
+                    index_entry.mode != parent_entry.mode
+                        || index_entry.object_id != parent_entry.object_id
+                }
+                (Some(_), None) | (None, Some(_)) => true,
+                (None, None) => false,
+            },
+        )
+        .map(str::to_owned)
+        .collect()
 }
 
 fn worktree_path_matches_exact_case(root: &Path, slash_path: &str) -> bool {
@@ -1539,6 +1628,36 @@ mod tests {
     }
 
     #[test]
+    fn commit_plan_reports_staged_paths_without_writing_objects() {
+        let temp = temp_path("commit-plan");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        fs::write(temp.join("tracked.txt"), "one\n").expect("file should be written");
+        repository
+            .add_paths(&["tracked.txt".to_owned()])
+            .expect("add should work");
+        let object_count_before = count_object_files(repository.common_dir().join("objects"));
+
+        let plan = repository
+            .plan_commit_index_with_options("initial\nbody", &super::CommitOptions::default())
+            .expect("commit plan should work");
+
+        assert_eq!(plan.message_summary, "initial");
+        assert_eq!(plan.parent_id, None);
+        assert_eq!(plan.file_count, 1);
+        assert_eq!(plan.paths_to_commit, vec!["tracked.txt"]);
+        assert!(plan.verify);
+        assert_eq!(
+            count_object_files(repository.common_dir().join("objects")),
+            object_count_before
+        );
+        assert_eq!(
+            repository.resolve_head().expect("HEAD should resolve"),
+            None
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
     fn add_chmod_executable_records_index_mode_and_tree_mode() {
         let temp = temp_path("add-chmod-executable");
         let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
@@ -1851,6 +1970,24 @@ mod tests {
         if path.exists() {
             fs::remove_dir_all(path).expect("temporary directory should be removed");
         }
+    }
+
+    fn count_object_files(path: impl AsRef<Path>) -> usize {
+        let path = path.as_ref();
+        if !path.exists() {
+            return 0;
+        }
+        let mut count = 0;
+        for entry in fs::read_dir(path).expect("object directory should read") {
+            let entry = entry.expect("object entry should read");
+            let path = entry.path();
+            if path.is_dir() {
+                count += count_object_files(&path);
+            } else if path.is_file() {
+                count += 1;
+            }
+        }
+        count
     }
 
     #[cfg(unix)]

@@ -1125,7 +1125,7 @@ fn commit_command(
         Ok(None) => {
             writeln!(
                 stderr,
-                "rit: commit currently supports -m <message>, --author, --date, and --no-verify"
+                "rit: commit currently supports -m <message>, --plan, --author, --date, and --no-verify"
             )?;
             return Ok(ExitCode::from(129));
         }
@@ -1139,6 +1139,38 @@ fn commit_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
+    if commit_args.plan {
+        return match repository
+            .plan_commit_index_with_options(&commit_args.message, &commit_args.options)
+        {
+            Ok(plan) => {
+                writeln!(stdout, "commit: plan")?;
+                writeln!(stdout, "parent: {}", short_head(plan.parent_id))?;
+                writeln!(stdout, "message: {}", plan.message_summary)?;
+                writeln!(
+                    stdout,
+                    "hooks: {}",
+                    if plan.verify { "verify" } else { "no-verify" }
+                )?;
+                if let Some(author) = plan.author {
+                    writeln!(stdout, "author: {} <{}>", author.name, author.email)?;
+                }
+                if let Some(author_date) = plan.author_date {
+                    writeln!(
+                        stdout,
+                        "author-date: {} {}",
+                        author_date.timestamp, author_date.offset
+                    )?;
+                }
+                writeln!(stdout, "files: {}", plan.file_count)?;
+                for path in plan.paths_to_commit {
+                    writeln!(stdout, "path: {path}")?;
+                }
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_command_error(stderr, error),
+        };
+    }
     let before = capture_operation_snapshot(&repository, stderr)?;
     match repository.commit_index_with_options(&commit_args.message, &commit_args.options) {
         Ok(result) => {
@@ -1792,11 +1824,13 @@ fn write_command_error(stderr: &mut dyn Write, error: rit_core::RitError) -> io:
 struct ParsedCommitArgs {
     message: String,
     options: rit_core::CommitOptions,
+    plan: bool,
 }
 
 fn parse_commit_args(args: &[String]) -> rit_core::Result<Option<ParsedCommitArgs>> {
     let mut message = None;
     let mut options = rit_core::CommitOptions::default();
+    let mut plan = false;
     let mut index = 0;
 
     while index < args.len() {
@@ -1829,12 +1863,18 @@ fn parse_commit_args(args: &[String]) -> rit_core::Result<Option<ParsedCommitArg
             options.verify = false;
         } else if arg == "--verify" {
             options.verify = true;
+        } else if arg == "--plan" {
+            plan = true;
         } else {
             return Ok(None);
         }
         index += 1;
     }
-    Ok(message.map(|message| ParsedCommitArgs { message, options }))
+    Ok(message.map(|message| ParsedCommitArgs {
+        message,
+        options,
+        plan,
+    }))
 }
 
 fn first_message_line(message: &str) -> &str {
