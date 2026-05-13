@@ -3686,6 +3686,92 @@ mod tests {
         remove_dir_all(&temp);
     }
 
+    #[test]
+    fn merge_reports_distinct_type_conflict_for_symlink_and_regular_file() {
+        let temp = temp_path("merge-distinct-type-inverse");
+        let repository = committed_nested_repository(&temp);
+        fs::write(
+            repository.git_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n\tsymlinks = false\n[user]\n\tname = Rit Test\n\temail = rit@example.test\n",
+        )
+        .expect("config should be written");
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "target\n")
+            .expect("target file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("target add should work");
+        repository
+            .commit_index("content")
+            .expect("topic commit should work");
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        let head_object_id = repository
+            .loose_objects()
+            .write_object(ObjectKind::Blob, b"head-target")
+            .expect("symlink target blob should be written");
+        let mut index =
+            Index::read(&repository.git_dir().join("index")).expect("index should read");
+        let entry = index
+            .entries
+            .iter_mut()
+            .find(|entry| entry.path == "nested/a.txt")
+            .expect("tracked entry should exist");
+        entry.mode = 0o120000;
+        entry.object_id = head_object_id;
+        entry.file_size = b"head-target".len() as u32;
+        index
+            .write(&repository.git_dir().join("index"))
+            .expect("index should write");
+        repository
+            .commit_index("symlink")
+            .expect("master commit should work");
+        fs::write(temp.join("nested").join("a.txt"), "head-target")
+            .expect("plain symlink target should be materialized");
+
+        let result = repository
+            .merge("topic")
+            .expect("distinct type merge should start");
+
+        let super::MergeResult::Conflicts {
+            conflict_reports, ..
+        } = result
+        else {
+            panic!("expected distinct type conflict result");
+        };
+        assert_eq!(
+            conflict_reports,
+            vec![MergeConflictReport {
+                path: "nested/a.txt".to_owned(),
+                kind: MergeConflictKind::DistinctTypes,
+            }]
+        );
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        assert!(index.entries.iter().any(|entry| {
+            entry.path == "nested/a.txt" && entry.stage == 2 && entry.mode == 0o120000
+        }));
+        assert!(index.entries.iter().any(|entry| {
+            entry.path == "nested/a.txt~topic" && entry.stage == 1 && entry.mode == 0o100644
+        }));
+        assert!(index.entries.iter().any(|entry| {
+            entry.path == "nested/a.txt~topic" && entry.stage == 3 && entry.mode == 0o100644
+        }));
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("a.txt"))
+                .expect("head side should be written"),
+            "head-target"
+        );
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("a.txt~topic"))
+                .expect("target side should be written"),
+            "target\n"
+        );
+        remove_dir_all(&temp);
+    }
+
     fn committed_nested_repository(path: &Path) -> Repository {
         let repository = Repository::init(&InitOptions::new(path)).expect("init should work");
         fs::create_dir_all(path.join("nested")).expect("nested directory should be written");

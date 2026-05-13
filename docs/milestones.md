@@ -413,8 +413,8 @@ Completion criteria:
       message.
     - [x] Mode-only changes combine cleanly with content-only changes instead
       of creating false conflicts.
-    - [x] Regular-file/symlink distinct-type conflicts split the sides into
-      Git-shaped index/worktree paths and print `distinct types` messages.
+    - [x] Regular-file/symlink distinct-type conflicts split both directions
+      into Git-shaped index/worktree paths and print `distinct types` messages.
     - [ ] True mode conflict and remaining full conflict result messages.
 
 Completion criteria:
