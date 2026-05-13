@@ -1811,6 +1811,9 @@ fn merge_command(
                 head_id,
                 target_id,
                 merge_base,
+                head_changed_paths,
+                target_changed_paths,
+                conflict_paths,
             }) => {
                 writeln!(stdout, "merge: plan")?;
                 writeln!(stdout, "action: non-fast-forward")?;
@@ -1821,6 +1824,15 @@ fn merge_command(
                         writeln!(stdout, "merge-base: {}", &commit_id.to_hex()[..7])?
                     }
                     None => writeln!(stdout, "merge-base: <none>")?,
+                }
+                for path in head_changed_paths {
+                    writeln!(stdout, "head-change: {path}")?;
+                }
+                for path in target_changed_paths {
+                    writeln!(stdout, "target-change: {path}")?;
+                }
+                for path in conflict_paths {
+                    writeln!(stdout, "conflict-candidate: {path}")?;
                 }
                 writeln!(stdout, "requires: merge-commit")?;
                 Ok(ExitCode::SUCCESS)
@@ -1860,6 +1872,9 @@ fn merge_command(
                 head_id,
                 target_id,
                 merge_base,
+                head_changed_paths,
+                target_changed_paths,
+                conflict_paths,
             }) => {
                 writeln!(stdout, "action: non-fast-forward")?;
                 writeln!(stdout, "head: {}", &head_id.to_hex()[..7])?;
@@ -1874,6 +1889,15 @@ fn merge_command(
                     stdout,
                     "reason: HEAD is not an ancestor of the target commit"
                 )?;
+                for path in head_changed_paths {
+                    writeln!(stdout, "head-change: {path}")?;
+                }
+                for path in target_changed_paths {
+                    writeln!(stdout, "target-change: {path}")?;
+                }
+                for path in conflict_paths {
+                    writeln!(stdout, "conflict-candidate: {path}")?;
+                }
                 writeln!(stdout, "requires: merge-commit")?;
                 Ok(ExitCode::SUCCESS)
             }

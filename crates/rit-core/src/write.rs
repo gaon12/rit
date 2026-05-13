@@ -145,6 +145,13 @@ pub enum MergePlan {
         target_id: ObjectId,
         /// First common ancestor found by the simple graph walk.
         merge_base: Option<ObjectId>,
+        /// Paths changed on the current `HEAD` side since the merge base.
+        head_changed_paths: Vec<String>,
+        /// Paths changed on the target side since the merge base.
+        target_changed_paths: Vec<String>,
+        /// Paths changed differently on both sides and likely to need conflict
+        /// stages when merge commits are implemented.
+        conflict_paths: Vec<String>,
     },
 }
 
@@ -676,10 +683,22 @@ impl Repository {
             return Ok(MergePlan::AlreadyUpToDate { commit_id: old_id });
         }
         if !self.commit_is_ancestor(old_id, new_id)? {
+            let merge_base = self.find_merge_base(old_id, new_id)?;
+            let old_entries = self.commit_index_entries(old_id)?;
+            let new_entries = self.commit_index_entries(new_id)?;
+            let base_entries = match merge_base {
+                Some(base_id) => self.commit_index_entries(base_id)?,
+                None => Vec::new(),
+            };
+            let merge_workflow =
+                non_fast_forward_merge_workflow_plan(&base_entries, &old_entries, &new_entries);
             return Ok(MergePlan::NonFastForward {
                 head_id: old_id,
                 target_id: new_id,
-                merge_base: self.find_merge_base(old_id, new_id)?,
+                merge_base,
+                head_changed_paths: merge_workflow.head_changed_paths,
+                target_changed_paths: merge_workflow.target_changed_paths,
+                conflict_paths: merge_workflow.conflict_paths,
             });
         }
         let old_entries = self.commit_index_entries(old_id)?;
@@ -1123,6 +1142,71 @@ fn tree_update_plan(
         }
     }
     (paths_to_update, paths_to_remove)
+}
+
+struct NonFastForwardMergeWorkflowPlan {
+    head_changed_paths: Vec<String>,
+    target_changed_paths: Vec<String>,
+    conflict_paths: Vec<String>,
+}
+
+fn non_fast_forward_merge_workflow_plan(
+    base_entries: &[IndexEntry],
+    head_entries: &[IndexEntry],
+    target_entries: &[IndexEntry],
+) -> NonFastForwardMergeWorkflowPlan {
+    let base_by_path = index_entries_by_path(base_entries);
+    let head_by_path = index_entries_by_path(head_entries);
+    let target_by_path = index_entries_by_path(target_entries);
+    let paths = base_by_path
+        .keys()
+        .chain(head_by_path.keys())
+        .chain(target_by_path.keys())
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let mut head_changed_paths = Vec::new();
+    let mut target_changed_paths = Vec::new();
+    let mut conflict_paths = Vec::new();
+    for path in paths {
+        let base_entry = base_by_path.get(path).copied();
+        let head_entry = head_by_path.get(path).copied();
+        let target_entry = target_by_path.get(path).copied();
+        let head_changed = tree_entry_changed(base_entry, head_entry);
+        let target_changed = tree_entry_changed(base_entry, target_entry);
+        if head_changed {
+            head_changed_paths.push(path.to_owned());
+        }
+        if target_changed {
+            target_changed_paths.push(path.to_owned());
+        }
+        if head_changed && target_changed && !tree_entries_equal(head_entry, target_entry) {
+            conflict_paths.push(path.to_owned());
+        }
+    }
+    NonFastForwardMergeWorkflowPlan {
+        head_changed_paths,
+        target_changed_paths,
+        conflict_paths,
+    }
+}
+
+fn index_entries_by_path(entries: &[IndexEntry]) -> BTreeMap<&str, &IndexEntry> {
+    entries
+        .iter()
+        .map(|entry| (entry.path.as_str(), entry))
+        .collect()
+}
+
+fn tree_entry_changed(base: Option<&IndexEntry>, other: Option<&IndexEntry>) -> bool {
+    !tree_entries_equal(base, other)
+}
+
+fn tree_entries_equal(left: Option<&IndexEntry>, right: Option<&IndexEntry>) -> bool {
+    match (left, right) {
+        (Some(left), Some(right)) => left.mode == right.mode && left.object_id == right.object_id,
+        (None, None) => true,
+        (Some(_), None) | (None, Some(_)) => false,
+    }
 }
 
 fn worktree_path_matches_exact_case(root: &Path, slash_path: &str) -> bool {
@@ -2248,6 +2332,9 @@ mod tests {
                 head_id: master,
                 target_id: topic,
                 merge_base: Some(base),
+                head_changed_paths: vec!["nested/a.txt".to_owned()],
+                target_changed_paths: vec!["nested/a.txt".to_owned()],
+                conflict_paths: vec!["nested/a.txt".to_owned()],
             }
         );
         assert_eq!(

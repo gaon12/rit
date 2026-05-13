@@ -380,6 +380,8 @@ Completion criteria:
     contents.
   - [x] Non-fast-forward `--plan` reports `HEAD`, target, and merge-base
     without writing repository state.
+  - [x] Non-fast-forward `--plan` reports head-side changes, target-side
+    changes, and conflict candidates without writing repository state.
   - [ ] Merge commits, conflict index stages, hooks, strategies, abort, and
     continue workflows.
 - [ ] `rit cherry-pick`

@@ -1318,6 +1318,9 @@ fn merge_plan_prints_non_fast_forward_without_changing_head() {
     assert!(output.contains("merge: plan\n"));
     assert!(output.contains("action: non-fast-forward\n"));
     assert!(output.contains("merge-base: "));
+    assert!(output.contains("head-change: tracked.txt\n"));
+    assert!(output.contains("target-change: tracked.txt\n"));
+    assert!(output.contains("conflict-candidate: tracked.txt\n"));
     assert!(output.contains("requires: merge-commit\n"));
     assert_eq!(
         run_capture("git", ["rev-parse", "HEAD"], &fixture).0,

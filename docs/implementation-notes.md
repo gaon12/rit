@@ -329,6 +329,9 @@
 - Added non-fast-forward merge planning for `rit merge --plan <target>` and
   `rit merge explain <target>`. This reports `HEAD`, target, and a simple
   graph-walk merge base without writing refs, index, or worktree files.
+- Non-fast-forward planning now compares merge-base, `HEAD`, and target trees
+  to report head-side changes, target-side changes, and conflict candidates.
+  This is planning metadata only; no conflict index stages are written yet.
 - Still unsupported: merge commits, conflict stage generation, strategies,
   merge hooks, `--abort`, `--continue`, `cherry-pick`, `rebase`, and `stash`.
 
@@ -922,8 +925,9 @@
 - rit-specific behavior: `--plan` prints whether the merge would be already
   up-to-date, fast-forward, or non-fast-forward. Fast-forward plans include
   paths that would be updated or removed; non-fast-forward plans include
-  `HEAD`, target, merge-base, and the merge-commit requirement without
-  changing `HEAD`, refs, index, or worktree.
+  `HEAD`, target, merge-base, head-side changes, target-side changes, conflict
+  candidates, and the merge-commit requirement without changing `HEAD`, refs,
+  index, or worktree.
 - rit-specific behavior: `merge explain` prints the fast-forward or
   non-fast-forward reason without changing repository state.
 - Intentional differences: output is simplified and non-fast-forward merges are
