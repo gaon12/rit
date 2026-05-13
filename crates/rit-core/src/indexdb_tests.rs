@@ -185,6 +185,41 @@ fn indexdb_status_detects_external_ref_changes_and_ensure_reconciles_them() {
 }
 
 #[test]
+fn indexdb_status_detects_index_changes_and_ensure_reconciles_them() {
+    let temp = temp_path("external-index");
+    let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+    write_user_config(&repository);
+    fs::write(temp.join("file.txt"), "one\n").expect("file should be written");
+    repository
+        .add_paths(&["file.txt".to_owned()])
+        .expect("add should work");
+    repository
+        .commit_index("first")
+        .expect("commit should work");
+    repository.indexdb().ensure().expect("ensure should work");
+    fs::write(temp.join("new.txt"), "new\n").expect("new file should be written");
+    repository
+        .add_paths(&["new.txt".to_owned()])
+        .expect("index change should work");
+
+    let stale_status = repository.indexdb().status().expect("status should work");
+    assert!(stale_status.healthy);
+    assert!(stale_status.stale);
+    assert!(
+        stale_status
+            .stale_reasons
+            .iter()
+            .any(|reason| reason.contains("index snapshot is stale"))
+    );
+
+    repository.indexdb().ensure().expect("ensure should update");
+    let fresh_status = repository.indexdb().status().expect("status should work");
+    assert!(fresh_status.healthy);
+    assert!(!fresh_status.stale);
+    remove_dir_all(&temp);
+}
+
+#[test]
 fn indexdb_write_through_ignores_corrupted_database() {
     let temp = temp_path("write-through-corrupt");
     let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");

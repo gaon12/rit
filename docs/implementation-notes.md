@@ -132,6 +132,10 @@
   reconciles external Git-compatible HEAD/ref changes by refreshing the
   snapshot and indexing newly reachable commit objects from canonical
   `.git/objects` data.
+- 2026-05-13 IndexDB index-state reconciliation slice: IndexDB records the
+  canonical `.git/index` checksum, mtime, and size in `cache_state`.
+  `rit indexdb status` reports stale index snapshots, and `rit indexdb`
+  refreshes the stored index snapshot without making IndexDB a source of truth.
 - 2026-05-12 large-file backend trait slice checked the AGENTS large-object
   backend guidance; no external `git-lfs` binary is used.
 - 2026-05-12 LFS pointer slice checked installed `git-lfs/3.7.1` and the

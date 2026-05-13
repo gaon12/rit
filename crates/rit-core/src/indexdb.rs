@@ -1,8 +1,9 @@
-use crate::{ObjectId, ObjectKind, Repository, Result, RitError, parse_commit};
-use rusqlite::{Connection, OpenFlags, params};
+use crate::{ObjectId, ObjectKind, Repository, Result, RitError, object::sha1_bytes, parse_commit};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
+use std::time::UNIX_EPOCH;
 
 /// Current SQLite auxiliary index schema version.
 pub const INDEXDB_SCHEMA_VERSION: i64 = 1;
@@ -123,6 +124,8 @@ impl<'repo> IndexDb<'repo> {
             ));
         } else if refs_snapshot_is_stale(&connection, self.repository)? {
             stale_reasons.push("refs snapshot is stale".to_owned());
+        } else if index_snapshot_is_stale(&connection, self.repository)? {
+            stale_reasons.push("index snapshot is stale".to_owned());
         }
         let stale = !stale_reasons.is_empty();
 
@@ -253,10 +256,50 @@ fn refresh_indexdb(connection: &mut Connection, repository: &Repository) -> Resu
             params!["last_update_utc"],
         )
         .map_err(sqlite_error)?;
+    let index_snapshot = current_index_snapshot(repository)?;
+    write_cache_value(
+        &transaction,
+        "index_checksum",
+        index_snapshot.checksum.as_deref().unwrap_or("-"),
+    )?;
+    write_cache_value(
+        &transaction,
+        "index_mtime",
+        index_snapshot.mtime.as_deref().unwrap_or("-"),
+    )?;
+    write_cache_value(
+        &transaction,
+        "index_size",
+        &index_snapshot
+            .size
+            .map(|size| size.to_string())
+            .unwrap_or_else(|| "-".to_owned()),
+    )?;
     refresh_refs_snapshot(&transaction, &refs_snapshot)?;
     let commits_indexed = refresh_commits(&transaction, repository, &refs_snapshot)?;
     transaction.commit().map_err(sqlite_error)?;
     Ok(commits_indexed)
+}
+
+fn write_cache_value(connection: &Connection, key: &str, value: &str) -> Result<()> {
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO cache_state(key, value) VALUES (?1, ?2)",
+            params![key, value],
+        )
+        .map_err(sqlite_error)?;
+    Ok(())
+}
+
+fn read_cache_value(connection: &Connection, key: &str) -> Result<Option<String>> {
+    connection
+        .query_row(
+            "SELECT value FROM cache_state WHERE key = ?1",
+            params![key],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(sqlite_error)
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -320,6 +363,50 @@ fn stored_refs_snapshot(connection: &Connection) -> Result<Vec<RefSnapshotRow>> 
 
 fn refs_snapshot_is_stale(connection: &Connection, repository: &Repository) -> Result<bool> {
     Ok(stored_refs_snapshot(connection)? != current_refs_snapshot(repository)?)
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct IndexSnapshot {
+    checksum: Option<String>,
+    mtime: Option<String>,
+    size: Option<u64>,
+}
+
+fn current_index_snapshot(repository: &Repository) -> Result<IndexSnapshot> {
+    let path = repository.git_dir().join("index");
+    if !path.exists() {
+        return Ok(IndexSnapshot::default());
+    }
+    let bytes = fs::read(&path).map_err(|source| RitError::io(&path, source))?;
+    let metadata = fs::metadata(&path).map_err(|source| RitError::io(&path, source))?;
+    let checksum = Some(hex(&sha1_bytes(&bytes)));
+    let mtime = metadata
+        .modified()
+        .ok()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| format!("{}.{:09}", duration.as_secs(), duration.subsec_nanos()));
+    Ok(IndexSnapshot {
+        checksum,
+        mtime,
+        size: Some(metadata.len()),
+    })
+}
+
+fn stored_index_snapshot(connection: &Connection) -> Result<IndexSnapshot> {
+    Ok(IndexSnapshot {
+        checksum: option_from_cache_value(read_cache_value(connection, "index_checksum")?),
+        mtime: option_from_cache_value(read_cache_value(connection, "index_mtime")?),
+        size: option_from_cache_value(read_cache_value(connection, "index_size")?)
+            .and_then(|value| value.parse::<u64>().ok()),
+    })
+}
+
+fn option_from_cache_value(value: Option<String>) -> Option<String> {
+    value.filter(|value| value != "-")
+}
+
+fn index_snapshot_is_stale(connection: &Connection, repository: &Repository) -> Result<bool> {
+    Ok(stored_index_snapshot(connection)? != current_index_snapshot(repository)?)
 }
 
 fn refresh_refs_snapshot(connection: &Connection, refs_snapshot: &[RefSnapshotRow]) -> Result<()> {
@@ -455,6 +542,16 @@ fn ensure_supported_schema(connection: &Connection) -> Result<()> {
 
 fn sqlite_error(error: rusqlite::Error) -> RitError {
     RitError::invalid_input(format!("SQLite indexdb error: {error}"))
+}
+
+fn hex(bytes: &[u8]) -> String {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        output.push(DIGITS[(byte >> 4) as usize] as char);
+        output.push(DIGITS[(byte & 0x0f) as usize] as char);
+    }
+    output
 }
 
 const INDEXDB_SCHEMA: &str = "
