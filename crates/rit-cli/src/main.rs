@@ -1988,7 +1988,12 @@ fn merge_command(
         };
     }
     let before = capture_operation_snapshot(&repository, stderr)?;
-    match repository.merge_ff_only(&merge_args.target) {
+    let merge_result = if merge_args.ff_only {
+        repository.merge_ff_only(&merge_args.target)
+    } else {
+        repository.merge(&merge_args.target)
+    };
+    match merge_result {
         Ok(rit_core::MergeResult::AlreadyUpToDate { .. }) => {
             record_operation(
                 &repository,
@@ -2019,6 +2024,33 @@ fn merge_command(
             writeln!(stdout, "Fast-forward")?;
             Ok(ExitCode::SUCCESS)
         }
+        Ok(rit_core::MergeResult::Conflicts {
+            target_id,
+            conflict_paths,
+        }) => {
+            record_operation_with_changed_paths(
+                &repository,
+                "merge",
+                &format!("conflicted merge {}", merge_args.target),
+                before,
+                conflict_paths.clone(),
+                Vec::new(),
+                stderr,
+            )?;
+            for path in &conflict_paths {
+                writeln!(stdout, "CONFLICT (content): Merge conflict in {path}")?;
+            }
+            writeln!(
+                stdout,
+                "Recorded pre-merge target {}",
+                &target_id.to_hex()[..7]
+            )?;
+            writeln!(
+                stdout,
+                "Automatic merge failed; fix conflicts and then commit the result."
+            )?;
+            Ok(ExitCode::from(1))
+        }
         Err(error) => write_command_error(stderr, error),
     }
 }
@@ -2027,6 +2059,7 @@ struct ParsedMergeArgs {
     target: String,
     plan: bool,
     explain: bool,
+    ff_only: bool,
 }
 
 fn parse_merge_args(
@@ -2035,6 +2068,7 @@ fn parse_merge_args(
 ) -> io::Result<Option<ParsedMergeArgs>> {
     let mut plan = false;
     let mut explain = false;
+    let mut ff_only = false;
     let mut target = None;
     let mut index = 0;
     while index < args.len() {
@@ -2042,6 +2076,7 @@ fn parse_merge_args(
         if arg == "--plan" {
             plan = true;
         } else if arg == "--ff-only" {
+            ff_only = true;
         } else if arg == "explain" && target.is_none() {
             explain = true;
             index += 1;
@@ -2076,6 +2111,7 @@ fn parse_merge_args(
         target,
         plan,
         explain,
+        ff_only,
     }))
 }
 

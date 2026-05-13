@@ -337,8 +337,12 @@
 - The index parser/writer now preserves Git stage bits 0/1/2/3, sorts duplicate
   conflict paths by stage, rejects invalid stage values, and lets
   `ls-files --stage` print the stored stage instead of assuming stage 0.
-- Still unsupported: merge commits, conflict stage generation, strategies,
-  merge hooks, `--abort`, `--continue`, `cherry-pick`, `rebase`, and `stash`.
+- Conflicted non-fast-forward `rit merge <target>` now writes unmerged index
+  stage entries, `MERGE_HEAD`, and `MERGE_MSG`, records the operation journal
+  entry, and refuses to commit while the index contains unmerged entries.
+- Still unsupported: merge commits, worktree conflict marker generation,
+  strategies, merge hooks, `--abort`, `--continue`, `cherry-pick`, `rebase`,
+  and `stash`.
 
 ### M16: Operation journal and universal undo
 
@@ -923,10 +927,10 @@
 
 - Baseline command checked: `git merge -h`
 - Supported options: default fast-forward shape and explicit `--ff-only` with
-  one target branch or revision, plus rit-specific `--plan` and
-  `merge explain <target>`.
-- Unsupported options: merge commits, conflict handling, strategies, stat
-  output, hooks, squash, abort, quit, continue, autostash, signing, and
+  one target branch or revision, conflicted non-fast-forward index-stage
+  starts, plus rit-specific `--plan` and `merge explain <target>`.
+- Unsupported options: merge commits, worktree conflict markers, strategies,
+  stat output, hooks, squash, abort, quit, continue, autostash, signing, and
   verification options.
 - Git-compatible behavior: fast-forward final `HEAD`, index, and worktree state
   match Git for simple clean repositories.
@@ -938,10 +942,14 @@
   changing `HEAD`, refs, index, or worktree.
 - rit-specific behavior: `merge explain` prints the fast-forward or
   non-fast-forward reason without changing repository state.
-- Intentional differences: output is simplified and non-fast-forward merges are
-  rejected instead of attempting a merge commit.
-- Repository mutation: yes, updates `HEAD` or the current branch ref, writes
-  the index, and materializes the target tree.
+- rit-specific behavior: conflicted non-fast-forward merges leave stage 1/2/3
+  entries in the index and merge state files, but do not yet write conflict
+  markers into the working tree.
+- Intentional differences: output is simplified; clean non-fast-forward merges
+  without conflicts are still rejected instead of creating a merge commit.
+- Repository mutation: yes, updates `HEAD` or the current branch ref for
+  fast-forward merges, or writes unmerged index entries and merge state files
+  for conflicted non-fast-forward merges.
 - Risk: moderate; requires a clean worktree before writing.
 
 ### `rit op` and `rit undo`

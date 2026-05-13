@@ -119,6 +119,13 @@ pub enum MergeResult {
     AlreadyUpToDate { commit_id: ObjectId },
     /// HEAD moved forward without creating a merge commit.
     FastForward { old_id: ObjectId, new_id: ObjectId },
+    /// A non-fast-forward merge started and left conflict stages in the index.
+    Conflicts {
+        /// Target commit requested by the user.
+        target_id: ObjectId,
+        /// Paths with unmerged stage entries in the index.
+        conflict_paths: Vec<String>,
+    },
 }
 
 /// Dry-run plan for the currently supported fast-forward merge path.
@@ -739,6 +746,52 @@ impl Repository {
         })
     }
 
+    /// Merges `target` into the current branch for the currently supported cases.
+    pub fn merge(&self, target: &str) -> Result<MergeResult> {
+        ensure_clean_for_checkout(self)?;
+        let old_id = self
+            .resolve_head()?
+            .ok_or_else(|| RitError::invalid_input("merge requires an existing HEAD"))?;
+        let new_id = self.resolve_merge_target(target)?;
+        if old_id == new_id {
+            return Ok(MergeResult::AlreadyUpToDate { commit_id: old_id });
+        }
+        if !self.commit_is_ancestor(old_id, new_id)? {
+            let merge_base = self.find_merge_base(old_id, new_id)?;
+            let head_entries = self.commit_index_entries(old_id)?;
+            let target_entries = self.commit_index_entries(new_id)?;
+            let base_entries = match merge_base {
+                Some(base_id) => self.commit_index_entries(base_id)?,
+                None => Vec::new(),
+            };
+            let merge_workflow =
+                non_fast_forward_merge_workflow_plan(&base_entries, &head_entries, &target_entries);
+            if merge_workflow.conflict_stages.is_empty() {
+                return Err(RitError::invalid_input(
+                    "not possible to fast-forward; merge requires a merge commit",
+                ));
+            }
+            self.start_conflicted_merge(
+                target,
+                new_id,
+                &base_entries,
+                &head_entries,
+                &target_entries,
+                &merge_workflow.conflict_stages,
+            )?;
+            self.refresh_indexdb_after_git_write();
+            return Ok(MergeResult::Conflicts {
+                target_id: new_id,
+                conflict_paths: merge_workflow.conflict_paths,
+            });
+        }
+
+        self.checkout_commit_tree(new_id)?;
+        self.update_head(new_id)?;
+        self.refresh_indexdb_after_git_write();
+        Ok(MergeResult::FastForward { old_id, new_id })
+    }
+
     /// Fast-forwards the current branch to `target` when possible.
     pub fn merge_ff_only(&self, target: &str) -> Result<MergeResult> {
         ensure_clean_for_checkout(self)?;
@@ -759,6 +812,130 @@ impl Repository {
         self.update_head(new_id)?;
         self.refresh_indexdb_after_git_write();
         Ok(MergeResult::FastForward { old_id, new_id })
+    }
+
+    fn start_conflicted_merge(
+        &self,
+        target: &str,
+        target_id: ObjectId,
+        base_entries: &[IndexEntry],
+        head_entries: &[IndexEntry],
+        target_entries: &[IndexEntry],
+        conflict_stages: &[MergeConflictStagePlan],
+    ) -> Result<()> {
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "merge must be run in a repository with a working tree",
+            ));
+        };
+        let symlinks_enabled = self.core_symlinks_enabled()?;
+        let merged_entries = self.conflicted_merge_index_entries(
+            base_entries,
+            head_entries,
+            target_entries,
+            conflict_stages,
+        )?;
+        let conflict_paths = conflict_stages
+            .iter()
+            .map(|stage| stage.path.as_str())
+            .collect::<BTreeSet<_>>();
+        write_non_conflicting_merge_worktree_changes(
+            self,
+            worktree,
+            head_entries,
+            &merged_entries,
+            &conflict_paths,
+            symlinks_enabled,
+        )?;
+
+        Index {
+            entries: merged_entries,
+            extensions: Vec::new(),
+        }
+        .write(&self.git_dir().join("index"))?;
+        write_text_atomically(
+            &self.git_dir().join("MERGE_HEAD"),
+            &format!("{target_id}\n"),
+        )?;
+        write_text_atomically(
+            &self.git_dir().join("MERGE_MSG"),
+            &merge_message_with_conflicts(target, &conflict_paths),
+        )
+    }
+
+    fn conflicted_merge_index_entries(
+        &self,
+        base_entries: &[IndexEntry],
+        head_entries: &[IndexEntry],
+        target_entries: &[IndexEntry],
+        conflict_stages: &[MergeConflictStagePlan],
+    ) -> Result<Vec<IndexEntry>> {
+        let base_by_path = index_entries_by_path(base_entries);
+        let head_by_path = index_entries_by_path(head_entries);
+        let target_by_path = index_entries_by_path(target_entries);
+        let conflict_paths = conflict_stages
+            .iter()
+            .map(|stage| stage.path.as_str())
+            .collect::<BTreeSet<_>>();
+        let all_paths = base_by_path
+            .keys()
+            .chain(head_by_path.keys())
+            .chain(target_by_path.keys())
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let mut entries = Vec::new();
+
+        for path in all_paths {
+            if conflict_paths.contains(path) {
+                continue;
+            }
+            let base_entry = base_by_path.get(path).copied();
+            let head_entry = head_by_path.get(path).copied();
+            let target_entry = target_by_path.get(path).copied();
+            let selected = if tree_entries_equal(head_entry, target_entry) {
+                head_entry
+            } else if tree_entries_equal(base_entry, head_entry) {
+                target_entry
+            } else {
+                head_entry
+            };
+            if let Some(entry) = selected {
+                let mut entry = entry.clone();
+                entry.stage = 0;
+                entries.push(entry);
+            }
+        }
+
+        for conflict in conflict_stages {
+            if let Some(base) = conflict.base {
+                entries.push(self.conflict_index_entry(&conflict.path, 1, base)?);
+            }
+            if let Some(head) = conflict.head {
+                entries.push(self.conflict_index_entry(&conflict.path, 2, head)?);
+            }
+            if let Some(target) = conflict.target {
+                entries.push(self.conflict_index_entry(&conflict.path, 3, target)?);
+            }
+        }
+
+        Ok(entries)
+    }
+
+    fn conflict_index_entry(
+        &self,
+        path: &str,
+        stage: u8,
+        entry: MergeConflictStageEntry,
+    ) -> Result<IndexEntry> {
+        let object = self.read_object(entry.object_id)?;
+        Ok(IndexEntry {
+            stat: IndexEntryStat::default(),
+            mode: entry.mode,
+            object_id: entry.object_id,
+            stage,
+            file_size: object.size().min(u32::MAX as usize) as u32,
+            path: path.to_owned(),
+        })
     }
 
     fn resolve_merge_target(&self, target: &str) -> Result<ObjectId> {
@@ -829,6 +1006,12 @@ impl Repository {
     fn write_tree_from_index(&self, index: &Index) -> Result<ObjectId> {
         let mut root = TreeNode::default();
         for entry in &index.entries {
+            if entry.stage != 0 {
+                return Err(RitError::invalid_input(format!(
+                    "cannot write tree with unmerged index entry: {}",
+                    entry.path
+                )));
+            }
             root.insert(&entry.path, entry.object_id, entry.mode)?;
         }
         self.write_tree_node(root)
@@ -1251,6 +1434,73 @@ fn conflict_stage_entry(entry: Option<&IndexEntry>) -> Option<MergeConflictStage
         mode: entry.mode,
         object_id: entry.object_id,
     })
+}
+
+fn write_non_conflicting_merge_worktree_changes(
+    repository: &Repository,
+    worktree: &Path,
+    head_entries: &[IndexEntry],
+    merged_entries: &[IndexEntry],
+    conflict_paths: &BTreeSet<&str>,
+    symlinks_enabled: bool,
+) -> Result<()> {
+    let head_by_path = index_entries_by_path(head_entries);
+    let merged_by_path = merged_entries
+        .iter()
+        .filter(|entry| entry.stage == 0)
+        .map(|entry| (entry.path.as_str(), entry))
+        .collect::<BTreeMap<_, _>>();
+    let paths = head_by_path
+        .keys()
+        .chain(merged_by_path.keys())
+        .copied()
+        .collect::<BTreeSet<_>>();
+
+    for path in paths {
+        if conflict_paths.contains(path) {
+            continue;
+        }
+        match (
+            head_by_path.get(path).copied(),
+            merged_by_path.get(path).copied(),
+        ) {
+            (Some(head), Some(merged)) if tree_entries_equal(Some(head), Some(merged)) => {}
+            (_, Some(merged)) => {
+                let object = repository.read_object(merged.object_id)?;
+                if object.kind != ObjectKind::Blob {
+                    return Err(RitError::invalid_input(format!(
+                        "object {} is {}, not blob",
+                        merged.object_id, object.kind
+                    )));
+                }
+                write_worktree_entry_atomically(
+                    &join_slash_path(worktree, &merged.path),
+                    &object.data,
+                    merged.mode,
+                    symlinks_enabled,
+                )?;
+            }
+            (Some(head), None) => {
+                let path = join_slash_path(worktree, &head.path);
+                if path.exists() || fs::symlink_metadata(&path).is_ok() {
+                    fs::remove_file(&path).map_err(|source| RitError::io(&path, source))?;
+                }
+            }
+            (None, None) => {}
+        }
+    }
+
+    Ok(())
+}
+
+fn merge_message_with_conflicts(target: &str, conflict_paths: &BTreeSet<&str>) -> String {
+    let mut message = format!("Merge commit '{target}'\n\nConflicts:\n");
+    for path in conflict_paths {
+        message.push('\t');
+        message.push_str(path);
+        message.push('\n');
+    }
+    message
 }
 
 fn worktree_path_matches_exact_case(root: &Path, slash_path: &str) -> bool {
@@ -2404,6 +2654,71 @@ mod tests {
         assert_eq!(
             fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
             "master\n"
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn merge_writes_conflict_stages_for_non_fast_forward_conflict() {
+        let temp = temp_path("merge-conflict-stages");
+        let repository = committed_nested_repository(&temp);
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "topic\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("topic add should work");
+        let topic = repository
+            .commit_index("topic")
+            .expect("topic commit should work")
+            .commit_id;
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(temp.join("nested").join("a.txt"), "master\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("master add should work");
+        repository
+            .commit_index("master")
+            .expect("master commit should work");
+
+        let result = repository
+            .merge("topic")
+            .expect("conflicted merge should write stages");
+
+        assert_eq!(
+            result,
+            super::MergeResult::Conflicts {
+                target_id: topic,
+                conflict_paths: vec!["nested/a.txt".to_owned()],
+            }
+        );
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        let stages = index
+            .entries
+            .iter()
+            .filter(|entry| entry.path == "nested/a.txt")
+            .map(|entry| entry.stage)
+            .collect::<Vec<_>>();
+        assert_eq!(stages, vec![1, 2, 3]);
+        assert_eq!(
+            fs::read_to_string(repository.git_dir().join("MERGE_HEAD"))
+                .expect("MERGE_HEAD should read"),
+            format!("{topic}\n")
+        );
+        assert!(
+            fs::read_to_string(repository.git_dir().join("MERGE_MSG"))
+                .expect("MERGE_MSG should read")
+                .contains("nested/a.txt")
+        );
+        assert_eq!(
+            repository
+                .commit_index("should fail")
+                .expect_err("unmerged index should not commit")
+                .to_string(),
+            "cannot write tree with unmerged index entry: nested/a.txt"
         );
         remove_dir_all(&temp);
     }

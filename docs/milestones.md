@@ -386,7 +386,7 @@ Completion criteria:
     entries for conflicting paths without writing conflict index stages.
   - [x] Index parser/writer preserves Git index stage bits for future conflict
     entries.
-  - [ ] Merge commits, conflict index stages, hooks, strategies, abort, and
+  - [ ] Merge commits, conflict markers, hooks, strategies, abort, and
     continue workflows.
 - [ ] `rit cherry-pick`
 - [ ] `rit rebase`
@@ -394,7 +394,9 @@ Completion criteria:
 - [~] Conflict index stages.
   - [x] Preserve stage 0/1/2/3 in index read, write, sorting, and
     `ls-files --stage` output.
-  - [ ] Write actual stage entries during conflicted merge application.
+  - [x] Write actual stage entries during conflicted merge application.
+  - [x] Write `MERGE_HEAD` and `MERGE_MSG` for conflicted merge starts.
+  - [ ] Write worktree conflict markers and full merge result contents.
 
 Completion criteria:
 - Interrupted operations leave clear state and can be continued, aborted, or
@@ -648,8 +650,8 @@ Completion criteria:
 
 ## Active Queue
 
-1. Continue M8 merge with conflict index stages and merge-commit workflow
-   planning.
+1. Continue M8 merge with worktree conflict markers, abort/continue, and
+   merge-commit workflow planning.
 2. Continue M16 operation journal with reversible patches and command-aware
    undo for index-only/worktree-changing operations.
 3. Add indexdb fallback/query APIs for missing, stale, or corrupted auxiliary

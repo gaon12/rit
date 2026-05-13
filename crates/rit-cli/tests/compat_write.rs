@@ -1374,6 +1374,79 @@ fn merge_plan_prints_non_fast_forward_without_changing_head() {
 }
 
 #[test]
+fn merge_conflict_writes_index_stages_and_operation_record() {
+    let fixture = temp_path("merge-conflict-stage-fixture");
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    fs::write(fixture.join("tracked.txt"), "base\n").expect("base file should be written");
+    run_git(&fixture, ["add", "tracked.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    run_git(&fixture, ["checkout", "--quiet", "-b", "topic"]);
+    fs::write(fixture.join("tracked.txt"), "topic\n").expect("topic file should be written");
+    run_git(&fixture, ["add", "tracked.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "topic"]);
+    run_git(&fixture, ["checkout", "--quiet", "master"]);
+    fs::write(fixture.join("tracked.txt"), "master\n").expect("master file should be written");
+    run_git(&fixture, ["add", "tracked.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "master"]);
+
+    let output = Command::new(rit_binary())
+        .args(["merge", "topic"])
+        .current_dir(&fixture)
+        .output()
+        .expect("rit merge should start");
+
+    assert!(!output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("CONFLICT (content): Merge conflict in tracked.txt\n"));
+    assert!(stdout.contains("Automatic merge failed; fix conflicts and then commit the result.\n"));
+    assert!(fixture.join(".git").join("MERGE_HEAD").exists());
+    let ls_files = run_capture(rit_binary(), ["ls-files", "--stage"], &fixture).0;
+    assert!(ls_files.contains(" 1\ttracked.txt\n"));
+    assert!(ls_files.contains(" 2\ttracked.txt\n"));
+    assert!(ls_files.contains(" 3\ttracked.txt\n"));
+    let op_log = run_capture(rit_binary(), ["op", "log"], &fixture).0;
+    assert!(op_log.contains("merge"));
+    assert!(op_log.contains("tracked.txt"));
+    let _ = fs::remove_dir_all(fixture);
+}
+
+#[test]
+fn merge_ff_only_rejects_conflict_without_writing_merge_state() {
+    let fixture = temp_path("merge-ff-only-conflict-fixture");
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    fs::write(fixture.join("tracked.txt"), "base\n").expect("base file should be written");
+    run_git(&fixture, ["add", "tracked.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    run_git(&fixture, ["checkout", "--quiet", "-b", "topic"]);
+    fs::write(fixture.join("tracked.txt"), "topic\n").expect("topic file should be written");
+    run_git(&fixture, ["add", "tracked.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "topic"]);
+    run_git(&fixture, ["checkout", "--quiet", "master"]);
+    fs::write(fixture.join("tracked.txt"), "master\n").expect("master file should be written");
+    run_git(&fixture, ["add", "tracked.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "master"]);
+
+    let output = Command::new(rit_binary())
+        .args(["merge", "--ff-only", "topic"])
+        .current_dir(&fixture)
+        .output()
+        .expect("rit merge should start");
+
+    assert!(!output.status.success());
+    assert!(!fixture.join(".git").join("MERGE_HEAD").exists());
+    assert_eq!(run_capture(rit_binary(), ["op", "log"], &fixture).0, "");
+    let _ = fs::remove_dir_all(fixture);
+}
+
+#[test]
 fn merge_explain_prints_fast_forward_reason_without_changing_head() {
     let fixture = temp_path("merge-explain-fixture");
     fs::create_dir_all(&fixture).expect("fixture should be created");
