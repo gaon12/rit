@@ -33,6 +33,7 @@ Core commands:
   undo          Undo the last restorable rit operation
   show          Show one object
   ls-files      Show files in the index
+  pathspec      Explain pathspec parsing and matching
   workspace     Inspect workspace profile operations
   doctor        Check repository health without modifying it
   repair        Plan or apply conservative repository repairs
@@ -199,6 +200,12 @@ rit ls-files [--stage] [--] [<pathspec>...]
 Show files tracked in the index.
 ";
 
+const PATHSPEC_HELP: &str = "\
+rit pathspec explain <pathspec>...
+
+Explain how rit parses pathspec magic, matching mode, exclusions, wildcards, case handling, and attributes.
+";
+
 const WORKSPACE_HELP: &str = "\
 rit workspace prefetch <profile>
 
@@ -248,6 +255,7 @@ pub fn print_command_help(
         "undo" => stdout.write_all(UNDO_HELP.as_bytes())?,
         "show" => stdout.write_all(SHOW_HELP.as_bytes())?,
         "ls-files" => stdout.write_all(LS_FILES_HELP.as_bytes())?,
+        "pathspec" => stdout.write_all(PATHSPEC_HELP.as_bytes())?,
         "workspace" => stdout.write_all(WORKSPACE_HELP.as_bytes())?,
         "doctor" => stdout.write_all(DOCTOR_HELP.as_bytes())?,
         "repair" => stdout.write_all(REPAIR_HELP.as_bytes())?,

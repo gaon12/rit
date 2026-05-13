@@ -20,6 +20,32 @@ pub struct PathspecPattern {
     attributes: Vec<AttributeRequirement>,
 }
 
+/// Human-readable explanation of a parsed pathspec set.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PathspecExplanation {
+    /// True when the pathspec set is empty and therefore matches every path.
+    pub matches_all: bool,
+    /// Parsed pattern explanations in user-provided order.
+    pub patterns: Vec<PathspecPatternExplanation>,
+}
+
+/// Human-readable explanation of one parsed pathspec pattern.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PathspecPatternExplanation {
+    /// Normalized repository-relative pattern after pathspec magic processing.
+    pub pattern: String,
+    /// Matching mode used by this pattern.
+    pub mode: String,
+    /// Whether matching ignores ASCII case.
+    pub ignore_case: bool,
+    /// Whether this pattern excludes paths from previous positive matches.
+    pub exclude: bool,
+    /// Whether this pattern uses wildcard syntax.
+    pub has_wildcard: bool,
+    /// Attribute requirements from `:(attr:...)` magic.
+    pub attributes: Vec<String>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct AttributeRequirement {
     name: String,
@@ -69,6 +95,14 @@ impl PathspecSet {
     /// Returns the normalized pathspec patterns.
     pub fn patterns(&self) -> &[PathspecPattern] {
         &self.patterns
+    }
+
+    /// Explains how the pathspec set will be matched.
+    pub fn explain(&self) -> PathspecExplanation {
+        PathspecExplanation {
+            matches_all: self.is_all(),
+            patterns: self.patterns.iter().map(PathspecPattern::explain).collect(),
+        }
     }
 
     /// Returns true when a repository-relative slash path matches this set.
@@ -127,6 +161,22 @@ impl PathspecPattern {
         !self.attributes.is_empty()
     }
 
+    /// Explains how this pattern will be matched.
+    pub fn explain(&self) -> PathspecPatternExplanation {
+        PathspecPatternExplanation {
+            pattern: self.pattern.clone(),
+            mode: self.mode.as_str().to_owned(),
+            ignore_case: self.ignore_case,
+            exclude: self.exclude,
+            has_wildcard: self.has_wildcard(),
+            attributes: self
+                .attributes
+                .iter()
+                .map(AttributeRequirement::explain)
+                .collect(),
+        }
+    }
+
     /// Returns true when this pattern is a non-wildcard exact path filter.
     pub(crate) fn is_exact_path(&self, path: &str) -> bool {
         !self.has_wildcard() && self.pattern == path
@@ -171,6 +221,15 @@ impl PathspecPattern {
 }
 
 impl AttributeRequirement {
+    fn explain(&self) -> String {
+        match &self.state {
+            AttributeRequirementState::Set => self.name.clone(),
+            AttributeRequirementState::Unset => format!("-{}", self.name),
+            AttributeRequirementState::Value(value) => format!("{}={value}", self.name),
+            AttributeRequirementState::Unspecified => format!("!{}", self.name),
+        }
+    }
+
     fn matches(&self, state: Option<AttributeState>) -> bool {
         match (&self.state, state) {
             (AttributeRequirementState::Set, Some(AttributeState::Set)) => true,
@@ -182,6 +241,16 @@ impl AttributeRequirement {
                 true
             }
             _ => false,
+        }
+    }
+}
+
+impl PathspecMatchMode {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Literal => "literal",
+            Self::Glob => "glob",
         }
     }
 }
@@ -738,6 +807,27 @@ mod tests {
         assert!(pathspec.matches_with_attributes("main.rs", Some(&attributes)));
         assert!(pathspec.matches_with_attributes("plain.txt", Some(&attributes)));
         assert!(!pathspec.matches_with_attributes("docs/readme.md", Some(&attributes)));
+    }
+
+    #[test]
+    fn explains_pathspec_magic() {
+        let pathspec = PathspecSet::from_args(&[
+            ":(icase,glob,attr:diff=rust)**/*.RS".to_owned(),
+            ":!target".to_owned(),
+        ])
+        .expect("valid pathspec");
+
+        let explanation = pathspec.explain();
+
+        assert!(!explanation.matches_all);
+        assert_eq!(explanation.patterns.len(), 2);
+        assert_eq!(explanation.patterns[0].pattern, "**/*.RS");
+        assert_eq!(explanation.patterns[0].mode, "glob");
+        assert!(explanation.patterns[0].ignore_case);
+        assert!(explanation.patterns[0].has_wildcard);
+        assert_eq!(explanation.patterns[0].attributes, vec!["diff=rust"]);
+        assert_eq!(explanation.patterns[1].pattern, "target");
+        assert!(explanation.patterns[1].exclude);
     }
 
     #[test]

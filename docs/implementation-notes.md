@@ -91,6 +91,11 @@
   `rit add --plan`, `rit commit --plan`, `rit reset --plan`, and
   `rit merge --plan` as rit-specific dry-run views over the same selection
   logic used by the applying commands.
+- 2026-05-13 explainable pathspec slice used the existing Git-compatible
+  pathspec parser; `rit pathspec explain <pathspec>` is rit-specific and
+  prints normalized patterns, matching mode, exclusions, wildcard use,
+  case-sensitivity, and attribute requirements without touching repository
+  state.
 - 2026-05-12 large-file backend trait slice checked the AGENTS large-object
   backend guidance; no external `git-lfs` binary is used.
 - 2026-05-12 LFS pointer slice checked installed `git-lfs/3.7.1` and the

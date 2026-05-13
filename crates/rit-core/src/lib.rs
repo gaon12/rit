@@ -78,7 +78,7 @@ pub use operations::{
     OperationRecord, OperationRestoreResult, OperationSnapshot, RepositoryOperations,
 };
 pub use partial_clone::{PartialClonePolicy, PromisorRemote};
-pub use pathspec::PathspecSet;
+pub use pathspec::{PathspecExplanation, PathspecPatternExplanation, PathspecSet};
 pub use policy::{PolicyConfig, PolicyEnforcement, parse_size_limit};
 pub use policy_check::{PolicyFinding, PolicyFindingKind, PolicySeverity};
 pub use refs::{Branch, Tag};

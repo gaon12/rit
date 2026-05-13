@@ -57,6 +57,7 @@ fn run(
         [command, rest @ ..] if command == "merge" => merge_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "show" => show_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ls-files" => ls_files_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "pathspec" => pathspec_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "workspace" => workspace_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "doctor" => doctor::doctor_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "repair" => repair::repair_command(rest, stdout, stderr),
@@ -142,6 +143,54 @@ fn workspace_command(
         writeln!(stdout, "include: {path}")?;
     }
 
+    Ok(ExitCode::SUCCESS)
+}
+
+fn pathspec_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let pathspecs = match args {
+        [subcommand, pathspecs @ ..] if subcommand == "explain" && !pathspecs.is_empty() => {
+            pathspecs.to_vec()
+        }
+        [subcommand] if subcommand == "explain" => {
+            writeln!(
+                stderr,
+                "rit: pathspec explain requires at least one pathspec"
+            )?;
+            return Ok(ExitCode::from(129));
+        }
+        [subcommand, ..] => {
+            writeln!(
+                stderr,
+                "rit: unsupported pathspec subcommand '{subcommand}'"
+            )?;
+            return Ok(ExitCode::from(129));
+        }
+        [] => {
+            writeln!(stderr, "rit: pathspec requires a subcommand")?;
+            return Ok(ExitCode::from(129));
+        }
+    };
+    let set = match rit_core::PathspecSet::from_args(&pathspecs) {
+        Ok(set) => set,
+        Err(error) => return write_command_error(stderr, error),
+    };
+    let explanation = set.explain();
+    writeln!(stdout, "pathspec: explain")?;
+    writeln!(stdout, "matches-all: {}", explanation.matches_all)?;
+    for pattern in explanation.patterns {
+        writeln!(stdout, "pattern: {}", pattern.pattern)?;
+        writeln!(stdout, "mode: {}", pattern.mode)?;
+        writeln!(stdout, "ignore-case: {}", pattern.ignore_case)?;
+        writeln!(stdout, "exclude: {}", pattern.exclude)?;
+        writeln!(stdout, "wildcard: {}", pattern.has_wildcard)?;
+        for attribute in pattern.attributes {
+            writeln!(stdout, "attr: {attribute}")?;
+        }
+    }
     Ok(ExitCode::SUCCESS)
 }
 
@@ -2375,6 +2424,29 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit ls-files"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn pathspec_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "pathspec"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit pathspec explain"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn pathspec_explain_prints_parsed_rules() {
+        let (code, stdout, stderr) =
+            run_with(&["pathspec", "explain", ":(icase,glob)*.RS", ":!target"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("pathspec: explain\n"));
+        assert!(stdout.contains("pattern: *.RS\n"));
+        assert!(stdout.contains("mode: glob\n"));
+        assert!(stdout.contains("ignore-case: true\n"));
+        assert!(stdout.contains("exclude: true\n"));
         assert_eq!(stderr, "");
     }
 

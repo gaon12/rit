@@ -72,6 +72,7 @@ rit merge [--plan] [--ff-only] <target>
 rit op log
 rit op restore <id>
 rit undo
+rit pathspec explain <pathspec>...
 ```
 
 Many options are intentionally still unsupported. Unsupported behavior should
