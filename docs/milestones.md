@@ -272,7 +272,7 @@ Completion criteria:
 - [x] Implement `rit indexdb rebuild`.
 - [x] Implement `rit indexdb drop`.
 - [x] Implement `rit indexdb vacuum`.
-- [ ] Implement write-through updates after `rit` creates commits, refs, tags,
+- [x] Implement write-through updates after `rit` creates commits, refs, tags,
   or checkout state changes.
 - [ ] Implement lightweight reconciliation when external Git-compatible tools
   changed refs, index, or pack snapshots.
@@ -633,11 +633,10 @@ Completion criteria:
 1. Continue M8 merge with conflict index stages and non-fast-forward planning.
 2. Continue M16 operation journal with changed paths, object IDs, index-only
    undo, and malformed-journal recovery.
-3. Add indexdb write-through updates for rit-created commits and ref changes.
-4. Add indexdb lightweight reconciliation for external Git-compatible changes.
-5. Add indexdb corruption, stale cache, and external Git reconciliation test
+3. Add indexdb lightweight reconciliation for external Git-compatible changes.
+4. Add indexdb corruption, stale cache, and external Git reconciliation test
    plan.
-6. Keep M6 case-sensitivity parity under verification as new path lookup
+5. Keep M6 case-sensitivity parity under verification as new path lookup
    surfaces are added.
 
 ## Implementation Notes

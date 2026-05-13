@@ -710,6 +710,20 @@ impl Repository {
         self.bare
     }
 
+    /// Refreshes optional auxiliary metadata after a successful Git write.
+    ///
+    /// IndexDB is never the source of truth, so a refresh failure must not turn
+    /// a successful Git repository update into a failed command.
+    pub(crate) fn refresh_indexdb_after_git_write(&self) {
+        #[cfg(feature = "indexdb")]
+        {
+            let indexdb = self.indexdb();
+            if indexdb.storage().database_path.exists() {
+                let _ = indexdb.update();
+            }
+        }
+    }
+
     fn from_paths(worktree: Option<PathBuf>, git_dir: PathBuf, bare: bool) -> Result<Self> {
         let common_dir = resolve_common_dir(&git_dir)?;
         let repository = Self {

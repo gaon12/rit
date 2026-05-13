@@ -73,6 +73,7 @@ impl Repository {
             )));
         }
         write_ref_atomically(&path, target)?;
+        self.refresh_indexdb_after_git_write();
         Ok(target)
     }
 
@@ -116,6 +117,7 @@ impl Repository {
             )));
         }
         fs::remove_file(&path).map_err(|source| RitError::io(&path, source))?;
+        self.refresh_indexdb_after_git_write();
         Ok(target)
     }
 
@@ -149,6 +151,7 @@ impl Repository {
             )));
         }
         write_ref_atomically(&path, target)?;
+        self.refresh_indexdb_after_git_write();
         Ok(target)
     }
 
@@ -167,6 +170,7 @@ impl Repository {
         let target = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
         let target = ObjectId::from_hex(target.trim())?;
         fs::remove_file(&path).map_err(|source| RitError::io(&path, source))?;
+        self.refresh_indexdb_after_git_write();
         Ok(target)
     }
 

@@ -259,6 +259,22 @@ fn refresh_refs_snapshot(connection: &Connection, repository: &Repository) -> Re
             .map(|branch| format!("refs/heads/{branch}"));
         insert_ref_snapshot(connection, "HEAD", Some(head), target.as_deref())?;
     }
+    for branch in repository.list_branches()? {
+        insert_ref_snapshot(
+            connection,
+            &format!("refs/heads/{}", branch.name),
+            Some(branch.target),
+            None,
+        )?;
+    }
+    for tag in repository.list_tags()? {
+        insert_ref_snapshot(
+            connection,
+            &format!("refs/tags/{}", tag.name),
+            Some(tag.target),
+            None,
+        )?;
+    }
     Ok(())
 }
 

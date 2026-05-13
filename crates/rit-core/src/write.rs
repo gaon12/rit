@@ -449,6 +449,7 @@ impl Repository {
             .write_object(ObjectKind::Commit, &commit)?;
         self.update_head(commit_id)?;
         run_post_commit_hook(self);
+        self.refresh_indexdb_after_git_write();
         Ok(CommitResult {
             commit_id,
             file_count: index.entries.len(),
@@ -621,6 +622,7 @@ impl Repository {
             &self.git_dir().join("HEAD"),
             &format!("ref: refs/heads/{name}\n"),
         )?;
+        self.refresh_indexdb_after_git_write();
         Ok(target)
     }
 
@@ -634,6 +636,7 @@ impl Repository {
             &self.git_dir().join("HEAD"),
             &format!("ref: refs/heads/{name}\n"),
         )?;
+        self.refresh_indexdb_after_git_write();
         Ok(target)
     }
 
@@ -650,6 +653,7 @@ impl Repository {
         }
         self.checkout_commit_tree(target)?;
         write_text_atomically(&self.git_dir().join("HEAD"), &format!("{target}\n"))?;
+        self.refresh_indexdb_after_git_write();
         Ok(target)
     }
 
@@ -696,6 +700,7 @@ impl Repository {
 
         self.checkout_commit_tree(new_id)?;
         self.update_head(new_id)?;
+        self.refresh_indexdb_after_git_write();
         Ok(MergeResult::FastForward { old_id, new_id })
     }
 

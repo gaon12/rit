@@ -1,5 +1,6 @@
 use crate::indexdb::INDEXDB_SCHEMA_VERSION;
 use crate::{InitOptions, Repository};
+use rusqlite::{Connection, params};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -69,6 +70,144 @@ fn indexdb_drop_does_not_break_status() {
     assert_eq!(status.entries, Vec::new());
     assert!(!repository.indexdb().storage().database_path.exists());
     remove_dir_all(&temp);
+}
+
+#[test]
+fn indexdb_write_through_records_new_commit() {
+    let temp = temp_path("write-through-commit");
+    let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+    write_user_config(&repository);
+    fs::write(temp.join("file.txt"), "one\n").expect("file should be written");
+    repository
+        .add_paths(&["file.txt".to_owned()])
+        .expect("add should work");
+    let first = repository
+        .commit_index("first")
+        .expect("commit should work")
+        .commit_id;
+    repository.indexdb().ensure().expect("ensure should work");
+    fs::write(temp.join("file.txt"), "two\n").expect("file should be modified");
+    repository
+        .add_paths(&["file.txt".to_owned()])
+        .expect("add should work");
+
+    let second = repository
+        .commit_index("second")
+        .expect("commit should update indexdb")
+        .commit_id;
+
+    {
+        let connection =
+            Connection::open(repository.indexdb().storage().database_path).expect("db should open");
+        assert!(commit_exists(&connection, first));
+        assert!(commit_exists(&connection, second));
+    }
+    remove_dir_all(&temp);
+}
+
+#[test]
+fn indexdb_write_through_records_refs_and_checkout_state() {
+    let temp = temp_path("write-through-refs");
+    let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+    write_user_config(&repository);
+    fs::write(temp.join("file.txt"), "one\n").expect("file should be written");
+    repository
+        .add_paths(&["file.txt".to_owned()])
+        .expect("add should work");
+    repository
+        .commit_index("first")
+        .expect("commit should work");
+    repository.indexdb().ensure().expect("ensure should work");
+
+    repository
+        .create_branch("topic")
+        .expect("branch should update indexdb");
+    repository
+        .create_tag("v1")
+        .expect("tag should update indexdb");
+    repository
+        .checkout_branch("topic")
+        .expect("checkout should update indexdb");
+
+    {
+        let connection =
+            Connection::open(repository.indexdb().storage().database_path).expect("db should open");
+        assert_eq!(
+            ref_target(&connection, "HEAD").as_deref(),
+            Some("refs/heads/topic")
+        );
+        assert!(ref_exists(&connection, "refs/heads/topic"));
+        assert!(ref_exists(&connection, "refs/tags/v1"));
+    }
+    remove_dir_all(&temp);
+}
+
+#[test]
+fn indexdb_write_through_ignores_corrupted_database() {
+    let temp = temp_path("write-through-corrupt");
+    let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+    write_user_config(&repository);
+    fs::write(temp.join("file.txt"), "one\n").expect("file should be written");
+    repository
+        .add_paths(&["file.txt".to_owned()])
+        .expect("add should work");
+    repository
+        .commit_index("first")
+        .expect("commit should work");
+    repository.indexdb().ensure().expect("ensure should work");
+    fs::write(
+        repository.indexdb().storage().database_path,
+        "not a sqlite database",
+    )
+    .expect("db should be corruptible");
+    fs::write(temp.join("file.txt"), "two\n").expect("file should be modified");
+    repository
+        .add_paths(&["file.txt".to_owned()])
+        .expect("add should work");
+
+    repository
+        .commit_index("second")
+        .expect("git write should still succeed when indexdb is corrupt");
+
+    assert!(
+        repository
+            .resolve_head()
+            .expect("head should resolve")
+            .is_some()
+    );
+    remove_dir_all(&temp);
+}
+
+fn commit_exists(connection: &Connection, object_id: crate::ObjectId) -> bool {
+    connection
+        .query_row(
+            "SELECT COUNT(*) FROM commits WHERE hash_kind = ?1 AND object_id = ?2",
+            params!["sha1", object_id.as_bytes().to_vec()],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("commit query should work")
+        > 0
+}
+
+fn ref_exists(connection: &Connection, name: &str) -> bool {
+    connection
+        .query_row(
+            "SELECT COUNT(*) FROM refs_snapshot WHERE name = ?1",
+            params![name],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("ref query should work")
+        > 0
+}
+
+fn ref_target(connection: &Connection, name: &str) -> Option<String> {
+    connection
+        .query_row(
+            "SELECT target FROM refs_snapshot WHERE name = ?1",
+            params![name],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .expect("ref target query should work")
 }
 
 fn write_user_config(repository: &Repository) {
