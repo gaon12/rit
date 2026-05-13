@@ -350,11 +350,11 @@
 - Clean non-fast-forward merges without conflict candidates now materialize the
   merged index/worktree and create a merge commit with `HEAD` and the target as
   parents.
-- Delete/modify conflicts where `HEAD` deleted the path and the target modified
-  it now leave the target version in the working tree while preserving stage 1
-  and stage 3 index entries. Merge results now carry structured conflict
-  reports so the CLI can print Git-shaped `modify/delete` messages instead of
-  treating every conflict as content-only.
+- Delete/modify conflicts now leave the modified side in the working tree for
+  both `HEAD`-deleted and target-deleted cases while preserving the relevant
+  conflict stage entries. Merge results carry structured conflict reports so
+  the CLI can print Git-shaped `modify/delete` messages instead of treating
+  every conflict as content-only.
 - Still unsupported: binary/mode/symlink conflict materialization and messages,
   strategies, merge hooks, `cherry-pick`, `rebase`, and `stash`.
 
@@ -959,9 +959,9 @@
   non-fast-forward reason without changing repository state.
 - rit-specific behavior: conflicted non-fast-forward merges leave stage 1/2/3
   entries in the index, merge state files, and simple worktree conflict markers
-  for regular text content conflicts. Delete/modify conflicts where `HEAD`
-  deleted the path leave the target version in the working tree and print a
-  `modify/delete` conflict message.
+  for regular text content conflicts. Delete/modify conflicts leave the
+  modified side in the working tree and print a `modify/delete` conflict
+  message.
 - rit-specific behavior: `--abort` restores the `ORIG_HEAD` tree and removes
   merge state files, but does not yet handle autostash or `--quit`.
 - rit-specific behavior: `--continue` creates a merge commit from the current

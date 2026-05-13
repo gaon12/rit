@@ -3041,6 +3041,84 @@ mod tests {
     }
 
     #[test]
+    fn merge_keeps_head_for_delete_modify_conflict_when_target_deleted() {
+        let temp = temp_path("merge-delete-modify-head");
+        let repository = committed_nested_repository(&temp);
+        fs::write(temp.join("nested").join("b.txt"), "kept\n").expect("file should be written");
+        repository
+            .add_paths(&["nested/b.txt".to_owned()])
+            .expect("kept add should work");
+        repository
+            .commit_index("kept")
+            .expect("kept commit should work");
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::remove_file(temp.join("nested").join("a.txt")).expect("file should be removed");
+        let mut index =
+            Index::read(&repository.git_dir().join("index")).expect("index should read");
+        index.entries.retain(|entry| entry.path != "nested/a.txt");
+        index
+            .write(&repository.git_dir().join("index"))
+            .expect("delete should be staged");
+        let parent = repository
+            .resolve_head()
+            .expect("head should resolve")
+            .expect("head should exist");
+        repository
+            .commit_index_with_parents("delete", &super::CommitOptions::default(), &[parent], false)
+            .expect("delete commit should work");
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(temp.join("nested").join("a.txt"), "head\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("head add should work");
+        repository
+            .commit_index("head")
+            .expect("head commit should work");
+
+        let result = repository
+            .merge("topic")
+            .expect("delete/modify merge should start");
+
+        let super::MergeResult::Conflicts {
+            conflict_paths,
+            conflict_reports,
+            ..
+        } = result
+        else {
+            panic!("expected conflicted merge");
+        };
+        assert_eq!(conflict_paths, vec!["nested/a.txt".to_owned()]);
+        assert_eq!(
+            conflict_reports,
+            vec![MergeConflictReport {
+                path: "nested/a.txt".to_owned(),
+                kind: MergeConflictKind::ModifyDelete {
+                    deleted_side: MergeConflictSide::Target,
+                    modified_side: MergeConflictSide::Head,
+                    worktree_side: MergeConflictSide::Head,
+                },
+            }]
+        );
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
+            "head\n"
+        );
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        let stages = index
+            .entries
+            .iter()
+            .filter(|entry| entry.path == "nested/a.txt")
+            .map(|entry| entry.stage)
+            .collect::<Vec<_>>();
+        assert_eq!(stages, vec![1, 2]);
+        remove_dir_all(&temp);
+    }
+
+    #[test]
     fn merge_continue_creates_merge_commit_after_resolution() {
         let temp = temp_path("merge-continue");
         let repository = committed_nested_repository(&temp);

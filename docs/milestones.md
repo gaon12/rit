@@ -403,10 +403,10 @@ Completion criteria:
   - [x] Continue resolved conflicted merge state with `rit merge --continue`.
   - [~] Write binary/delete/mode conflict worktree states and full merge result
     contents.
-    - [x] Delete/modify conflicts where `HEAD` deleted the path leave the
-      target version in the working tree.
-    - [x] Delete/modify conflicts print a Git-shaped `modify/delete` conflict
-      result message.
+    - [x] Delete/modify conflicts leave the modified side in the working tree
+      for both `HEAD`-deleted and target-deleted cases.
+    - [x] Delete/modify conflicts print Git-shaped `modify/delete` conflict
+      result messages for both directions.
     - [ ] Binary conflict, mode conflict, symlink conflict, and remaining full
       conflict result messages.
 

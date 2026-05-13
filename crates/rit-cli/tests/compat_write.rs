@@ -1457,7 +1457,7 @@ fn merge_delete_modify_conflict_leaves_target_file_when_head_deleted() {
     assert!(!merge.status.success());
     let stdout = String::from_utf8_lossy(&merge.stdout);
     assert!(stdout.contains(
-        "CONFLICT (modify/delete): a.txt deleted in HEAD and modified in topic. Version topic of a.txt left in tree.\n"
+        "CONFLICT (modify/delete): a.txt deleted in HEAD and modified in topic.  Version topic of a.txt left in tree.\n"
     ));
     assert_eq!(
         fs::read_to_string(fixture.join("a.txt")).expect("target file should exist"),
@@ -1466,6 +1466,48 @@ fn merge_delete_modify_conflict_leaves_target_file_when_head_deleted() {
     assert_eq!(
         run_capture(rit_binary(), ["status", "--porcelain=v1"], &fixture).0,
         "DU a.txt\n"
+    );
+    let _ = fs::remove_dir_all(fixture);
+}
+
+#[test]
+fn merge_delete_modify_conflict_leaves_head_file_when_target_deleted() {
+    let fixture = temp_path("merge-target-delete-modify-fixture");
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    fs::write(fixture.join("a.txt"), "base\n").expect("base file should be written");
+    run_git(&fixture, ["add", "a.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    run_git(&fixture, ["checkout", "--quiet", "-b", "topic"]);
+    fs::remove_file(fixture.join("a.txt")).expect("target file should be removed");
+    run_git(&fixture, ["add", "a.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "delete"]);
+    run_git(&fixture, ["checkout", "--quiet", "master"]);
+    fs::write(fixture.join("a.txt"), "head\n").expect("head file should be written");
+    run_git(&fixture, ["add", "a.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "head"]);
+
+    let merge = Command::new(rit_binary())
+        .args(["merge", "topic"])
+        .current_dir(&fixture)
+        .output()
+        .expect("rit merge should start");
+
+    assert!(!merge.status.success());
+    let stdout = String::from_utf8_lossy(&merge.stdout);
+    assert!(stdout.contains(
+        "CONFLICT (modify/delete): a.txt deleted in topic and modified in HEAD.  Version HEAD of a.txt left in tree.\n"
+    ));
+    assert_eq!(
+        fs::read_to_string(fixture.join("a.txt")).expect("head file should exist"),
+        "head\n"
+    );
+    assert_eq!(
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &fixture).0,
+        "UD a.txt\n"
     );
     let _ = fs::remove_dir_all(fixture);
 }

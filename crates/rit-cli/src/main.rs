@@ -2429,7 +2429,7 @@ fn format_merge_conflict_report(report: &rit_core::MergeConflictReport, target: 
             modified_side,
             worktree_side,
         } => format!(
-            "CONFLICT (modify/delete): {} deleted in {} and modified in {}. Version {} of {} left in tree.",
+            "CONFLICT (modify/delete): {} deleted in {} and modified in {}.  Version {} of {} left in tree.",
             report.path,
             format_merge_side(deleted_side, target),
             format_merge_side(modified_side, target),
