@@ -411,8 +411,10 @@ Completion criteria:
       and print a Git-shaped binary merge warning.
     - [x] Add/add conflicts print a Git-shaped `add/add` conflict result
       message.
-    - [ ] Mode conflict, symlink conflict, and remaining full conflict result
-      messages.
+    - [x] Mode-only changes combine cleanly with content-only changes instead
+      of creating false conflicts.
+    - [ ] True mode conflict, symlink conflict, and remaining full conflict
+      result messages.
 
 Completion criteria:
 - Interrupted operations leave clear state and can be continued, aborted, or

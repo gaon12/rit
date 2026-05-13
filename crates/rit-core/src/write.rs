@@ -1069,15 +1069,19 @@ impl Repository {
             let base_entry = base_by_path.get(path).copied();
             let head_entry = head_by_path.get(path).copied();
             let target_entry = target_by_path.get(path).copied();
-            let selected = if tree_entries_equal(head_entry, target_entry) {
-                head_entry
+            let selected = if let Some(entry) =
+                clean_mode_content_merge_entry(base_entry, head_entry, target_entry)
+            {
+                Some(entry)
+            } else if tree_entries_equal(head_entry, target_entry) {
+                head_entry.cloned()
             } else if tree_entries_equal(base_entry, head_entry) {
-                target_entry
+                target_entry.cloned()
             } else {
-                head_entry
+                head_entry.cloned()
             };
             if let Some(entry) = selected {
-                let mut entry = entry.clone();
+                let mut entry = entry;
                 entry.stage = 0;
                 entries.push(entry);
             }
@@ -1623,7 +1627,11 @@ fn non_fast_forward_merge_workflow_plan(
         if target_changed {
             target_changed_paths.push(path.to_owned());
         }
-        if head_changed && target_changed && !tree_entries_equal(head_entry, target_entry) {
+        if head_changed
+            && target_changed
+            && !tree_entries_equal(head_entry, target_entry)
+            && clean_mode_content_merge_entry(base_entry, head_entry, target_entry).is_none()
+        {
             conflict_paths.push(path.to_owned());
             conflict_stages.push(MergeConflictStagePlan {
                 path: path.to_owned(),
@@ -1658,6 +1666,36 @@ fn tree_entries_equal(left: Option<&IndexEntry>, right: Option<&IndexEntry>) -> 
         (None, None) => true,
         (Some(_), None) | (None, Some(_)) => false,
     }
+}
+
+fn clean_mode_content_merge_entry(
+    base: Option<&IndexEntry>,
+    head: Option<&IndexEntry>,
+    target: Option<&IndexEntry>,
+) -> Option<IndexEntry> {
+    let (base, head, target) = (base?, head?, target?);
+    if entry_changed_mode_only(base, head) && entry_changed_content_only(base, target) {
+        return Some(entry_with_mode(target, head.mode));
+    }
+    if entry_changed_content_only(base, head) && entry_changed_mode_only(base, target) {
+        return Some(entry_with_mode(head, target.mode));
+    }
+    None
+}
+
+fn entry_changed_mode_only(base: &IndexEntry, other: &IndexEntry) -> bool {
+    base.object_id == other.object_id && base.mode != other.mode
+}
+
+fn entry_changed_content_only(base: &IndexEntry, other: &IndexEntry) -> bool {
+    base.object_id != other.object_id && base.mode == other.mode
+}
+
+fn entry_with_mode(entry: &IndexEntry, mode: u32) -> IndexEntry {
+    let mut entry = entry.clone();
+    entry.mode = mode;
+    entry.stage = 0;
+    entry
 }
 
 fn conflict_stage_entry(entry: Option<&IndexEntry>) -> Option<MergeConflictStageEntry> {
@@ -3396,6 +3434,67 @@ mod tests {
                 .to_porcelain_v1(),
             ""
         );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn merge_combines_mode_only_and_content_only_changes_cleanly() {
+        let temp = temp_path("merge-mode-content-clean");
+        let repository = committed_nested_repository(&temp);
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        repository
+            .add_paths_with_options(
+                &["nested/a.txt".to_owned()],
+                &AddOptions {
+                    mode_override: Some(FileModeOverride::Executable),
+                },
+            )
+            .expect("mode-only add should work");
+        let topic = repository
+            .commit_index("mode")
+            .expect("topic commit should work")
+            .commit_id;
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(temp.join("nested").join("a.txt"), "head\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("content add should work");
+        let master = repository
+            .commit_index("content")
+            .expect("master commit should work")
+            .commit_id;
+
+        let result = repository
+            .merge("topic")
+            .expect("mode/content merge should commit");
+
+        let super::MergeResult::MergeCommit {
+            old_id,
+            target_id,
+            commit_id,
+        } = result
+        else {
+            panic!("expected clean merge commit result");
+        };
+        assert_eq!(old_id, master);
+        assert_eq!(target_id, topic);
+        let entries = repository
+            .commit_index_entries(commit_id)
+            .expect("merge tree should read");
+        let entry = entries
+            .iter()
+            .find(|entry| entry.path == "nested/a.txt")
+            .expect("merged file should exist");
+        assert_eq!(entry.mode, 0o100755);
+        let object = repository
+            .read_object(entry.object_id)
+            .expect("merged blob should read");
+        assert_eq!(object.data, b"head\n");
+        assert!(!repository.git_dir().join("MERGE_HEAD").exists());
         remove_dir_all(&temp);
     }
 

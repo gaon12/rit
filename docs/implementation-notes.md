@@ -359,9 +359,12 @@
   preserve conflict stages, and print a Git-shaped binary merge warning.
 - Add/add conflicts now carry a structured conflict kind and print a
   Git-shaped `add/add` conflict result message.
-- Still unsupported: mode/symlink conflict materialization and messages,
-  remaining full conflict message parity, strategies, merge hooks,
-  `cherry-pick`, `rebase`, and `stash`.
+- Clean non-fast-forward merges now combine mode-only changes on one side with
+  content-only changes on the other side, producing a regular merge commit with
+  the content-side blob and the mode-side file mode.
+- Still unsupported: true mode conflict and symlink conflict materialization
+  and messages, remaining full conflict message parity, strategies, merge
+  hooks, `cherry-pick`, `rebase`, and `stash`.
 
 ### M16: Operation journal and universal undo
 

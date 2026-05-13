@@ -1726,6 +1726,47 @@ fn merge_creates_clean_non_fast_forward_commit() {
 }
 
 #[test]
+fn merge_combines_mode_only_and_content_only_changes_cleanly() {
+    let fixture = temp_path("merge-mode-content-clean-fixture");
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    run_git(&fixture, ["config", "core.filemode", "true"]);
+    fs::write(fixture.join("script.sh"), "base\n").expect("base file should be written");
+    run_git(&fixture, ["add", "script.sh"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    run_git(&fixture, ["checkout", "--quiet", "-b", "topic"]);
+    run_git(&fixture, ["update-index", "--chmod=+x", "script.sh"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "mode"]);
+    run_git(&fixture, ["checkout", "--force", "--quiet", "master"]);
+    fs::write(fixture.join("script.sh"), "head\n").expect("head file should be written");
+    run_git(&fixture, ["add", "script.sh"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "content"]);
+
+    let output = run_capture(rit_binary(), ["merge", "topic"], &fixture).0;
+
+    assert!(output.contains("Merged "));
+    assert!(!fixture.join(".git").join("MERGE_HEAD").exists());
+    let tree_entry = run_capture("git", ["ls-tree", "HEAD", "script.sh"], &fixture).0;
+    assert!(
+        tree_entry.starts_with("100755 blob "),
+        "tree entry should combine executable mode: {tree_entry:?}"
+    );
+    assert_eq!(
+        run_capture("git", ["show", "HEAD:script.sh"], &fixture).0,
+        "head\n"
+    );
+    assert!(
+        run_capture(rit_binary(), ["op", "log"], &fixture)
+            .0
+            .contains("merge")
+    );
+    let _ = fs::remove_dir_all(fixture);
+}
+
+#[test]
 fn merge_explain_prints_fast_forward_reason_without_changing_head() {
     let fixture = temp_path("merge-explain-fixture");
     fs::create_dir_all(&fixture).expect("fixture should be created");
