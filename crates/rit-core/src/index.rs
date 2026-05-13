@@ -342,6 +342,9 @@ pub struct IndexEntry {
     pub mode: u32,
     /// Object ID stored for this path.
     pub object_id: ObjectId,
+    /// Git index stage, where 0 is a normal entry and 1/2/3 are conflict
+    /// stages.
+    pub stage: u8,
     /// File size stored in the index.
     pub file_size: u32,
     /// Repository-relative path using `/` separators.
@@ -414,7 +417,11 @@ impl Index {
     /// Writes this index as Git index v2.
     pub fn write(&self, path: &Path) -> Result<()> {
         let mut entries = self.entries.clone();
-        entries.sort_by(|left, right| left.path.cmp(&right.path));
+        entries.sort_by(|left, right| {
+            left.path
+                .cmp(&right.path)
+                .then(left.stage.cmp(&right.stage))
+        });
 
         let mut bytes = Vec::new();
         bytes.extend_from_slice(b"DIRC");
@@ -422,6 +429,12 @@ impl Index {
         bytes.extend_from_slice(&(entries.len() as u32).to_be_bytes());
 
         for entry in entries {
+            if entry.stage > 3 {
+                return Err(RitError::invalid_input(format!(
+                    "index entry stage must be between 0 and 3: {}",
+                    entry.stage
+                )));
+            }
             let entry_start = bytes.len();
             bytes.extend_from_slice(&entry.stat.ctime_seconds.to_be_bytes());
             bytes.extend_from_slice(&entry.stat.ctime_nanoseconds.to_be_bytes());
@@ -434,7 +447,7 @@ impl Index {
             bytes.extend_from_slice(&entry.stat.gid.to_be_bytes());
             bytes.extend_from_slice(&entry.file_size.to_be_bytes());
             bytes.extend_from_slice(entry.object_id.as_bytes());
-            let flags = entry.path.len().min(0x0fff) as u16;
+            let flags = ((entry.stage as u16) << 12) | entry.path.len().min(0x0fff) as u16;
             bytes.extend_from_slice(&flags.to_be_bytes());
             bytes.extend_from_slice(entry.path.as_bytes());
             bytes.push(0);
@@ -491,6 +504,7 @@ fn parse_index(bytes: &[u8]) -> Result<Index> {
         let mut object_id = [0_u8; 20];
         object_id.copy_from_slice(&bytes[offset + 40..offset + 60]);
         let flags = read_u16(bytes, offset + 60)?;
+        let stage = ((flags >> 12) & 0x3) as u8;
         offset += 62;
 
         if flags & 0x4000 != 0 {
@@ -527,6 +541,7 @@ fn parse_index(bytes: &[u8]) -> Result<Index> {
             stat,
             mode,
             object_id: ObjectId::from_bytes(object_id),
+            stage,
             file_size,
             path,
         });
@@ -1230,6 +1245,7 @@ mod tests {
                 stat: IndexEntryStat::default(),
                 mode: 0o100644,
                 object_id: ObjectId::from_bytes([1; 20]),
+                stage: 0,
                 file_size: 1,
                 path: "a.txt".to_owned(),
             }],
@@ -1241,6 +1257,72 @@ mod tests {
         let _ = fs::remove_file(&path);
 
         assert_eq!(parsed.extensions, b"TREE\0\0\0\x05hello");
+    }
+
+    #[test]
+    fn index_write_preserves_conflict_stages() {
+        let path = std::env::temp_dir().join(format!(
+            "rit-index-stages-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        ));
+        let entry = |stage, byte| IndexEntry {
+            stat: IndexEntryStat::default(),
+            mode: 0o100644,
+            object_id: ObjectId::from_bytes([byte; 20]),
+            stage,
+            file_size: 1,
+            path: "conflict.txt".to_owned(),
+        };
+        let index = Index {
+            entries: vec![entry(3, 3), entry(1, 1), entry(2, 2)],
+            extensions: Vec::new(),
+        };
+
+        index.write(&path).expect("index should write");
+        let parsed = Index::read(&path).expect("index should read");
+        let _ = fs::remove_file(&path);
+
+        let stages = parsed
+            .entries
+            .iter()
+            .map(|entry| entry.stage)
+            .collect::<Vec<_>>();
+        assert_eq!(stages, vec![1, 2, 3]);
+        assert_eq!(parsed.entries[0].object_id, ObjectId::from_bytes([1; 20]));
+        assert_eq!(parsed.entries[2].object_id, ObjectId::from_bytes([3; 20]));
+    }
+
+    #[test]
+    fn index_write_rejects_invalid_conflict_stage() {
+        let path = std::env::temp_dir().join(format!(
+            "rit-index-invalid-stage-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        ));
+        let index = Index {
+            entries: vec![IndexEntry {
+                stat: IndexEntryStat::default(),
+                mode: 0o100644,
+                object_id: ObjectId::from_bytes([1; 20]),
+                stage: 4,
+                file_size: 1,
+                path: "a.txt".to_owned(),
+            }],
+            extensions: Vec::new(),
+        };
+
+        let error = index.write(&path).expect_err("invalid stage should fail");
+
+        assert_eq!(
+            error.to_string(),
+            "index entry stage must be between 0 and 3: 4"
+        );
+        assert!(!path.exists());
     }
 
     #[test]

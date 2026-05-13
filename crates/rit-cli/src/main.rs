@@ -1082,8 +1082,8 @@ fn ls_files_command(
         if stage {
             writeln!(
                 stdout,
-                "{:06o} {} 0\t{}",
-                entry.mode, entry.object_id, entry.path
+                "{:06o} {} {}\t{}",
+                entry.mode, entry.object_id, entry.stage, entry.path
             )?;
         } else {
             writeln!(stdout, "{}", entry.path)?;

@@ -384,12 +384,17 @@ Completion criteria:
     changes, and conflict candidates without writing repository state.
   - [x] Non-fast-forward `--plan` reports candidate base/head/target stage
     entries for conflicting paths without writing conflict index stages.
+  - [x] Index parser/writer preserves Git index stage bits for future conflict
+    entries.
   - [ ] Merge commits, conflict index stages, hooks, strategies, abort, and
     continue workflows.
 - [ ] `rit cherry-pick`
 - [ ] `rit rebase`
 - [ ] `rit stash`
-- [ ] Conflict index stages.
+- [~] Conflict index stages.
+  - [x] Preserve stage 0/1/2/3 in index read, write, sorting, and
+    `ls-files --stage` output.
+  - [ ] Write actual stage entries during conflicted merge application.
 
 Completion criteria:
 - Interrupted operations leave clear state and can be continued, aborted, or

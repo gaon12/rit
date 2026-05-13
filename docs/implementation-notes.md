@@ -334,6 +334,9 @@
   It also reports candidate base/head/target stage entries for conflicting
   paths. This is planning metadata only; no conflict index stages are written
   yet.
+- The index parser/writer now preserves Git stage bits 0/1/2/3, sorts duplicate
+  conflict paths by stage, rejects invalid stage values, and lets
+  `ls-files --stage` print the stored stage instead of assuming stage 0.
 - Still unsupported: merge commits, conflict stage generation, strategies,
   merge hooks, `--abort`, `--continue`, `cherry-pick`, `rebase`, and `stash`.
 
