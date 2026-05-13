@@ -121,6 +121,24 @@ pub enum MergeResult {
     FastForward { old_id: ObjectId, new_id: ObjectId },
 }
 
+/// Dry-run plan for the currently supported fast-forward merge path.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MergePlan {
+    /// HEAD already points at the requested commit.
+    AlreadyUpToDate { commit_id: ObjectId },
+    /// HEAD could move forward without creating a merge commit.
+    FastForward {
+        /// Current `HEAD` commit.
+        old_id: ObjectId,
+        /// Target commit that would become `HEAD`.
+        new_id: ObjectId,
+        /// Paths that would be written or refreshed in the index and worktree.
+        paths_to_update: Vec<String>,
+        /// Paths that would be removed from the index and worktree.
+        paths_to_remove: Vec<String>,
+    },
+}
+
 /// Options that affect commit metadata without changing the committed tree.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommitOptions {
@@ -636,16 +654,37 @@ impl Repository {
     }
 
     /// Fast-forwards the current branch to `target` when possible.
+    pub fn plan_merge_ff_only(&self, target: &str) -> Result<MergePlan> {
+        let old_id = self
+            .resolve_head()?
+            .ok_or_else(|| RitError::invalid_input("merge requires an existing HEAD"))?;
+        let new_id = self.resolve_merge_target(target)?;
+        if old_id == new_id {
+            return Ok(MergePlan::AlreadyUpToDate { commit_id: old_id });
+        }
+        if !self.commit_is_ancestor(old_id, new_id)? {
+            return Err(RitError::invalid_input(
+                "not possible to fast-forward; merge requires a merge commit",
+            ));
+        }
+        let old_entries = self.commit_index_entries(old_id)?;
+        let new_entries = self.commit_index_entries(new_id)?;
+        let (paths_to_update, paths_to_remove) = tree_update_plan(&old_entries, &new_entries);
+        Ok(MergePlan::FastForward {
+            old_id,
+            new_id,
+            paths_to_update,
+            paths_to_remove,
+        })
+    }
+
+    /// Fast-forwards the current branch to `target` when possible.
     pub fn merge_ff_only(&self, target: &str) -> Result<MergeResult> {
         ensure_clean_for_checkout(self)?;
         let old_id = self
             .resolve_head()?
             .ok_or_else(|| RitError::invalid_input("merge requires an existing HEAD"))?;
-        let new_id = if self.branch_target(target).is_ok() {
-            self.branch_target(target)?
-        } else {
-            self.resolve_revision(target)?
-        };
+        let new_id = self.resolve_merge_target(target)?;
         if old_id == new_id {
             return Ok(MergeResult::AlreadyUpToDate { commit_id: old_id });
         }
@@ -658,6 +697,13 @@ impl Repository {
         self.checkout_commit_tree(new_id)?;
         self.update_head(new_id)?;
         Ok(MergeResult::FastForward { old_id, new_id })
+    }
+
+    fn resolve_merge_target(&self, target: &str) -> Result<ObjectId> {
+        match self.branch_target(target) {
+            Ok(object_id) => Ok(object_id),
+            Err(_) => self.resolve_revision(target),
+        }
     }
 
     fn commit_is_ancestor(&self, ancestor: ObjectId, descendant: ObjectId) -> Result<bool> {
@@ -989,6 +1035,40 @@ fn staged_paths_different_from_head(
         )
         .map(str::to_owned)
         .collect()
+}
+
+fn tree_update_plan(
+    old_entries: &[IndexEntry],
+    new_entries: &[IndexEntry],
+) -> (Vec<String>, Vec<String>) {
+    let old_by_path = old_entries
+        .iter()
+        .map(|entry| (entry.path.as_str(), entry))
+        .collect::<BTreeMap<_, _>>();
+    let new_by_path = new_entries
+        .iter()
+        .map(|entry| (entry.path.as_str(), entry))
+        .collect::<BTreeMap<_, _>>();
+    let paths = old_by_path
+        .keys()
+        .chain(new_by_path.keys())
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let mut paths_to_update = Vec::new();
+    let mut paths_to_remove = Vec::new();
+    for path in paths {
+        match (old_by_path.get(path), new_by_path.get(path)) {
+            (Some(old_entry), Some(new_entry)) => {
+                if old_entry.mode != new_entry.mode || old_entry.object_id != new_entry.object_id {
+                    paths_to_update.push(path.to_owned());
+                }
+            }
+            (None, Some(_)) => paths_to_update.push(path.to_owned()),
+            (Some(_), None) => paths_to_remove.push(path.to_owned()),
+            (None, None) => {}
+        }
+    }
+    (paths_to_update, paths_to_remove)
 }
 
 fn worktree_path_matches_exact_case(root: &Path, slash_path: &str) -> bool {
@@ -2020,6 +2100,56 @@ mod tests {
             .map(|entry| entry.path.as_str())
             .collect::<Vec<_>>();
         assert_eq!(paths, vec!["nested/a.txt", "nested/new.txt"]);
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn merge_plan_reports_fast_forward_without_changing_head() {
+        let temp = temp_path("merge-plan");
+        let repository = committed_nested_repository(&temp);
+        let base = repository
+            .resolve_head()
+            .expect("HEAD should resolve")
+            .expect("HEAD should exist");
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "topic\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("add should work");
+        let topic = repository
+            .commit_index("topic")
+            .expect("topic commit should work")
+            .commit_id;
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+
+        let plan = repository
+            .plan_merge_ff_only("topic")
+            .expect("merge plan should work");
+
+        assert_eq!(
+            plan,
+            super::MergePlan::FastForward {
+                old_id: base,
+                new_id: topic,
+                paths_to_update: vec!["nested/a.txt".to_owned()],
+                paths_to_remove: Vec::new(),
+            }
+        );
+        assert_eq!(
+            repository
+                .resolve_head()
+                .expect("HEAD should resolve")
+                .expect("HEAD should exist"),
+            base
+        );
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
+            "base\n"
+        );
         remove_dir_all(&temp);
     }
 

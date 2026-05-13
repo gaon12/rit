@@ -87,9 +87,10 @@
   `git help -a`; this feature is rit-specific metadata under `.git/rit/` and
   does not use Git command output as a compatibility target.
 - 2026-05-13 transaction plan slices checked `git add -h`,
-  `git commit -h`, and `git reset -h`; implemented `rit add --plan`,
-  `rit commit --plan`, and `rit reset --plan` as rit-specific dry-run views
-  over the same selection logic used by the applying commands.
+  `git commit -h`, `git reset -h`, and `git merge -h`; implemented
+  `rit add --plan`, `rit commit --plan`, `rit reset --plan`, and
+  `rit merge --plan` as rit-specific dry-run views over the same selection
+  logic used by the applying commands.
 - 2026-05-12 large-file backend trait slice checked the AGENTS large-object
   backend guidance; no external `git-lfs` binary is used.
 - 2026-05-12 LFS pointer slice checked installed `git-lfs/3.7.1` and the
@@ -856,12 +857,15 @@
 
 - Baseline command checked: `git merge -h`
 - Supported options: default fast-forward shape and explicit `--ff-only` with
-  one target branch or revision.
+  one target branch or revision, plus rit-specific `--plan`.
 - Unsupported options: merge commits, conflict handling, strategies, stat
   output, hooks, squash, abort, quit, continue, autostash, signing, and
   verification options.
 - Git-compatible behavior: fast-forward final `HEAD`, index, and worktree state
   match Git for simple clean repositories.
+- rit-specific behavior: `--plan` prints whether the merge would be already
+  up-to-date or fast-forward, the old and new commit IDs, and paths that would
+  be updated or removed without changing `HEAD`, refs, index, or worktree.
 - Intentional differences: output is simplified and non-fast-forward merges are
   rejected instead of attempting a merge commit.
 - Repository mutation: yes, updates `HEAD` or the current branch ref, writes

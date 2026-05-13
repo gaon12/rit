@@ -1622,36 +1622,49 @@ fn merge_command(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    let target = match args {
-        [target] if !target.starts_with('-') => target,
-        [flag, target] if flag == "--ff-only" && !target.starts_with('-') => target,
-        [unsupported, ..] if unsupported.starts_with('-') => {
-            writeln!(stderr, "rit: unsupported merge option '{unsupported}'")?;
-            return Ok(ExitCode::from(129));
-        }
-        [] => {
-            writeln!(stderr, "rit: merge requires a target revision")?;
-            return Ok(ExitCode::from(129));
-        }
-        _ => {
-            writeln!(
-                stderr,
-                "rit: merge currently supports only fast-forward merges"
-            )?;
-            return Ok(ExitCode::from(129));
-        }
+    let Some(merge_args) = parse_merge_args(args, stderr)? else {
+        return Ok(ExitCode::from(129));
     };
     let repository = match discover_repository(stderr)? {
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
+    if merge_args.plan {
+        return match repository.plan_merge_ff_only(&merge_args.target) {
+            Ok(rit_core::MergePlan::AlreadyUpToDate { commit_id }) => {
+                writeln!(stdout, "merge: plan")?;
+                writeln!(stdout, "action: already-up-to-date")?;
+                writeln!(stdout, "head: {}", &commit_id.to_hex()[..7])?;
+                Ok(ExitCode::SUCCESS)
+            }
+            Ok(rit_core::MergePlan::FastForward {
+                old_id,
+                new_id,
+                paths_to_update,
+                paths_to_remove,
+            }) => {
+                writeln!(stdout, "merge: plan")?;
+                writeln!(stdout, "action: fast-forward")?;
+                writeln!(stdout, "old: {}", &old_id.to_hex()[..7])?;
+                writeln!(stdout, "new: {}", &new_id.to_hex()[..7])?;
+                for path in paths_to_update {
+                    writeln!(stdout, "update: {path}")?;
+                }
+                for path in paths_to_remove {
+                    writeln!(stdout, "remove: {path}")?;
+                }
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_command_error(stderr, error),
+        };
+    }
     let before = capture_operation_snapshot(&repository, stderr)?;
-    match repository.merge_ff_only(target) {
+    match repository.merge_ff_only(&merge_args.target) {
         Ok(rit_core::MergeResult::AlreadyUpToDate { .. }) => {
             record_operation(
                 &repository,
                 "merge",
-                &format!("already up to date with {target}"),
+                &format!("already up to date with {}", merge_args.target),
                 before,
                 Vec::new(),
                 stderr,
@@ -1663,7 +1676,7 @@ fn merge_command(
             record_operation(
                 &repository,
                 "merge",
-                &format!("fast-forward {target}"),
+                &format!("fast-forward {}", merge_args.target),
                 before,
                 Vec::new(),
                 stderr,
@@ -1679,6 +1692,41 @@ fn merge_command(
         }
         Err(error) => write_command_error(stderr, error),
     }
+}
+
+struct ParsedMergeArgs {
+    target: String,
+    plan: bool,
+}
+
+fn parse_merge_args(
+    args: &[String],
+    stderr: &mut dyn Write,
+) -> io::Result<Option<ParsedMergeArgs>> {
+    let mut plan = false;
+    let mut target = None;
+    for arg in args {
+        if arg == "--plan" {
+            plan = true;
+        } else if arg == "--ff-only" {
+        } else if arg.starts_with('-') {
+            writeln!(stderr, "rit: unsupported merge option '{arg}'")?;
+            return Ok(None);
+        } else if target.is_some() {
+            writeln!(
+                stderr,
+                "rit: merge currently supports only fast-forward merges"
+            )?;
+            return Ok(None);
+        } else {
+            target = Some(arg.clone());
+        }
+    }
+    let Some(target) = target else {
+        writeln!(stderr, "rit: merge requires a target revision")?;
+        return Ok(None);
+    };
+    Ok(Some(ParsedMergeArgs { target, plan }))
 }
 
 fn op_command(

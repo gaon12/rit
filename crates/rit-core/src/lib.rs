@@ -127,8 +127,8 @@ pub use workspace_profile::{
     LazyMaterializationPolicy, RitConfig, WorkspacePrefetchPlan, WorkspaceProfile,
 };
 pub use write::{
-    AddOptions, AddPlan, CommitOptions, CommitPlan, CommitResult, FileModeOverride, MergeResult,
-    ResetPlan, SignatureIdentity, SignatureTime,
+    AddOptions, AddPlan, CommitOptions, CommitPlan, CommitResult, FileModeOverride, MergePlan,
+    MergeResult, ResetPlan, SignatureIdentity, SignatureTime,
 };
 
 /// Returns the crate version used by the CLI and tests.
