@@ -1408,6 +1408,9 @@ fn merge_conflict_writes_index_stages_and_operation_record() {
     assert!(ls_files.contains(" 1\ttracked.txt\n"));
     assert!(ls_files.contains(" 2\ttracked.txt\n"));
     assert!(ls_files.contains(" 3\ttracked.txt\n"));
+    let conflict_text =
+        fs::read_to_string(fixture.join("tracked.txt")).expect("conflict file should read");
+    assert!(conflict_text.contains("<<<<<<< HEAD\nmaster\n=======\ntopic\n>>>>>>> topic\n"));
     let op_log = run_capture(rit_binary(), ["op", "log"], &fixture).0;
     assert!(op_log.contains("merge"));
     assert!(op_log.contains("tracked.txt"));

@@ -19,6 +19,7 @@ pub mod indexdb;
 mod indexdb_tests;
 #[cfg(any(feature = "lfs", feature = "xet"))]
 pub mod large_files;
+pub mod merge_conflict;
 pub mod merge_state;
 pub mod object;
 pub mod odb;

@@ -340,7 +340,9 @@
 - Conflicted non-fast-forward `rit merge <target>` now writes unmerged index
   stage entries, `MERGE_HEAD`, and `MERGE_MSG`, records the operation journal
   entry, and refuses to commit while the index contains unmerged entries.
-- Still unsupported: merge commits, worktree conflict marker generation,
+- Regular text content conflicts now materialize simple `<<<<<<< HEAD`,
+  `=======`, and `>>>>>>> <target>` markers in the working tree.
+- Still unsupported: merge commits, binary/delete/mode conflict materialization,
   strategies, merge hooks, `--abort`, `--continue`, `cherry-pick`, `rebase`,
   and `stash`.
 
@@ -929,9 +931,9 @@
 - Supported options: default fast-forward shape and explicit `--ff-only` with
   one target branch or revision, conflicted non-fast-forward index-stage
   starts, plus rit-specific `--plan` and `merge explain <target>`.
-- Unsupported options: merge commits, worktree conflict markers, strategies,
-  stat output, hooks, squash, abort, quit, continue, autostash, signing, and
-  verification options.
+- Unsupported options: merge commits, binary/delete/mode conflict
+  materialization, strategies, stat output, hooks, squash, abort, quit,
+  continue, autostash, signing, and verification options.
 - Git-compatible behavior: fast-forward final `HEAD`, index, and worktree state
   match Git for simple clean repositories.
 - rit-specific behavior: `--plan` prints whether the merge would be already
@@ -943,8 +945,8 @@
 - rit-specific behavior: `merge explain` prints the fast-forward or
   non-fast-forward reason without changing repository state.
 - rit-specific behavior: conflicted non-fast-forward merges leave stage 1/2/3
-  entries in the index and merge state files, but do not yet write conflict
-  markers into the working tree.
+  entries in the index, merge state files, and simple worktree conflict markers
+  for regular text content conflicts.
 - Intentional differences: output is simplified; clean non-fast-forward merges
   without conflicts are still rejected instead of creating a merge commit.
 - Repository mutation: yes, updates `HEAD` or the current branch ref for

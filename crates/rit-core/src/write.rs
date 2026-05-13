@@ -1,4 +1,5 @@
 use crate::index::{Index, IndexEntry, IndexEntryStat, join_slash_path, relative_slash_path};
+use crate::merge_conflict::write_conflict_markers;
 use crate::object::{hash_object, parse_tree_entries};
 use crate::{
     GitAttributes, GitConfig, ObjectId, ObjectKind, PathspecSet, Repository, Result, RitError,
@@ -847,6 +848,7 @@ impl Repository {
             &conflict_paths,
             symlinks_enabled,
         )?;
+        write_conflict_markers(self, worktree, conflict_stages, target, symlinks_enabled)?;
 
         Index {
             entries: merged_entries,
@@ -1982,7 +1984,7 @@ fn write_text_atomically(path: &Path, contents: &str) -> Result<()> {
     Ok(())
 }
 
-fn write_worktree_entry_atomically(
+pub(crate) fn write_worktree_entry_atomically(
     path: &Path,
     contents: &[u8],
     mode: u32,
@@ -2713,6 +2715,9 @@ mod tests {
                 .expect("MERGE_MSG should read")
                 .contains("nested/a.txt")
         );
+        let conflict_text =
+            fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read");
+        assert!(conflict_text.contains("<<<<<<< HEAD\nmaster\n=======\ntopic\n>>>>>>> topic\n"));
         assert_eq!(
             repository
                 .commit_index("should fail")
