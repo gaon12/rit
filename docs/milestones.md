@@ -416,7 +416,9 @@ Completion criteria:
     - [x] Regular-file/symlink distinct-type conflicts split both directions
       into Git-shaped index/worktree paths and print `distinct types` messages.
     - [x] Content conflicts with mode changes preserve Git-shaped stage modes.
-    - [ ] Remaining full conflict result messages.
+    - [x] Content, binary, and add/add conflicts print Git-shaped
+      `Auto-merging` lines and omit rit-only pre-merge debug output.
+    - [ ] Remaining full conflict result message parity.
 
 Completion criteria:
 - Interrupted operations leave clear state and can be continued, aborted, or

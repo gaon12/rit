@@ -1402,8 +1402,10 @@ fn merge_conflict_writes_index_stages_and_operation_record() {
 
     assert!(!output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Auto-merging tracked.txt\n"));
     assert!(stdout.contains("CONFLICT (content): Merge conflict in tracked.txt\n"));
     assert!(stdout.contains("Automatic merge failed; fix conflicts and then commit the result.\n"));
+    assert!(!stdout.contains("Recorded pre-merge target"));
     assert!(fixture.join(".git").join("MERGE_HEAD").exists());
     let ls_files = run_capture(rit_binary(), ["ls-files", "--stage"], &fixture).0;
     assert!(ls_files.contains(" 1\ttracked.txt\n"));
@@ -1460,6 +1462,8 @@ fn merge_delete_modify_conflict_leaves_target_file_when_head_deleted() {
     assert!(stdout.contains(
         "CONFLICT (modify/delete): a.txt deleted in HEAD and modified in topic.  Version topic of a.txt left in tree.\n"
     ));
+    assert!(!stdout.contains("Auto-merging a.txt\n"));
+    assert!(!stdout.contains("Recorded pre-merge target"));
     assert_eq!(
         fs::read_to_string(fixture.join("a.txt")).expect("target file should exist"),
         "topic\n"
@@ -1502,6 +1506,8 @@ fn merge_delete_modify_conflict_leaves_head_file_when_target_deleted() {
     assert!(stdout.contains(
         "CONFLICT (modify/delete): a.txt deleted in topic and modified in HEAD.  Version HEAD of a.txt left in tree.\n"
     ));
+    assert!(!stdout.contains("Auto-merging a.txt\n"));
+    assert!(!stdout.contains("Recorded pre-merge target"));
     assert_eq!(
         fs::read_to_string(fixture.join("a.txt")).expect("head file should exist"),
         "head\n"
@@ -1542,7 +1548,9 @@ fn merge_binary_conflict_reports_warning_and_keeps_head_file() {
     assert!(!merge.status.success());
     let stdout = String::from_utf8_lossy(&merge.stdout);
     assert!(stdout.contains("warning: Cannot merge binary files: blob.bin (HEAD vs. topic)\n"));
+    assert!(stdout.contains("Auto-merging blob.bin\n"));
     assert!(stdout.contains("CONFLICT (content): Merge conflict in blob.bin\n"));
+    assert!(!stdout.contains("Recorded pre-merge target"));
     assert_eq!(
         fs::read(fixture.join("blob.bin")).expect("head blob should exist"),
         vec![0, 1, 2, 8, 4]
@@ -1584,7 +1592,9 @@ fn merge_content_conflict_preserves_mode_stage_entries() {
 
     assert!(!merge.status.success());
     let stdout = String::from_utf8_lossy(&merge.stdout);
+    assert!(stdout.contains("Auto-merging a.sh\n"));
     assert!(stdout.contains("CONFLICT (content): Merge conflict in a.sh\n"));
+    assert!(!stdout.contains("Recorded pre-merge target"));
     assert_eq!(
         run_capture(rit_binary(), ["status", "--porcelain=v1"], &fixture).0,
         "UU a.sh\n"
@@ -1630,7 +1640,9 @@ fn merge_add_add_conflict_reports_add_add_message() {
 
     assert!(!merge.status.success());
     let stdout = String::from_utf8_lossy(&merge.stdout);
+    assert!(stdout.contains("Auto-merging a.txt\n"));
     assert!(stdout.contains("CONFLICT (add/add): Merge conflict in a.txt\n"));
+    assert!(!stdout.contains("Recorded pre-merge target"));
     assert_eq!(
         run_capture(rit_binary(), ["status", "--porcelain=v1"], &fixture).0,
         "AA a.txt\n"
@@ -1678,6 +1690,8 @@ fn merge_distinct_type_conflict_splits_regular_file_and_symlink_paths() {
     assert!(stdout.contains(
         "CONFLICT (distinct types): a.txt had different types on each side; renamed one of them so each can be recorded somewhere.\n"
     ));
+    assert!(!stdout.contains("Auto-merging a.txt\n"));
+    assert!(!stdout.contains("Recorded pre-merge target"));
     assert_eq!(
         run_capture(rit_binary(), ["status", "--porcelain=v1"], &fixture).0,
         "UA a.txt\nUD a.txt~HEAD\n"
@@ -1737,6 +1751,8 @@ fn merge_distinct_type_conflict_splits_symlink_head_and_regular_target_paths() {
     assert!(stdout.contains(
         "CONFLICT (distinct types): a.txt had different types on each side; renamed one of them so each can be recorded somewhere.\n"
     ));
+    assert!(!stdout.contains("Auto-merging a.txt\n"));
+    assert!(!stdout.contains("Recorded pre-merge target"));
     assert_eq!(
         run_capture(rit_binary(), ["status", "--porcelain=v1"], &fixture).0,
         "AU a.txt\nDU a.txt~topic\n"

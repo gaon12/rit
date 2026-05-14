@@ -2091,9 +2091,9 @@ fn merge_command(
             Ok(ExitCode::SUCCESS)
         }
         Ok(rit_core::MergeResult::Conflicts {
-            target_id,
             conflict_paths,
             conflict_reports,
+            ..
         }) => {
             record_operation_with_changed_paths(
                 &repository,
@@ -2105,13 +2105,8 @@ fn merge_command(
                 stderr,
             )?;
             for report in &conflict_reports {
-                writeln!(stdout, "{}", format_merge_conflict_report(report, target))?;
+                write_merge_conflict_report(stdout, report, target)?;
             }
-            writeln!(
-                stdout,
-                "Recorded pre-merge target {}",
-                &target_id.to_hex()[..7]
-            )?;
             writeln!(
                 stdout,
                 "Automatic merge failed; fix conflicts and then commit the result."
@@ -2419,19 +2414,43 @@ fn format_merge_stage(stage: Option<rit_core::MergeConflictStageEntry>) -> Strin
         .unwrap_or_else(|| "-".to_owned())
 }
 
-fn format_merge_conflict_report(report: &rit_core::MergeConflictReport, target: &str) -> String {
+fn write_merge_conflict_report(
+    stdout: &mut dyn Write,
+    report: &rit_core::MergeConflictReport,
+    target: &str,
+) -> io::Result<()> {
     match report.kind {
         rit_core::MergeConflictKind::Content => {
-            format!("CONFLICT (content): Merge conflict in {}", report.path)
+            writeln!(stdout, "Auto-merging {}", report.path)?;
+            writeln!(
+                stdout,
+                "CONFLICT (content): Merge conflict in {}",
+                report.path
+            )
         }
-        rit_core::MergeConflictKind::BinaryContent => format!(
-            "warning: Cannot merge binary files: {} (HEAD vs. {target})\nCONFLICT (content): Merge conflict in {}",
-            report.path, report.path
-        ),
+        rit_core::MergeConflictKind::BinaryContent => {
+            writeln!(
+                stdout,
+                "warning: Cannot merge binary files: {} (HEAD vs. {target})",
+                report.path
+            )?;
+            writeln!(stdout, "Auto-merging {}", report.path)?;
+            writeln!(
+                stdout,
+                "CONFLICT (content): Merge conflict in {}",
+                report.path
+            )
+        }
         rit_core::MergeConflictKind::AddAdd => {
-            format!("CONFLICT (add/add): Merge conflict in {}", report.path)
+            writeln!(stdout, "Auto-merging {}", report.path)?;
+            writeln!(
+                stdout,
+                "CONFLICT (add/add): Merge conflict in {}",
+                report.path
+            )
         }
-        rit_core::MergeConflictKind::DistinctTypes => format!(
+        rit_core::MergeConflictKind::DistinctTypes => writeln!(
+            stdout,
             "CONFLICT (distinct types): {} had different types on each side; renamed one of them so each can be recorded somewhere.",
             report.path
         ),
@@ -2439,7 +2458,8 @@ fn format_merge_conflict_report(report: &rit_core::MergeConflictReport, target: 
             deleted_side,
             modified_side,
             worktree_side,
-        } => format!(
+        } => writeln!(
+            stdout,
             "CONFLICT (modify/delete): {} deleted in {} and modified in {}.  Version {} of {} left in tree.",
             report.path,
             format_merge_side(deleted_side, target),

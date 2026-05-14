@@ -369,8 +369,11 @@
 - Content conflicts that also change file mode now preserve Git-shaped stage
   modes, for example stage 3 can keep `100755` while the conflict is reported
   as a regular `CONFLICT (content)`.
-- Still unsupported: remaining full conflict message parity, strategies, merge
-  hooks, `cherry-pick`, `rebase`, and `stash`.
+- Content, binary, and add/add conflicts now print Git-shaped `Auto-merging`
+  lines, and conflicted merge output no longer includes rit-only pre-merge
+  target debug text.
+- Still unsupported: remaining full conflict result message parity, strategies,
+  merge hooks, `cherry-pick`, `rebase`, and `stash`.
 
 ### M16: Operation journal and universal undo
 
