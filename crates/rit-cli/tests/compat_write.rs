@@ -1258,6 +1258,47 @@ fn operation_journal_records_index_and_worktree_commands() {
 }
 
 #[test]
+fn operation_journal_records_branch_and_tag_ref_commands() {
+    let fixture = LocalWriteFixture::new(
+        "operation-journal-refs",
+        LocalWriteFixtureKind::NestedTracked,
+    )
+    .expect("fixture should build");
+
+    run_capture(rit_binary(), ["branch", "scratch"], fixture.path());
+    run_capture(rit_binary(), ["tag", "v1"], fixture.path());
+    run_capture(rit_binary(), ["tag", "-d", "v1"], fixture.path());
+    run_capture(rit_binary(), ["branch", "-d", "scratch"], fixture.path());
+
+    let log = run_capture(rit_binary(), ["op", "log"], fixture.path()).0;
+    assert!(log.contains(" branch "));
+    assert!(log.contains("create branch scratch"));
+    assert!(log.contains("delete branch scratch"));
+    assert!(log.contains(" tag "));
+    assert!(log.contains("create tag v1"));
+    assert!(log.contains("delete tag v1"));
+
+    let json_log = run_capture(rit_binary(), ["op", "log", "--json"], fixture.path()).0;
+    let parsed_json: serde_json::Value =
+        serde_json::from_str(&json_log).expect("op log JSON should parse");
+    let summaries = parsed_json["records"]
+        .as_array()
+        .expect("records should be an array")
+        .iter()
+        .map(|record| {
+            record["summary"]
+                .as_str()
+                .expect("summary should be a string")
+                .to_owned()
+        })
+        .collect::<Vec<_>>();
+    assert!(summaries.contains(&"create branch scratch".to_owned()));
+    assert!(summaries.contains(&"delete branch scratch".to_owned()));
+    assert!(summaries.contains(&"create tag v1".to_owned()));
+    assert!(summaries.contains(&"delete tag v1".to_owned()));
+}
+
+#[test]
 fn checkout_detached_commit_matches_git_state() {
     let fixture =
         LocalWriteFixture::new("detached-checkout", LocalWriteFixtureKind::DetachedCheckout)

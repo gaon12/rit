@@ -1397,8 +1397,17 @@ fn branch_command(
             Err(error) => write_command_error(stderr, error),
         },
         [flag, name] if flag == "-d" || flag == "--delete" => {
+            let before = capture_operation_snapshot(&repository, stderr)?;
             match repository.delete_branch(name) {
                 Ok(target) => {
+                    record_operation(
+                        &repository,
+                        "branch",
+                        &format!("delete branch {name}"),
+                        before,
+                        Vec::new(),
+                        stderr,
+                    )?;
                     writeln!(
                         stdout,
                         "Deleted branch {name} (was {}).",
@@ -1409,10 +1418,23 @@ fn branch_command(
                 Err(error) => write_command_error(stderr, error),
             }
         }
-        [name] if !name.starts_with('-') => match repository.create_branch(name) {
-            Ok(_) => Ok(ExitCode::SUCCESS),
-            Err(error) => write_command_error(stderr, error),
-        },
+        [name] if !name.starts_with('-') => {
+            let before = capture_operation_snapshot(&repository, stderr)?;
+            match repository.create_branch(name) {
+                Ok(_) => {
+                    record_operation(
+                        &repository,
+                        "branch",
+                        &format!("create branch {name}"),
+                        before,
+                        Vec::new(),
+                        stderr,
+                    )?;
+                    Ok(ExitCode::SUCCESS)
+                }
+                Err(error) => write_command_error(stderr, error),
+            }
+        }
         _ => {
             writeln!(stderr, "rit: unsupported branch arguments")?;
             Ok(ExitCode::from(129))
@@ -1449,21 +1471,45 @@ fn tag_command(
             }
             Err(error) => write_command_error(stderr, error),
         },
-        [flag, name] if flag == "-d" || flag == "--delete" => match repository.delete_tag(name) {
-            Ok(target) => {
-                writeln!(
-                    stdout,
-                    "Deleted tag '{name}' (was {}).",
-                    &target.to_hex()[..7]
-                )?;
-                Ok(ExitCode::SUCCESS)
+        [flag, name] if flag == "-d" || flag == "--delete" => {
+            let before = capture_operation_snapshot(&repository, stderr)?;
+            match repository.delete_tag(name) {
+                Ok(target) => {
+                    record_operation(
+                        &repository,
+                        "tag",
+                        &format!("delete tag {name}"),
+                        before,
+                        Vec::new(),
+                        stderr,
+                    )?;
+                    writeln!(
+                        stdout,
+                        "Deleted tag '{name}' (was {}).",
+                        &target.to_hex()[..7]
+                    )?;
+                    Ok(ExitCode::SUCCESS)
+                }
+                Err(error) => write_command_error(stderr, error),
             }
-            Err(error) => write_command_error(stderr, error),
-        },
-        [name] if !name.starts_with('-') => match repository.create_tag(name) {
-            Ok(_) => Ok(ExitCode::SUCCESS),
-            Err(error) => write_command_error(stderr, error),
-        },
+        }
+        [name] if !name.starts_with('-') => {
+            let before = capture_operation_snapshot(&repository, stderr)?;
+            match repository.create_tag(name) {
+                Ok(_) => {
+                    record_operation(
+                        &repository,
+                        "tag",
+                        &format!("create tag {name}"),
+                        before,
+                        Vec::new(),
+                        stderr,
+                    )?;
+                    Ok(ExitCode::SUCCESS)
+                }
+                Err(error) => write_command_error(stderr, error),
+            }
+        }
         _ => {
             writeln!(stderr, "rit: unsupported tag arguments")?;
             Ok(ExitCode::from(129))

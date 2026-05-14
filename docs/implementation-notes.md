@@ -405,6 +405,8 @@
 - Successful `rit add`, `rit restore`, and pathspec `rit reset` operations now
   append operation records with command-provided changed path metadata, covering
   the first index-only/worktree-changing journal slice.
+- Successful `rit branch` create/delete and `rit tag` create/delete operations
+  now append operation records for explicit local ref changes.
 - Still unsupported: command-aware undo modes, reversible patches for
   index-only/worktree-only operations and complete object creation inventories.
 
@@ -1010,7 +1012,8 @@
 - Supported metadata: before/after HEAD snapshots, current branch snapshots,
   index checksums, changed paths, and known created object IDs.
 - Recorded commands: commit, checkout, switch, fast-forward and conflicted
-  merge, merge abort, add, restore, and pathspec reset.
+  merge, merge abort, add, restore, pathspec reset, branch create/delete, and
+  tag create/delete.
 - Malformed operation journal lines are skipped with warnings and do not block
   reading later valid records.
 - Unsupported options: filtering, complete object creation inventories, and
