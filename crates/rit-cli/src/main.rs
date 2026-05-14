@@ -6,6 +6,7 @@ mod auth;
 mod doctor;
 mod help;
 mod indexdb;
+mod op;
 mod pathspec_args;
 mod remote;
 mod repair;
@@ -2280,6 +2281,19 @@ fn op_command(
             }
             Err(error) => write_command_error(stderr, error),
         },
+        [subcommand, flag] if subcommand == "log" && flag == "--json" => {
+            match repository.operations().log_with_warnings() {
+                Ok(log) => {
+                    op::write_operation_log_json(stdout, &log)?;
+                    Ok(ExitCode::SUCCESS)
+                }
+                Err(error) => write_command_error(stderr, error),
+            }
+        }
+        [subcommand, flag] if subcommand == "log" => {
+            writeln!(stderr, "rit: unsupported op log option '{flag}'")?;
+            Ok(ExitCode::from(129))
+        }
         [subcommand, id] if subcommand == "restore" => match repository.operations().restore(id) {
             Ok(result) => {
                 writeln!(

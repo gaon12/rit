@@ -399,12 +399,14 @@
 - Malformed operation journal lines are skipped with diagnostics from
   `log_with_warnings`; `rit op log` reports warnings on stderr while preserving
   valid records.
+- `rit op log --json` prints newest-first operation records as structured JSON,
+  including before/after snapshots, changed paths, created object IDs, and
+  malformed-line warnings in a `warnings` array.
 - Successful `rit add`, `rit restore`, and pathspec `rit reset` operations now
   append operation records with command-provided changed path metadata, covering
   the first index-only/worktree-changing journal slice.
 - Still unsupported: command-aware undo modes, reversible patches for
-  index-only/worktree-only operations, complete object creation inventories,
-  and JSON output.
+  index-only/worktree-only operations and complete object creation inventories.
 
 ### M9: Large-file backends
 
@@ -1003,15 +1005,16 @@
 ### `rit op` and `rit undo`
 
 - Baseline command checked: rit-specific command, no Git equivalent.
-- Supported options: `rit op log`, `rit op restore <id>`, and `rit undo`.
+- Supported options: `rit op log`, `rit op log --json`,
+  `rit op restore <id>`, and `rit undo`.
 - Supported metadata: before/after HEAD snapshots, current branch snapshots,
   index checksums, changed paths, and known created object IDs.
 - Recorded commands: commit, checkout, switch, fast-forward and conflicted
   merge, merge abort, add, restore, and pathspec reset.
 - Malformed operation journal lines are skipped with warnings and do not block
   reading later valid records.
-- Unsupported options: JSON output, filtering, complete object creation
-  inventories, and command-aware undo policies.
+- Unsupported options: filtering, complete object creation inventories, and
+  command-aware undo policies.
 - Git-compatible behavior: metadata is stored under `.git/rit/` and does not
   replace Git refs, objects, index, or working tree state.
 - Intentional differences: this is a rit differentiator, not a Git-compatible

@@ -587,7 +587,7 @@ Completion criteria:
   changes when requested.
 - [x] Add corruption handling for malformed operation journal lines.
 - [ ] Add linked-worktree journal isolation tests.
-- [ ] Add JSON output for operation records.
+- [x] Add JSON output for operation records.
 
 Completion criteria:
 - Operation metadata lives only under `.git/rit/` and can be deleted without

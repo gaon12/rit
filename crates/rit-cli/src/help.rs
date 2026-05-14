@@ -196,7 +196,7 @@ Manage the optional SQLite auxiliary index under .git/rit/indexdb.sqlite. The da
 ";
 
 const OP_HELP: &str = "\
-rit op log
+rit op log [--json]
 rit op restore <id>
 
 Inspect or restore the rit operation journal stored under .git/rit/ops.log.

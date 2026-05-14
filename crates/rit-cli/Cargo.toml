@@ -18,3 +18,4 @@ indexdb = ["rit-core/indexdb"]
 
 [dev-dependencies]
 rit-testkit = { path = "../rit-testkit" }
+serde_json = "1.0.147"

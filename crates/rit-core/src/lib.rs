@@ -82,7 +82,8 @@ pub use merge_state::{MergeState, RebaseState};
 pub use object::{GitObject, ObjectId, ObjectKind, TreeEntry, hash_object};
 pub use odb::{IngestedPack, LooseObjectDb, StoredPack, StoredPackIndex};
 pub use operations::{
-    OperationRecord, OperationRestoreResult, OperationSnapshot, RepositoryOperations,
+    OperationJournalWarning, OperationLog, OperationRecord, OperationRestoreResult,
+    OperationSnapshot, RepositoryOperations,
 };
 pub use partial_clone::{PartialClonePolicy, PromisorRemote};
 pub use pathspec::{PathspecExplanation, PathspecPatternExplanation, PathspecSet};

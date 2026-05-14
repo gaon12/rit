@@ -1139,6 +1139,38 @@ fn operation_journal_records_commit_and_undo_restores_head() {
     assert!(log.contains("journaled"));
     assert!(log.contains("paths: nested/tracked.txt"));
     assert!(log.contains("objects: "));
+    let (json_log, json_warning) =
+        run_capture(rit_binary(), ["op", "log", "--json"], fixture.path());
+    assert_eq!(json_warning, "");
+    let parsed_json: serde_json::Value =
+        serde_json::from_str(&json_log).expect("op log JSON should parse");
+    assert_eq!(parsed_json["records"][0]["command"], "commit");
+    assert_eq!(parsed_json["records"][0]["summary"], "journaled");
+    assert_eq!(
+        parsed_json["records"][0]["changed_paths"][0],
+        "nested/tracked.txt"
+    );
+    assert!(
+        parsed_json["records"][0]["created_object_ids"][0]
+            .as_str()
+            .expect("created object id should be a string")
+            .len()
+            >= 40
+    );
+    assert!(
+        parsed_json["warnings"]
+            .as_array()
+            .expect("warnings array")
+            .is_empty()
+    );
+    assert!(json_log.contains("\"records\": ["));
+    assert!(json_log.contains("\"command\": \"commit\""));
+    assert!(json_log.contains("\"summary\": \"journaled\""));
+    assert!(json_log.contains("\"before\": {"));
+    assert!(json_log.contains("\"after\": {"));
+    assert!(json_log.contains("\"changed_paths\": [\"nested/tracked.txt\"]"));
+    assert!(json_log.contains("\"created_object_ids\": [\""));
+    assert!(json_log.contains("\"warnings\": ["));
     {
         let mut log_file = fs::OpenOptions::new()
             .append(true)
@@ -1149,6 +1181,23 @@ fn operation_journal_records_commit_and_undo_restores_head() {
     let (log_after_bad_line, warning) = run_capture(rit_binary(), ["op", "log"], fixture.path());
     assert!(log_after_bad_line.contains("journaled"));
     assert!(warning.contains("skipped malformed operation journal line"));
+    let (json_after_bad_line, json_warning) =
+        run_capture(rit_binary(), ["op", "log", "--json"], fixture.path());
+    assert_eq!(json_warning, "");
+    let parsed_json: serde_json::Value =
+        serde_json::from_str(&json_after_bad_line).expect("warning JSON should parse");
+    assert_eq!(parsed_json["records"][0]["summary"], "journaled");
+    assert_eq!(parsed_json["warnings"][0]["line_number"], 3);
+    assert!(
+        parsed_json["warnings"][0]["message"]
+            .as_str()
+            .expect("warning message should be a string")
+            .contains("operation journal")
+    );
+    assert!(json_after_bad_line.contains("\"summary\": \"journaled\""));
+    assert!(json_after_bad_line.contains("\"warnings\": ["));
+    assert!(json_after_bad_line.contains("\"line_number\":"));
+    assert!(json_after_bad_line.contains("operation journal"));
     assert_ne!(
         run_capture("git", ["rev-parse", "HEAD"], fixture.path()).0,
         base
