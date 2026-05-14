@@ -366,9 +366,11 @@
   shape in both directions: the non-regular side stays at the original path,
   the regular side is written to a suffixed path such as `~HEAD` or
   `~<target>`, and the CLI prints a `CONFLICT (distinct types)` message.
-- Still unsupported: true mode conflict handling, remaining full conflict
-  message parity, strategies, merge hooks, `cherry-pick`, `rebase`, and
-  `stash`.
+- Content conflicts that also change file mode now preserve Git-shaped stage
+  modes, for example stage 3 can keep `100755` while the conflict is reported
+  as a regular `CONFLICT (content)`.
+- Still unsupported: remaining full conflict message parity, strategies, merge
+  hooks, `cherry-pick`, `rebase`, and `stash`.
 
 ### M16: Operation journal and universal undo
 

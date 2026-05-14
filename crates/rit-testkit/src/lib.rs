@@ -10,6 +10,7 @@ use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
+use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Result type used by `rit-testkit`.
@@ -241,12 +242,13 @@ impl LocalWriteFixture {
     }
 
     fn run_git<const N: usize>(&self, args: [&str; N]) -> Result<()> {
-        let output = run_setup_command("git", args, &self.path)?;
+        let program = git_program();
+        let output = run_setup_command(program, args, &self.path)?;
         if output.exit_code == Some(0) {
             Ok(())
         } else {
             Err(TestkitError::SetupCommandFailed {
-                program: OsString::from("git"),
+                program: program.to_os_string(),
                 args: args.into_iter().map(OsString::from).collect(),
                 cwd: self.path.clone(),
                 output: Box::new(output),
@@ -255,12 +257,13 @@ impl LocalWriteFixture {
     }
 
     fn capture_git<const N: usize>(&self, args: [&str; N]) -> Result<String> {
-        let output = run_setup_command("git", args, &self.path)?;
+        let program = git_program();
+        let output = run_setup_command(program, args, &self.path)?;
         if output.exit_code == Some(0) {
             Ok(output.stdout)
         } else {
             Err(TestkitError::SetupCommandFailed {
-                program: OsString::from("git"),
+                program: program.to_os_string(),
                 args: args.into_iter().map(OsString::from).collect(),
                 cwd: self.path.clone(),
                 output: Box::new(output),
@@ -442,7 +445,7 @@ fn run_command(spec: &CommandSpec, cwd: &Path) -> Result<CommandOutput> {
 }
 
 fn run_setup_command<const N: usize>(
-    program: &str,
+    program: &OsStr,
     args: [&str; N],
     cwd: &Path,
 ) -> Result<CommandOutput> {
@@ -451,7 +454,7 @@ fn run_setup_command<const N: usize>(
         .current_dir(cwd)
         .output()
         .map_err(|source| TestkitError::Spawn {
-            program: OsString::from(program),
+            program: program.to_os_string(),
             source,
         })?;
     Ok(CommandOutput::from_process_output(
@@ -459,6 +462,24 @@ fn run_setup_command<const N: usize>(
         output.stdout,
         output.stderr,
     ))
+}
+
+fn git_program() -> &'static OsStr {
+    static GIT_PROGRAM: OnceLock<OsString> = OnceLock::new();
+    GIT_PROGRAM.get_or_init(discover_git_program).as_os_str()
+}
+
+fn discover_git_program() -> OsString {
+    let locator = if cfg!(windows) { "where.exe" } else { "which" };
+    if let Ok(output) = Command::new(locator).arg("git").output()
+        && output.status.success()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if let Some(path) = stdout.lines().find(|line| !line.trim().is_empty()) {
+            return OsString::from(path.trim());
+        }
+    }
+    OsString::from("git")
 }
 
 fn compare_state(git_repo: &Path, rit_repo: &Path) -> Result<StateComparison> {

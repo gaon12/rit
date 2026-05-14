@@ -4,6 +4,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
@@ -1554,6 +1555,54 @@ fn merge_binary_conflict_reports_warning_and_keeps_head_file() {
 }
 
 #[test]
+fn merge_content_conflict_preserves_mode_stage_entries() {
+    let fixture = temp_path("merge-content-mode-conflict-fixture");
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    run_git(&fixture, ["config", "core.filemode", "true"]);
+    fs::write(fixture.join("a.sh"), "base\n").expect("base file should be written");
+    run_git(&fixture, ["add", "a.sh"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    run_git(&fixture, ["checkout", "--quiet", "-b", "topic"]);
+    fs::write(fixture.join("a.sh"), "topic\n").expect("topic file should be written");
+    run_git(&fixture, ["add", "a.sh"]);
+    run_git(&fixture, ["update-index", "--chmod=+x", "a.sh"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "topic"]);
+    run_git(&fixture, ["checkout", "--force", "--quiet", "master"]);
+    fs::write(fixture.join("a.sh"), "head\n").expect("head file should be written");
+    run_git(&fixture, ["add", "a.sh"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "head"]);
+
+    let merge = Command::new(rit_binary())
+        .args(["merge", "topic"])
+        .current_dir(&fixture)
+        .output()
+        .expect("rit merge should start");
+
+    assert!(!merge.status.success());
+    let stdout = String::from_utf8_lossy(&merge.stdout);
+    assert!(stdout.contains("CONFLICT (content): Merge conflict in a.sh\n"));
+    assert_eq!(
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &fixture).0,
+        "UU a.sh\n"
+    );
+    let ls_files = run_capture(rit_binary(), ["ls-files", "--stage"], &fixture).0;
+    assert!(ls_files.contains("100644 "));
+    assert!(ls_files.contains(" 1\ta.sh\n"));
+    assert!(ls_files.contains(" 2\ta.sh\n"));
+    assert!(ls_files.contains("100755 "));
+    assert!(ls_files.contains(" 3\ta.sh\n"));
+    assert_eq!(
+        fs::read_to_string(fixture.join("a.sh")).expect("conflict file should read"),
+        "<<<<<<< HEAD\nhead\n=======\ntopic\n>>>>>>> topic\n"
+    );
+    let _ = fs::remove_dir_all(fixture);
+}
+
+#[test]
 fn merge_add_add_conflict_reports_add_add_message() {
     let fixture = temp_path("merge-add-add-conflict-fixture");
     fs::create_dir_all(&fixture).expect("fixture should be created");
@@ -1606,7 +1655,7 @@ fn merge_distinct_type_conflict_splits_regular_file_and_symlink_paths() {
     run_git(&fixture, ["checkout", "--quiet", "-b", "topic"]);
     let target_blob = write_git_blob_from_stdin(&fixture, b"target");
     let cacheinfo = format!("120000,{target_blob},a.txt");
-    let update = Command::new("git")
+    let update = Command::new(git_program())
         .args(["update-index", "--add", "--cacheinfo", &cacheinfo])
         .current_dir(&fixture)
         .output()
@@ -1668,7 +1717,7 @@ fn merge_distinct_type_conflict_splits_symlink_head_and_regular_target_paths() {
     run_git(&fixture, ["checkout", "--force", "--quiet", "master"]);
     let head_blob = write_git_blob_from_stdin(&fixture, b"head-target");
     let cacheinfo = format!("120000,{head_blob},a.txt");
-    let update = Command::new("git")
+    let update = Command::new(git_program())
         .args(["update-index", "--add", "--cacheinfo", &cacheinfo])
         .current_dir(&fixture)
         .output()
@@ -2004,7 +2053,7 @@ fn clone_local_no_checkout_copies_head_objects_and_refs() {
     run_git(&source, ["add", "a.txt"]);
     run_git(&source, ["commit", "--quiet", "-m", "base"]);
 
-    let git_output = Command::new("git")
+    let git_output = Command::new(git_program())
         .args(["clone", "-q", "--local", "--no-checkout"])
         .arg(&source)
         .arg(&git_target)
@@ -2063,7 +2112,7 @@ fn fetch_local_copies_objects_and_writes_fetch_head() {
     run_git(&git_target, ["init", "--quiet"]);
     run_git(&rit_target, ["init", "--quiet"]);
 
-    let git_output = Command::new("git")
+    let git_output = Command::new(git_program())
         .arg("fetch")
         .arg("-q")
         .arg(&source)
@@ -2126,7 +2175,7 @@ fn fetch_local_refspec_updates_destination_ref() {
     run_git(&rit_target, ["init", "--quiet"]);
     let refspec = "refs/heads/master:refs/remotes/origin/master";
 
-    let git_output = Command::new("git")
+    let git_output = Command::new(git_program())
         .arg("fetch")
         .arg("-q")
         .arg(&source)
@@ -2306,8 +2355,9 @@ impl Drop for CommandOutcome {
 }
 
 fn command_words<const N: usize>(program: impl Into<OsString>, args: [&str; N]) -> CommandSpec {
+    let program = normalize_test_program(program.into());
     CommandSpec {
-        program: program.into(),
+        program,
         args: args.into_iter().map(OsString::from).collect(),
         env: Vec::new(),
         stdin: None,
@@ -2319,8 +2369,9 @@ fn command_words_with_stdin<const N: usize>(
     args: [&str; N],
     stdin: &[u8],
 ) -> CommandSpec {
+    let program = normalize_test_program(program.into());
     CommandSpec {
-        program: program.into(),
+        program,
         args: args.into_iter().map(OsString::from).collect(),
         env: Vec::new(),
         stdin: Some(stdin.to_vec()),
@@ -2332,8 +2383,9 @@ fn command_words_with_env<const N: usize, const M: usize>(
     args: [&str; N],
     env: &[(&str, &str); M],
 ) -> CommandSpec {
+    let program = normalize_test_program(program.into());
     CommandSpec {
-        program: program.into(),
+        program,
         args: args.into_iter().map(OsString::from).collect(),
         env: env
             .iter()
@@ -2407,6 +2459,7 @@ fn run_capture<const N: usize>(
     args: [&str; N],
     cwd: &Path,
 ) -> (String, String) {
+    let program = normalize_test_program(program.as_ref().to_os_string());
     let output = Command::new(program)
         .args(args)
         .current_dir(cwd)
@@ -2425,7 +2478,7 @@ fn run_capture<const N: usize>(
 }
 
 fn run_git<const N: usize>(cwd: &Path, args: [&str; N]) {
-    let output = Command::new("git")
+    let output = Command::new(git_program())
         .args(args)
         .current_dir(cwd)
         .output()
@@ -2439,7 +2492,7 @@ fn run_git<const N: usize>(cwd: &Path, args: [&str; N]) {
 }
 
 fn write_git_blob_from_stdin(cwd: &Path, contents: &[u8]) -> String {
-    let mut child = Command::new("git")
+    let mut child = Command::new(git_program())
         .args(["hash-object", "-w", "--stdin"])
         .current_dir(cwd)
         .stdin(Stdio::piped())
@@ -2457,6 +2510,32 @@ fn write_git_blob_from_stdin(cwd: &Path, contents: &[u8]) -> String {
         .expect("git hash-object should finish");
     assert!(output.status.success());
     String::from_utf8_lossy(&output.stdout).trim().to_owned()
+}
+
+fn normalize_test_program(program: OsString) -> OsString {
+    if program == OsStr::new("git") {
+        git_program()
+    } else {
+        program
+    }
+}
+
+fn git_program() -> OsString {
+    static GIT_PROGRAM: OnceLock<OsString> = OnceLock::new();
+    GIT_PROGRAM.get_or_init(discover_git_program).clone()
+}
+
+fn discover_git_program() -> OsString {
+    let locator = if cfg!(windows) { "where.exe" } else { "which" };
+    if let Ok(output) = Command::new(locator).arg("git").output()
+        && output.status.success()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        if let Some(path) = stdout.lines().find(|line| !line.trim().is_empty()) {
+            return OsString::from(path.trim());
+        }
+    }
+    OsString::from("git")
 }
 
 fn write_hook(repository: &Path, name: &str, contents: &str) {

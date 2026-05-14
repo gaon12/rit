@@ -3355,6 +3355,74 @@ mod tests {
     }
 
     #[test]
+    fn merge_preserves_mode_stages_for_content_conflict_with_mode_change() {
+        let temp = temp_path("merge-content-mode-conflict");
+        let repository = committed_nested_repository(&temp);
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "topic\n")
+            .expect("topic file should be written");
+        repository
+            .add_paths_with_options(
+                &["nested/a.txt".to_owned()],
+                &AddOptions {
+                    mode_override: Some(FileModeOverride::Executable),
+                },
+            )
+            .expect("topic add should work");
+        repository
+            .commit_index("topic")
+            .expect("topic commit should work");
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(temp.join("nested").join("a.txt"), "head\n")
+            .expect("head file should be written");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("head add should work");
+        repository
+            .commit_index("head")
+            .expect("head commit should work");
+
+        let result = repository
+            .merge("topic")
+            .expect("content/mode merge should start");
+
+        let super::MergeResult::Conflicts {
+            conflict_paths,
+            conflict_reports,
+            ..
+        } = result
+        else {
+            panic!("expected conflicted merge");
+        };
+        assert_eq!(conflict_paths, vec!["nested/a.txt".to_owned()]);
+        assert_eq!(
+            conflict_reports,
+            vec![MergeConflictReport {
+                path: "nested/a.txt".to_owned(),
+                kind: MergeConflictKind::Content,
+            }]
+        );
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        let stages = index
+            .entries
+            .iter()
+            .filter(|entry| entry.path == "nested/a.txt")
+            .map(|entry| (entry.stage, entry.mode))
+            .collect::<Vec<_>>();
+        assert_eq!(stages, vec![(1, 0o100644), (2, 0o100644), (3, 0o100755)]);
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("a.txt"))
+                .expect("conflict file should read"),
+            "<<<<<<< HEAD\nhead\n=======\ntopic\n>>>>>>> topic\n"
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
     fn merge_reports_add_add_conflict_for_independent_adds() {
         let temp = temp_path("merge-add-add-conflict");
         let repository = committed_nested_repository(&temp);
