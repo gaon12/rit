@@ -1023,6 +1023,13 @@ impl Repository {
         Ok(original_head)
     }
 
+    /// Forgets an in-progress merge while leaving the index and worktree alone.
+    pub fn quit_merge(&self) -> Result<()> {
+        remove_file_if_exists(&self.git_dir().join("MERGE_HEAD"))?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_MODE"))
+    }
+
     /// Commits a resolved in-progress merge.
     pub fn continue_merge(&self, options: &CommitOptions) -> Result<CommitResult> {
         let state = self.merge_state()?;

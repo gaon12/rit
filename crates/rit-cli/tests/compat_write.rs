@@ -1432,6 +1432,86 @@ fn merge_conflict_writes_index_stages_and_operation_record() {
 }
 
 #[test]
+fn merge_quit_clears_state_without_touching_conflict_index_or_worktree() {
+    let fixture = temp_path("merge-quit-fixture");
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    fs::write(fixture.join("a.txt"), "base\n").expect("base file should be written");
+    run_git(&fixture, ["add", "a.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    run_git(&fixture, ["checkout", "--quiet", "-b", "topic"]);
+    fs::write(fixture.join("a.txt"), "topic\n").expect("topic file should be written");
+    run_git(&fixture, ["add", "a.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "topic"]);
+    run_git(&fixture, ["checkout", "--quiet", "master"]);
+    fs::write(fixture.join("a.txt"), "head\n").expect("head file should be written");
+    run_git(&fixture, ["add", "a.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "head"]);
+
+    let merge = Command::new(rit_binary())
+        .args(["merge", "topic"])
+        .current_dir(&fixture)
+        .output()
+        .expect("rit merge should start");
+    assert!(!merge.status.success());
+    assert!(fixture.join(".git").join("MERGE_HEAD").exists());
+    assert!(fixture.join(".git").join("MERGE_MSG").exists());
+    let before_index = run_capture(rit_binary(), ["ls-files", "--stage"], &fixture).0;
+    let before_worktree = fs::read_to_string(fixture.join("a.txt")).expect("file should read");
+
+    let quit = Command::new(rit_binary())
+        .args(["merge", "--quit"])
+        .current_dir(&fixture)
+        .output()
+        .expect("rit merge --quit should run");
+
+    assert!(quit.status.success());
+    assert_eq!(String::from_utf8_lossy(&quit.stdout), "");
+    assert_eq!(String::from_utf8_lossy(&quit.stderr), "");
+    assert!(!fixture.join(".git").join("MERGE_HEAD").exists());
+    assert!(!fixture.join(".git").join("MERGE_MSG").exists());
+    assert!(fixture.join(".git").join("ORIG_HEAD").exists());
+    assert_eq!(
+        run_capture(rit_binary(), ["ls-files", "--stage"], &fixture).0,
+        before_index
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.join("a.txt")).expect("file should read"),
+        before_worktree
+    );
+    assert_eq!(
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &fixture).0,
+        "UU a.txt\n"
+    );
+    let op_log = run_capture(rit_binary(), ["op", "log"], &fixture).0;
+    assert!(op_log.contains("quit merge"));
+    let _ = fs::remove_dir_all(fixture);
+}
+
+#[test]
+fn merge_quit_without_active_merge_succeeds_without_output() {
+    let fixture = LocalWriteFixture::new("merge-quit-clean", LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should initialize");
+
+    let output = Command::new(rit_binary())
+        .args(["merge", "--quit"])
+        .current_dir(fixture.path())
+        .output()
+        .expect("rit merge --quit should run");
+
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "");
+    assert_eq!(String::from_utf8_lossy(&output.stderr), "");
+    assert_eq!(
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], fixture.path()).0,
+        ""
+    );
+}
+
+#[test]
 fn merge_delete_modify_conflict_leaves_target_file_when_head_deleted() {
     let fixture = temp_path("merge-delete-modify-fixture");
     fs::create_dir_all(&fixture).expect("fixture should be created");

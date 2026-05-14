@@ -400,6 +400,8 @@ Completion criteria:
   - [x] Write simple worktree conflict markers for regular text content
     conflicts.
   - [x] Abort conflicted merge state with `rit merge --abort`.
+  - [x] Quit conflicted merge state with `rit merge --quit` while leaving
+    unmerged index stages and working tree conflict contents untouched.
   - [x] Continue resolved conflicted merge state with `rit merge --continue`.
   - [~] Write binary/delete/mode conflict worktree states and full merge result
     contents.

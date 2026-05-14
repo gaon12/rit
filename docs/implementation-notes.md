@@ -344,6 +344,9 @@
   `=======`, and `>>>>>>> <target>` markers in the working tree.
 - `rit merge --abort` restores the `ORIG_HEAD` tree, clears merge state files,
   refreshes the index/worktree, and records the operation journal entry.
+- `rit merge --quit` clears merge state files while leaving unmerged index
+  stages and working tree conflict contents untouched, matching Git's
+  state-forgetting behavior for the supported slice.
 - `rit merge --continue` commits a resolved merge using `HEAD` plus
   `MERGE_HEAD` as parents, clears merge state files, and records the created
   merge commit in the operation journal.
@@ -959,11 +962,11 @@
 - Baseline command checked: `git merge -h`
 - Supported options: default fast-forward shape and explicit `--ff-only` with
   one target branch or revision, conflicted non-fast-forward index-stage
-  starts, `--abort`, `--continue`, plus rit-specific `--plan` and
+  starts, `--abort`, `--quit`, `--continue`, plus rit-specific `--plan` and
   `merge explain <target>`.
-- Unsupported options: mode/symlink conflict materialization and messages,
+- Unsupported options: remaining advanced mode/symlink conflict edge cases,
   remaining full conflict message parity, strategies, stat output, hooks,
-  squash, quit, autostash, signing, and verification options.
+  squash, autostash, signing, and verification options.
 - Git-compatible behavior: fast-forward final `HEAD`, index, and worktree state
   match Git for simple clean repositories.
 - rit-specific behavior: `--plan` prints whether the merge would be already
@@ -982,7 +985,10 @@
   tree and print a binary merge warning. Add/add conflicts print an `add/add`
   conflict message.
 - rit-specific behavior: `--abort` restores the `ORIG_HEAD` tree and removes
-  merge state files, but does not yet handle autostash or `--quit`.
+  merge state files, but does not yet handle autostash.
+- Git-compatible behavior: `--quit` removes merge state files without changing
+  unmerged index stages or working tree conflict contents, and succeeds with no
+  output when no merge is active.
 - rit-specific behavior: `--continue` creates a merge commit from the current
   resolved index and existing merge message without launching an editor.
 - rit-specific behavior: clean non-fast-forward merges create a merge commit

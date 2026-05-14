@@ -1860,6 +1860,23 @@ fn merge_command(
             Err(error) => write_command_error(stderr, error),
         };
     }
+    if merge_args.quit {
+        let before = capture_operation_snapshot(&repository, stderr)?;
+        return match repository.quit_merge() {
+            Ok(()) => {
+                record_operation(
+                    &repository,
+                    "merge",
+                    "quit merge",
+                    before,
+                    Vec::new(),
+                    stderr,
+                )?;
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_command_error(stderr, error),
+        };
+    }
     if merge_args.continue_merge {
         let before = capture_operation_snapshot(&repository, stderr)?;
         return match repository.continue_merge(&rit_core::CommitOptions::default()) {
@@ -2123,6 +2140,7 @@ struct ParsedMergeArgs {
     explain: bool,
     ff_only: bool,
     abort: bool,
+    quit: bool,
     continue_merge: bool,
 }
 
@@ -2134,6 +2152,7 @@ fn parse_merge_args(
     let mut explain = false;
     let mut ff_only = false;
     let mut abort = false;
+    let mut quit = false;
     let mut continue_merge = false;
     let mut target = None;
     let mut index = 0;
@@ -2145,6 +2164,8 @@ fn parse_merge_args(
             ff_only = true;
         } else if arg == "--abort" {
             abort = true;
+        } else if arg == "--quit" {
+            quit = true;
         } else if arg == "--continue" {
             continue_merge = true;
         } else if arg == "explain" && target.is_none() {
@@ -2173,22 +2194,32 @@ fn parse_merge_args(
         }
         index += 1;
     }
-    if abort && continue_merge {
+    let state_option_count = [abort, quit, continue_merge]
+        .into_iter()
+        .filter(|selected| *selected)
+        .count();
+    if state_option_count > 1 {
         writeln!(
             stderr,
-            "rit: merge cannot use --abort and --continue together"
+            "rit: merge can use only one of --abort, --quit, and --continue"
         )?;
         return Ok(None);
     }
-    if (abort || continue_merge) && target.is_some() {
-        let option = if abort { "--abort" } else { "--continue" };
+    if (abort || quit || continue_merge) && target.is_some() {
+        let option = if abort {
+            "--abort"
+        } else if quit {
+            "--quit"
+        } else {
+            "--continue"
+        };
         writeln!(
             stderr,
             "rit: merge {option} does not take a target revision"
         )?;
         return Ok(None);
     }
-    if !(abort || continue_merge) && target.is_none() {
+    if !(abort || quit || continue_merge) && target.is_none() {
         writeln!(stderr, "rit: merge requires a target revision")?;
         return Ok(None);
     }
@@ -2198,6 +2229,7 @@ fn parse_merge_args(
         explain,
         ff_only,
         abort,
+        quit,
         continue_merge,
     }))
 }
