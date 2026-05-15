@@ -100,21 +100,21 @@ pub fn read_pathspecs_from_file(
         }
         match parse_pathspec_file_line(line) {
             Ok(pathspec) => pathspecs.push(pathspec),
-            Err(error) => {
-                writeln!(stderr, "rit: invalid pathspec file entry '{line}': {error}")?;
-                return Ok(PathspecFileRead::Error { exit_code: 129 });
+            Err(()) => {
+                writeln!(stderr, "fatal: line is badly quoted: {line}")?;
+                return Ok(PathspecFileRead::Error { exit_code: 128 });
             }
         }
     }
     Ok(PathspecFileRead::Pathspecs(pathspecs))
 }
 
-fn parse_pathspec_file_line(line: &str) -> Result<String, String> {
+fn parse_pathspec_file_line(line: &str) -> Result<String, ()> {
     if !line.starts_with('"') {
         return Ok(line.to_owned());
     }
     if !line.ends_with('"') || line.len() == 1 {
-        return Err("missing closing quote".to_owned());
+        return Err(());
     }
 
     let quoted = &line[1..line.len() - 1];
@@ -126,7 +126,7 @@ fn parse_pathspec_file_line(line: &str) -> Result<String, String> {
             continue;
         }
         let Some(escaped) = chars.next() else {
-            return Err("trailing backslash escape".to_owned());
+            return Err(());
         };
         match escaped {
             '\\' => output.push('\\'),
@@ -150,11 +150,11 @@ fn parse_pathspec_file_line(line: &str) -> Result<String, String> {
                     value = value * 8 + next.to_digit(8).unwrap_or(0);
                 }
                 let Some(decoded) = char::from_u32(value) else {
-                    return Err(format!("invalid octal escape: {value:o}"));
+                    return Err(());
                 };
                 output.push(decoded);
             }
-            other => return Err(format!("unsupported escape: \\{other}")),
+            _ => return Err(()),
         }
     }
     Ok(output)

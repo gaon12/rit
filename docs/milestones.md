@@ -183,6 +183,8 @@ Completion criteria:
     - [x] C-style quoted pathspec-file entries for common escapes.
     - [x] Empty line pathspec-file entries are rejected with Git-compatible
       fatal output for `add`, `restore`, and `reset`.
+    - [x] Badly quoted pathspec-file entries are rejected with Git-compatible
+      fatal output for `add`, `restore`, and `reset`.
     - [ ] Full Git pathspec-file edge cases and advanced glob parity.
 - [x] Hook execution for commit.
   - [x] `pre-commit`, `prepare-commit-msg`, and `commit-msg` can block the

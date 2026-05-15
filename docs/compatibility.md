@@ -137,7 +137,7 @@ covered for root `.gitattributes` set/unset/value/unspecified requirements in
 status, diff, ls-files, and add. Pathspec-file input is covered for `add`,
 `restore`, and `reset`, including stdin and NUL-separated input.
 Line-delimited pathspec-file input also covers Git-compatible rejection of
-empty pathspec entries before repository mutation.
+empty and badly quoted pathspec entries before repository mutation.
 Local write compatibility tests cover `core.ignorecase=true` for a
 mismatched-case `add` pathspec that Git accepts as a no-op.
 

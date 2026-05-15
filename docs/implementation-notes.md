@@ -86,6 +86,9 @@
 - 2026-05-15 empty pathspec-file entry slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for leading
   empty line entries in `--pathspec-from-file`.
+- 2026-05-15 badly quoted pathspec-file entry slice checked `git add -h`,
+  `git restore -h`, `git reset -h`, and direct Git comparisons for
+  unterminated quoted entries in `--pathspec-from-file`.
 - 2026-05-12 merge-state model slice checked `git merge -h`,
   `git cherry-pick -h`, `git rebase -h`, and `git stash -h`.
 - 2026-05-13 fast-forward merge slice checked `git merge -h`; implemented
@@ -303,6 +306,8 @@
 - Added C-style quoted pathspec-file entry parsing for common escapes.
 - Added Git-compatible rejection for empty line-delimited pathspec-file
   entries before any `add`, `restore`, or `reset` mutation is applied.
+- Added Git-compatible rejection for badly quoted pathspec-file entries before
+  any `add`, `restore`, or `reset` mutation is applied.
 - Still unsupported: full Git pathspec-file edge cases, broader worktree
   rename/copy diffcore parity beyond intent-to-add entries, full rename
   limits/advanced diffcore parity, and `show` path filtering for patch output.
