@@ -132,6 +132,9 @@
 - 2026-05-15 text pathspec-file NUL byte slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for NUL bytes
   embedded inside text `--pathspec-from-file` lines.
+- 2026-05-15 lone carriage-return pathspec-file slice checked `git add -h`,
+  `git restore -h`, `git reset -h`, and direct Git comparisons for text
+  `--pathspec-from-file` lines ending with a lone `\r` byte.
 - 2026-05-15 pathspec-file option validation slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   `--pathspec-file-nul` without `--pathspec-from-file`.
@@ -408,6 +411,8 @@
   pathspec behavior follows Git instead of failing as an input encoding error.
 - NUL bytes inside text pathspec-file lines truncate that line before normal
   empty-entry and quoted-entry parsing, matching Git's non-NUL mode behavior.
+- Lone carriage-return bytes are preserved as pathspec characters; CRLF line
+  endings are still normalized by text line splitting, matching Git behavior.
 - `--pathspec-file-nul` without `--pathspec-from-file` is rejected before any
   `add`, `restore`, or `reset` mutation with Git's fatal dependency message.
 - `--pathspec-from-file` without a following value is rejected before any

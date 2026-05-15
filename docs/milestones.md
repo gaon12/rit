@@ -219,6 +219,8 @@ Completion criteria:
       pathspec matching and errors for `add`, `restore`, and `reset`.
     - [x] NUL bytes inside text pathspec-file lines truncate the line like Git
       for `add`, `restore`, and `reset`.
+    - [x] Lone carriage-return bytes in text pathspec-file lines remain part
+      of the pathspec like Git for `add`, `restore`, and `reset`.
     - [x] `--pathspec-file-nul` without `--pathspec-from-file` is rejected
       with Git-compatible fatal output for `add`, `restore`, and `reset`.
     - [x] `--pathspec-from-file` without a value is rejected with

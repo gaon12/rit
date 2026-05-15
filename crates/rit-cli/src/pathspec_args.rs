@@ -101,7 +101,6 @@ pub fn read_pathspecs_from_file(
     let mut pathspecs = Vec::new();
     for line in text.lines() {
         let line = line.split('\0').next().unwrap_or(line);
-        let line = line.strip_suffix('\r').unwrap_or(line);
         if line.is_empty() {
             writeln!(
                 stderr,
