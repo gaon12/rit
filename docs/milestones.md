@@ -203,6 +203,8 @@ Completion criteria:
       `add`, `restore`, and `reset`.
     - [x] `--pathspec-from-file` mixed with pathspec arguments is rejected
       with Git-compatible fatal output for `add`, `restore`, and `reset`.
+    - [x] Missing `--pathspec-from-file` files are rejected with
+      Git-compatible fatal output for `add`, `restore`, and `reset`.
     - [x] `--pathspec-file-nul` without `--pathspec-from-file` is rejected
       with Git-compatible fatal output for `add`, `restore`, and `reset`.
     - [x] `--pathspec-from-file` without a value is rejected with

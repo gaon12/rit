@@ -64,9 +64,11 @@ pub fn read_pathspecs_from_file(
             Err(error) => {
                 writeln!(
                     stderr,
-                    "rit: could not read pathspec file '{file_name}': {error}"
+                    "fatal: could not open '{}' for reading: {}",
+                    file_name,
+                    git_file_read_error(&error)
                 )?;
-                return Ok(PathspecFileRead::Error { exit_code: 129 });
+                return Ok(PathspecFileRead::Error { exit_code: 128 });
             }
         }
     };
@@ -171,4 +173,12 @@ fn parse_pathspec_file_line(line: &str) -> Result<String, ()> {
         }
     }
     String::from_utf8(output).map_err(|_| ())
+}
+
+fn git_file_read_error(error: &io::Error) -> String {
+    if error.kind() == io::ErrorKind::NotFound {
+        "No such file or directory".to_owned()
+    } else {
+        error.to_string()
+    }
 }

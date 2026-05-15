@@ -108,6 +108,9 @@
 - 2026-05-15 pathspec-file argument mixing slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   `--pathspec-from-file` combined with ordinary pathspec arguments.
+- 2026-05-15 missing pathspec-file slice checked `git add -h`,
+  `git restore -h`, `git reset -h`, and direct Git comparisons for missing
+  `--pathspec-from-file` input files.
 - 2026-05-15 pathspec-file option validation slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   `--pathspec-file-nul` without `--pathspec-from-file`.
@@ -367,6 +370,8 @@
 - `--pathspec-from-file` cannot be mixed with ordinary pathspec arguments,
   matching Git's fatal pre-mutation validation for `add`, `restore`, and
   `reset`.
+- Missing pathspec input files are rejected with Git's fatal
+  `could not open ... for reading` message and exit code before any mutation.
 - `--pathspec-file-nul` without `--pathspec-from-file` is rejected before any
   `add`, `restore`, or `reset` mutation with Git's fatal dependency message.
 - `--pathspec-from-file` without a following value is rejected before any
