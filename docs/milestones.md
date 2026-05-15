@@ -410,8 +410,12 @@ Completion criteria:
   - [x] `ssh://host:port/path` URL port parsing and `ssh -p` process
     argument wiring.
   - [x] `GIT_SSH_COMMAND` and `GIT_SSH` process selection for SSH transport.
-  - [ ] SSH auth option parity and broader advanced SSH transport
+  - [~] SSH auth option parity and broader advanced SSH transport
     configuration.
+    - [x] Read `core.sshCommand` from `.git/config` for process-based SSH
+      fetch and push, with Git-shaped precedence behind `GIT_SSH_COMMAND`.
+    - [ ] Add `ssh.variant` and `GIT_SSH_VARIANT` argument-shape parity for
+      OpenSSH, plink, putty, tortoiseplink, and simple variants.
 - [~] Fetch refs negotiation.
   - [x] Single local fetch refspec updates a destination ref after copying
     objects.

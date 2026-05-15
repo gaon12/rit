@@ -120,13 +120,13 @@ pub use status::{
     StatusExplanation, StatusOptions, UntrackedFilesMode,
 };
 pub use transport::{
-    AdvertisedRef, BlockingSmartHttpClient, FetchRefSpec, ProcessSshServiceExecutor,
-    ReceivePackCommand, ReceivePackCommandStatus, ReceivePackRequest, ReceivePackStatus,
-    RemotePackNegotiation, SmartHttpAdvertisement, SmartHttpPostRequest, SmartHttpRequest,
-    SmartHttpResponse, SmartHttpService, SshProcessInvocation, SshReceivePackExecutor,
-    SshServiceCommand, SshServiceExecutor, SshUploadPackExecutor, TransportLocation,
-    TransportProtocol, UploadPackAckStatus, UploadPackAcknowledgement, UploadPackRequest,
-    UploadPackResponse, UploadPackSideBand, run_ssh_upload_pack,
+    AdvertisedRef, BlockingSmartHttpClient, ConfiguredProcessSshServiceExecutor, FetchRefSpec,
+    ProcessSshServiceExecutor, ReceivePackCommand, ReceivePackCommandStatus, ReceivePackRequest,
+    ReceivePackStatus, RemotePackNegotiation, SmartHttpAdvertisement, SmartHttpPostRequest,
+    SmartHttpRequest, SmartHttpResponse, SmartHttpService, SshProcessConfig, SshProcessInvocation,
+    SshReceivePackExecutor, SshServiceCommand, SshServiceExecutor, SshUploadPackExecutor,
+    TransportLocation, TransportProtocol, UploadPackAckStatus, UploadPackAcknowledgement,
+    UploadPackRequest, UploadPackResponse, UploadPackSideBand, run_ssh_upload_pack,
 };
 pub use vfs::{
     FallbackMaterializedAction, FallbackMaterializedBackend, FallbackMaterializedPlan,

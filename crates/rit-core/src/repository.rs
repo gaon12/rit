@@ -1,10 +1,11 @@
 use crate::object::parse_tree_entries;
 use crate::{
-    BlockingSmartHttpClient, FetchRefSpec, GitAttributes, GitConfig, GitObject, LooseObjectDb,
-    ObjectId, ObjectKind, PartialClonePolicy, ProcessSshServiceExecutor, ReceivePackCommand,
-    ReceivePackCommandStatus, ReceivePackRequest, ReceivePackStatus, Result, RitConfig, RitError,
-    SmartHttpAdvertisement, SmartHttpService, SparseCheckout, SshReceivePackExecutor,
-    SshUploadPackExecutor, TransportLocation, TransportProtocol, parse_commit,
+    BlockingSmartHttpClient, ConfiguredProcessSshServiceExecutor, FetchRefSpec, GitAttributes,
+    GitConfig, GitObject, LooseObjectDb, ObjectId, ObjectKind, PartialClonePolicy,
+    ReceivePackCommand, ReceivePackCommandStatus, ReceivePackRequest, ReceivePackStatus, Result,
+    RitConfig, RitError, SmartHttpAdvertisement, SmartHttpService, SparseCheckout,
+    SshProcessConfig, SshReceivePackExecutor, SshUploadPackExecutor, TransportLocation,
+    TransportProtocol, parse_commit,
 };
 use std::collections::HashSet;
 use std::fs;
@@ -369,7 +370,8 @@ impl Repository {
 
     /// Fetches one advertised ref from an SSH remote.
     pub fn fetch_remote_ssh(&self, options: &RemoteFetchOptions) -> Result<RemoteFetchResult> {
-        self.fetch_remote_ssh_with_executor(options, &ProcessSshServiceExecutor)
+        let executor = self.configured_ssh_process_executor()?;
+        self.fetch_remote_ssh_with_executor(options, &executor)
     }
 
     /// Fetches one advertised ref from an SSH remote using an explicit executor.
@@ -437,7 +439,8 @@ impl Repository {
 
     /// Pushes one source ref or revision to an SSH remote.
     pub fn push_remote_ssh(&self, options: &RemotePushOptions) -> Result<RemotePushResult> {
-        self.push_remote_ssh_with_executor(options, &ProcessSshServiceExecutor)
+        let executor = self.configured_ssh_process_executor()?;
+        self.push_remote_ssh_with_executor(options, &executor)
     }
 
     /// Pushes one source ref or revision to an SSH remote using an explicit executor.
@@ -768,6 +771,21 @@ impl Repository {
         }
         let config = GitConfig::read(&config_path)?;
         config.get_bool("core", key, default)
+    }
+
+    fn configured_ssh_process_executor(&self) -> Result<ConfiguredProcessSshServiceExecutor> {
+        Ok(ConfiguredProcessSshServiceExecutor::new(
+            self.ssh_process_config()?,
+        ))
+    }
+
+    fn ssh_process_config(&self) -> Result<SshProcessConfig> {
+        let config_path = self.common_dir.join("config");
+        if !config_path.exists() {
+            return Ok(SshProcessConfig::default());
+        }
+        let config = GitConfig::read(&config_path)?;
+        Ok(SshProcessConfig::from_git_config(&config))
     }
 }
 
@@ -1323,6 +1341,26 @@ mod tests {
         );
         assert_eq!(policy.promisor_pack_markers.len(), 1);
 
+        remove_dir_all(&root);
+    }
+
+    #[test]
+    fn reads_ssh_process_config_from_git_config() {
+        let root = temp_path("ssh-process-config");
+        let repository = Repository::init(&InitOptions::new(&root)).expect("repo should init");
+        let config_path = repository.common_dir().join("config");
+        let mut config = fs::read_to_string(&config_path).expect("config should be readable");
+        config.push_str("\n[core]\n\tsshCommand = ssh -i config-key\n");
+        fs::write(&config_path, config).expect("config should be updated");
+
+        let process_config = repository
+            .ssh_process_config()
+            .expect("ssh process config should read");
+
+        assert_eq!(
+            process_config.core_ssh_command.as_deref(),
+            Some("ssh -i config-key")
+        );
         remove_dir_all(&root);
     }
 

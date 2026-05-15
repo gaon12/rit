@@ -9,7 +9,7 @@ use std::{
 
 use native_tls::TlsConnector;
 
-use crate::{ObjectId, Result, RitError};
+use crate::{GitConfig, ObjectId, Result, RitError};
 
 mod receive_pack;
 mod upload_pack;
@@ -128,6 +128,30 @@ pub struct SshProcessInvocation {
     pub args: Vec<String>,
 }
 
+/// Repository-level SSH process configuration.
+///
+/// Environment variables are still read at process start time and take the
+/// same precedence as Git: `GIT_SSH_COMMAND`, then `core.sshCommand`, then
+/// `GIT_SSH`, finally plain `ssh`.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SshProcessConfig {
+    /// Command from `core.sshCommand`, in the same shell-like form as
+    /// `GIT_SSH_COMMAND`.
+    pub core_ssh_command: Option<String>,
+}
+
+impl SshProcessConfig {
+    /// Reads SSH process settings from parsed Git config.
+    pub fn from_git_config(config: &GitConfig) -> Self {
+        Self {
+            core_ssh_command: config
+                .get("core", "sshcommand")
+                .filter(|value| !value.trim().is_empty())
+                .map(ToOwned::to_owned),
+        }
+    }
+}
+
 impl SshServiceCommand {
     /// Returns the `ssh` destination argument, including `user@` when present.
     pub fn target(&self) -> String {
@@ -173,32 +197,7 @@ pub struct ProcessSshServiceExecutor;
 
 impl SshServiceExecutor for ProcessSshServiceExecutor {
     fn run(&self, command: &SshServiceCommand, request: &[u8]) -> Result<Vec<u8>> {
-        let mut process = command_to_process(command)?;
-        let mut child = process
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(request)
-                .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
-        }
-
-        let output = child
-            .wait_with_output()
-            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(RitError::invalid_input(format!(
-                "SSH service command failed for {}: {}",
-                command.host,
-                stderr.trim()
-            )));
-        }
-        Ok(output.stdout)
+        run_ssh_service_process(command, request, &SshProcessConfig::default())
     }
 }
 
@@ -209,70 +208,7 @@ impl SshUploadPackExecutor for ProcessSshServiceExecutor {
         wanted_ref: &str,
         haves: Vec<ObjectId>,
     ) -> Result<RemotePackNegotiation> {
-        let command = location.ssh_service_command(SmartHttpService::UploadPack)?;
-        let mut process = command_to_process(&command)?;
-        let mut child = process
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
-
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| RitError::invalid_input("SSH upload-pack stdout was not captured"))?;
-        let mut stdout = BufReader::new(stdout);
-        let mut advertisement_bytes = Vec::new();
-        read_ssh_advertisement(&mut stdout, &mut advertisement_bytes, &command.host)?;
-        let advertisement = SmartHttpAdvertisement::parse_git_protocol(
-            SmartHttpService::UploadPack,
-            &advertisement_bytes,
-        )?;
-        let want_id = advertised_ref_id(&advertisement, wanted_ref).ok_or_else(|| {
-            RitError::invalid_input(format!(
-                "remote did not advertise requested ref: {wanted_ref}"
-            ))
-        })?;
-        let request = UploadPackRequest::new(vec![want_id])?
-            .with_capabilities(select_upload_pack_capabilities(&advertisement.capabilities))
-            .with_haves(haves);
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(&request.to_pkt_lines())
-                .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
-        }
-
-        let mut response_bytes = Vec::new();
-        stdout
-            .read_to_end(&mut response_bytes)
-            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
-        let output = child
-            .wait_with_output()
-            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(RitError::invalid_input(format!(
-                "SSH upload-pack failed for {}: {}",
-                command.host,
-                stderr.trim()
-            )));
-        }
-
-        let response = UploadPackResponse::parse(&response_bytes)?;
-        reject_upload_pack_error(&response)?;
-        let pack_bytes = response.pack_bytes()?.ok_or_else(|| {
-            RitError::invalid_input("upload-pack response did not include a pack")
-        })?;
-
-        Ok(RemotePackNegotiation {
-            advertisement,
-            wanted_ref: wanted_ref.to_owned(),
-            want_id,
-            response,
-            pack_bytes,
-        })
+        negotiate_upload_pack_process(location, wanted_ref, haves, &SshProcessConfig::default())
     }
 }
 
@@ -284,65 +220,235 @@ impl SshReceivePackExecutor for ProcessSshServiceExecutor {
         new_id: ObjectId,
         pack_data: Vec<u8>,
     ) -> Result<ReceivePackStatus> {
-        let command = location.ssh_service_command(SmartHttpService::ReceivePack)?;
-        let mut process = command_to_process(&command)?;
-        let mut child = process
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
-
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| RitError::invalid_input("SSH receive-pack stdout was not captured"))?;
-        let mut stdout = BufReader::new(stdout);
-        let mut advertisement_bytes = Vec::new();
-        read_ssh_advertisement(&mut stdout, &mut advertisement_bytes, &command.host)?;
-        let advertisement = SmartHttpAdvertisement::parse_git_protocol(
-            SmartHttpService::ReceivePack,
-            &advertisement_bytes,
-        )?;
-        let old_id = advertised_ref_id(&advertisement, ref_name).unwrap_or_else(zero_object_id);
-        let receive_command = ReceivePackCommand::new(old_id, new_id, ref_name.to_owned())?;
-        let request = ReceivePackRequest::new(vec![receive_command])?
-            .with_capabilities(select_receive_pack_capabilities(
-                &advertisement.capabilities,
-            ))
-            .with_pack_data(pack_data);
-
-        if let Some(mut stdin) = child.stdin.take() {
-            stdin
-                .write_all(&request.to_bytes())
-                .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
-        }
-
-        let mut response_bytes = Vec::new();
-        stdout
-            .read_to_end(&mut response_bytes)
-            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
-        let output = child
-            .wait_with_output()
-            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(RitError::invalid_input(format!(
-                "SSH receive-pack failed for {}: {}",
-                command.host,
-                stderr.trim()
-            )));
-        }
-
-        ReceivePackStatus::parse(&response_bytes)
+        send_receive_pack_process(
+            location,
+            ref_name,
+            new_id,
+            pack_data,
+            &SshProcessConfig::default(),
+        )
     }
 }
 
-fn command_to_process(command: &SshServiceCommand) -> Result<Command> {
+/// SSH executor backed by an explicit repository process configuration.
+#[derive(Clone, Debug, Default)]
+pub struct ConfiguredProcessSshServiceExecutor {
+    process_config: SshProcessConfig,
+}
+
+impl ConfiguredProcessSshServiceExecutor {
+    /// Builds a process executor from repository-level SSH settings.
+    pub fn new(process_config: SshProcessConfig) -> Self {
+        Self { process_config }
+    }
+}
+
+impl SshServiceExecutor for ConfiguredProcessSshServiceExecutor {
+    fn run(&self, command: &SshServiceCommand, request: &[u8]) -> Result<Vec<u8>> {
+        run_ssh_service_process(command, request, &self.process_config)
+    }
+}
+
+impl SshUploadPackExecutor for ConfiguredProcessSshServiceExecutor {
+    fn negotiate_upload_pack(
+        &self,
+        location: &TransportLocation,
+        wanted_ref: &str,
+        haves: Vec<ObjectId>,
+    ) -> Result<RemotePackNegotiation> {
+        negotiate_upload_pack_process(location, wanted_ref, haves, &self.process_config)
+    }
+}
+
+impl SshReceivePackExecutor for ConfiguredProcessSshServiceExecutor {
+    fn send_receive_pack(
+        &self,
+        location: &TransportLocation,
+        ref_name: &str,
+        new_id: ObjectId,
+        pack_data: Vec<u8>,
+    ) -> Result<ReceivePackStatus> {
+        send_receive_pack_process(location, ref_name, new_id, pack_data, &self.process_config)
+    }
+}
+
+fn run_ssh_service_process(
+    command: &SshServiceCommand,
+    request: &[u8],
+    process_config: &SshProcessConfig,
+) -> Result<Vec<u8>> {
+    let mut process = command_to_process(command, process_config)?;
+    let mut child = process
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(request)
+            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(RitError::invalid_input(format!(
+            "SSH service command failed for {}: {}",
+            command.host,
+            stderr.trim()
+        )));
+    }
+    Ok(output.stdout)
+}
+
+fn negotiate_upload_pack_process(
+    location: &TransportLocation,
+    wanted_ref: &str,
+    haves: Vec<ObjectId>,
+    process_config: &SshProcessConfig,
+) -> Result<RemotePackNegotiation> {
+    let command = location.ssh_service_command(SmartHttpService::UploadPack)?;
+    let mut process = command_to_process(&command, process_config)?;
+    let mut child = process
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| RitError::invalid_input("SSH upload-pack stdout was not captured"))?;
+    let mut stdout = BufReader::new(stdout);
+    let mut advertisement_bytes = Vec::new();
+    read_ssh_advertisement(&mut stdout, &mut advertisement_bytes, &command.host)?;
+    let advertisement = SmartHttpAdvertisement::parse_git_protocol(
+        SmartHttpService::UploadPack,
+        &advertisement_bytes,
+    )?;
+    let want_id = advertised_ref_id(&advertisement, wanted_ref).ok_or_else(|| {
+        RitError::invalid_input(format!(
+            "remote did not advertise requested ref: {wanted_ref}"
+        ))
+    })?;
+    let request = UploadPackRequest::new(vec![want_id])?
+        .with_capabilities(select_upload_pack_capabilities(&advertisement.capabilities))
+        .with_haves(haves);
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(&request.to_pkt_lines())
+            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+    }
+
+    let mut response_bytes = Vec::new();
+    stdout
+        .read_to_end(&mut response_bytes)
+        .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(RitError::invalid_input(format!(
+            "SSH upload-pack failed for {}: {}",
+            command.host,
+            stderr.trim()
+        )));
+    }
+
+    let response = UploadPackResponse::parse(&response_bytes)?;
+    reject_upload_pack_error(&response)?;
+    let pack_bytes = response
+        .pack_bytes()?
+        .ok_or_else(|| RitError::invalid_input("upload-pack response did not include a pack"))?;
+
+    Ok(RemotePackNegotiation {
+        advertisement,
+        wanted_ref: wanted_ref.to_owned(),
+        want_id,
+        response,
+        pack_bytes,
+    })
+}
+
+fn send_receive_pack_process(
+    location: &TransportLocation,
+    ref_name: &str,
+    new_id: ObjectId,
+    pack_data: Vec<u8>,
+    process_config: &SshProcessConfig,
+) -> Result<ReceivePackStatus> {
+    let command = location.ssh_service_command(SmartHttpService::ReceivePack)?;
+    let mut process = command_to_process(&command, process_config)?;
+    let mut child = process
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| RitError::invalid_input("SSH receive-pack stdout was not captured"))?;
+    let mut stdout = BufReader::new(stdout);
+    let mut advertisement_bytes = Vec::new();
+    read_ssh_advertisement(&mut stdout, &mut advertisement_bytes, &command.host)?;
+    let advertisement = SmartHttpAdvertisement::parse_git_protocol(
+        SmartHttpService::ReceivePack,
+        &advertisement_bytes,
+    )?;
+    let old_id = advertised_ref_id(&advertisement, ref_name).unwrap_or_else(zero_object_id);
+    let receive_command = ReceivePackCommand::new(old_id, new_id, ref_name.to_owned())?;
+    let request = ReceivePackRequest::new(vec![receive_command])?
+        .with_capabilities(select_receive_pack_capabilities(
+            &advertisement.capabilities,
+        ))
+        .with_pack_data(pack_data);
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(&request.to_bytes())
+            .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+    }
+
+    let mut response_bytes = Vec::new();
+    stdout
+        .read_to_end(&mut response_bytes)
+        .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|source| RitError::transport_io(command.host.clone(), source))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(RitError::invalid_input(format!(
+            "SSH receive-pack failed for {}: {}",
+            command.host,
+            stderr.trim()
+        )));
+    }
+
+    ReceivePackStatus::parse(&response_bytes)
+}
+
+fn command_to_process(
+    command: &SshServiceCommand,
+    process_config: &SshProcessConfig,
+) -> Result<Command> {
     let git_ssh_command = env::var("GIT_SSH_COMMAND").ok();
     let git_ssh = env::var("GIT_SSH").ok();
-    let invocation =
-        ssh_process_invocation(command, git_ssh_command.as_deref(), git_ssh.as_deref())?;
+    let invocation = ssh_process_invocation(
+        command,
+        git_ssh_command.as_deref(),
+        process_config.core_ssh_command.as_deref(),
+        git_ssh.as_deref(),
+    )?;
     let mut process = Command::new(&invocation.program);
     process.args(&invocation.args);
     Ok(process)
@@ -351,13 +457,17 @@ fn command_to_process(command: &SshServiceCommand) -> Result<Command> {
 fn ssh_process_invocation(
     command: &SshServiceCommand,
     git_ssh_command: Option<&str>,
+    core_ssh_command: Option<&str>,
     git_ssh: Option<&str>,
 ) -> Result<SshProcessInvocation> {
     let (program, mut args) = match git_ssh_command.filter(|value| !value.trim().is_empty()) {
         Some(command) => parse_git_ssh_command(command)?,
-        None => match git_ssh.filter(|value| !value.trim().is_empty()) {
-            Some(program) => (program.to_owned(), Vec::new()),
-            None => ("ssh".to_owned(), Vec::new()),
+        None => match core_ssh_command.filter(|value| !value.trim().is_empty()) {
+            Some(command) => parse_git_ssh_command(command)?,
+            None => match git_ssh.filter(|value| !value.trim().is_empty()) {
+                Some(program) => (program.to_owned(), Vec::new()),
+                None => ("ssh".to_owned(), Vec::new()),
+            },
         },
     };
     add_ssh_process_args(&mut args, command);
@@ -1495,11 +1605,11 @@ fn is_windows_drive_path(input: &str) -> bool {
 mod tests {
     use super::{
         BlockingSmartHttpClient, FetchRefSpec, SmartHttpAdvertisement, SmartHttpService,
-        SshProcessInvocation, SshServiceCommand, SshServiceExecutor, TransportLocation,
-        TransportProtocol, UploadPackAckStatus, UploadPackAcknowledgement, UploadPackRequest,
-        UploadPackResponse, UploadPackSideBand,
+        SshProcessConfig, SshProcessInvocation, SshServiceCommand, SshServiceExecutor,
+        TransportLocation, TransportProtocol, UploadPackAckStatus, UploadPackAcknowledgement,
+        UploadPackRequest, UploadPackResponse, UploadPackSideBand,
     };
-    use crate::{ObjectId, Result};
+    use crate::{GitConfig, ObjectId, Result};
     use std::{
         io::{Read, Write},
         net::TcpListener,
@@ -1591,7 +1701,7 @@ mod tests {
             .ssh_service_command(SmartHttpService::UploadPack)
             .expect("ssh command");
 
-        let invocation = super::ssh_process_invocation(&command, None, None)
+        let invocation = super::ssh_process_invocation(&command, None, None, None)
             .expect("default invocation should build");
 
         assert_eq!(
@@ -1612,9 +1722,13 @@ mod tests {
             .ssh_service_command(SmartHttpService::ReceivePack)
             .expect("ssh command");
 
-        let invocation =
-            super::ssh_process_invocation(&command, Some("plink -batch -i 'key file.ppk'"), None)
-                .expect("GIT_SSH_COMMAND invocation should build");
+        let invocation = super::ssh_process_invocation(
+            &command,
+            Some("plink -batch -i 'key file.ppk'"),
+            None,
+            None,
+        )
+        .expect("GIT_SSH_COMMAND invocation should build");
 
         assert_eq!(
             invocation,
@@ -1639,7 +1753,7 @@ mod tests {
             .ssh_service_command(SmartHttpService::UploadPack)
             .expect("ssh command");
 
-        let invocation = super::ssh_process_invocation(&command, None, Some("custom-ssh"))
+        let invocation = super::ssh_process_invocation(&command, None, None, Some("custom-ssh"))
             .expect("GIT_SSH invocation should build");
 
         assert_eq!(invocation.program, "custom-ssh");
@@ -1649,6 +1763,89 @@ mod tests {
                 "example.test".to_owned(),
                 "git-upload-pack 'org/repo.git'".to_owned(),
             ]
+        );
+    }
+
+    #[test]
+    fn core_ssh_command_uses_git_ssh_command_form() {
+        let command = TransportLocation::parse("ssh://git@example.test:2222/project.git")
+            .ssh_service_command(SmartHttpService::UploadPack)
+            .expect("ssh command");
+
+        let invocation = super::ssh_process_invocation(
+            &command,
+            None,
+            Some("ssh -i 'key file' -o StrictHostKeyChecking=no"),
+            None,
+        )
+        .expect("core.sshCommand invocation should build");
+
+        assert_eq!(
+            invocation,
+            SshProcessInvocation {
+                program: "ssh".to_owned(),
+                args: vec![
+                    "-i".to_owned(),
+                    "key file".to_owned(),
+                    "-o".to_owned(),
+                    "StrictHostKeyChecking=no".to_owned(),
+                    "-p".to_owned(),
+                    "2222".to_owned(),
+                    "git@example.test".to_owned(),
+                    "git-upload-pack '/project.git'".to_owned(),
+                ],
+            }
+        );
+    }
+
+    #[test]
+    fn git_ssh_command_overrides_core_ssh_command() {
+        let command = TransportLocation::parse("git@example.test:org/repo.git")
+            .ssh_service_command(SmartHttpService::UploadPack)
+            .expect("ssh command");
+
+        let invocation = super::ssh_process_invocation(
+            &command,
+            Some("env-ssh -v"),
+            Some("config-ssh -q"),
+            Some("git-ssh"),
+        )
+        .expect("GIT_SSH_COMMAND should win");
+
+        assert_eq!(invocation.program, "env-ssh");
+        assert!(invocation.args.contains(&"-v".to_owned()));
+        assert!(!invocation.args.contains(&"-q".to_owned()));
+    }
+
+    #[test]
+    fn core_ssh_command_takes_precedence_over_git_ssh() {
+        let command = TransportLocation::parse("git@example.test:org/repo.git")
+            .ssh_service_command(SmartHttpService::UploadPack)
+            .expect("ssh command");
+
+        let invocation =
+            super::ssh_process_invocation(&command, None, Some("config-ssh -q"), Some("git-ssh"))
+                .expect("core.sshCommand should win over GIT_SSH");
+
+        assert_eq!(invocation.program, "config-ssh");
+        assert!(invocation.args.contains(&"-q".to_owned()));
+    }
+
+    #[test]
+    fn ssh_process_config_reads_core_ssh_command() {
+        let config = GitConfig::parse(
+            r#"
+            [core]
+                sshCommand = ssh -i key
+            "#,
+        )
+        .expect("config should parse");
+
+        assert_eq!(
+            SshProcessConfig::from_git_config(&config),
+            SshProcessConfig {
+                core_ssh_command: Some("ssh -i key".to_owned()),
+            }
         );
     }
 

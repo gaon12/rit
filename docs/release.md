@@ -10,8 +10,8 @@ profiles, not separate source trees.
 | Build | Cargo command | Included feature intent | Excluded by default |
 | --- | --- | --- | --- |
 | `rit-min` | `cargo build -p rit-cli --release --locked` | Core CLI, local repository operations, HTTP(S) transport, policy/doctor/repair models, fallback VFS model | LFS, Xet, semantic tree-sitter adapters, semantic JSON, platform VFS |
-| `rit-full` | `cargo build -p rit-cli --release --locked --features rit-core/large-files,rit-core/semantic-json,rit-core/semantic-rust,rit-core/semantic-typescript,rit-core/semantic-python,rit-core/vfs` | Everything in `rit-min` plus LFS/Xet models, semantic JSON, Rust/TypeScript/Python semantic adapters, VFS planning APIs | Platform VFS drivers, network/promisor VFS fetching, and SQLite indexdb write-through/reconciliation remain planned |
-| `rit-indexed` | `cargo build -p rit-cli --release --locked --features indexdb` | Everything in `rit-min` plus the optional SQLite auxiliary index command surface and schema | Must remain safe when `.git/rit/indexdb.sqlite` is missing, stale, dropped, or corrupted |
+| `rit-full` | `cargo build -p rit-cli --release --locked --features rit-core/large-files,rit-core/semantic-json,rit-core/semantic-rust,rit-core/semantic-typescript,rit-core/semantic-python,rit-core/vfs` | Everything in `rit-min` plus LFS/Xet models, semantic JSON, Rust/TypeScript/Python semantic adapters, VFS planning APIs | Platform VFS drivers, network/promisor VFS fetching, and SQLite indexdb feature selection remain separate |
+| `rit-indexed` | `cargo build -p rit-cli --release --locked --features indexdb` | Everything in `rit-min` plus the optional SQLite auxiliary index command surface, schema, fallback query APIs, and `rit file-history <path>` | Must remain safe when `.git/rit/indexdb.sqlite` is missing, stale, dropped, or corrupted |
 
 Current `rit-core` feature flags:
 
@@ -26,7 +26,7 @@ Current `rit-core` feature flags:
 | `semantic-typescript` | TypeScript/TSX function summary adapter. |
 | `semantic-python` | Python function summary adapter. |
 | `vfs` | Enables VFS availability for planning APIs. |
-| `indexdb` | Optional SQLite auxiliary index for commit metadata, parent graph, refs snapshots, and cache state. File-history population and reconciliation are still planned. |
+| `indexdb` | Optional SQLite auxiliary index for commit metadata, parent graph, refs snapshots, file history, and cache state. Query APIs fall back to canonical Git data when the database is missing, stale, corrupted, or incomplete. |
 
 Release builds must keep working with no feature flags. Feature-gated code must
 return clear unsupported-feature messages instead of silently changing behavior.
