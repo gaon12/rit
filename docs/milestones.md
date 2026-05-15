@@ -366,7 +366,7 @@ Completion criteria:
 - [x] Add compatibility tests proving indexdb does not change Git-compatible
   command output.
 - [x] Add corruption tests proving broken indexdb never corrupts the repository.
-- [ ] Add linked worktree tests proving worktree cache isolation.
+- [x] Add linked worktree tests proving worktree cache isolation.
 - [ ] Add benchmark tests for large commit history and file history queries.
 
 Completion criteria:

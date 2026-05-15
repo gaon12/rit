@@ -61,8 +61,15 @@ fn indexdb_uses_worktree_cache_location_for_linked_worktrees() {
 
     let linked_repository =
         Repository::open(&linked_worktree).expect("linked worktree should open");
+    let main_storage = repository.indexdb().storage();
     let storage = linked_repository.indexdb().storage();
 
+    assert_eq!(storage.database_path, main_storage.database_path);
+    assert_ne!(
+        storage.worktree_cache_path,
+        main_storage.worktree_cache_path
+    );
+    assert_ne!(storage.worktree_lock_path, main_storage.worktree_lock_path);
     assert_eq!(
         storage.database_path,
         linked_repository
