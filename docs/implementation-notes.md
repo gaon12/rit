@@ -77,6 +77,9 @@
 - 2026-05-16 indexdb canonical fallback slice changed read APIs to use
   `.git/objects` and refs when indexdb is missing, stale, corrupted, or missing
   a requested row.
+- 2026-05-16 indexdb benchmark slice added ignored smoke tests for large commit
+  history indexing and repeated file-history queries. They are manual checks so
+  normal CI stays fast.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
 - 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git
@@ -273,6 +276,9 @@
   `.git/rit/indexdb.sqlite` for reproducible repository metadata, and isolated
   `.git/rit/worktrees/<id>/worktree-cache.sqlite` paths for worktree-local
   cache data.
+- Manual benchmark coverage is available through ignored tests named
+  `indexdb_benchmark_large_commit_history_queries` and
+  `indexdb_benchmark_file_history_queries`.
 - Source of truth: IndexDB stores reproducible metadata only. `drop` removes
   the SQLite file without touching Git objects, refs, `.git/index`, or working
   tree files. Normal Git-compatible commands do not require IndexDB.

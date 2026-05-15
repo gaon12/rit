@@ -367,7 +367,7 @@ Completion criteria:
   command output.
 - [x] Add corruption tests proving broken indexdb never corrupts the repository.
 - [x] Add linked worktree tests proving worktree cache isolation.
-- [ ] Add benchmark tests for large commit history and file history queries.
+- [x] Add benchmark tests for large commit history and file history queries.
 
 Completion criteria:
 - `rit indexdb` creates or updates `.git/rit/indexdb.sqlite` without changing

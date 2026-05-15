@@ -3,7 +3,7 @@ use crate::{InitOptions, ObjectId, ObjectKind, Repository, parse_commit};
 use rusqlite::{Connection, params};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[test]
 fn indexdb_uses_git_rit_storage_location() {
@@ -695,6 +695,68 @@ fn indexdb_write_through_ignores_corrupted_database() {
             .expect("head should resolve")
             .is_some()
     );
+    remove_dir_all(&temp);
+}
+
+#[test]
+#[ignore = "benchmark smoke test for manual indexdb history checks"]
+fn indexdb_benchmark_large_commit_history_queries() {
+    let temp = temp_path("benchmark-commit-history");
+    let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+    write_user_config(&repository);
+    for index in 0..150 {
+        fs::write(temp.join("file.txt"), format!("{index}\n")).expect("file should be written");
+        repository
+            .add_paths(&["file.txt".to_owned()])
+            .expect("add should work");
+        repository
+            .commit_index(&format!("commit {index}"))
+            .expect("commit should work");
+    }
+
+    let build_start = Instant::now();
+    repository.indexdb().ensure().expect("ensure should work");
+    let build_elapsed = build_start.elapsed();
+    let query_start = Instant::now();
+    let commits = repository
+        .indexdb()
+        .recent_commits(50)
+        .expect("recent commits should load");
+    let query_elapsed = query_start.elapsed();
+
+    assert_eq!(commits.len(), 50);
+    eprintln!("indexdb benchmark: build={build_elapsed:?} recent_commits(50)={query_elapsed:?}");
+    remove_dir_all(&temp);
+}
+
+#[test]
+#[ignore = "benchmark smoke test for manual indexdb file-history checks"]
+fn indexdb_benchmark_file_history_queries() {
+    let temp = temp_path("benchmark-file-history");
+    let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+    write_user_config(&repository);
+    for index in 0..120 {
+        fs::write(temp.join("file.txt"), format!("{index}\n")).expect("file should be written");
+        repository
+            .add_paths(&["file.txt".to_owned()])
+            .expect("add should work");
+        repository
+            .commit_index(&format!("commit {index}"))
+            .expect("commit should work");
+    }
+    repository.indexdb().ensure().expect("ensure should work");
+
+    let query_start = Instant::now();
+    for _ in 0..25 {
+        let history = repository
+            .indexdb()
+            .file_history("file.txt")
+            .expect("file history should load");
+        assert_eq!(history.len(), 120);
+    }
+    let query_elapsed = query_start.elapsed();
+
+    eprintln!("indexdb benchmark: file_history(file.txt) x25={query_elapsed:?}");
     remove_dir_all(&temp);
 }
 
