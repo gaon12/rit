@@ -1275,6 +1275,10 @@ fn parse_add_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Option<
         index += 1;
     }
 
+    if pathspec_file_nul && pathspec_file.is_none() {
+        write_pathspec_file_nul_requires_file(stderr)?;
+        return Ok(Some(ParsedAddArgs::exit(128)));
+    }
     if let Some(file_name) = pathspec_file {
         match pathspec_args::read_pathspecs_from_file(&file_name, pathspec_file_nul, "add", stderr)?
         {
@@ -1645,6 +1649,10 @@ fn parse_restore_args(
         }
         index += 1;
     }
+    if pathspec_file_nul && pathspec_file.is_none() {
+        write_pathspec_file_nul_requires_file(stderr)?;
+        return Ok(Some(ParsedRestoreArgs::exit(128)));
+    }
     if let Some(file_name) = pathspec_file {
         match pathspec_args::read_pathspecs_from_file(
             &file_name,
@@ -1789,6 +1797,10 @@ fn parse_reset_args(
             paths.push(arg.clone());
         }
         index += 1;
+    }
+    if pathspec_file_nul && pathspec_file.is_none() {
+        write_pathspec_file_nul_requires_file(stderr)?;
+        return Ok(Some(ParsedResetArgs::exit(128)));
     }
     if let Some(file_name) = pathspec_file {
         from_pathspec_file = true;
@@ -2708,6 +2720,13 @@ fn is_reset_noop_pathspec_error(error: &rit_core::RitError) -> bool {
         error,
         rit_core::RitError::InvalidInput { message }
             if message.starts_with("pathspec did not match any file known to git: ")
+    )
+}
+
+fn write_pathspec_file_nul_requires_file(stderr: &mut dyn Write) -> io::Result<()> {
+    writeln!(
+        stderr,
+        "fatal: the option '--pathspec-file-nul' requires '--pathspec-from-file'"
     )
 }
 
