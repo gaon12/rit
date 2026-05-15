@@ -8,7 +8,7 @@ use std::time::UNIX_EPOCH;
 mod file_history;
 
 pub use file_history::IndexedFileChange;
-use file_history::{indexed_file_history, refresh_file_changes_for_commit};
+use file_history::{canonical_file_history, indexed_file_history, refresh_file_changes_for_commit};
 
 /// Current SQLite auxiliary index schema version.
 pub const INDEXDB_SCHEMA_VERSION: i64 = 1;
@@ -292,58 +292,72 @@ impl<'repo> IndexDb<'repo> {
         self.status()
     }
 
-    /// Reads one commit by object ID from the index database.
-    ///
-    /// This API reads only the auxiliary database. Callers that need canonical
-    /// Git behavior should fall back to `.git/objects` when this returns
-    /// `Ok(None)` or an indexdb health error.
+    /// Reads one commit by object ID, using indexdb when it is healthy and
+    /// fresh and falling back to canonical Git objects otherwise.
     pub fn commit_by_id(&self, object_id: ObjectId) -> Result<Option<IndexedCommit>> {
-        let connection = self.open_supported_read_only()?;
-        indexed_commit_by_id(&connection, object_id)
+        if self.can_use_indexdb_for_queries()?
+            && let Ok(Some(commit)) = self
+                .open_supported_read_only()
+                .and_then(|connection| indexed_commit_by_id(&connection, object_id))
+        {
+            return Ok(Some(commit));
+        }
+        canonical_commit_by_id(self.repository, object_id)
     }
 
-    /// Reads recent indexed commits newest-first by committer timestamp.
+    /// Reads recent commits newest-first by committer timestamp, using indexdb
+    /// when it is healthy and fresh and falling back to canonical Git objects
+    /// otherwise.
     pub fn recent_commits(&self, limit: usize) -> Result<Vec<IndexedCommit>> {
         if limit == 0 {
             return Ok(Vec::new());
         }
-        let connection = self.open_supported_read_only()?;
-        let mut statement = connection
-            .prepare(
-                "SELECT object_id FROM commits
-                 WHERE hash_kind = 'sha1'
-                 ORDER BY committer_timestamp DESC, object_id DESC
-                 LIMIT ?1",
-            )
-            .map_err(sqlite_error)?;
-        let rows = statement
-            .query_map(params![limit as i64], |row| row.get::<_, Vec<u8>>(0))
-            .map_err(sqlite_error)?;
-        let object_ids = rows
-            .collect::<rusqlite::Result<Vec<_>>>()
-            .map_err(sqlite_error)?
-            .into_iter()
-            .filter_map(|bytes| object_id_from_snapshot_bytes(Some(&bytes)))
-            .collect::<Vec<_>>();
-        object_ids
-            .into_iter()
-            .filter_map(|object_id| indexed_commit_by_id(&connection, object_id).transpose())
-            .collect()
+        if self.can_use_indexdb_for_queries()?
+            && let Ok(commits) = self
+                .open_supported_read_only()
+                .and_then(|connection| indexed_recent_commits(&connection, limit))
+        {
+            return Ok(commits);
+        }
+        canonical_recent_commits(self.repository, limit)
     }
 
-    /// Reads the indexed refs snapshot in stable name order.
+    /// Reads refs in stable name order, using indexdb when it is healthy and
+    /// fresh and falling back to canonical refs otherwise.
     pub fn refs_snapshot(&self) -> Result<Vec<IndexedRef>> {
-        let connection = self.open_supported_read_only()?;
-        stored_refs_snapshot(&connection)?
+        if self.can_use_indexdb_for_queries()?
+            && let Ok(refs) = self.open_supported_read_only().and_then(|connection| {
+                stored_refs_snapshot(&connection)?
+                    .into_iter()
+                    .map(IndexedRef::try_from)
+                    .collect()
+            })
+        {
+            return Ok(refs);
+        }
+        current_refs_snapshot(self.repository)?
             .into_iter()
             .map(IndexedRef::try_from)
             .collect()
     }
 
-    /// Reads indexed first-parent changes for one repository-relative path.
+    /// Reads first-parent changes for one repository-relative path, using
+    /// indexdb when it is healthy and fresh and falling back to canonical Git
+    /// objects otherwise.
     pub fn file_history(&self, path: &str) -> Result<Vec<IndexedFileChange>> {
-        let connection = self.open_supported_read_only()?;
-        indexed_file_history(&connection, path)
+        if self.can_use_indexdb_for_queries()?
+            && let Ok(history) = self
+                .open_supported_read_only()
+                .and_then(|connection| indexed_file_history(&connection, path))
+        {
+            return Ok(history);
+        }
+        canonical_file_history(self.repository, path)
+    }
+
+    fn can_use_indexdb_for_queries(&self) -> Result<bool> {
+        let status = self.status()?;
+        Ok(status.exists && status.healthy && !status.stale)
     }
 
     fn open_supported_read_only(&self) -> Result<Connection> {
@@ -679,6 +693,93 @@ fn object_id_from_snapshot_bytes(bytes: Option<&[u8]>) -> Option<ObjectId> {
     let bytes = bytes?;
     let object_id: [u8; 20] = bytes.try_into().ok()?;
     Some(ObjectId::from_bytes(object_id))
+}
+
+fn indexed_recent_commits(connection: &Connection, limit: usize) -> Result<Vec<IndexedCommit>> {
+    let mut statement = connection
+        .prepare(
+            "SELECT object_id FROM commits
+             WHERE hash_kind = 'sha1'
+             ORDER BY committer_timestamp DESC, object_id DESC
+             LIMIT ?1",
+        )
+        .map_err(sqlite_error)?;
+    let rows = statement
+        .query_map(params![limit as i64], |row| row.get::<_, Vec<u8>>(0))
+        .map_err(sqlite_error)?;
+    let object_ids = rows
+        .collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(sqlite_error)?
+        .into_iter()
+        .filter_map(|bytes| object_id_from_snapshot_bytes(Some(&bytes)))
+        .collect::<Vec<_>>();
+    object_ids
+        .into_iter()
+        .filter_map(|object_id| indexed_commit_by_id(connection, object_id).transpose())
+        .collect()
+}
+
+fn canonical_recent_commits(repository: &Repository, limit: usize) -> Result<Vec<IndexedCommit>> {
+    let refs_snapshot = current_refs_snapshot(repository)?;
+    let mut seen = HashSet::new();
+    let mut stack = refs_snapshot
+        .iter()
+        .filter_map(|row| object_id_from_snapshot_bytes(row.object_id.as_deref()))
+        .collect::<Vec<_>>();
+    let mut commits = Vec::new();
+    while let Some(object_id) = stack.pop() {
+        if !seen.insert(object_id) {
+            continue;
+        }
+        let Some(commit) = canonical_commit_by_id(repository, object_id)? else {
+            continue;
+        };
+        stack.extend(commit.parents.iter().copied());
+        commits.push(commit);
+    }
+    commits.sort_by(|left, right| {
+        right
+            .committer_timestamp
+            .cmp(&left.committer_timestamp)
+            .then_with(|| right.object_id.as_bytes().cmp(left.object_id.as_bytes()))
+    });
+    commits.truncate(limit);
+    Ok(commits)
+}
+
+fn canonical_commit_by_id(
+    repository: &Repository,
+    object_id: ObjectId,
+) -> Result<Option<IndexedCommit>> {
+    let object = match repository.read_object(object_id) {
+        Ok(object) => object,
+        Err(RitError::ObjectNotFound { .. }) => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    if object.kind != ObjectKind::Commit {
+        return Ok(None);
+    }
+    let commit = parse_commit(&object.data)?;
+    Ok(Some(indexed_commit_from_parsed(object_id, &commit)))
+}
+
+fn indexed_commit_from_parsed(object_id: ObjectId, commit: &crate::Commit) -> IndexedCommit {
+    IndexedCommit {
+        hash_kind: "sha1".to_owned(),
+        object_id,
+        tree_hash_kind: "sha1".to_owned(),
+        tree_id: commit.tree,
+        author_name: commit.author.name.clone(),
+        author_email: commit.author.email.clone(),
+        author_timestamp: commit.author.timestamp,
+        author_offset: commit.author.offset.clone(),
+        committer_name: commit.committer.name.clone(),
+        committer_email: commit.committer.email.clone(),
+        committer_timestamp: commit.committer.timestamp,
+        committer_offset: commit.committer.offset.clone(),
+        message: commit.message.clone(),
+        parents: commit.parents.clone(),
+    }
 }
 
 fn indexed_commit_by_id(

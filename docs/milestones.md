@@ -357,7 +357,7 @@ Completion criteria:
     snapshots.
   - [x] Detect stale index checksum and mtime.
   - [x] Detect stale packfile list, size, and mtime.
-- [ ] Implement fallback to canonical Git object/index/refs data when indexdb
+- [x] Implement fallback to canonical Git object/index/refs data when indexdb
   is missing, stale, or corrupted.
 - [x] Add indexed commit query API.
 - [x] Add indexed file history API.

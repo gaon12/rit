@@ -345,6 +345,121 @@ fn indexdb_file_history_query_api_reads_first_parent_changes() {
 }
 
 #[test]
+fn indexdb_query_apis_fall_back_to_canonical_data_when_database_is_unavailable() {
+    let temp = temp_path("query-fallback-missing-corrupt");
+    let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+    write_user_config(&repository);
+    fs::write(temp.join("file.txt"), "one\n").expect("file should be written");
+    repository
+        .add_paths(&["file.txt".to_owned()])
+        .expect("add should work");
+    let first = repository
+        .commit_index("first")
+        .expect("first commit should work")
+        .commit_id;
+    std::thread::sleep(Duration::from_secs(1));
+    fs::write(temp.join("file.txt"), "two\n").expect("file should be modified");
+    repository
+        .add_paths(&["file.txt".to_owned()])
+        .expect("add should work");
+    let second = repository
+        .commit_index("second")
+        .expect("second commit should work")
+        .commit_id;
+
+    let missing_db_commit = repository
+        .indexdb()
+        .commit_by_id(second)
+        .expect("missing db should fall back to commit object")
+        .expect("commit should load");
+    let missing_db_recent = repository
+        .indexdb()
+        .recent_commits(10)
+        .expect("missing db should fall back to canonical commits");
+    let missing_db_refs = repository
+        .indexdb()
+        .refs_snapshot()
+        .expect("missing db should fall back to canonical refs");
+    let missing_db_history = repository
+        .indexdb()
+        .file_history("file.txt")
+        .expect("missing db should fall back to canonical file history");
+
+    assert_eq!(missing_db_commit.object_id, second);
+    assert_eq!(
+        missing_db_recent
+            .iter()
+            .map(|commit| commit.object_id)
+            .collect::<Vec<_>>(),
+        vec![second, first]
+    );
+    assert!(missing_db_refs.iter().any(|row| row.name == "HEAD"));
+    assert_eq!(
+        missing_db_history
+            .iter()
+            .map(|change| (change.commit_id, change.change_kind.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(second, "M"), (first, "A")]
+    );
+
+    repository.indexdb().ensure().expect("ensure should work");
+    fs::write(
+        repository.indexdb().storage().database_path,
+        "not a sqlite database",
+    )
+    .expect("db should be corruptible");
+    let corrupt_db_commit = repository
+        .indexdb()
+        .commit_by_id(second)
+        .expect("corrupt db should fall back to commit object")
+        .expect("commit should load");
+    let corrupt_db_history = repository
+        .indexdb()
+        .file_history("file.txt")
+        .expect("corrupt db should fall back to canonical file history");
+
+    assert_eq!(corrupt_db_commit.object_id, second);
+    assert_eq!(corrupt_db_history.len(), 2);
+    remove_dir_all(&temp);
+}
+
+#[test]
+fn indexdb_refs_snapshot_falls_back_to_canonical_refs_when_database_is_stale() {
+    let temp = temp_path("refs-fallback-stale");
+    let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+    write_user_config(&repository);
+    fs::write(temp.join("file.txt"), "one\n").expect("file should be written");
+    repository
+        .add_paths(&["file.txt".to_owned()])
+        .expect("add should work");
+    repository
+        .commit_index("first")
+        .expect("commit should work");
+    repository.indexdb().ensure().expect("ensure should work");
+    repository
+        .create_branch("topic")
+        .expect("branch should update indexdb");
+    {
+        let connection =
+            Connection::open(repository.indexdb().storage().database_path).expect("db should open");
+        connection
+            .execute(
+                "DELETE FROM refs_snapshot WHERE name = ?1",
+                params!["refs/heads/topic"],
+            )
+            .expect("refs snapshot should be made stale");
+    }
+
+    let refs = repository
+        .indexdb()
+        .refs_snapshot()
+        .expect("stale db should fall back to canonical refs");
+
+    assert!(refs.iter().any(|row| row.name == "refs/heads/topic"));
+    remove_dir_all(&temp);
+}
+
+#[test]
 fn indexdb_write_through_records_refs_and_checkout_state() {
     let temp = temp_path("write-through-refs");
     let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");

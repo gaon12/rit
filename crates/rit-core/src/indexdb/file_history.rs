@@ -129,6 +129,60 @@ pub(super) fn indexed_file_history(
         .collect()
 }
 
+pub(super) fn canonical_file_history(
+    repository: &Repository,
+    path: &str,
+) -> Result<Vec<IndexedFileChange>> {
+    let mut history = Vec::new();
+    let Some(mut commit_id) = repository.resolve_head()? else {
+        return Ok(history);
+    };
+
+    loop {
+        let commit_object = repository.read_object(commit_id)?;
+        if commit_object.kind != ObjectKind::Commit {
+            break;
+        }
+        let commit = parse_commit(&commit_object.data)?;
+        let current = commit_tree_entries(repository, commit.tree)?;
+        let parent_entries = commit
+            .parents
+            .first()
+            .copied()
+            .map(|parent_id| {
+                let parent_object = repository.read_object(parent_id)?;
+                let parent_commit = parse_commit(&parent_object.data)?;
+                commit_tree_entries(repository, parent_commit.tree)
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let before = parent_entries.get(path);
+        let after = current.get(path);
+        let change_kind = match (before, after) {
+            (None, Some(_)) => Some("A"),
+            (Some(_), None) => Some("D"),
+            (Some(before), Some(after)) if before != after => Some("M"),
+            _ => None,
+        };
+        if let Some(change_kind) = change_kind {
+            history.push(IndexedFileChange {
+                commit_id,
+                path: path.to_owned(),
+                change_kind: change_kind.to_owned(),
+                object_id: after.map(|entry| entry.object_id),
+                mode: after.map(|entry| entry.mode),
+            });
+        }
+
+        let Some(parent_id) = commit.parents.first().copied() else {
+            break;
+        };
+        commit_id = parent_id;
+    }
+
+    Ok(history)
+}
+
 fn commit_tree_entries(
     repository: &Repository,
     tree_id: ObjectId,

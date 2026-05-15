@@ -74,6 +74,9 @@
 - 2026-05-16 linked-worktree indexdb validation now asserts linked worktrees
   share the repository DB path while using distinct worktree cache and lock
   paths.
+- 2026-05-16 indexdb canonical fallback slice changed read APIs to use
+  `.git/objects` and refs when indexdb is missing, stale, corrupted, or missing
+  a requested row.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
 - 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git
@@ -244,16 +247,17 @@
   `commit_parents`, `file_changes`, and `refs_snapshot`. Object IDs are stored
   as `hash_kind` plus binary object-id bytes, not fixed SHA-1 text columns.
 - `Repository::indexdb().commit_by_id(...)` and `recent_commits(...)` expose a
-  small read-only indexed commit query API over the auxiliary database. These
-  APIs do not affect Git-compatible command output and callers that need
-  canonical behavior should fall back to `.git/objects` when IndexDB is
-  missing, stale, corrupted, or incomplete.
+  small read-only commit query API. They use the auxiliary database when it is
+  healthy and fresh, and fall back to canonical `.git/objects` traversal when
+  IndexDB is missing, stale, corrupted, or incomplete.
 - `Repository::indexdb().refs_snapshot()` exposes the indexed HEAD/local
   branch/lightweight tag snapshot as a read-only API without changing
-  Git-compatible command behavior.
+  Git-compatible command behavior. It falls back to canonical refs when the
+  auxiliary snapshot is stale or unavailable.
 - `Repository::indexdb().file_history(path)` exposes indexed first-parent file
   changes for a repository-relative path. Rename/copy-aware history remains
-  future work; the current API stores straightforward add/modify/delete rows.
+  future work; the current API stores straightforward add/modify/delete rows and
+  falls back to first-parent tree walking when indexdb is unavailable.
 - `rit file-history <path>` is feature-gated behind `indexdb` and reports a
   clear missing-feature error in minimal builds. It creates or updates
   `.git/rit/indexdb.sqlite` as reproducible metadata but does not modify Git
@@ -272,9 +276,8 @@
 - Source of truth: IndexDB stores reproducible metadata only. `drop` removes
   the SQLite file without touching Git objects, refs, `.git/index`, or working
   tree files. Normal Git-compatible commands do not require IndexDB.
-- Unsupported behavior: writing worktree-specific cache DB contents, indexed
-  file-history queries, corruption repair beyond rebuild, and migration beyond
-  rebuild guidance.
+- Unsupported behavior: writing worktree-specific cache DB contents, corruption
+  repair beyond rebuild, and migration beyond rebuild guidance.
 - 2026-05-13 IndexDB write-through slice: when the `indexdb` feature is built
   and `.git/rit/indexdb.sqlite` already exists, successful rit-created commits,
   branch/tag ref changes, checkout state changes, and fast-forward merges
