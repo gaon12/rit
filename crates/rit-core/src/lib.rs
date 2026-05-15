@@ -62,7 +62,9 @@ pub use index::{
     UntrackedCache, UntrackedCacheDirectoryBlock, UntrackedCacheStat, UntrackedCacheTail,
 };
 #[cfg(feature = "indexdb")]
-pub use indexdb::{IndexDb, IndexDbEnsureResult, IndexDbStatus, IndexDbStorage, IndexedCommit};
+pub use indexdb::{
+    IndexDb, IndexDbEnsureResult, IndexDbStatus, IndexDbStorage, IndexedCommit, IndexedRef,
+};
 #[cfg(feature = "lfs")]
 pub use large_files::{
     GitLfsBackend, LFS_BATCH_MEDIA_TYPE, LfsBatchAction, LfsBatchObject, LfsBatchObjectError,

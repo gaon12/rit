@@ -57,6 +57,8 @@
   storage paths.
 - 2026-05-16 indexdb commit query slice added feature-gated read-only APIs for
   exact commit lookup and recent commit listing from the auxiliary SQLite DB.
+- 2026-05-16 indexdb refs snapshot query slice added a feature-gated read-only
+  API for HEAD, local branch, and lightweight tag snapshot rows.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
 - 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git
@@ -231,6 +233,9 @@
   APIs do not affect Git-compatible command output and callers that need
   canonical behavior should fall back to `.git/objects` when IndexDB is
   missing, stale, corrupted, or incomplete.
+- `Repository::indexdb().refs_snapshot()` exposes the indexed HEAD/local
+  branch/lightweight tag snapshot as a read-only API without changing
+  Git-compatible command behavior.
 - Source of truth: IndexDB stores reproducible metadata only. `drop` removes
   the SQLite file without touching Git objects, refs, `.git/index`, or working
   tree files. Normal Git-compatible commands do not require IndexDB.

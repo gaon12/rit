@@ -88,6 +88,19 @@ pub struct IndexedCommit {
     pub parents: Vec<ObjectId>,
 }
 
+/// One ref snapshot row read from the optional SQLite auxiliary index.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IndexedRef {
+    /// Full ref name, or `HEAD` for the current HEAD snapshot.
+    pub name: String,
+    /// Hash algorithm used by `object_id`, when the ref points at an object.
+    pub hash_kind: Option<String>,
+    /// Object ID stored for this ref, when available.
+    pub object_id: Option<ObjectId>,
+    /// Symbolic target such as `refs/heads/main`, when this row is symbolic.
+    pub target: Option<String>,
+}
+
 /// Repository-scoped manager for the optional SQLite auxiliary index.
 pub struct IndexDb<'repo> {
     repository: &'repo Repository,
@@ -313,6 +326,15 @@ impl<'repo> IndexDb<'repo> {
             .collect()
     }
 
+    /// Reads the indexed refs snapshot in stable name order.
+    pub fn refs_snapshot(&self) -> Result<Vec<IndexedRef>> {
+        let connection = self.open_supported_read_only()?;
+        stored_refs_snapshot(&connection)?
+            .into_iter()
+            .map(IndexedRef::try_from)
+            .collect()
+    }
+
     fn open_supported_read_only(&self) -> Result<Connection> {
         let storage = self.storage();
         if !storage.database_path.exists() {
@@ -325,6 +347,25 @@ impl<'repo> IndexDb<'repo> {
                 .map_err(sqlite_error)?;
         ensure_supported_schema(&connection)?;
         Ok(connection)
+    }
+}
+
+impl TryFrom<RefSnapshotRow> for IndexedRef {
+    type Error = RitError;
+
+    fn try_from(row: RefSnapshotRow) -> Result<Self> {
+        let object_id = match row.object_id.as_deref() {
+            Some(bytes) => Some(object_id_from_snapshot_bytes(Some(bytes)).ok_or_else(|| {
+                RitError::invalid_input("indexdb ref snapshot contains an invalid object id")
+            })?),
+            None => None,
+        };
+        Ok(Self {
+            name: row.name,
+            hash_kind: row.hash_kind,
+            object_id,
+            target: row.target,
+        })
     }
 }
 

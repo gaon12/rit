@@ -317,6 +317,53 @@ fn indexdb_write_through_records_refs_and_checkout_state() {
 }
 
 #[test]
+fn indexdb_refs_snapshot_query_api_reads_head_branches_and_tags() {
+    let temp = temp_path("refs-query");
+    let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+    write_user_config(&repository);
+    fs::write(temp.join("file.txt"), "one\n").expect("file should be written");
+    repository
+        .add_paths(&["file.txt".to_owned()])
+        .expect("add should work");
+    let commit = repository
+        .commit_index("first")
+        .expect("commit should work")
+        .commit_id;
+    repository
+        .create_branch("topic")
+        .expect("branch should be created");
+    repository.create_tag("v1").expect("tag should be created");
+    repository.indexdb().ensure().expect("ensure should work");
+
+    let refs = repository
+        .indexdb()
+        .refs_snapshot()
+        .expect("refs snapshot should load");
+
+    assert_eq!(
+        refs.iter().map(|row| row.name.as_str()).collect::<Vec<_>>(),
+        vec![
+            "HEAD",
+            "refs/heads/master",
+            "refs/heads/topic",
+            "refs/tags/v1"
+        ]
+    );
+    let head = refs
+        .iter()
+        .find(|row| row.name == "HEAD")
+        .expect("HEAD row");
+    assert_eq!(head.object_id, Some(commit));
+    assert_eq!(head.target.as_deref(), Some("refs/heads/master"));
+    assert!(
+        refs.iter()
+            .filter(|row| row.name != "HEAD")
+            .all(|row| row.object_id == Some(commit) && row.target.is_none())
+    );
+    remove_dir_all(&temp);
+}
+
+#[test]
 fn indexdb_status_detects_external_ref_changes_and_ensure_reconciles_them() {
     let temp = temp_path("external-ref");
     let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
