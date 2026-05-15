@@ -1,9 +1,9 @@
 use crate::indexdb::INDEXDB_SCHEMA_VERSION;
-use crate::{InitOptions, ObjectKind, Repository, parse_commit};
+use crate::{InitOptions, ObjectId, ObjectKind, Repository, parse_commit};
 use rusqlite::{Connection, params};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[test]
 fn indexdb_uses_git_rit_storage_location() {
@@ -179,6 +179,103 @@ fn indexdb_write_through_records_new_commit() {
         assert!(commit_exists(&connection, first));
         assert!(commit_exists(&connection, second));
     }
+    remove_dir_all(&temp);
+}
+
+#[test]
+fn indexdb_commit_query_api_reads_commits_and_parents() {
+    let temp = temp_path("commit-query");
+    let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+    write_user_config(&repository);
+    fs::write(temp.join("file.txt"), "one\n").expect("file should be written");
+    repository
+        .add_paths(&["file.txt".to_owned()])
+        .expect("add should work");
+    let first = repository
+        .commit_index("first")
+        .expect("first commit should work")
+        .commit_id;
+    std::thread::sleep(Duration::from_secs(1));
+    fs::write(temp.join("file.txt"), "two\n").expect("file should be modified");
+    repository
+        .add_paths(&["file.txt".to_owned()])
+        .expect("add should work");
+    let second = repository
+        .commit_index("second")
+        .expect("second commit should work")
+        .commit_id;
+    repository.indexdb().ensure().expect("ensure should work");
+
+    let indexed_first = repository
+        .indexdb()
+        .commit_by_id(first)
+        .expect("query should work")
+        .expect("first commit should be indexed");
+    let indexed_second = repository
+        .indexdb()
+        .commit_by_id(second)
+        .expect("query should work")
+        .expect("second commit should be indexed");
+    let missing = repository
+        .indexdb()
+        .commit_by_id(
+            ObjectId::from_hex("0000000000000000000000000000000000000000")
+                .expect("zero object id should parse"),
+        )
+        .expect("missing query should work");
+
+    assert_eq!(indexed_first.hash_kind, "sha1");
+    assert_eq!(indexed_first.object_id, first);
+    assert_eq!(indexed_first.message, "first\n");
+    assert!(indexed_first.parents.is_empty());
+    assert_eq!(indexed_second.object_id, second);
+    assert_eq!(indexed_second.message, "second\n");
+    assert_eq!(indexed_second.parents, vec![first]);
+    assert!(missing.is_none());
+    remove_dir_all(&temp);
+}
+
+#[test]
+fn indexdb_recent_commit_query_api_orders_newest_first() {
+    let temp = temp_path("recent-commit-query");
+    let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+    write_user_config(&repository);
+    fs::write(temp.join("file.txt"), "one\n").expect("file should be written");
+    repository
+        .add_paths(&["file.txt".to_owned()])
+        .expect("add should work");
+    let first = repository
+        .commit_index("first")
+        .expect("first commit should work")
+        .commit_id;
+    std::thread::sleep(Duration::from_secs(1));
+    fs::write(temp.join("file.txt"), "two\n").expect("file should be modified");
+    repository
+        .add_paths(&["file.txt".to_owned()])
+        .expect("add should work");
+    let second = repository
+        .commit_index("second")
+        .expect("second commit should work")
+        .commit_id;
+    repository.indexdb().ensure().expect("ensure should work");
+
+    let commits = repository
+        .indexdb()
+        .recent_commits(10)
+        .expect("recent commits should load");
+    let none = repository
+        .indexdb()
+        .recent_commits(0)
+        .expect("zero limit should work");
+
+    assert_eq!(
+        commits
+            .iter()
+            .map(|commit| commit.object_id)
+            .collect::<Vec<_>>(),
+        vec![second, first]
+    );
+    assert!(none.is_empty());
     remove_dir_all(&temp);
 }
 

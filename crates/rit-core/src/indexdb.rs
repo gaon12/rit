@@ -55,6 +55,39 @@ pub struct IndexDbEnsureResult {
     pub commits_indexed: usize,
 }
 
+/// One commit row read from the optional SQLite auxiliary index.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IndexedCommit {
+    /// Hash algorithm used by `object_id`.
+    pub hash_kind: String,
+    /// Commit object ID.
+    pub object_id: ObjectId,
+    /// Hash algorithm used by `tree_id`.
+    pub tree_hash_kind: String,
+    /// Root tree object ID.
+    pub tree_id: ObjectId,
+    /// Author name copied from the commit object.
+    pub author_name: String,
+    /// Author email copied from the commit object.
+    pub author_email: String,
+    /// Author timestamp copied from the commit object.
+    pub author_timestamp: i64,
+    /// Author UTC offset copied from the commit object.
+    pub author_offset: String,
+    /// Committer name copied from the commit object.
+    pub committer_name: String,
+    /// Committer email copied from the commit object.
+    pub committer_email: String,
+    /// Committer timestamp copied from the commit object.
+    pub committer_timestamp: i64,
+    /// Committer UTC offset copied from the commit object.
+    pub committer_offset: String,
+    /// Full commit message.
+    pub message: String,
+    /// Parent commit IDs in Git parent order.
+    pub parents: Vec<ObjectId>,
+}
+
 /// Repository-scoped manager for the optional SQLite auxiliary index.
 pub struct IndexDb<'repo> {
     repository: &'repo Repository,
@@ -239,6 +272,59 @@ impl<'repo> IndexDb<'repo> {
         ensure_supported_schema(&connection)?;
         connection.execute_batch("VACUUM;").map_err(sqlite_error)?;
         self.status()
+    }
+
+    /// Reads one commit by object ID from the index database.
+    ///
+    /// This API reads only the auxiliary database. Callers that need canonical
+    /// Git behavior should fall back to `.git/objects` when this returns
+    /// `Ok(None)` or an indexdb health error.
+    pub fn commit_by_id(&self, object_id: ObjectId) -> Result<Option<IndexedCommit>> {
+        let connection = self.open_supported_read_only()?;
+        indexed_commit_by_id(&connection, object_id)
+    }
+
+    /// Reads recent indexed commits newest-first by committer timestamp.
+    pub fn recent_commits(&self, limit: usize) -> Result<Vec<IndexedCommit>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let connection = self.open_supported_read_only()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT object_id FROM commits
+                 WHERE hash_kind = 'sha1'
+                 ORDER BY committer_timestamp DESC, object_id DESC
+                 LIMIT ?1",
+            )
+            .map_err(sqlite_error)?;
+        let rows = statement
+            .query_map(params![limit as i64], |row| row.get::<_, Vec<u8>>(0))
+            .map_err(sqlite_error)?;
+        let object_ids = rows
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(sqlite_error)?
+            .into_iter()
+            .filter_map(|bytes| object_id_from_snapshot_bytes(Some(&bytes)))
+            .collect::<Vec<_>>();
+        object_ids
+            .into_iter()
+            .filter_map(|object_id| indexed_commit_by_id(&connection, object_id).transpose())
+            .collect()
+    }
+
+    fn open_supported_read_only(&self) -> Result<Connection> {
+        let storage = self.storage();
+        if !storage.database_path.exists() {
+            return Err(RitError::invalid_input(
+                "indexdb is missing; run `rit indexdb build`",
+            ));
+        }
+        let connection =
+            Connection::open_with_flags(&storage.database_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .map_err(sqlite_error)?;
+        ensure_supported_schema(&connection)?;
+        Ok(connection)
     }
 }
 
@@ -540,6 +626,107 @@ fn object_id_from_snapshot_bytes(bytes: Option<&[u8]>) -> Option<ObjectId> {
     let bytes = bytes?;
     let object_id: [u8; 20] = bytes.try_into().ok()?;
     Some(ObjectId::from_bytes(object_id))
+}
+
+fn indexed_commit_by_id(
+    connection: &Connection,
+    object_id: ObjectId,
+) -> Result<Option<IndexedCommit>> {
+    let row = connection
+        .query_row(
+            "SELECT
+                hash_kind, object_id, tree_hash_kind, tree_object_id,
+                author_name, author_email, author_timestamp, author_offset,
+                committer_name, committer_email, committer_timestamp,
+                committer_offset, message
+             FROM commits
+             WHERE hash_kind = 'sha1' AND object_id = ?1",
+            params![object_id.as_bytes().to_vec()],
+            |row| {
+                let object_bytes: Vec<u8> = row.get(1)?;
+                let tree_bytes: Vec<u8> = row.get(3)?;
+                Ok((
+                    row.get::<_, String>(0)?,
+                    object_bytes,
+                    row.get::<_, String>(2)?,
+                    tree_bytes,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, i64>(6)?,
+                    row.get::<_, String>(7)?,
+                    row.get::<_, String>(8)?,
+                    row.get::<_, String>(9)?,
+                    row.get::<_, i64>(10)?,
+                    row.get::<_, String>(11)?,
+                    row.get::<_, String>(12)?,
+                ))
+            },
+        )
+        .optional()
+        .map_err(sqlite_error)?;
+    let Some((
+        hash_kind,
+        object_bytes,
+        tree_hash_kind,
+        tree_bytes,
+        author_name,
+        author_email,
+        author_timestamp,
+        author_offset,
+        committer_name,
+        committer_email,
+        committer_timestamp,
+        committer_offset,
+        message,
+    )) = row
+    else {
+        return Ok(None);
+    };
+    let object_id = object_id_from_snapshot_bytes(Some(&object_bytes)).ok_or_else(|| {
+        RitError::invalid_input("indexdb commit row contains an invalid object id")
+    })?;
+    let tree_id = object_id_from_snapshot_bytes(Some(&tree_bytes))
+        .ok_or_else(|| RitError::invalid_input("indexdb commit row contains an invalid tree id"))?;
+    Ok(Some(IndexedCommit {
+        hash_kind,
+        object_id,
+        tree_hash_kind,
+        tree_id,
+        author_name,
+        author_email,
+        author_timestamp,
+        author_offset,
+        committer_name,
+        committer_email,
+        committer_timestamp,
+        committer_offset,
+        message,
+        parents: indexed_commit_parents(connection, object_id)?,
+    }))
+}
+
+fn indexed_commit_parents(connection: &Connection, object_id: ObjectId) -> Result<Vec<ObjectId>> {
+    let mut statement = connection
+        .prepare(
+            "SELECT parent_object_id FROM commit_parents
+             WHERE hash_kind = 'sha1' AND object_id = ?1
+             ORDER BY parent_order",
+        )
+        .map_err(sqlite_error)?;
+    let rows = statement
+        .query_map(params![object_id.as_bytes().to_vec()], |row| {
+            row.get::<_, Vec<u8>>(0)
+        })
+        .map_err(sqlite_error)?;
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(sqlite_error)?
+        .into_iter()
+        .map(|bytes| {
+            object_id_from_snapshot_bytes(Some(&bytes)).ok_or_else(|| {
+                RitError::invalid_input("indexdb parent row contains an invalid object id")
+            })
+        })
+        .collect()
 }
 
 fn insert_commit(

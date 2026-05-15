@@ -359,7 +359,7 @@ Completion criteria:
   - [x] Detect stale packfile list, size, and mtime.
 - [ ] Implement fallback to canonical Git object/index/refs data when indexdb
   is missing, stale, or corrupted.
-- [ ] Add indexed commit query API.
+- [x] Add indexed commit query API.
 - [ ] Add indexed file history API.
 - [ ] Add indexed refs snapshot API.
 - [ ] Add optional indexed path history command such as `rit file-history <path>`.

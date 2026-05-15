@@ -55,6 +55,8 @@
 - 2026-05-16 indexdb layout slice checked existing linked worktree discovery
   behavior and added explicit shared repository DB plus worktree-local cache
   storage paths.
+- 2026-05-16 indexdb commit query slice added feature-gated read-only APIs for
+  exact commit lookup and recent commit listing from the auxiliary SQLite DB.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
 - 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git
@@ -224,6 +226,11 @@
 - IndexDB schema version 1 creates `cache_state`, `commits`,
   `commit_parents`, `file_changes`, and `refs_snapshot`. Object IDs are stored
   as `hash_kind` plus binary object-id bytes, not fixed SHA-1 text columns.
+- `Repository::indexdb().commit_by_id(...)` and `recent_commits(...)` expose a
+  small read-only indexed commit query API over the auxiliary database. These
+  APIs do not affect Git-compatible command output and callers that need
+  canonical behavior should fall back to `.git/objects` when IndexDB is
+  missing, stale, corrupted, or incomplete.
 - Source of truth: IndexDB stores reproducible metadata only. `drop` removes
   the SQLite file without touching Git objects, refs, `.git/index`, or working
   tree files. Normal Git-compatible commands do not require IndexDB.
