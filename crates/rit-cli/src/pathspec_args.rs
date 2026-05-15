@@ -162,10 +162,10 @@ fn parse_pathspec_file_line(line: &str) -> Result<String, ()> {
                 let mut value = escaped.to_digit(8).unwrap_or(0);
                 for _ in 0..2 {
                     let Some(next) = chars.peek().copied() else {
-                        break;
+                        return Err(());
                     };
                     if !('0'..='7').contains(&next) {
-                        break;
+                        return Err(());
                     }
                     chars.next();
                     value = value * 8 + next.to_digit(8).unwrap_or(0);

@@ -112,6 +112,9 @@
 - 2026-05-15 quoted octal pathspec-file slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for UTF-8
   pathspec bytes encoded as octal C-style escapes.
+- 2026-05-16 short octal pathspec-file slice checked `git add -h`,
+  `git restore -h`, `git reset -h`, and direct Git comparisons for short or
+  incomplete octal C-style escapes in quoted `--pathspec-from-file` entries.
 - 2026-05-15 quoted alarm pathspec-file slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for `\a`
   C-style escapes and pathspec-not-found output.
@@ -410,6 +413,9 @@
 - Added C-style quoted pathspec-file entry parsing for common escapes.
 - Octal C-style pathspec-file escapes are decoded as bytes before UTF-8
   validation, matching Git for non-ASCII paths such as `caf\303\251.txt`.
+- Octal C-style pathspec-file escapes must contain exactly three octal digits;
+  shorter or incomplete octal escapes are rejected as badly quoted before any
+  `add`, `restore`, or `reset` mutation.
 - Added `\a` C-style pathspec-file decoding and Git-compatible
   pathspec-not-found output for `add` and `restore`; pathspec-only `reset`
   keeps Git's no-op behavior when no index or `HEAD` path matches.
