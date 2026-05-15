@@ -159,6 +159,8 @@ Completion criteria:
     intent-to-add rename detection.
   - [x] Worktree `-l<n>` exhaustive rename-limit warnings for intent-to-add
     copy detection.
+  - [x] Exact copy detection runs before `-l<n>` exhaustive limit warnings for
+    cached and worktree intent-to-add copy detection.
   - [x] Worktree `--find-copies-harder` copy detection from unchanged index
     sources for Git intent-to-add entries.
   - [ ] Broader worktree rename/copy detection, full rename limits, and

@@ -909,6 +909,10 @@ impl Repository {
         new_entries: &BTreeMap<String, DiffTreeEntry>,
         options: &DiffOptions,
     ) -> Result<Vec<String>> {
+        self.detect_exact_summary_copies(files, old_entries, new_entries, options)?;
+        if !files.iter().any(|file| file.status == 'A') {
+            return Ok(Vec::new());
+        }
         if let Some(candidate_count) =
             rename_limit_exceeded_count(files.iter().map(|file| file.status), options)
         {
@@ -954,6 +958,46 @@ impl Repository {
             };
         }
         Ok(Vec::new())
+    }
+
+    fn detect_exact_summary_copies(
+        &self,
+        files: &mut [DiffFileStat],
+        old_entries: &BTreeMap<String, DiffTreeEntry>,
+        new_entries: &BTreeMap<String, DiffTreeEntry>,
+        options: &DiffOptions,
+    ) -> Result<()> {
+        for add_index in 0..files.len() {
+            if files[add_index].status != 'A' {
+                continue;
+            }
+            let new_path = files[add_index].path.clone();
+            let Some(new_entry) = new_entries.get(&new_path) else {
+                continue;
+            };
+            let Some((old_path, old_entry)) = old_entries.iter().find(|(path, old_entry)| {
+                old_entry.mode == new_entry.mode
+                    && old_entry.object_id == new_entry.object_id
+                    && copy_source_is_available(files, path.as_str(), options, add_index)
+            }) else {
+                continue;
+            };
+            let old_object = self.read_blob(old_entry.object_id)?;
+            let binary = is_binary_data(&old_object.data);
+
+            files[add_index] = DiffFileStat {
+                status: 'C',
+                old_path: Some(old_path.clone()),
+                path: new_path,
+                similarity_score: Some(100),
+                insertions: 0,
+                deletions: 0,
+                binary,
+                old_size: old_object.data.len(),
+                new_size: old_object.data.len(),
+            };
+        }
+        Ok(())
     }
 
     fn best_copy_match(
@@ -1007,6 +1051,10 @@ impl Repository {
         new_entries: &BTreeMap<String, DiffTreeEntry>,
         options: &DiffOptions,
     ) -> Result<Vec<String>> {
+        self.detect_exact_patch_copies(files, old_entries, new_entries, options)?;
+        if !files.iter().any(|file| file.status == 'A') {
+            return Ok(Vec::new());
+        }
         if let Some(candidate_count) =
             rename_limit_exceeded_count(files.iter().map(|file| file.status), options)
         {
@@ -1051,6 +1099,46 @@ impl Repository {
             };
         }
         Ok(Vec::new())
+    }
+
+    fn detect_exact_patch_copies(
+        &self,
+        files: &mut [DiffPatchFile],
+        old_entries: &BTreeMap<String, DiffTreeEntry>,
+        new_entries: &BTreeMap<String, DiffTreeEntry>,
+        options: &DiffOptions,
+    ) -> Result<()> {
+        for add_index in 0..files.len() {
+            if files[add_index].status != 'A' {
+                continue;
+            }
+            let new_path = files[add_index].path.clone();
+            let Some(new_entry) = new_entries.get(&new_path) else {
+                continue;
+            };
+            let stats = patch_files_to_stats(files);
+            let Some((old_path, old_entry)) = old_entries.iter().find(|(path, old_entry)| {
+                old_entry.mode == new_entry.mode
+                    && old_entry.object_id == new_entry.object_id
+                    && copy_source_is_available(&stats, path.as_str(), options, add_index)
+            }) else {
+                continue;
+            };
+            let old_object = self.read_blob(old_entry.object_id)?;
+
+            files[add_index] = DiffPatchFile {
+                status: 'C',
+                old_path: Some(old_path.clone()),
+                path: new_path,
+                similarity_score: Some(100),
+                old_object_id: Some(old_entry.object_id),
+                new_object_id: Some(new_entry.object_id),
+                mode: new_entry.mode,
+                old_data: old_object.data,
+                new_data: files[add_index].new_data.clone(),
+            };
+        }
+        Ok(())
     }
 }
 
@@ -1212,6 +1300,10 @@ fn detect_patch_copies_from_sources(
     copy_sources: &[CopySource],
     options: &DiffOptions,
 ) -> Result<Vec<String>> {
+    detect_exact_patch_copies_from_sources(files, copy_sources, options);
+    if !files.iter().any(|file| file.status == 'A') {
+        return Ok(Vec::new());
+    }
     if let Some(candidate_count) =
         rename_limit_exceeded_count(files.iter().map(|file| file.status), options)
     {
@@ -1235,6 +1327,30 @@ fn detect_patch_copies_from_sources(
         file.old_data = match_candidate.data;
     }
     Ok(Vec::new())
+}
+
+fn detect_exact_patch_copies_from_sources(
+    files: &mut [DiffPatchFile],
+    copy_sources: &[CopySource],
+    options: &DiffOptions,
+) {
+    for file in files.iter_mut() {
+        if file.status != 'A' {
+            continue;
+        }
+        let Some(source) = copy_sources.iter().find(|source| {
+            source.mode == file.mode
+                && source.data == file.new_data
+                && (options.find_copies_harder || source.changed)
+        }) else {
+            continue;
+        };
+        file.status = 'C';
+        file.old_path = Some(source.path.clone());
+        file.similarity_score = Some(100);
+        file.old_object_id = source.object_id;
+        file.old_data = source.data.clone();
+    }
 }
 
 fn best_copy_match_from_sources(
@@ -1266,6 +1382,21 @@ fn best_copy_match_from_sources(
         }
     }
     Ok(best)
+}
+
+fn copy_source_is_available(
+    files: &[DiffFileStat],
+    path: &str,
+    options: &DiffOptions,
+    excluded_index: usize,
+) -> bool {
+    if options.find_copies_harder {
+        return true;
+    }
+    files
+        .iter()
+        .enumerate()
+        .any(|(index, file)| index != excluded_index && file.path == path && file.status == 'M')
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
