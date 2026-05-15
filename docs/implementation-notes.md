@@ -100,6 +100,9 @@
   represent pack bytes as optional. HTTP and SSH fetch now accept an ACK-only
   already-have response, update `FETCH_HEAD` and destination refs, and report
   zero ingested objects instead of trying to parse an empty pack.
+- 2026-05-16 thin-pack safety slice stopped requesting the advertised
+  `thin-pack` upload-pack capability until rit has explicit thin-pack fixup
+  before pack storage. `ofs-delta` remains selected when advertised.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
 - 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git

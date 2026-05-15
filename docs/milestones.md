@@ -438,6 +438,8 @@ Completion criteria:
     during HTTP and SSH fetch negotiation.
   - [x] Accept packless already-have upload-pack responses and still update
     `FETCH_HEAD`/destination refs without ingesting an empty pack.
+  - [x] Avoid requesting `thin-pack` until explicit thin-pack fixup storage is
+    implemented.
   - [ ] Multi-round negotiation, thin-pack fixups, and advanced capability
     parity.
 - [x] Push basics.

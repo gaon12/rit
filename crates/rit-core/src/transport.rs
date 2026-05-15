@@ -983,7 +983,6 @@ fn select_upload_pack_capabilities(advertised: &[String]) -> Vec<String> {
         push_capability_if_advertised(advertised, &mut selected, "multi_ack");
     }
     push_capability_if_advertised(advertised, &mut selected, "side-band-64k");
-    push_capability_if_advertised(advertised, &mut selected, "thin-pack");
     push_capability_if_advertised(advertised, &mut selected, "ofs-delta");
     selected
 }
@@ -2234,8 +2233,10 @@ mod tests {
         advertisement.extend_from_slice(b"0000");
         test_pkt_line(
             &mut advertisement,
-            format!("{want} HEAD\0multi_ack_detailed side-band-64k ofs-delta agent=git/2.52\n")
-                .as_bytes(),
+            format!(
+                "{want} HEAD\0multi_ack_detailed side-band-64k thin-pack ofs-delta agent=git/2.52\n"
+            )
+            .as_bytes(),
         );
         test_pkt_line(
             &mut advertisement,
@@ -2273,6 +2274,7 @@ mod tests {
             "want 0a53e9ddeaddad63ad106860237bbf53411d11a7 \
              multi_ack_detailed side-band-64k ofs-delta\n"
         ));
+        assert!(!post_request.contains("thin-pack"));
         assert!(post_request.contains("have 441b40d833fdfa93eb2908e52742248faf0ee993\n"));
     }
 
