@@ -144,6 +144,8 @@ Completion criteria:
   - [x] Staged `--find-copies-harder` copy detection from unchanged HEAD
     sources.
   - [x] Rename/copy candidate limit model and CLI parsing for `-l<n>`.
+  - [x] Exact rename detection still runs when `-l<n>` is below the changed
+    path count, matching Git's cheap exact-pass behavior.
   - [x] Worktree rename/copy detection for default `diff -M/-C` when added
     paths are represented by Git intent-to-add index entries.
   - [x] Worktree `--find-copies-harder` copy detection from unchanged index

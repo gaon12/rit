@@ -78,6 +78,9 @@
 - 2026-05-15 worktree find-copies-harder slice checked `git diff -h` and
   direct Git comparisons for default worktree `diff --find-copies-harder` and
   `diff -C --find-copies-harder` with Git intent-to-add entries.
+- 2026-05-15 exact rename-limit slice checked `git diff -h` and direct Git
+  comparisons for cached and worktree intent-to-add exact renames with
+  `diff -M -l1`.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
   `--pathspec-file-nul`, including a quoted pathspec entry.
@@ -298,6 +301,9 @@
 - Added `-l<n>` parsing and a conservative candidate limit model for
   rename/copy detection. A limit of `0` is treated as unlimited, matching
   Git's command shape.
+- Added a Git-compatible exact-rename pass before the `-l<n>` exhaustive
+  similarity limit check, so exact cached and worktree intent-to-add renames
+  are still reported when the limit is below the changed path count.
 - Added local write compatibility coverage that compares Git and rit porcelain
   state after directory pathspec `add`, `restore`, and `reset`.
 - Added local write compatibility coverage for simple wildcard and

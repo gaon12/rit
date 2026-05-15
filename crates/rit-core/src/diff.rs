@@ -760,6 +760,7 @@ impl Repository {
         new_entries: &BTreeMap<String, DiffTreeEntry>,
         options: &DiffOptions,
     ) -> Result<()> {
+        self.detect_exact_summary_renames(files, old_entries, new_entries)?;
         if rename_limit_exceeded(files.iter().map(|file| file.status), options) {
             return Ok(());
         }
@@ -812,6 +813,55 @@ impl Repository {
                 binary,
                 old_size: old_object.data.len(),
                 new_size: new_object.data.len(),
+            };
+            remove_indexes.push(add_index);
+        }
+
+        remove_indexes.sort_unstable();
+        remove_indexes.dedup();
+        for index in remove_indexes.into_iter().rev() {
+            files.remove(index);
+        }
+        Ok(())
+    }
+
+    fn detect_exact_summary_renames(
+        &self,
+        files: &mut Vec<DiffFileStat>,
+        old_entries: &BTreeMap<String, DiffTreeEntry>,
+        new_entries: &BTreeMap<String, DiffTreeEntry>,
+    ) -> Result<()> {
+        let mut remove_indexes = Vec::new();
+        for delete_index in 0..files.len() {
+            if files[delete_index].status != 'D' {
+                continue;
+            }
+            let old_path = files[delete_index].path.clone();
+            let Some(old_entry) = old_entries.get(&old_path) else {
+                continue;
+            };
+            let Some(add_index) = files.iter().position(|file| {
+                file.status == 'A'
+                    && new_entries.get(&file.path).is_some_and(|new_entry| {
+                        new_entry.mode == old_entry.mode
+                            && new_entry.object_id == old_entry.object_id
+                    })
+            }) else {
+                continue;
+            };
+            let new_path = files[add_index].path.clone();
+            let old_object = self.read_blob(old_entry.object_id)?;
+            let binary = is_binary_data(&old_object.data);
+            files[delete_index] = DiffFileStat {
+                status: 'R',
+                old_path: Some(old_path),
+                path: new_path,
+                similarity_score: Some(100),
+                insertions: 0,
+                deletions: 0,
+                binary,
+                old_size: old_object.data.len(),
+                new_size: old_object.data.len(),
             };
             remove_indexes.push(add_index);
         }
@@ -970,6 +1020,7 @@ impl Repository {
 }
 
 fn detect_patch_renames(files: &mut Vec<DiffPatchFile>, options: &DiffOptions) -> Result<()> {
+    detect_exact_patch_renames(files);
     if rename_limit_exceeded(files.iter().map(|file| file.status), options) {
         return Ok(());
     }
@@ -1018,6 +1069,46 @@ fn detect_patch_renames(files: &mut Vec<DiffPatchFile>, options: &DiffOptions) -
         files.remove(index);
     }
     Ok(())
+}
+
+fn detect_exact_patch_renames(files: &mut Vec<DiffPatchFile>) {
+    let mut remove_indexes = Vec::new();
+    for delete_index in 0..files.len() {
+        if files[delete_index].status != 'D' {
+            continue;
+        }
+        let old_path = files[delete_index].path.clone();
+        let old_object_id = files[delete_index].old_object_id;
+        let old_mode = files[delete_index].mode;
+        let old_data = files[delete_index].old_data.clone();
+        let Some(add_index) = files.iter().position(|file| {
+            file.status == 'A' && file.mode == old_mode && file.new_object_id == old_object_id
+        }) else {
+            continue;
+        };
+        let new_path = files[add_index].path.clone();
+        let new_object_id = files[add_index].new_object_id;
+        let new_data = files[add_index].new_data.clone();
+
+        files[delete_index] = DiffPatchFile {
+            status: 'R',
+            old_path: Some(old_path),
+            path: new_path,
+            similarity_score: Some(100),
+            old_object_id,
+            new_object_id,
+            mode: old_mode,
+            old_data,
+            new_data,
+        };
+        remove_indexes.push(add_index);
+    }
+
+    remove_indexes.sort_unstable();
+    remove_indexes.dedup();
+    for index in remove_indexes.into_iter().rev() {
+        files.remove(index);
+    }
 }
 
 fn rename_limit_exceeded(statuses: impl Iterator<Item = char>, options: &DiffOptions) -> bool {

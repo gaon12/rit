@@ -52,6 +52,7 @@ fn diff_cached_exact_rename_outputs_match_git() {
         vec!["diff", "--cached", "-M", "--numstat"],
         vec!["diff", "--cached", "-M", "--stat"],
         vec!["diff", "--cached", "-M"],
+        vec!["diff", "--cached", "-M", "-l1", "--name-status"],
     ] {
         let outcome = compare(&CompareOptions::new(
             fixture.path(),
@@ -79,6 +80,7 @@ fn diff_worktree_intent_to_add_rename_outputs_match_git() {
         vec!["diff", "-M", "--numstat"],
         vec!["diff", "-M", "--stat"],
         vec!["diff", "-M"],
+        vec!["diff", "-M", "-l1", "--name-status"],
     ] {
         let mut options = CompareOptions::new(
             fixture.path(),
