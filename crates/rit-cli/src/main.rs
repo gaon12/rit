@@ -792,7 +792,7 @@ fn diff_command(
         let patch_result = if cached {
             repository.diff_index_to_head_patch_with_options(&pathspecs, &diff_options)
         } else {
-            repository.diff_worktree_to_index_patch_with_pathspecs(&pathspecs)
+            repository.diff_worktree_to_index_patch_with_options(&pathspecs, &diff_options)
         };
         match patch_result.and_then(|patch| patch.to_patch_text()) {
             Ok(text) => {
@@ -809,7 +809,7 @@ fn diff_command(
     let diff_result = if cached {
         repository.diff_index_to_head_with_options(&pathspecs, &diff_options)
     } else {
-        repository.diff_worktree_to_index_with_pathspecs(&pathspecs)
+        repository.diff_worktree_to_index_with_options(&pathspecs, &diff_options)
     };
     let diff = match diff_result {
         Ok(diff) => diff,

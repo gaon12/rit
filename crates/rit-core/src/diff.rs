@@ -358,67 +358,32 @@ impl Repository {
         &self,
         pathspecs: &PathspecSet,
     ) -> Result<DiffSummary> {
-        let Some(worktree) = self.worktree() else {
-            return Err(RitError::invalid_input(
-                "diff must be run in a repository with a working tree",
-            ));
-        };
-        let index = Index::read(&self.git_dir().join("index"))?;
-        let attributes = self.root_attributes()?;
-        let mut files = Vec::new();
+        self.diff_worktree_to_index_with_options(pathspecs, &DiffOptions::default())
+    }
 
-        for entry in index.entries {
-            if !pathspecs.matches_with_attributes(&entry.path, Some(&attributes)) {
-                continue;
-            }
-            let worktree_path = join_slash_path(worktree, &entry.path);
-            let old_object = self.read_object(entry.object_id)?;
-            if old_object.kind != ObjectKind::Blob {
-                continue;
-            }
-
-            if !worktree_path.exists() {
-                files.push(DiffFileStat {
-                    status: 'D',
-                    old_path: None,
-                    path: entry.path,
-                    similarity_score: None,
-                    insertions: 0,
-                    deletions: count_lines(&old_object.data),
-                    binary: is_binary_data(&old_object.data),
-                    old_size: old_object.data.len(),
-                    new_size: 0,
-                });
-                continue;
-            }
-
-            let new_data = read_worktree_entry_data(&worktree_path, entry.mode)?;
-            let new_object_id = hash_object(ObjectKind::Blob, &new_data);
-            if new_object_id == entry.object_id {
-                continue;
-            }
-
-            let (insertions, deletions, binary) = file_delta(&old_object.data, &new_data)?;
-            files.push(DiffFileStat {
-                status: 'M',
-                old_path: None,
-                path: entry.path,
-                similarity_score: None,
-                insertions,
-                deletions,
-                binary,
-                old_size: old_object.data.len(),
-                new_size: new_data.len(),
-            });
-        }
-
-        Ok(DiffSummary { files })
+    /// Computes default `git diff` scope with explicit diff options.
+    pub fn diff_worktree_to_index_with_options(
+        &self,
+        pathspecs: &PathspecSet,
+        options: &DiffOptions,
+    ) -> Result<DiffSummary> {
+        let patch = self.diff_worktree_to_index_patch_with_options(pathspecs, options)?;
+        patch_files_to_summary(&patch.files)
     }
 
     /// Computes default `git diff` patch output.
     pub fn diff_worktree_to_index_patch_with_pathspecs(
         &self,
         pathspecs: &PathspecSet,
+    ) -> Result<DiffPatch> {
+        self.diff_worktree_to_index_patch_with_options(pathspecs, &DiffOptions::default())
+    }
+
+    /// Computes default `git diff` patch output with explicit diff options.
+    pub fn diff_worktree_to_index_patch_with_options(
+        &self,
+        pathspecs: &PathspecSet,
+        options: &DiffOptions,
     ) -> Result<DiffPatch> {
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
@@ -428,49 +393,92 @@ impl Repository {
         let index = Index::read(&self.git_dir().join("index"))?;
         let attributes = self.root_attributes()?;
         let mut files = Vec::new();
+        let mut copy_sources = Vec::new();
 
-        for entry in index.entries {
+        for entry in index.entries.iter().filter(|entry| entry.stage == 0) {
             if !pathspecs.matches_with_attributes(&entry.path, Some(&attributes)) {
                 continue;
             }
             let worktree_path = join_slash_path(worktree, &entry.path);
-            let old_object = self.read_object(entry.object_id)?;
-            if old_object.kind != ObjectKind::Blob {
-                continue;
-            }
+            let old_object = if entry.is_intent_to_add() {
+                None
+            } else {
+                let object = self.read_blob(entry.object_id)?;
+                Some(object)
+            };
 
             if !worktree_path.exists() {
-                files.push(DiffPatchFile {
-                    status: 'D',
-                    old_path: None,
-                    path: entry.path,
-                    similarity_score: None,
-                    old_object_id: Some(entry.object_id),
-                    new_object_id: None,
-                    mode: entry.mode,
-                    old_data: old_object.data,
-                    new_data: Vec::new(),
-                });
+                if let Some(old_object) = old_object {
+                    files.push(DiffPatchFile {
+                        status: 'D',
+                        old_path: None,
+                        path: entry.path.clone(),
+                        similarity_score: None,
+                        old_object_id: Some(entry.object_id),
+                        new_object_id: None,
+                        mode: entry.mode,
+                        old_data: old_object.data,
+                        new_data: Vec::new(),
+                    });
+                }
                 continue;
             }
 
             let new_data = read_worktree_entry_data(&worktree_path, entry.mode)?;
             let new_object_id = hash_object(ObjectKind::Blob, &new_data);
-            if new_object_id == entry.object_id {
+            if let Some(old_object) = old_object {
+                if new_object_id == entry.object_id {
+                    if options.find_copies_harder {
+                        copy_sources.push(CopySource {
+                            path: entry.path.clone(),
+                            mode: entry.mode,
+                            object_id: Some(entry.object_id),
+                            data: old_object.data,
+                            changed: false,
+                        });
+                    }
+                    continue;
+                }
+
+                copy_sources.push(CopySource {
+                    path: entry.path.clone(),
+                    mode: entry.mode,
+                    object_id: Some(entry.object_id),
+                    data: old_object.data.clone(),
+                    changed: true,
+                });
+                files.push(DiffPatchFile {
+                    status: 'M',
+                    old_path: None,
+                    path: entry.path.clone(),
+                    similarity_score: None,
+                    old_object_id: Some(entry.object_id),
+                    new_object_id: Some(new_object_id),
+                    mode: entry.mode,
+                    old_data: old_object.data,
+                    new_data,
+                });
                 continue;
             }
 
             files.push(DiffPatchFile {
-                status: 'M',
+                status: 'A',
                 old_path: None,
-                path: entry.path,
+                path: entry.path.clone(),
                 similarity_score: None,
-                old_object_id: Some(entry.object_id),
+                old_object_id: None,
                 new_object_id: Some(new_object_id),
                 mode: entry.mode,
-                old_data: old_object.data,
+                old_data: Vec::new(),
                 new_data,
             });
+        }
+
+        if options.find_renames {
+            detect_patch_renames(&mut files, options)?;
+        }
+        if options.find_copies {
+            detect_patch_copies_from_sources(&mut files, &copy_sources, options)?;
         }
 
         Ok(DiffPatch { files })
@@ -1035,6 +1043,115 @@ struct SimilarityMatch {
 struct CopyMatch {
     path: String,
     score: u8,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct CopySource {
+    path: String,
+    mode: u32,
+    object_id: Option<ObjectId>,
+    data: Vec<u8>,
+    changed: bool,
+}
+
+fn detect_patch_copies_from_sources(
+    files: &mut [DiffPatchFile],
+    copy_sources: &[CopySource],
+    options: &DiffOptions,
+) -> Result<()> {
+    if rename_limit_exceeded(files.iter().map(|file| file.status), options) {
+        return Ok(());
+    }
+    for file in files.iter_mut() {
+        if file.status != 'A' {
+            continue;
+        }
+        let new_data = file.new_data.clone();
+        let Some(match_candidate) =
+            best_copy_match_from_sources(copy_sources, file.mode, &new_data, options)?
+        else {
+            continue;
+        };
+
+        file.status = 'C';
+        file.old_path = Some(match_candidate.path.clone());
+        file.similarity_score = Some(match_candidate.score);
+        file.old_object_id = match_candidate.object_id;
+        file.old_data = match_candidate.data;
+    }
+    Ok(())
+}
+
+fn best_copy_match_from_sources(
+    copy_sources: &[CopySource],
+    new_mode: u32,
+    new_data: &[u8],
+    options: &DiffOptions,
+) -> Result<Option<CopySourceMatch>> {
+    let mut best = None;
+    for source in copy_sources {
+        if source.mode != new_mode || (!options.find_copies_harder && !source.changed) {
+            continue;
+        }
+        let candidate_score = similarity_score(&source.data, new_data)?;
+        if candidate_score < options.copy_similarity_threshold {
+            continue;
+        }
+        let should_replace = best
+            .as_ref()
+            .map(|best: &CopySourceMatch| candidate_score > best.score)
+            .unwrap_or(true);
+        if should_replace {
+            best = Some(CopySourceMatch {
+                path: source.path.clone(),
+                score: candidate_score,
+                object_id: source.object_id,
+                data: source.data.clone(),
+            });
+        }
+    }
+    Ok(best)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct CopySourceMatch {
+    path: String,
+    score: u8,
+    object_id: Option<ObjectId>,
+    data: Vec<u8>,
+}
+
+fn patch_files_to_summary(files: &[DiffPatchFile]) -> Result<DiffSummary> {
+    let mut summary_files = Vec::with_capacity(files.len());
+    for file in files {
+        let (insertions, deletions, binary) = match file.status {
+            'A' => (
+                count_lines(&file.new_data),
+                0,
+                is_binary_data(&file.new_data),
+            ),
+            'D' => (
+                0,
+                count_lines(&file.old_data),
+                is_binary_data(&file.old_data),
+            ),
+            _ => file_delta(&file.old_data, &file.new_data)?,
+        };
+        summary_files.push(DiffFileStat {
+            status: file.status,
+            old_path: file.old_path.clone(),
+            path: file.path.clone(),
+            similarity_score: file.similarity_score,
+            insertions,
+            deletions,
+            binary,
+            old_size: file.old_data.len(),
+            new_size: file.new_data.len(),
+        });
+    }
+    Ok(DiffSummary {
+        files: summary_files,
+    })
 }
 
 fn patch_files_to_stats(files: &[DiffPatchFile]) -> Vec<DiffFileStat> {

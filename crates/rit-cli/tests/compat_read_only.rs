@@ -70,6 +70,61 @@ fn diff_cached_exact_rename_outputs_match_git() {
 }
 
 #[test]
+fn diff_worktree_intent_to_add_rename_outputs_match_git() {
+    let fixture = WorktreeIntentRenameFixture::new("worktree-intent-rename");
+
+    for args in [
+        vec!["diff", "-M", "--name-only"],
+        vec!["diff", "-M", "--name-status"],
+        vec!["diff", "-M", "--numstat"],
+        vec!["diff", "-M", "--stat"],
+        vec!["diff", "-M"],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree intent rename {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
+fn diff_worktree_intent_to_add_copy_outputs_match_git() {
+    let fixture = WorktreeIntentCopyFixture::new("worktree-intent-copy");
+
+    for args in [
+        vec!["diff", "-C", "--name-status"],
+        vec!["diff", "-C79%", "--name-status"],
+        vec!["diff", "--find-copies=79", "--stat"],
+        vec!["diff", "-C"],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree intent copy {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_cached_similarity_rename_outputs_match_git() {
     let fixture = SimilarityRenameFixture::new("cached-similarity-rename");
 
@@ -981,6 +1036,77 @@ impl ExactRenameFixture {
 }
 
 impl Drop for ExactRenameFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct WorktreeIntentRenameFixture {
+    path: PathBuf,
+}
+
+impl WorktreeIntentRenameFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("old.txt"), "one\ntwo\nthree\n").expect("base file should be written");
+        run_git(&path, ["add", "old.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+        fs::rename(path.join("old.txt"), path.join("new.txt"))
+            .expect("worktree file should be renamed");
+        run_git(&path, ["add", "-N", "new.txt"]);
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for WorktreeIntentRenameFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct WorktreeIntentCopyFixture {
+    path: PathBuf,
+}
+
+impl WorktreeIntentCopyFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("old.txt"), "one\ntwo\nthree\nfour\nfive\n")
+            .expect("base file should be written");
+        run_git(&path, ["add", "old.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+        fs::write(path.join("old.txt"), "one\ntwo\nthree\nfour\nsix\n")
+            .expect("source file should be modified");
+        fs::write(path.join("copy.txt"), "one\ntwo\nthree\nfour\nsix\n")
+            .expect("copy file should be written");
+        run_git(&path, ["add", "-N", "copy.txt"]);
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for WorktreeIntentCopyFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

@@ -6,7 +6,7 @@ and implementation notes may use Git as the reference implementation.
 
 ## Checked Baseline
 
-- Date checked: 2026-05-13
+- Date checked: 2026-05-15
 - Git version: `git version 2.52.0.windows.1`
 - Command list checked with: `git help -a`
 - Command help checked with: `git <command> -h`
@@ -56,6 +56,9 @@ The current codebase implements an early local Git subset:
   `--find-renames[=<n>]`, `-C[<n>]`, and `--find-copies[=<n>]` for summary
   modes and patch output. `--find-copies-harder` can use unchanged HEAD files
   as copy sources in cached diff.
+- Default worktree diff supports rename/copy detection with `-M[<n>]` and
+  `-C[<n>]` for the Git-compatible intent-to-add slice, where added worktree
+  paths are already represented in the index by `git add -N`.
 - Ordinary literal file and directory pathspec filtering is supported for
   `status --porcelain=v1` and the supported `diff` summary modes.
 - Ordinary literal file and directory pathspec filtering is supported for
@@ -173,6 +176,9 @@ default and cached text patches.
 Binary patch compatibility tests cover default and cached `Binary files ...
 differ` placeholders.
 Patch compatibility tests cover splitting distant changes into multiple hunks.
+Worktree rename/copy compatibility tests cover default `diff -M/-C` summary
+and patch output when Git intent-to-add entries make added worktree paths part
+of the index.
 Binary diff compatibility tests cover `--name-only`, `--name-status`,
 `--numstat`, and `--stat` summary output.
 Packed object compatibility tests cover reading a delta-compressed packed blob

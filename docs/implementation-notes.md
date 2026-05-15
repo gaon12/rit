@@ -71,6 +71,10 @@
   comparisons for `diff --cached --find-copies-harder`.
 - 2026-05-12 rename-limit slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M -l0`.
+- 2026-05-15 worktree intent-to-add rename/copy slice checked `git diff -h`
+  and direct Git comparisons for default `diff -M`, `diff -C`,
+  `--find-copies=79`, and summary/patch output when added worktree paths are
+  represented by Git intent-to-add index entries.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
   `--pathspec-file-nul`, including a quoted pathspec entry.
@@ -279,6 +283,9 @@
   insertion/deletion totals.
 - Added exact staged rename detection for `diff --cached -M` summary and patch
   output.
+- Added worktree rename/copy detection for default `diff -M/-C` when the added
+  path is represented by Git's intent-to-add index state, including summary
+  and patch output.
 - Added `-l<n>` parsing and a conservative candidate limit model for
   rename/copy detection. A limit of `0` is treated as unlimited, matching
   Git's command shape.
@@ -291,9 +298,9 @@
 - Added Git comparison coverage for stdin-delivered NUL-separated pathspecs
   in `add`, `restore`, and `reset`.
 - Added C-style quoted pathspec-file entry parsing for common escapes.
-- Still unsupported: full Git pathspec-file edge cases, worktree rename/copy
-  detection, rename limits/advanced diffcore parity, and `show` path filtering
-  for patch output.
+- Still unsupported: full Git pathspec-file edge cases, broader worktree
+  rename/copy diffcore parity beyond intent-to-add entries, full rename
+  limits/advanced diffcore parity, and `show` path filtering for patch output.
 
 ### M7: Remote transport foundation
 
@@ -712,10 +719,11 @@
   exact and non-exact rename detection in cached diff output. `-C[<n>]` and
   `--find-copies[=<n>]` support staged copy detection from modified source
   files. `--find-copies-harder` also considers unchanged HEAD files as staged
-  copy sources.
+  copy sources. Default worktree diff supports `-M[<n>]` and `-C[<n>]` when
+  the added worktree path is represented by Git's intent-to-add index state.
 - Unsupported options: commit/tree/blob arguments, pathspec files,
-  worktree rename/copy detection, rename limits, and many advanced patch
-  formatting options.
+  broader worktree rename/copy diffcore parity beyond intent-to-add entries,
+  full rename limits, and many advanced patch formatting options.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files.
 - Git-compatible behavior: cached diff scope compares the index against `HEAD`.
 - Intentional differences: advanced patch formatting and custom diff drivers

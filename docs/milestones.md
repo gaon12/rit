@@ -14,7 +14,7 @@ drift.
 
 ## Current Baseline
 
-- Date: 2026-05-13
+- Date: 2026-05-15
 - Reference Git: `git version 2.52.0.windows.1`
 - Required recurring checks:
   - `git --version`
@@ -45,6 +45,10 @@ Verified on 2026-05-13 before continuing implementation:
 - M8 had an uncommitted fast-forward-only merge core in `write.rs`; this pass
   completed CLI wiring, operation journaling, tests, and notes for that first
   merge slice.
+- 2026-05-15 verification before continuing from M0 found M0-M2 still
+  accurately checked. The earliest real implementation gap remains M3 rename
+  detection beyond cached diff. This pass added the first worktree rename/copy
+  slice for default `diff` when Git's index contains intent-to-add entries.
 
 ## M0: Baseline And Rules
 
@@ -140,8 +144,10 @@ Completion criteria:
   - [x] Staged `--find-copies-harder` copy detection from unchanged HEAD
     sources.
   - [x] Rename/copy candidate limit model and CLI parsing for `-l<n>`.
-  - [ ] Worktree rename/copy detection, rename limits, and advanced Git
-    diffcore parity.
+  - [x] Worktree rename/copy detection for default `diff -M/-C` when added
+    paths are represented by Git intent-to-add index entries.
+  - [ ] Broader worktree rename/copy detection, full rename limits, and
+    advanced Git diffcore parity.
 - [x] Binary diff accounting for summary modes.
 
 Completion criteria:

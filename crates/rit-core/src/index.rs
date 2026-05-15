@@ -345,11 +345,23 @@ pub struct IndexEntry {
     /// Git index stage, where 0 is a normal entry and 1/2/3 are conflict
     /// stages.
     pub stage: u8,
+    /// On-disk extended flags stored after the main index flags.
+    pub extended_flags: u16,
     /// File size stored in the index.
     pub file_size: u32,
     /// Repository-relative path using `/` separators.
     pub path: String,
 }
+
+impl IndexEntry {
+    /// Returns true when this entry is Git's intent-to-add placeholder.
+    pub fn is_intent_to_add(&self) -> bool {
+        self.extended_flags & INDEX_EXTENDED_FLAG_INTENT_TO_ADD != 0
+    }
+}
+
+const INDEX_MAIN_FLAG_EXTENDED: u16 = 0x4000;
+const INDEX_EXTENDED_FLAG_INTENT_TO_ADD: u16 = 0x2000;
 
 /// Cached filesystem stat fields for one index entry.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -447,8 +459,14 @@ impl Index {
             bytes.extend_from_slice(&entry.stat.gid.to_be_bytes());
             bytes.extend_from_slice(&entry.file_size.to_be_bytes());
             bytes.extend_from_slice(entry.object_id.as_bytes());
-            let flags = ((entry.stage as u16) << 12) | entry.path.len().min(0x0fff) as u16;
+            let mut flags = ((entry.stage as u16) << 12) | entry.path.len().min(0x0fff) as u16;
+            if entry.extended_flags != 0 {
+                flags |= INDEX_MAIN_FLAG_EXTENDED;
+            }
             bytes.extend_from_slice(&flags.to_be_bytes());
+            if entry.extended_flags != 0 {
+                bytes.extend_from_slice(&entry.extended_flags.to_be_bytes());
+            }
             bytes.extend_from_slice(entry.path.as_bytes());
             bytes.push(0);
             while (bytes.len() - entry_start) % 8 != 0 {
@@ -507,12 +525,14 @@ fn parse_index(bytes: &[u8]) -> Result<Index> {
         let stage = ((flags >> 12) & 0x3) as u8;
         offset += 62;
 
-        if flags & 0x4000 != 0 {
+        let mut extended_flags = 0;
+        if flags & INDEX_MAIN_FLAG_EXTENDED != 0 {
             if bytes.len().saturating_sub(offset) < 2 {
                 return Err(RitError::invalid_input(
                     "index extended flags are truncated",
                 ));
             }
+            extended_flags = read_u16(bytes, offset)?;
             offset += 2;
         }
 
@@ -542,6 +562,7 @@ fn parse_index(bytes: &[u8]) -> Result<Index> {
             mode,
             object_id: ObjectId::from_bytes(object_id),
             stage,
+            extended_flags,
             file_size,
             path,
         });
@@ -1188,8 +1209,8 @@ pub fn join_slash_path(root: &Path, path: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::{
-        FsMonitorToken, Index, IndexEntry, IndexEntryStat, IndexExtensionKind, join_slash_path,
-        relative_slash_path,
+        FsMonitorToken, INDEX_EXTENDED_FLAG_INTENT_TO_ADD, Index, IndexEntry, IndexEntryStat,
+        IndexExtensionKind, join_slash_path, relative_slash_path,
     };
     use crate::ObjectId;
     use std::fs;
@@ -1246,6 +1267,7 @@ mod tests {
                 mode: 0o100644,
                 object_id: ObjectId::from_bytes([1; 20]),
                 stage: 0,
+                extended_flags: 0,
                 file_size: 1,
                 path: "a.txt".to_owned(),
             }],
@@ -1273,6 +1295,7 @@ mod tests {
             mode: 0o100644,
             object_id: ObjectId::from_bytes([byte; 20]),
             stage,
+            extended_flags: 0,
             file_size: 1,
             path: "conflict.txt".to_owned(),
         };
@@ -1296,6 +1319,39 @@ mod tests {
     }
 
     #[test]
+    fn index_write_preserves_intent_to_add_extended_flag() {
+        let path = std::env::temp_dir().join(format!(
+            "rit-index-intent-to-add-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        ));
+        let index = Index {
+            entries: vec![IndexEntry {
+                stat: IndexEntryStat::default(),
+                mode: 0o100644,
+                object_id: ObjectId::from_bytes([1; 20]),
+                stage: 0,
+                extended_flags: INDEX_EXTENDED_FLAG_INTENT_TO_ADD,
+                file_size: 0,
+                path: "intent.txt".to_owned(),
+            }],
+            extensions: Vec::new(),
+        };
+
+        index.write(&path).expect("index should write");
+        let parsed = Index::read(&path).expect("index should read");
+        let _ = fs::remove_file(&path);
+
+        assert!(parsed.entries[0].is_intent_to_add());
+        assert_eq!(
+            parsed.entries[0].extended_flags,
+            INDEX_EXTENDED_FLAG_INTENT_TO_ADD
+        );
+    }
+
+    #[test]
     fn index_write_rejects_invalid_conflict_stage() {
         let path = std::env::temp_dir().join(format!(
             "rit-index-invalid-stage-{}",
@@ -1310,6 +1366,7 @@ mod tests {
                 mode: 0o100644,
                 object_id: ObjectId::from_bytes([1; 20]),
                 stage: 4,
+                extended_flags: 0,
                 file_size: 1,
                 path: "a.txt".to_owned(),
             }],
