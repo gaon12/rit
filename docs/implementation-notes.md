@@ -75,6 +75,9 @@
   and direct Git comparisons for default `diff -M`, `diff -C`,
   `--find-copies=79`, and summary/patch output when added worktree paths are
   represented by Git intent-to-add index entries.
+- 2026-05-15 worktree find-copies-harder slice checked `git diff -h` and
+  direct Git comparisons for default worktree `diff --find-copies-harder` and
+  `diff -C --find-copies-harder` with Git intent-to-add entries.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
   `--pathspec-file-nul`, including a quoted pathspec entry.
@@ -730,7 +733,9 @@
   `--find-copies[=<n>]` support staged copy detection from modified source
   files. `--find-copies-harder` also considers unchanged HEAD files as staged
   copy sources. Default worktree diff supports `-M[<n>]` and `-C[<n>]` when
-  the added worktree path is represented by Git's intent-to-add index state.
+  the added worktree path is represented by Git's intent-to-add index state;
+  `--find-copies-harder` can also use unchanged index files as worktree copy
+  sources for that intent-to-add slice.
 - Unsupported options: commit/tree/blob arguments, pathspec files,
   broader worktree rename/copy diffcore parity beyond intent-to-add entries,
   full rename limits, and many advanced patch formatting options.

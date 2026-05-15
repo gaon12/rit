@@ -146,6 +146,8 @@ Completion criteria:
   - [x] Rename/copy candidate limit model and CLI parsing for `-l<n>`.
   - [x] Worktree rename/copy detection for default `diff -M/-C` when added
     paths are represented by Git intent-to-add index entries.
+  - [x] Worktree `--find-copies-harder` copy detection from unchanged index
+    sources for Git intent-to-add entries.
   - [ ] Broader worktree rename/copy detection, full rename limits, and
     advanced Git diffcore parity.
 - [x] Binary diff accounting for summary modes.

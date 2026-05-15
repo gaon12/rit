@@ -125,6 +125,24 @@ fn diff_worktree_intent_to_add_copy_outputs_match_git() {
 }
 
 #[test]
+fn diff_worktree_find_copies_harder_outputs_match_git() {
+    let fixture = WorktreeIntentHardCopyFixture::new("worktree-intent-hard-copy");
+
+    for args in [
+        vec!["diff", "--find-copies-harder", "--name-status"],
+        vec!["diff", "-C", "--find-copies-harder", "--name-status"],
+        vec!["diff", "-C", "--find-copies-harder"],
+    ] {
+        let os_args = args.iter().map(OsString::from).collect::<Vec<_>>();
+        let (git_stdout, git_stderr) = run_capture_args("git", &os_args, fixture.path());
+        let (rit_stdout, rit_stderr) = run_capture_args(rit_binary(), &os_args, fixture.path());
+
+        assert_eq!(git_stdout, rit_stdout, "worktree hard copy {args:?}");
+        assert_eq!(git_stderr, rit_stderr, "worktree hard copy {args:?}");
+    }
+}
+
+#[test]
 fn diff_cached_similarity_rename_outputs_match_git() {
     let fixture = SimilarityRenameFixture::new("cached-similarity-rename");
 
@@ -1107,6 +1125,41 @@ impl WorktreeIntentCopyFixture {
 }
 
 impl Drop for WorktreeIntentCopyFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct WorktreeIntentHardCopyFixture {
+    path: PathBuf,
+}
+
+impl WorktreeIntentHardCopyFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("old.txt"), "one\ntwo\nthree\nfour\nfive\n")
+            .expect("base file should be written");
+        run_git(&path, ["add", "old.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+        fs::write(path.join("copy.txt"), "one\ntwo\nthree\nfour\nfive\n")
+            .expect("copy file should be written");
+        run_git(&path, ["add", "-N", "copy.txt"]);
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for WorktreeIntentHardCopyFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

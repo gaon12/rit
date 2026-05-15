@@ -59,6 +59,8 @@ The current codebase implements an early local Git subset:
 - Default worktree diff supports rename/copy detection with `-M[<n>]` and
   `-C[<n>]` for the Git-compatible intent-to-add slice, where added worktree
   paths are already represented in the index by `git add -N`.
+  `--find-copies-harder` can use unchanged index entries as copy sources in
+  that same worktree intent-to-add slice.
 - Ordinary literal file and directory pathspec filtering is supported for
   `status --porcelain=v1` and the supported `diff` summary modes.
 - Ordinary literal file and directory pathspec filtering is supported for
