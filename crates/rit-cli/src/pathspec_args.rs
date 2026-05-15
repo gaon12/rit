@@ -74,6 +74,9 @@ pub fn read_pathspecs_from_file(
     };
 
     if nul_terminated {
+        if data.is_empty() {
+            return Ok(PathspecFileRead::Pathspecs(Vec::new()));
+        }
         let mut pathspecs = Vec::new();
         let parts = data.split(|byte| *byte == 0).collect::<Vec<_>>();
         for (index, item) in parts.iter().enumerate() {

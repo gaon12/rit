@@ -102,6 +102,9 @@
 - 2026-05-15 empty pathspec-from-file value slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   `--pathspec-from-file=`.
+- 2026-05-15 empty NUL pathspec-file slice checked `git add -h`,
+  `git restore -h`, `git reset -h`, and direct Git comparisons for empty
+  `--pathspec-from-file=<file> --pathspec-file-nul` inputs.
 - 2026-05-15 repeated pathspec-from-file slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons proving the
   last `--pathspec-from-file` value is used.
@@ -365,6 +368,8 @@
   `reset` treats the empty file as a full pathspec reset of the index.
 - Empty `--pathspec-from-file=` values follow the same empty-input behavior
   as Git instead of attempting to open an empty file name.
+- Empty NUL-mode pathspec files now follow Git's empty-input behavior while
+  still rejecting actual empty NUL-delimited pathspec entries.
 - Repeated `--pathspec-from-file` options use the last file, matching Git for
   `add`, `restore`, and `reset`.
 - `--pathspec-from-file` cannot be mixed with ordinary pathspec arguments,
