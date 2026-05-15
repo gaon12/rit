@@ -1158,9 +1158,9 @@ fn add_command(
     if add_args.paths.is_empty() {
         writeln!(
             stderr,
-            "rit: add currently supports ordinary pathspecs and --chmod=(+|-)x"
+            "Nothing specified, nothing added.\nhint: Maybe you wanted to say 'git add .'?\nhint: Disable this message with \"git config set advice.addEmptyPathspec false\""
         )?;
-        return Ok(ExitCode::from(129));
+        return Ok(ExitCode::SUCCESS);
     }
 
     let repository = match discover_repository(stderr)? {
@@ -1556,8 +1556,8 @@ fn restore_command(args: &[String], stderr: &mut dyn Write) -> io::Result<ExitCo
     let staged = restore_args.staged;
     let paths = restore_args.paths;
     if paths.is_empty() {
-        writeln!(stderr, "rit: restore requires at least one file")?;
-        return Ok(ExitCode::from(129));
+        writeln!(stderr, "fatal: you must specify path(s) to restore")?;
+        return Ok(ExitCode::from(128));
     }
 
     let before = capture_operation_snapshot(&repository, stderr)?;
@@ -1678,7 +1678,12 @@ fn reset_command(
     if let Some(exit_code) = reset_args.exit_code {
         return Ok(ExitCode::from(exit_code));
     }
-    if reset_args.paths.is_empty() {
+    let reset_paths = if reset_args.paths.is_empty() && reset_args.from_pathspec_file {
+        vec![".".to_owned()]
+    } else {
+        reset_args.paths
+    };
+    if reset_paths.is_empty() {
         writeln!(
             stderr,
             "rit: reset currently supports only ordinary file or directory pathspecs"
@@ -1690,7 +1695,7 @@ fn reset_command(
         None => return Ok(ExitCode::from(128)),
     };
     if reset_args.plan {
-        return match repository.plan_restore_staged_paths_from_head(&reset_args.paths) {
+        return match repository.plan_restore_staged_paths_from_head(&reset_paths) {
             Ok(plan) => {
                 writeln!(stdout, "reset: plan")?;
                 for path in plan.paths_to_restore {
@@ -1707,11 +1712,11 @@ fn reset_command(
     }
     let before = capture_operation_snapshot(&repository, stderr)?;
     let planned_paths = repository
-        .plan_restore_staged_paths_from_head(&reset_args.paths)
+        .plan_restore_staged_paths_from_head(&reset_paths)
         .ok()
         .map(|plan| merge_changed_paths(plan.paths_to_restore, plan.paths_to_remove))
-        .unwrap_or_else(|| reset_args.paths.clone());
-    match repository.restore_staged_paths_from_head(&reset_args.paths) {
+        .unwrap_or_else(|| reset_paths.clone());
+    match repository.restore_staged_paths_from_head(&reset_paths) {
         Ok(unstaged) => {
             if !unstaged.is_empty() {
                 writeln!(stdout, "Unstaged changes after reset:")?;
@@ -1722,7 +1727,7 @@ fn reset_command(
             record_operation_with_changed_paths(
                 &repository,
                 "reset",
-                &format!("paths {}", reset_args.paths.join(" ")),
+                &format!("paths {}", reset_paths.join(" ")),
                 before,
                 planned_paths,
                 Vec::new(),
@@ -1739,6 +1744,7 @@ struct ParsedResetArgs {
     paths: Vec<String>,
     plan: bool,
     exit_code: Option<u8>,
+    from_pathspec_file: bool,
 }
 
 impl ParsedResetArgs {
@@ -1747,6 +1753,7 @@ impl ParsedResetArgs {
             paths: Vec::new(),
             plan: false,
             exit_code: Some(exit_code),
+            from_pathspec_file: false,
         }
     }
 }
@@ -1759,6 +1766,7 @@ fn parse_reset_args(
     let mut plan = false;
     let mut pathspec_file = None;
     let mut pathspec_file_nul = false;
+    let mut from_pathspec_file = false;
     let mut after_separator = false;
     let mut index = 0;
     while index < args.len() {
@@ -1783,6 +1791,7 @@ fn parse_reset_args(
         index += 1;
     }
     if let Some(file_name) = pathspec_file {
+        from_pathspec_file = true;
         match pathspec_args::read_pathspecs_from_file(
             &file_name,
             pathspec_file_nul,
@@ -1801,6 +1810,7 @@ fn parse_reset_args(
         paths,
         plan,
         exit_code: None,
+        from_pathspec_file,
     }))
 }
 

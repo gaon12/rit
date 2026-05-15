@@ -403,6 +403,55 @@ fn alarm_quoted_pathspec_from_file_matches_git_error() {
 }
 
 #[test]
+fn empty_pathspec_file_matches_git_behavior() {
+    for command in ["add", "restore", "reset"] {
+        let fixture = LocalWriteFixture::new(
+            &format!("{command}-empty-pathspec-file-behavior"),
+            LocalWriteFixtureKind::NestedTracked,
+        )
+        .expect("fixture should build");
+        fs::write(
+            fixture.path().join("nested").join("tracked.txt"),
+            "changed\n",
+        )
+        .expect("tracked file should be modified");
+        fs::write(fixture.path().join("pathspecs.txt"), "")
+            .expect("pathspec file should be written");
+        if command == "reset" {
+            run_git(fixture.path(), ["add", "nested/tracked.txt"]);
+        }
+
+        let workspace = temp_path(&format!("{command}-empty-pathspec-file-compare"));
+        let git_repo = workspace.join("git");
+        let rit_repo = workspace.join("rit");
+        copy_directory(fixture.path(), &git_repo);
+        copy_directory(fixture.path(), &rit_repo);
+
+        let git = run_command_allow_failure(
+            &command_words("git", [command, "--pathspec-from-file", "pathspecs.txt"]),
+            &git_repo,
+        );
+        let rit = run_command_allow_failure(
+            &command_words(
+                rit_binary(),
+                [command, "--pathspec-from-file", "pathspecs.txt"],
+            ),
+            &rit_repo,
+        );
+
+        assert_eq!(rit.exit_code, git.exit_code, "{command} exit code");
+        assert_eq!(rit.stdout, git.stdout, "{command} stdout");
+        assert_eq!(rit.stderr, git.stderr, "{command} stderr");
+        assert_eq!(
+            run_capture("git", ["status", "--porcelain=v1"], &git_repo).0,
+            run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).0,
+            "{command} status"
+        );
+        let _ = fs::remove_dir_all(workspace);
+    }
+}
+
+#[test]
 fn empty_line_pathspec_from_file_is_rejected_like_git() {
     for command in ["add", "restore", "reset"] {
         let fixture = LocalWriteFixture::new(

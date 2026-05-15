@@ -96,6 +96,9 @@
 - 2026-05-15 quoted alarm pathspec-file slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for `\a`
   C-style escapes and pathspec-not-found output.
+- 2026-05-15 empty pathspec-file slice checked `git add -h`,
+  `git restore -h`, `git reset -h`, and direct Git comparisons for empty
+  `--pathspec-from-file` inputs.
 - 2026-05-12 stdin pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file=-`.
 - 2026-05-12 stdin NUL pathspec-file slice checked `git add -h`,
@@ -339,6 +342,9 @@
 - Added `\a` C-style pathspec-file decoding and Git-compatible
   pathspec-not-found output for `add` and `restore`; pathspec-only `reset`
   keeps Git's no-op behavior when no index or `HEAD` path matches.
+- Empty pathspec files now match Git: `add` succeeds with Git's empty
+  pathspec advice, `restore` fails with Git's fatal restore message, and
+  `reset` treats the empty file as a full pathspec reset of the index.
 - Added Git-compatible rejection for empty line-delimited pathspec-file
   entries before any `add`, `restore`, or `reset` mutation is applied.
 - Added Git-compatible rejection for empty NUL-delimited pathspec-file entries
@@ -811,6 +817,8 @@
 - Git-compatible behavior: writes blob loose objects and Git index v2 entries
   for regular files; directory pathspecs recursively add regular files and
   stage deletions for matching tracked files that no longer exist.
+- Git-compatible behavior: empty pathspec input succeeds with Git's
+  `Nothing specified, nothing added.` advice and does not write the index.
 - Git-compatible behavior: when `core.ignorecase=true`, a mismatched-case
   non-wildcard `add` pathspec that corresponds to an existing worktree or
   indexed path is accepted as Git-compatible no-op instead of creating a
@@ -926,6 +934,8 @@
 - Git-compatible behavior: unstages explicit paths and reports remaining unstaged modifications.
 - Git-compatible behavior: pathspec-only resets are successful no-ops when no
   index or `HEAD` path matches, including pathspecs read from a file.
+- Git-compatible behavior: an empty pathspec file resets all index entries
+  from `HEAD`, matching Git's pathspec-file reset behavior.
 - Git-compatible behavior: clean tracked paths refresh cached index stat
   metadata during `status --porcelain=v1`.
 - rit-specific behavior: `--plan` prints which index entries would be restored
