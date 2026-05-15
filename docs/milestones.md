@@ -207,6 +207,8 @@ Completion criteria:
       with Git-compatible fatal output for `add`, `restore`, and `reset`.
     - [x] Missing `--pathspec-from-file` files are rejected with
       Git-compatible fatal output for `add`, `restore`, and `reset`.
+    - [x] Non-UTF-8 text pathspec-file bytes follow Git-compatible lossy
+      pathspec matching and errors for `add`, `restore`, and `reset`.
     - [x] `--pathspec-file-nul` without `--pathspec-from-file` is rejected
       with Git-compatible fatal output for `add`, `restore`, and `reset`.
     - [x] `--pathspec-from-file` without a value is rejected with

@@ -97,16 +97,7 @@ pub fn read_pathspecs_from_file(
         return Ok(PathspecFileRead::Pathspecs(pathspecs));
     }
 
-    let text = match String::from_utf8(data) {
-        Ok(text) => text,
-        Err(error) => {
-            writeln!(
-                stderr,
-                "rit: pathspec file '{file_name}' is not valid UTF-8: {error}"
-            )?;
-            return Ok(PathspecFileRead::Error { exit_code: 129 });
-        }
-    };
+    let text = String::from_utf8_lossy(&data);
     let mut pathspecs = Vec::new();
     for line in text.lines() {
         let line = line.strip_suffix('\r').unwrap_or(line);

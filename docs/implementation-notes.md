@@ -114,6 +114,9 @@
 - 2026-05-15 missing pathspec-file slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for missing
   `--pathspec-from-file` input files.
+- 2026-05-15 non-UTF-8 pathspec-file slice checked `git add -h`,
+  `git restore -h`, `git reset -h`, and direct Git comparisons for non-UTF-8
+  bytes in text `--pathspec-from-file` inputs.
 - 2026-05-15 pathspec-file option validation slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   `--pathspec-file-nul` without `--pathspec-from-file`.
@@ -377,6 +380,8 @@
   `reset`.
 - Missing pathspec input files are rejected with Git's fatal
   `could not open ... for reading` message and exit code before any mutation.
+- Non-UTF-8 bytes in text pathspec files are decoded lossily so unmatched
+  pathspec behavior follows Git instead of failing as an input encoding error.
 - `--pathspec-file-nul` without `--pathspec-from-file` is rejected before any
   `add`, `restore`, or `reset` mutation with Git's fatal dependency message.
 - `--pathspec-from-file` without a following value is rejected before any
