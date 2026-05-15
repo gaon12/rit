@@ -171,11 +171,6 @@ fn indexdb_write_through_records_new_commit() {
         .commit_id;
     repository.indexdb().ensure().expect("ensure should work");
     fs::write(temp.join("file.txt"), "two\n").expect("file should be modified");
-    let status = repository
-        .status_porcelain_v1()
-        .expect("ordinary status should ignore corrupt indexdb");
-    assert_eq!(status.entries.len(), 1);
-    assert_eq!(status.entries[0].path, "file.txt");
     repository
         .add_paths(&["file.txt".to_owned()])
         .expect("add should work");
@@ -566,6 +561,11 @@ fn indexdb_write_through_ignores_corrupted_database() {
     )
     .expect("db should be corruptible");
     fs::write(temp.join("file.txt"), "two\n").expect("file should be modified");
+    let status = repository
+        .status_porcelain_v1()
+        .expect("ordinary status should ignore corrupt indexdb");
+    assert_eq!(status.entries.len(), 1);
+    assert_eq!(status.entries[0].path, "file.txt");
     repository
         .add_paths(&["file.txt".to_owned()])
         .expect("add should work");
