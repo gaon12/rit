@@ -224,6 +224,31 @@ fn diff_cached_rename_limit_warning_outputs_match_git() {
 }
 
 #[test]
+fn diff_worktree_rename_limit_warning_outputs_match_git() {
+    let fixture = WorktreeIntentRenameLimitFixture::new("worktree-rename-limit");
+
+    for args in [
+        vec!["diff", "-M", "-l1", "--name-status"],
+        vec!["diff", "-M", "-l1"],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree rename limit {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_cached_copy_outputs_match_git() {
     let fixture = CopyFixture::new("cached-copy");
 
@@ -1179,6 +1204,54 @@ impl WorktreeIntentSimilarityRenameFixture {
 }
 
 impl Drop for WorktreeIntentSimilarityRenameFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct WorktreeIntentRenameLimitFixture {
+    path: PathBuf,
+}
+
+impl WorktreeIntentRenameLimitFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        for index in 1..=5 {
+            fs::write(
+                path.join(format!("old{index}.txt")),
+                format!("common\nline{index}\nkeep\n"),
+            )
+            .expect("old file should be written");
+        }
+        run_git(&path, ["add", "."]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+
+        for index in 1..=5 {
+            fs::remove_file(path.join(format!("old{index}.txt")))
+                .expect("old file should be removed");
+            fs::write(
+                path.join(format!("new{index}.txt")),
+                format!("common\nchanged{index}\nkeep\n"),
+            )
+            .expect("new file should be written");
+            run_git(&path, ["add", "-N", &format!("new{index}.txt")]);
+        }
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for WorktreeIntentRenameLimitFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }
