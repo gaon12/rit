@@ -475,6 +475,8 @@ Completion criteria:
     entries.
   - [x] Automatic clean merge commits for non-fast-forward merges without
     conflicts.
+  - [x] Clean merge commits run `pre-merge-commit` hooks and honor
+    `--no-verify` for that hook.
   - [ ] Full conflict handling, merge hooks, and strategies.
 - [ ] `rit cherry-pick`
 - [ ] `rit rebase`

@@ -2085,7 +2085,10 @@ fn merge_command(
     }
     if merge_args.continue_merge {
         let before = capture_operation_snapshot(&repository, stderr)?;
-        return match repository.continue_merge(&rit_core::CommitOptions::default()) {
+        return match repository.continue_merge(&rit_core::CommitOptions {
+            verify: merge_args.verify,
+            ..rit_core::CommitOptions::default()
+        }) {
             Ok(result) => {
                 record_operation(
                     &repository,
@@ -2258,7 +2261,12 @@ fn merge_command(
     let merge_result = if merge_args.ff_only {
         repository.merge_ff_only(target)
     } else {
-        repository.merge(target)
+        repository.merge_with_options(
+            target,
+            &rit_core::MergeOptions {
+                verify: merge_args.verify,
+            },
+        )
     };
     match merge_result {
         Ok(rit_core::MergeResult::AlreadyUpToDate { .. }) => {
@@ -2348,6 +2356,7 @@ struct ParsedMergeArgs {
     abort: bool,
     quit: bool,
     continue_merge: bool,
+    verify: bool,
 }
 
 fn parse_merge_args(
@@ -2360,6 +2369,7 @@ fn parse_merge_args(
     let mut abort = false;
     let mut quit = false;
     let mut continue_merge = false;
+    let mut verify = true;
     let mut target = None;
     let mut index = 0;
     while index < args.len() {
@@ -2374,6 +2384,10 @@ fn parse_merge_args(
             quit = true;
         } else if arg == "--continue" {
             continue_merge = true;
+        } else if arg == "-n" || arg == "--no-verify" {
+            verify = false;
+        } else if arg == "--verify" {
+            verify = true;
         } else if arg == "explain" && target.is_none() {
             explain = true;
             index += 1;
@@ -2437,6 +2451,7 @@ fn parse_merge_args(
         abort,
         quit,
         continue_merge,
+        verify,
     }))
 }
 

@@ -251,6 +251,16 @@ struct ConflictedMergeStart<'a> {
     conflict_stages: &'a [MergeConflictStagePlan],
 }
 
+struct CleanMergeCommitInput<'a> {
+    target: &'a str,
+    options: &'a MergeOptions,
+    old_id: ObjectId,
+    target_id: ObjectId,
+    base_entries: &'a [IndexEntry],
+    head_entries: &'a [IndexEntry],
+    target_entries: &'a [IndexEntry],
+}
+
 /// Options that affect commit metadata without changing the committed tree.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommitOptions {
@@ -260,6 +270,8 @@ pub struct CommitOptions {
     pub author_date: Option<SignatureTime>,
     /// Whether `pre-commit` and `commit-msg` hooks should run.
     pub verify: bool,
+    /// Which first hook and prepare-commit-msg source should be used.
+    pub hook_mode: CommitHookMode,
 }
 
 impl CommitOptions {
@@ -275,7 +287,37 @@ impl Default for CommitOptions {
             author: None,
             author_date: None,
             verify: true,
+            hook_mode: CommitHookMode::Commit,
         }
+    }
+}
+
+/// Hook shape used when creating a commit object.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CommitHookMode {
+    /// Normal `git commit` hook order.
+    Commit,
+    /// Automatic clean merge commit hook order.
+    Merge,
+}
+
+/// Options that affect merge execution without changing merge selection.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MergeOptions {
+    /// Whether merge verification hooks should run.
+    pub verify: bool,
+}
+
+impl MergeOptions {
+    /// Builds default merge options with hook verification enabled.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Default for MergeOptions {
+    fn default() -> Self {
+        Self { verify: true }
     }
 }
 
@@ -826,6 +868,11 @@ impl Repository {
 
     /// Merges `target` into the current branch for the currently supported cases.
     pub fn merge(&self, target: &str) -> Result<MergeResult> {
+        self.merge_with_options(target, &MergeOptions::default())
+    }
+
+    /// Merges `target` with explicit merge options.
+    pub fn merge_with_options(&self, target: &str, options: &MergeOptions) -> Result<MergeResult> {
         ensure_clean_for_checkout(self)?;
         let old_id = self
             .resolve_head()?
@@ -845,14 +892,15 @@ impl Repository {
             let merge_workflow =
                 non_fast_forward_merge_workflow_plan(&base_entries, &head_entries, &target_entries);
             if merge_workflow.conflict_stages.is_empty() {
-                let commit_id = self.create_clean_merge_commit(
+                let commit_id = self.create_clean_merge_commit(CleanMergeCommitInput {
                     target,
+                    options,
                     old_id,
-                    new_id,
-                    &base_entries,
-                    &head_entries,
-                    &target_entries,
-                )?;
+                    target_id: new_id,
+                    base_entries: &base_entries,
+                    head_entries: &head_entries,
+                    target_entries: &target_entries,
+                })?;
                 return Ok(MergeResult::MergeCommit {
                     old_id,
                     target_id: new_id,
@@ -882,15 +930,7 @@ impl Repository {
         Ok(MergeResult::FastForward { old_id, new_id })
     }
 
-    fn create_clean_merge_commit(
-        &self,
-        target: &str,
-        old_id: ObjectId,
-        target_id: ObjectId,
-        base_entries: &[IndexEntry],
-        head_entries: &[IndexEntry],
-        target_entries: &[IndexEntry],
-    ) -> Result<ObjectId> {
+    fn create_clean_merge_commit(&self, input: CleanMergeCommitInput<'_>) -> Result<ObjectId> {
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
                 "merge must be run in a repository with a working tree",
@@ -898,34 +938,49 @@ impl Repository {
         };
         let symlinks_enabled = self.core_symlinks_enabled()?;
         let merged_entries = self.non_fast_forward_merge_index_entries(
-            base_entries,
-            head_entries,
-            target_entries,
+            input.base_entries,
+            input.head_entries,
+            input.target_entries,
             &[],
-            target,
+            input.target,
         )?;
         let conflict_paths = BTreeSet::new();
         write_non_conflicting_merge_worktree_changes(
             self,
             worktree,
-            head_entries,
+            input.head_entries,
             &merged_entries,
             &conflict_paths,
             symlinks_enabled,
         )?;
-        write_text_atomically(&self.git_dir().join("ORIG_HEAD"), &format!("{old_id}\n"))?;
+        write_text_atomically(
+            &self.git_dir().join("ORIG_HEAD"),
+            &format!("{}\n", input.old_id),
+        )?;
         Index {
             entries: merged_entries,
             extensions: Vec::new(),
         }
         .write(&self.git_dir().join("index"))?;
-        let message = format!("Merge commit '{target}'");
+        let message = format!("Merge commit '{}'", input.target);
+        write_text_atomically(
+            &self.git_dir().join("MERGE_HEAD"),
+            &format!("{}\n", input.target_id),
+        )?;
+        write_text_atomically(&self.git_dir().join("MERGE_MSG"), &format!("{message}\n"))?;
         let result = self.commit_index_with_parents(
             &message,
-            &CommitOptions::default(),
-            &[old_id, target_id],
+            &CommitOptions {
+                verify: input.options.verify,
+                hook_mode: CommitHookMode::Merge,
+                ..CommitOptions::default()
+            },
+            &[input.old_id, input.target_id],
             true,
         )?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_HEAD"))?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_MODE"))?;
         Ok(result.commit_id)
     }
 
@@ -2052,22 +2107,31 @@ fn run_commit_hooks(
         &message_path,
         &format!("{}\n", message.trim_end_matches('\n')),
     )?;
+    let prepare_source = match options.hook_mode {
+        CommitHookMode::Commit => "message",
+        CommitHookMode::Merge => "merge",
+    };
+
     if !options.verify {
         run_hook(
             repository,
             "prepare-commit-msg",
-            &[message_path.clone(), PathBuf::from("message")],
+            &[message_path.clone(), PathBuf::from(prepare_source)],
         )?;
         *message = fs::read_to_string(&message_path)
             .map_err(|source| RitError::io(&message_path, source))?;
         return Ok(());
     }
 
-    run_hook(repository, "pre-commit", &[])?;
+    let first_hook = match options.hook_mode {
+        CommitHookMode::Commit => "pre-commit",
+        CommitHookMode::Merge => "pre-merge-commit",
+    };
+    run_hook(repository, first_hook, &[])?;
     run_hook(
         repository,
         "prepare-commit-msg",
-        &[message_path.clone(), PathBuf::from("message")],
+        &[message_path.clone(), PathBuf::from(prepare_source)],
     )?;
     run_hook(
         repository,

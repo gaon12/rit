@@ -74,6 +74,108 @@ fn supported_merge_conflict_outputs_match_git_exactly() {
     }
 }
 
+#[test]
+fn clean_merge_pre_merge_commit_hook_blocks_like_git_state() {
+    let root = temp_path("pre-merge-commit-hook");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_clean_merge(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    write_hook(
+        &git_repo,
+        "pre-merge-commit",
+        "#!/bin/sh\necho blocked >&2\nexit 1\n",
+    );
+    write_hook(
+        &rit_repo,
+        "pre-merge-commit",
+        "#!/bin/sh\necho blocked >&2\nexit 1\n",
+    );
+
+    let original_head = run_capture("git", ["rev-parse", "HEAD"], &git_repo).stdout;
+    let git_merge = run_capture("git", ["merge", "topic"], &git_repo);
+    let rit_merge = run_capture(rit_binary(), ["merge", "topic"], &rit_repo);
+
+    assert_ne!(git_merge.exit_code, 0);
+    assert_ne!(rit_merge.exit_code, 0);
+    assert_eq!(
+        original_head,
+        run_capture("git", ["rev-parse", "HEAD"], &git_repo).stdout
+    );
+    assert_eq!(
+        original_head,
+        run_capture("git", ["rev-parse", "HEAD"], &rit_repo).stdout
+    );
+    assert!(git_repo.join(".git").join("MERGE_HEAD").exists());
+    assert!(rit_repo.join(".git").join("MERGE_HEAD").exists());
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert!(rit_merge.stderr.contains("pre-merge-commit"));
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn clean_merge_no_verify_bypasses_pre_merge_commit_hook() {
+    let root = temp_path("pre-merge-commit-no-verify");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_clean_merge(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    write_hook(
+        &git_repo,
+        "pre-merge-commit",
+        "#!/bin/sh\necho blocked >&2\nexit 1\n",
+    );
+    write_hook(
+        &rit_repo,
+        "pre-merge-commit",
+        "#!/bin/sh\necho blocked >&2\nexit 1\n",
+    );
+
+    let git_merge = run_capture("git", ["merge", "--no-verify", "topic"], &git_repo);
+    let rit_merge = run_capture(rit_binary(), ["merge", "--no-verify", "topic"], &rit_repo);
+
+    assert_eq!(
+        git_merge.exit_code, 0,
+        "git merge stderr: {}",
+        git_merge.stderr
+    );
+    assert_eq!(
+        rit_merge.exit_code, 0,
+        "rit merge stderr: {}",
+        rit_merge.stderr
+    );
+    assert!(!git_repo.join(".git").join("MERGE_HEAD").exists());
+    assert!(!rit_repo.join(".git").join("MERGE_HEAD").exists());
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture(
+            "git",
+            ["rev-list", "--parents", "-n", "1", "HEAD"],
+            &git_repo
+        )
+        .stdout
+        .split_whitespace()
+        .count(),
+        run_capture(
+            "git",
+            ["rev-list", "--parents", "-n", "1", "HEAD"],
+            &rit_repo
+        )
+        .stdout
+        .split_whitespace()
+        .count()
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct MergeScenario {
     name: &'static str,
     setup: fn(&Path),
@@ -147,6 +249,15 @@ fn setup_distinct_type_conflict(repo: &Path) {
     commit_text(repo, "a.txt", "head\n", "content");
 }
 
+fn setup_clean_merge(repo: &Path) {
+    init_repo(repo);
+    commit_text(repo, "base.txt", "base\n", "base");
+    run_git(repo, ["checkout", "--quiet", "-b", "topic"]);
+    commit_text(repo, "topic.txt", "topic\n", "topic");
+    run_git(repo, ["checkout", "--quiet", "master"]);
+    commit_text(repo, "head.txt", "head\n", "head");
+}
+
 fn init_repo(repo: &Path) {
     fs::create_dir_all(repo).expect("fixture repository should be created");
     run_git(repo, ["init", "--quiet"]);
@@ -193,6 +304,26 @@ fn write_git_blob(repo: &Path, contents: &[u8]) -> String {
         .trim()
         .to_owned()
 }
+
+fn write_hook(repo: &Path, name: &str, contents: &str) {
+    let path = repo.join(".git").join("hooks").join(name);
+    fs::write(&path, contents).expect("hook should be written");
+    make_hook_executable(&path);
+}
+
+#[cfg(unix)]
+fn make_hook_executable(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut permissions = fs::metadata(path)
+        .expect("hook metadata should read")
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions).expect("hook permissions should be set");
+}
+
+#[cfg(not(unix))]
+fn make_hook_executable(_path: &Path) {}
 
 fn run_git<I, S>(repo: &Path, args: I)
 where

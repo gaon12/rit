@@ -643,8 +643,12 @@
   result output across content, modify/delete, binary, add/add, and
   regular-file/symlink distinct-type conflicts. The comparison includes exit
   code, stdout, stderr, porcelain status, and `ls-files --stage`.
+- Clean non-fast-forward merge commits now use the merge hook shape: they run
+  `pre-merge-commit`, pass `merge` to `prepare-commit-msg`, leave `MERGE_HEAD`
+  and `MERGE_MSG` when a verification hook blocks the commit, and honor
+  `--no-verify` for the automatic clean merge commit path.
 - Still unsupported: remaining full conflict result message parity, strategies,
-  merge hooks, `cherry-pick`, `rebase`, and `stash`.
+  full merge hook/editor parity, `cherry-pick`, `rebase`, and `stash`.
 
 ### M16: Operation journal and universal undo
 
@@ -1251,11 +1255,11 @@
 - Baseline command checked: `git merge -h`
 - Supported options: default fast-forward shape and explicit `--ff-only` with
   one target branch or revision, conflicted non-fast-forward index-stage
-  starts, `--abort`, `--quit`, `--continue`, plus rit-specific `--plan` and
-  `merge explain <target>`.
+  starts, `--abort`, `--quit`, `--continue`, `--no-verify` for clean merge
+  commits, plus rit-specific `--plan` and `merge explain <target>`.
 - Unsupported options: remaining advanced mode/symlink conflict edge cases,
-  remaining full conflict message parity, strategies, stat output, hooks,
-  squash, autostash, signing, and verification options.
+  remaining full conflict message parity, strategies, stat output, remaining
+  hook parity, squash, autostash, signing, and other verification options.
 - Git-compatible behavior: fast-forward final `HEAD`, index, and worktree state
   match Git for simple clean repositories.
 - rit-specific behavior: `--plan` prints whether the merge would be already
@@ -1282,6 +1286,9 @@
   resolved index and existing merge message without launching an editor.
 - rit-specific behavior: clean non-fast-forward merges create a merge commit
   immediately when the simple tree merge has no conflict candidates.
+- Git-compatible behavior: clean non-fast-forward merge commits run the
+  `pre-merge-commit` hook, leave merge state for manual commit when that hook
+  blocks, and bypass that hook when `--no-verify` is supplied.
 - Intentional differences: output is simplified and no editor is launched for
   generated merge messages.
 - Repository mutation: yes, updates `HEAD` or the current branch ref for

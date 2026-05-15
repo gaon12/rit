@@ -175,13 +175,13 @@ Switch to an existing branch, or create and switch to a new branch.
 ";
 
 const MERGE_HELP: &str = "\
-rit merge [--plan] [--ff-only] <target>
+rit merge [--plan] [--ff-only] [--no-verify] <target>
 rit merge --abort
 rit merge --quit
-rit merge --continue
+rit merge --continue [--no-verify]
 rit merge explain <target>
 
-Fast-forward the current branch to a local branch or revision, start a conflicted text merge, abort, quit, or continue an in-progress merge, print a dry-run plan, or explain the merge decision without writing.
+Fast-forward the current branch to a local branch or revision, create a clean merge commit, start a conflicted text merge, abort, quit, or continue an in-progress merge, print a dry-run plan, or explain the merge decision without writing.
 ";
 
 const AUTH_HELP: &str = "\
