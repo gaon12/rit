@@ -109,6 +109,13 @@ pub fn read_pathspecs_from_file(
             return Ok(PathspecFileRead::Error { exit_code: 128 });
         }
         match parse_pathspec_file_line(line) {
+            Ok(pathspec) if pathspec.is_empty() => {
+                writeln!(
+                    stderr,
+                    "fatal: empty string is not a valid pathspec. please use . instead if you meant to match all paths"
+                )?;
+                return Ok(PathspecFileRead::Error { exit_code: 128 });
+            }
             Ok(pathspec) => pathspecs.push(pathspec),
             Err(()) => {
                 writeln!(stderr, "fatal: line is badly quoted: {line}")?;

@@ -149,6 +149,9 @@
 - 2026-05-15 empty pathspec-file entry slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for leading
   empty line entries in `--pathspec-from-file`.
+- 2026-05-15 quoted empty pathspec-file slice checked `git add -h`,
+  `git restore -h`, `git reset -h`, and direct Git comparisons for quoted
+  empty entries in `--pathspec-from-file`.
 - 2026-05-15 empty NUL pathspec-file entry slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for leading
   empty entries in `--pathspec-from-file --pathspec-file-nul`.
@@ -419,6 +422,8 @@
   `add`, `restore`, or `reset` mutation with Git's option-value error.
 - Added Git-compatible rejection for empty line-delimited pathspec-file
   entries before any `add`, `restore`, or `reset` mutation is applied.
+- Added Git-compatible rejection for quoted empty pathspec-file entries before
+  any `add`, `restore`, or `reset` mutation is applied.
 - Added Git-compatible rejection for empty NUL-delimited pathspec-file entries
   before any `add`, `restore`, or `reset` mutation is applied, while keeping a
   final trailing NUL terminator valid like Git.
