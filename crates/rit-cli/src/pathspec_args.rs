@@ -130,25 +130,26 @@ fn parse_pathspec_file_line(line: &str) -> Result<String, ()> {
     }
 
     let quoted = &line[1..line.len() - 1];
-    let mut output = String::new();
+    let mut output = Vec::new();
     let mut chars = quoted.chars().peekable();
     while let Some(ch) = chars.next() {
         if ch != '\\' {
-            output.push(ch);
+            let mut bytes = [0; 4];
+            output.extend_from_slice(ch.encode_utf8(&mut bytes).as_bytes());
             continue;
         }
         let Some(escaped) = chars.next() else {
             return Err(());
         };
         match escaped {
-            '\\' => output.push('\\'),
-            '"' => output.push('"'),
-            'n' => output.push('\n'),
-            'r' => output.push('\r'),
-            't' => output.push('\t'),
-            'b' => output.push('\u{0008}'),
-            'f' => output.push('\u{000c}'),
-            'v' => output.push('\u{000b}'),
+            '\\' => output.push(b'\\'),
+            '"' => output.push(b'"'),
+            'n' => output.push(b'\n'),
+            'r' => output.push(b'\r'),
+            't' => output.push(b'\t'),
+            'b' => output.push(0x08),
+            'f' => output.push(0x0c),
+            'v' => output.push(0x0b),
             '0'..='7' => {
                 let mut value = escaped.to_digit(8).unwrap_or(0);
                 for _ in 0..2 {
@@ -161,13 +162,10 @@ fn parse_pathspec_file_line(line: &str) -> Result<String, ()> {
                     chars.next();
                     value = value * 8 + next.to_digit(8).unwrap_or(0);
                 }
-                let Some(decoded) = char::from_u32(value) else {
-                    return Err(());
-                };
-                output.push(decoded);
+                output.push(u8::try_from(value).map_err(|_| ())?);
             }
             _ => return Err(()),
         }
     }
-    Ok(output)
+    String::from_utf8(output).map_err(|_| ())
 }

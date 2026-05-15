@@ -90,6 +90,9 @@
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
   `--pathspec-file-nul`, including a quoted pathspec entry.
+- 2026-05-15 quoted octal pathspec-file slice checked `git add -h`,
+  `git restore -h`, `git reset -h`, and direct Git comparisons for UTF-8
+  pathspec bytes encoded as octal C-style escapes.
 - 2026-05-12 stdin pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file=-`.
 - 2026-05-12 stdin NUL pathspec-file slice checked `git add -h`,
@@ -328,6 +331,8 @@
 - Added Git comparison coverage for stdin-delivered NUL-separated pathspecs
   in `add`, `restore`, and `reset`.
 - Added C-style quoted pathspec-file entry parsing for common escapes.
+- Octal C-style pathspec-file escapes are decoded as bytes before UTF-8
+  validation, matching Git for non-ASCII paths such as `caf\303\251.txt`.
 - Added Git-compatible rejection for empty line-delimited pathspec-file
   entries before any `add`, `restore`, or `reset` mutation is applied.
 - Added Git-compatible rejection for empty NUL-delimited pathspec-file entries

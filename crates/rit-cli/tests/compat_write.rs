@@ -316,6 +316,44 @@ fn add_quoted_pathspec_from_file_matches_git_status() {
 }
 
 #[test]
+fn octal_quoted_pathspec_from_file_matches_git_status() {
+    for command in ["add", "restore", "reset"] {
+        let fixture = LocalWriteFixture::new(
+            &format!("{command}-octal-quoted-pathspec-file"),
+            LocalWriteFixtureKind::NestedTracked,
+        )
+        .expect("fixture should build");
+        run_git(fixture.path(), ["config", "core.quotepath", "false"]);
+        let path = "caf\u{00e9}.txt";
+        fs::write(fixture.path().join(path), "base\n").expect("unicode file should be written");
+        run_git(fixture.path(), ["add", path]);
+        run_git(fixture.path(), ["commit", "--quiet", "-m", "unicode path"]);
+        fs::write(fixture.path().join(path), "changed\n").expect("unicode file should be modified");
+        fs::write(
+            fixture.path().join("pathspecs.txt"),
+            "\"caf\\303\\251.txt\"\n",
+        )
+        .expect("pathspec file should be written");
+        if command == "reset" {
+            run_git(fixture.path(), ["add", path]);
+        }
+
+        let outcome = compare_after_command(
+            fixture.path(),
+            command_words("git", [command, "--pathspec-from-file", "pathspecs.txt"]),
+            command_words(
+                rit_binary(),
+                [command, "--pathspec-from-file", "pathspecs.txt"],
+            ),
+        );
+
+        assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+        assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+        assert_eq!(outcome.git_status, outcome.rit_status);
+    }
+}
+
+#[test]
 fn empty_line_pathspec_from_file_is_rejected_like_git() {
     for command in ["add", "restore", "reset"] {
         let fixture = LocalWriteFixture::new(
