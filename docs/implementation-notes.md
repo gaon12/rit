@@ -81,6 +81,9 @@
 - 2026-05-15 exact rename-limit slice checked `git diff -h` and direct Git
   comparisons for cached and worktree intent-to-add exact renames with
   `diff -M -l1`.
+- 2026-05-15 rename/copy limit width slice checked `git diff -h` and direct
+  Git comparisons for cached non-exact rename/copy detection with `-M -l1`
+  and `-C -l1`.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
   `--pathspec-file-nul`, including a quoted pathspec entry.
@@ -304,6 +307,9 @@
 - Added a Git-compatible exact-rename pass before the `-l<n>` exhaustive
   similarity limit check, so exact cached and worktree intent-to-add renames
   are still reported when the limit is below the changed path count.
+- Refined the `-l<n>` limit model to count the larger side of source and
+  destination candidate sets instead of the total changed-path count, matching
+  Git for one-source/one-destination non-exact rename and copy detection.
 - Added local write compatibility coverage that compares Git and rit porcelain
   state after directory pathspec `add`, `restore`, and `reset`.
 - Added local write compatibility coverage for simple wildcard and

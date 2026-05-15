@@ -56,7 +56,9 @@ The current codebase implements an early local Git subset:
   `--find-renames[=<n>]`, `-C[<n>]`, and `--find-copies[=<n>]` for summary
   modes and patch output. `--find-copies-harder` can use unchanged HEAD files
   as copy sources in cached diff. Exact renames are detected before the
-  exhaustive `-l<n>` similarity limit is applied.
+  exhaustive `-l<n>` similarity limit is applied, and the supported limit
+  model counts source/destination candidate width rather than total changed
+  paths for one-source/one-destination similarity detection.
 - Default worktree diff supports rename/copy detection with `-M[<n>]` and
   `-C[<n>]` for the Git-compatible intent-to-add slice, where added worktree
   paths are already represented in the index by `git add -N`.

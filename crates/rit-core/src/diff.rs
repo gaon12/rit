@@ -1118,9 +1118,16 @@ fn rename_limit_exceeded(statuses: impl Iterator<Item = char>, options: &DiffOpt
     if limit == 0 {
         return false;
     }
-    let candidate_count = statuses
-        .filter(|status| matches!(status, 'A' | 'D' | 'M'))
-        .count();
+    let mut destination_count = 0;
+    let mut source_count = 0;
+    for status in statuses {
+        match status {
+            'A' => destination_count += 1,
+            'D' | 'M' => source_count += 1,
+            _ => {}
+        }
+    }
+    let candidate_count = destination_count.max(source_count);
     candidate_count > limit
 }
 
@@ -1692,11 +1699,12 @@ mod tests {
     #[test]
     fn rename_limit_counts_candidate_paths_and_zero_is_unlimited() {
         let options = DiffOptions {
-            rename_limit: Some(2),
+            rename_limit: Some(1),
             ..DiffOptions::default()
         };
 
         assert!(rename_limit_exceeded(['A', 'D', 'M'].into_iter(), &options));
+        assert!(!rename_limit_exceeded(['A', 'D'].into_iter(), &options));
 
         let unlimited = DiffOptions {
             rename_limit: Some(0),

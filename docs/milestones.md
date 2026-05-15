@@ -146,6 +146,9 @@ Completion criteria:
   - [x] Rename/copy candidate limit model and CLI parsing for `-l<n>`.
   - [x] Exact rename detection still runs when `-l<n>` is below the changed
     path count, matching Git's cheap exact-pass behavior.
+  - [x] Rename/copy `-l<n>` counts source and destination candidate widths
+    instead of the total changed-path count for one-source/one-destination
+    similarity detection.
   - [x] Worktree rename/copy detection for default `diff -M/-C` when added
     paths are represented by Git intent-to-add index entries.
   - [x] Worktree `--find-copies-harder` copy detection from unchanged index

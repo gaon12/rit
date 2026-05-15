@@ -151,6 +151,7 @@ fn diff_cached_similarity_rename_outputs_match_git() {
     for args in [
         vec!["diff", "--cached", "-M", "--name-status"],
         vec!["diff", "--cached", "-M", "-l0", "--name-status"],
+        vec!["diff", "--cached", "-M", "-l1", "--name-status"],
         vec!["diff", "--cached", "-M79%", "--name-status"],
         vec!["diff", "--cached", "--find-renames=79", "--stat"],
         vec!["diff", "--cached", "-M"],
@@ -177,6 +178,7 @@ fn diff_cached_copy_outputs_match_git() {
 
     for args in [
         vec!["diff", "--cached", "-C", "--name-status"],
+        vec!["diff", "--cached", "-C", "-l1", "--name-status"],
         vec!["diff", "--cached", "-C79%", "--name-status"],
         vec!["diff", "--cached", "--find-copies=79", "--stat"],
         vec!["diff", "--cached", "-C"],
