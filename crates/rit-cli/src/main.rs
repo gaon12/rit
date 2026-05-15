@@ -298,10 +298,7 @@ fn init_command(
             }
             Ok(ExitCode::SUCCESS)
         }
-        Err(error) => {
-            writeln!(stderr, "rit: {error}")?;
-            Ok(ExitCode::from(1))
-        }
+        Err(error) => write_command_error(stderr, error),
     }
 }
 
@@ -582,10 +579,7 @@ fn status_command(
             }
             Ok(ExitCode::SUCCESS)
         }
-        Err(error) => {
-            writeln!(stderr, "rit: {error}")?;
-            Ok(ExitCode::from(1))
-        }
+        Err(error) => write_command_error(stderr, error),
     }
 }
 
@@ -1210,10 +1204,7 @@ fn add_command(
             )?;
             Ok(ExitCode::SUCCESS)
         }
-        Err(error) => {
-            writeln!(stderr, "rit: {error}")?;
-            Ok(ExitCode::from(1))
-        }
+        Err(error) => write_command_error(stderr, error),
     }
 }
 
@@ -1710,6 +1701,7 @@ fn reset_command(
                 }
                 Ok(ExitCode::SUCCESS)
             }
+            Err(error) if is_reset_noop_pathspec_error(&error) => Ok(ExitCode::SUCCESS),
             Err(error) => write_command_error(stderr, error),
         };
     }
@@ -1738,6 +1730,7 @@ fn reset_command(
             )?;
             Ok(ExitCode::SUCCESS)
         }
+        Err(error) if is_reset_noop_pathspec_error(&error) => Ok(ExitCode::SUCCESS),
         Err(error) => write_command_error(stderr, error),
     }
 }
@@ -2668,8 +2661,51 @@ fn format_merge_side(side: rit_core::MergeConflictSide, target: &str) -> &str {
 }
 
 fn write_command_error(stderr: &mut dyn Write, error: rit_core::RitError) -> io::Result<ExitCode> {
+    if let rit_core::RitError::InvalidInput { message } = &error {
+        if let Some(pathspec) = message.strip_prefix("pathspec did not match any files: ") {
+            writeln!(
+                stderr,
+                "fatal: pathspec '{}' did not match any files",
+                git_error_pathspec(pathspec)
+            )?;
+            return Ok(ExitCode::from(128));
+        }
+        if let Some(pathspec) =
+            message.strip_prefix("pathspec did not match any file known to git: ")
+        {
+            writeln!(
+                stderr,
+                "error: pathspec '{}' did not match any file(s) known to git",
+                git_error_pathspec(pathspec)
+            )?;
+            return Ok(ExitCode::from(1));
+        }
+        if let Some(pathspec) = message.strip_prefix("pathspec did not match any indexed file: ") {
+            writeln!(
+                stderr,
+                "error: pathspec '{}' did not match any file(s) known to git",
+                git_error_pathspec(pathspec)
+            )?;
+            return Ok(ExitCode::from(1));
+        }
+    }
     writeln!(stderr, "rit: {error}")?;
     Ok(ExitCode::from(1))
+}
+
+fn is_reset_noop_pathspec_error(error: &rit_core::RitError) -> bool {
+    matches!(
+        error,
+        rit_core::RitError::InvalidInput { message }
+            if message.starts_with("pathspec did not match any file known to git: ")
+    )
+}
+
+fn git_error_pathspec(pathspec: &str) -> String {
+    pathspec
+        .chars()
+        .map(|ch| if ch.is_control() { '?' } else { ch })
+        .collect()
 }
 
 struct ParsedCommitArgs {

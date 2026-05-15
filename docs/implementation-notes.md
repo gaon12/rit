@@ -93,6 +93,9 @@
 - 2026-05-15 quoted octal pathspec-file slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for UTF-8
   pathspec bytes encoded as octal C-style escapes.
+- 2026-05-15 quoted alarm pathspec-file slice checked `git add -h`,
+  `git restore -h`, `git reset -h`, and direct Git comparisons for `\a`
+  C-style escapes and pathspec-not-found output.
 - 2026-05-12 stdin pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file=-`.
 - 2026-05-12 stdin NUL pathspec-file slice checked `git add -h`,
@@ -333,6 +336,9 @@
 - Added C-style quoted pathspec-file entry parsing for common escapes.
 - Octal C-style pathspec-file escapes are decoded as bytes before UTF-8
   validation, matching Git for non-ASCII paths such as `caf\303\251.txt`.
+- Added `\a` C-style pathspec-file decoding and Git-compatible
+  pathspec-not-found output for `add` and `restore`; pathspec-only `reset`
+  keeps Git's no-op behavior when no index or `HEAD` path matches.
 - Added Git-compatible rejection for empty line-delimited pathspec-file
   entries before any `add`, `restore`, or `reset` mutation is applied.
 - Added Git-compatible rejection for empty NUL-delimited pathspec-file entries
@@ -896,6 +902,8 @@
   sparse controls, full Git pathspec-file edge cases.
 - Git-compatible behavior: explicit tracked file restore for regular files,
   including executable worktree permissions for `100755` index entries on Unix.
+- Git-compatible behavior: unmatched pathspec-file entries report
+  `pathspec ... did not match any file(s) known to git`.
 - Git-compatible behavior: symlink index entries are restored as symlinks on
   Unix and as link-target text files on platforms without Unix symlink support.
 - Git-compatible behavior: when `core.symlinks=false`, restore and checkout
@@ -916,6 +924,8 @@
 - Unsupported options: commit-moving resets, soft/mixed/hard/merge/keep modes,
   patch mode, full Git pathspec-file edge cases.
 - Git-compatible behavior: unstages explicit paths and reports remaining unstaged modifications.
+- Git-compatible behavior: pathspec-only resets are successful no-ops when no
+  index or `HEAD` path matches, including pathspecs read from a file.
 - Git-compatible behavior: clean tracked paths refresh cached index stat
   metadata during `status --porcelain=v1`.
 - rit-specific behavior: `--plan` prints which index entries would be restored

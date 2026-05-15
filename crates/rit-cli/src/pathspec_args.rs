@@ -147,6 +147,7 @@ fn parse_pathspec_file_line(line: &str) -> Result<String, ()> {
             'n' => output.push(b'\n'),
             'r' => output.push(b'\r'),
             't' => output.push(b'\t'),
+            'a' => output.push(0x07),
             'b' => output.push(0x08),
             'f' => output.push(0x0c),
             'v' => output.push(0x0b),

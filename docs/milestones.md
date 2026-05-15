@@ -192,6 +192,9 @@ Completion criteria:
     - [x] C-style quoted pathspec-file entries for common escapes.
     - [x] Octal C-style quoted pathspec-file escapes decode as UTF-8 bytes
       for `add`, `restore`, and `reset`.
+    - [x] Alarm C-style pathspec-file escape `\a` and Git-compatible
+      pathspec-not-found output/no-op behavior for `add`, `restore`, and
+      `reset`.
     - [x] Empty line pathspec-file entries are rejected with Git-compatible
       fatal output for `add`, `restore`, and `reset`.
     - [x] Empty NUL-delimited pathspec-file entries are rejected with
