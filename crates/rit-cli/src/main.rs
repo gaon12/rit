@@ -1143,6 +1143,9 @@ fn add_command(
     let Some(add_args) = parse_add_args(args, stderr)? else {
         return Ok(ExitCode::from(129));
     };
+    if let Some(exit_code) = add_args.exit_code {
+        return Ok(ExitCode::from(exit_code));
+    }
     if add_args.paths.is_empty() {
         writeln!(
             stderr,
@@ -1204,6 +1207,18 @@ struct ParsedAddArgs {
     paths: Vec<String>,
     options: rit_core::AddOptions,
     plan: bool,
+    exit_code: Option<u8>,
+}
+
+impl ParsedAddArgs {
+    fn exit(exit_code: u8) -> Self {
+        Self {
+            paths: Vec::new(),
+            options: rit_core::AddOptions::default(),
+            plan: false,
+            exit_code: Some(exit_code),
+        }
+    }
 }
 
 fn parse_add_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Option<ParsedAddArgs>> {
@@ -1255,18 +1270,22 @@ fn parse_add_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Option<
     }
 
     if let Some(file_name) = pathspec_file {
-        let Some(file_pathspecs) =
-            pathspec_args::read_pathspecs_from_file(&file_name, pathspec_file_nul, "add", stderr)?
-        else {
-            return Ok(None);
-        };
-        paths.extend(file_pathspecs);
+        match pathspec_args::read_pathspecs_from_file(&file_name, pathspec_file_nul, "add", stderr)?
+        {
+            pathspec_args::PathspecFileRead::Pathspecs(file_pathspecs) => {
+                paths.extend(file_pathspecs);
+            }
+            pathspec_args::PathspecFileRead::Error { exit_code } => {
+                return Ok(Some(ParsedAddArgs::exit(exit_code)));
+            }
+        }
     }
 
     Ok(Some(ParsedAddArgs {
         paths,
         options,
         plan,
+        exit_code: None,
     }))
 }
 
@@ -1522,9 +1541,14 @@ fn restore_command(args: &[String], stderr: &mut dyn Write) -> io::Result<ExitCo
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    let Some((staged, paths)) = parse_restore_args(args, stderr)? else {
+    let Some(restore_args) = parse_restore_args(args, stderr)? else {
         return Ok(ExitCode::from(129));
     };
+    if let Some(exit_code) = restore_args.exit_code {
+        return Ok(ExitCode::from(exit_code));
+    }
+    let staged = restore_args.staged;
+    let paths = restore_args.paths;
     if paths.is_empty() {
         writeln!(stderr, "rit: restore requires at least one file")?;
         return Ok(ExitCode::from(129));
@@ -1568,10 +1592,26 @@ fn restore_command(args: &[String], stderr: &mut dyn Write) -> io::Result<ExitCo
     }
 }
 
+struct ParsedRestoreArgs {
+    staged: bool,
+    paths: Vec<String>,
+    exit_code: Option<u8>,
+}
+
+impl ParsedRestoreArgs {
+    fn exit(exit_code: u8) -> Self {
+        Self {
+            staged: false,
+            paths: Vec::new(),
+            exit_code: Some(exit_code),
+        }
+    }
+}
+
 fn parse_restore_args(
     args: &[String],
     stderr: &mut dyn Write,
-) -> io::Result<Option<(bool, Vec<String>)>> {
+) -> io::Result<Option<ParsedRestoreArgs>> {
     let mut staged = false;
     let mut paths = Vec::new();
     let mut pathspec_file = None;
@@ -1600,18 +1640,25 @@ fn parse_restore_args(
         index += 1;
     }
     if let Some(file_name) = pathspec_file {
-        let Some(file_pathspecs) = pathspec_args::read_pathspecs_from_file(
+        match pathspec_args::read_pathspecs_from_file(
             &file_name,
             pathspec_file_nul,
             "restore",
             stderr,
-        )?
-        else {
-            return Ok(None);
-        };
-        paths.extend(file_pathspecs);
+        )? {
+            pathspec_args::PathspecFileRead::Pathspecs(file_pathspecs) => {
+                paths.extend(file_pathspecs);
+            }
+            pathspec_args::PathspecFileRead::Error { exit_code } => {
+                return Ok(Some(ParsedRestoreArgs::exit(exit_code)));
+            }
+        }
     }
-    Ok(Some((staged, paths)))
+    Ok(Some(ParsedRestoreArgs {
+        staged,
+        paths,
+        exit_code: None,
+    }))
 }
 
 fn reset_command(
@@ -1622,6 +1669,9 @@ fn reset_command(
     let Some(reset_args) = parse_reset_args(args, stderr)? else {
         return Ok(ExitCode::from(129));
     };
+    if let Some(exit_code) = reset_args.exit_code {
+        return Ok(ExitCode::from(exit_code));
+    }
     if reset_args.paths.is_empty() {
         writeln!(
             stderr,
@@ -1680,6 +1730,17 @@ fn reset_command(
 struct ParsedResetArgs {
     paths: Vec<String>,
     plan: bool,
+    exit_code: Option<u8>,
+}
+
+impl ParsedResetArgs {
+    fn exit(exit_code: u8) -> Self {
+        Self {
+            paths: Vec::new(),
+            plan: false,
+            exit_code: Some(exit_code),
+        }
+    }
 }
 
 fn parse_reset_args(
@@ -1714,18 +1775,25 @@ fn parse_reset_args(
         index += 1;
     }
     if let Some(file_name) = pathspec_file {
-        let Some(file_pathspecs) = pathspec_args::read_pathspecs_from_file(
+        match pathspec_args::read_pathspecs_from_file(
             &file_name,
             pathspec_file_nul,
             "reset",
             stderr,
-        )?
-        else {
-            return Ok(None);
-        };
-        paths.extend(file_pathspecs);
+        )? {
+            pathspec_args::PathspecFileRead::Pathspecs(file_pathspecs) => {
+                paths.extend(file_pathspecs);
+            }
+            pathspec_args::PathspecFileRead::Error { exit_code } => {
+                return Ok(Some(ParsedResetArgs::exit(exit_code)));
+            }
+        }
     }
-    Ok(Some(ParsedResetArgs { paths, plan }))
+    Ok(Some(ParsedResetArgs {
+        paths,
+        plan,
+        exit_code: None,
+    }))
 }
 
 fn checkout_command(

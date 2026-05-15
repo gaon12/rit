@@ -316,6 +316,59 @@ fn add_quoted_pathspec_from_file_matches_git_status() {
 }
 
 #[test]
+fn empty_line_pathspec_from_file_is_rejected_like_git() {
+    for command in ["add", "restore", "reset"] {
+        let fixture = LocalWriteFixture::new(
+            &format!("{command}-empty-pathspec-file"),
+            LocalWriteFixtureKind::NestedTracked,
+        )
+        .expect("fixture should build");
+        fs::write(
+            fixture.path().join("nested").join("tracked.txt"),
+            "changed\n",
+        )
+        .expect("tracked file should be modified");
+        fs::write(
+            fixture.path().join("pathspecs.txt"),
+            "\nnested/tracked.txt\n",
+        )
+        .expect("pathspec file should be written");
+        if command == "reset" {
+            run_git(fixture.path(), ["add", "nested/tracked.txt"]);
+        }
+
+        let workspace = temp_path(&format!("{command}-empty-pathspec-compare"));
+        let git_repo = workspace.join("git");
+        let rit_repo = workspace.join("rit");
+        copy_directory(fixture.path(), &git_repo);
+        copy_directory(fixture.path(), &rit_repo);
+
+        let git = run_command_allow_failure(
+            &command_words("git", [command, "--pathspec-from-file", "pathspecs.txt"]),
+            &git_repo,
+        );
+        let rit = run_command_allow_failure(
+            &command_words(
+                rit_binary(),
+                [command, "--pathspec-from-file", "pathspecs.txt"],
+            ),
+            &rit_repo,
+        );
+
+        assert_eq!(git.exit_code, Some(128), "{command} git exit code");
+        assert_eq!(rit.exit_code, git.exit_code, "{command} rit exit code");
+        assert_eq!(rit.stdout, git.stdout, "{command} stdout");
+        assert_eq!(rit.stderr, git.stderr, "{command} stderr");
+        assert_eq!(
+            run_capture("git", ["status", "--porcelain=v1"], &git_repo).0,
+            run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).0,
+            "{command} status"
+        );
+        let _ = fs::remove_dir_all(workspace);
+    }
+}
+
+#[test]
 fn add_exclude_magic_pathspec_matches_git_status() {
     let fixture = LocalWriteFixture::new("add-exclude-magic", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");
@@ -2653,6 +2706,9 @@ fn run_command(spec: &CommandSpec, cwd: &Path) -> (String, String) {
 
 struct CommandRun {
     success: bool,
+    exit_code: Option<i32>,
+    stdout: String,
+    stderr: String,
 }
 
 fn run_command_allow_failure(spec: &CommandSpec, cwd: &Path) -> CommandRun {
@@ -2676,6 +2732,9 @@ fn run_command_allow_failure(spec: &CommandSpec, cwd: &Path) -> CommandRun {
     let output = child.wait_with_output().expect("command should finish");
     CommandRun {
         success: output.status.success(),
+        exit_code: output.status.code(),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
     }
 }
 

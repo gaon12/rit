@@ -1,6 +1,11 @@
 use std::fs;
 use std::io::{self, Read, Write};
 
+pub enum PathspecFileRead {
+    Pathspecs(Vec<String>),
+    Error { exit_code: u8 },
+}
+
 pub fn handle_pathspec_file_option(
     args: &[String],
     index: &mut usize,
@@ -40,7 +45,7 @@ pub fn read_pathspecs_from_file(
     nul_terminated: bool,
     command: &str,
     stderr: &mut dyn Write,
-) -> io::Result<Option<Vec<String>>> {
+) -> io::Result<PathspecFileRead> {
     let data = if file_name == "-" {
         let mut data = Vec::new();
         if let Err(error) = io::stdin().read_to_end(&mut data) {
@@ -48,7 +53,7 @@ pub fn read_pathspecs_from_file(
                 stderr,
                 "rit: {command} could not read pathspecs from stdin: {error}"
             )?;
-            return Ok(None);
+            return Ok(PathspecFileRead::Error { exit_code: 129 });
         }
         data
     } else {
@@ -59,7 +64,7 @@ pub fn read_pathspecs_from_file(
                     stderr,
                     "rit: could not read pathspec file '{file_name}': {error}"
                 )?;
-                return Ok(None);
+                return Ok(PathspecFileRead::Error { exit_code: 129 });
             }
         }
     };
@@ -70,7 +75,7 @@ pub fn read_pathspecs_from_file(
             .filter(|item| !item.is_empty())
             .map(|item| String::from_utf8_lossy(item).into_owned())
             .collect();
-        return Ok(Some(pathspecs));
+        return Ok(PathspecFileRead::Pathspecs(pathspecs));
     }
 
     let text = match String::from_utf8(data) {
@@ -80,24 +85,28 @@ pub fn read_pathspecs_from_file(
                 stderr,
                 "rit: pathspec file '{file_name}' is not valid UTF-8: {error}"
             )?;
-            return Ok(None);
+            return Ok(PathspecFileRead::Error { exit_code: 129 });
         }
     };
     let mut pathspecs = Vec::new();
     for line in text.lines() {
         let line = line.strip_suffix('\r').unwrap_or(line);
         if line.is_empty() {
-            continue;
+            writeln!(
+                stderr,
+                "fatal: empty string is not a valid pathspec. please use . instead if you meant to match all paths"
+            )?;
+            return Ok(PathspecFileRead::Error { exit_code: 128 });
         }
         match parse_pathspec_file_line(line) {
             Ok(pathspec) => pathspecs.push(pathspec),
             Err(error) => {
                 writeln!(stderr, "rit: invalid pathspec file entry '{line}': {error}")?;
-                return Ok(None);
+                return Ok(PathspecFileRead::Error { exit_code: 129 });
             }
         }
     }
-    Ok(Some(pathspecs))
+    Ok(PathspecFileRead::Pathspecs(pathspecs))
 }
 
 fn parse_pathspec_file_line(line: &str) -> Result<String, String> {
