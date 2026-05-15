@@ -98,6 +98,9 @@
 - 2026-05-15 empty pathspec-file entry slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for leading
   empty line entries in `--pathspec-from-file`.
+- 2026-05-15 empty NUL pathspec-file entry slice checked `git add -h`,
+  `git restore -h`, `git reset -h`, and direct Git comparisons for leading
+  empty entries in `--pathspec-from-file --pathspec-file-nul`.
 - 2026-05-15 badly quoted pathspec-file entry slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   unterminated quoted entries in `--pathspec-from-file`.
@@ -327,6 +330,9 @@
 - Added C-style quoted pathspec-file entry parsing for common escapes.
 - Added Git-compatible rejection for empty line-delimited pathspec-file
   entries before any `add`, `restore`, or `reset` mutation is applied.
+- Added Git-compatible rejection for empty NUL-delimited pathspec-file entries
+  before any `add`, `restore`, or `reset` mutation is applied, while keeping a
+  final trailing NUL terminator valid like Git.
 - Added Git-compatible rejection for badly quoted pathspec-file entries before
   any `add`, `restore`, or `reset` mutation is applied.
 - Still unsupported: full Git pathspec-file edge cases, broader worktree

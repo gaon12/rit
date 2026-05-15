@@ -192,6 +192,9 @@ Completion criteria:
     - [x] C-style quoted pathspec-file entries for common escapes.
     - [x] Empty line pathspec-file entries are rejected with Git-compatible
       fatal output for `add`, `restore`, and `reset`.
+    - [x] Empty NUL-delimited pathspec-file entries are rejected with
+      Git-compatible fatal output for `add`, `restore`, and `reset`, while a
+      trailing NUL terminator remains allowed.
     - [x] Badly quoted pathspec-file entries are rejected with Git-compatible
       fatal output for `add`, `restore`, and `reset`.
     - [ ] Full Git pathspec-file edge cases and advanced glob parity.

@@ -70,11 +70,23 @@ pub fn read_pathspecs_from_file(
     };
 
     if nul_terminated {
-        let pathspecs = data
-            .split(|byte| *byte == 0)
-            .filter(|item| !item.is_empty())
-            .map(|item| String::from_utf8_lossy(item).into_owned())
-            .collect();
+        let mut pathspecs = Vec::new();
+        let parts = data.split(|byte| *byte == 0).collect::<Vec<_>>();
+        for (index, item) in parts.iter().enumerate() {
+            let is_trailing_empty =
+                item.is_empty() && index + 1 == parts.len() && data.ends_with(&[0]);
+            if item.is_empty() {
+                if is_trailing_empty {
+                    continue;
+                }
+                writeln!(
+                    stderr,
+                    "fatal: empty string is not a valid pathspec. please use . instead if you meant to match all paths"
+                )?;
+                return Ok(PathspecFileRead::Error { exit_code: 128 });
+            }
+            pathspecs.push(String::from_utf8_lossy(item).into_owned());
+        }
         return Ok(PathspecFileRead::Pathspecs(pathspecs));
     }
 
