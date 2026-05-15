@@ -153,6 +153,8 @@ Completion criteria:
     when similarity detection is skipped.
   - [x] Worktree rename/copy detection for default `diff -M/-C` when added
     paths are represented by Git intent-to-add index entries.
+  - [x] Worktree non-exact rename similarity thresholds for default `diff -M`
+    when added paths are represented by Git intent-to-add index entries.
   - [x] Worktree `--find-copies-harder` copy detection from unchanged index
     sources for Git intent-to-add entries.
   - [ ] Broader worktree rename/copy detection, full rename limits, and

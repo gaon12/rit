@@ -81,6 +81,9 @@
 - 2026-05-15 exact rename-limit slice checked `git diff -h` and direct Git
   comparisons for cached and worktree intent-to-add exact renames with
   `diff -M -l1`.
+- 2026-05-15 worktree similarity rename slice checked `git diff -h` and direct
+  Git comparisons for default `diff -M` non-exact rename detection with
+  intent-to-add destinations.
 - 2026-05-15 rename/copy limit width slice checked `git diff -h` and direct
   Git comparisons for cached non-exact rename/copy detection with `-M -l1`
   and `-C -l1`.
@@ -340,6 +343,8 @@
 - Added worktree rename/copy detection for default `diff -M/-C` when the added
   path is represented by Git's intent-to-add index state, including summary
   and patch output.
+- Added compatibility coverage for default `diff -M` worktree non-exact
+  rename similarity thresholds with Git intent-to-add destinations.
 - Added `-l<n>` parsing and a conservative candidate limit model for
   rename/copy detection. A limit of `0` is treated as unlimited, matching
   Git's command shape.

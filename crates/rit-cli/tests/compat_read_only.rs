@@ -100,6 +100,33 @@ fn diff_worktree_intent_to_add_rename_outputs_match_git() {
 }
 
 #[test]
+fn diff_worktree_intent_to_add_similarity_rename_outputs_match_git() {
+    let fixture = WorktreeIntentSimilarityRenameFixture::new("worktree-intent-similarity-rename");
+
+    for args in [
+        vec!["diff", "-M", "--name-status"],
+        vec!["diff", "-M79%", "--name-status"],
+        vec!["diff", "--find-renames=79", "--stat"],
+        vec!["diff", "-M"],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree intent similarity rename {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_worktree_intent_to_add_copy_outputs_match_git() {
     let fixture = WorktreeIntentCopyFixture::new("worktree-intent-copy");
 
@@ -1116,6 +1143,42 @@ impl WorktreeIntentRenameFixture {
 }
 
 impl Drop for WorktreeIntentRenameFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct WorktreeIntentSimilarityRenameFixture {
+    path: PathBuf,
+}
+
+impl WorktreeIntentSimilarityRenameFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("old.txt"), "one\ntwo\nthree\nfour\nfive\n")
+            .expect("base file should be written");
+        run_git(&path, ["add", "old.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+        fs::remove_file(path.join("old.txt")).expect("old file should be removed");
+        fs::write(path.join("new.txt"), "one\ntwo\nthree\nfour\nsix\n")
+            .expect("renamed worktree file should be written");
+        run_git(&path, ["add", "-N", "new.txt"]);
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for WorktreeIntentSimilarityRenameFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }
