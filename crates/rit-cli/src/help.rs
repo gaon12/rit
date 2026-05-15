@@ -31,6 +31,7 @@ Core commands:
   merge         Merge a branch or revision into the current branch
   auth          Explain remote authentication selection
   indexdb       Manage optional SQLite auxiliary index metadata
+  file-history  Show indexed first-parent path history
   op            Inspect or restore rit operation journal entries
   undo          Undo the last restorable rit operation
   show          Show one object
@@ -195,6 +196,12 @@ rit indexdb [status|build|update|repair|rebuild|drop|vacuum]
 Manage the optional SQLite auxiliary index under .git/rit/indexdb.sqlite. The database is reproducible metadata and is never the source of truth for Git objects, refs, index, or working tree state.
 ";
 
+const FILE_HISTORY_HELP: &str = "\
+rit file-history <path>
+
+Show indexed first-parent add, modify, and delete history for one repository-relative path. This command uses the optional SQLite indexdb feature and creates or updates reproducible index metadata when needed.
+";
+
 const OP_HELP: &str = "\
 rit op log [--json]
 rit op restore <id>
@@ -279,6 +286,7 @@ pub fn print_command_help(
         "merge" => stdout.write_all(MERGE_HELP.as_bytes())?,
         "auth" => stdout.write_all(AUTH_HELP.as_bytes())?,
         "indexdb" => stdout.write_all(INDEXDB_HELP.as_bytes())?,
+        "file-history" => stdout.write_all(FILE_HISTORY_HELP.as_bytes())?,
         "op" => stdout.write_all(OP_HELP.as_bytes())?,
         "undo" => stdout.write_all(UNDO_HELP.as_bytes())?,
         "show" => stdout.write_all(SHOW_HELP.as_bytes())?,

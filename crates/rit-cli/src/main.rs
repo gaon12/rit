@@ -4,6 +4,7 @@ use std::process::ExitCode;
 
 mod auth;
 mod doctor;
+mod file_history;
 mod help;
 mod indexdb;
 mod op;
@@ -61,6 +62,9 @@ fn run(
         [command, rest @ ..] if command == "auth" => auth::auth_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "indexdb" => {
             indexdb::indexdb_command(rest, stdout, stderr)
+        }
+        [command, rest @ ..] if command == "file-history" => {
+            file_history::file_history_command(rest, stdout, stderr)
         }
         [command, rest @ ..] if command == "show" => show_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ls-files" => ls_files_command(rest, stdout, stderr),
@@ -3358,10 +3362,29 @@ mod tests {
         assert_eq!(stderr, "");
     }
 
+    #[test]
+    fn file_history_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "file-history"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit file-history <path>"));
+        assert_eq!(stderr, "");
+    }
+
     #[cfg(not(feature = "indexdb"))]
     #[test]
     fn indexdb_command_reports_missing_feature() {
         let (code, stdout, stderr) = run_with(&["indexdb", "status"]);
+
+        assert_eq!(code, ExitCode::from(1));
+        assert_eq!(stdout, "");
+        assert!(stderr.contains("does not include indexdb support"));
+    }
+
+    #[cfg(not(feature = "indexdb"))]
+    #[test]
+    fn file_history_command_reports_missing_feature() {
+        let (code, stdout, stderr) = run_with(&["file-history", "file.txt"]);
 
         assert_eq!(code, ExitCode::from(1));
         assert_eq!(stdout, "");

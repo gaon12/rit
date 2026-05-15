@@ -62,6 +62,9 @@
 - 2026-05-16 indexdb file history slice started recording simple first-parent
   file changes (`A`, `M`, `D`) into `file_changes` and exposed a read-only
   `file_history(path)` query API.
+- 2026-05-16 `rit file-history <path>` slice added a read-only CLI over
+  indexdb file history rows. The command ensures reproducible index metadata
+  exists, then prints newest-first first-parent path changes.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
 - 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git
@@ -242,6 +245,10 @@
 - `Repository::indexdb().file_history(path)` exposes indexed first-parent file
   changes for a repository-relative path. Rename/copy-aware history remains
   future work; the current API stores straightforward add/modify/delete rows.
+- `rit file-history <path>` is feature-gated behind `indexdb` and reports a
+  clear missing-feature error in minimal builds. It creates or updates
+  `.git/rit/indexdb.sqlite` as reproducible metadata but does not modify Git
+  objects, refs, index entries, or working tree files.
 - Source of truth: IndexDB stores reproducible metadata only. `drop` removes
   the SQLite file without touching Git objects, refs, `.git/index`, or working
   tree files. Normal Git-compatible commands do not require IndexDB.

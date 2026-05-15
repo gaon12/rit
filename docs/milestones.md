@@ -362,7 +362,7 @@ Completion criteria:
 - [x] Add indexed commit query API.
 - [x] Add indexed file history API.
 - [x] Add indexed refs snapshot API.
-- [ ] Add optional indexed path history command such as `rit file-history <path>`.
+- [x] Add optional indexed path history command such as `rit file-history <path>`.
 - [ ] Add compatibility tests proving indexdb does not change Git-compatible
   command output.
 - [ ] Add corruption tests proving broken indexdb never corrupts the repository.

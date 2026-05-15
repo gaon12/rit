@@ -53,6 +53,37 @@ fn add_plan_prints_paths_without_writing_index() {
     );
 }
 
+#[cfg(feature = "indexdb")]
+#[test]
+fn file_history_command_prints_indexed_path_changes() {
+    let fixture =
+        LocalWriteFixture::new("file-history-command", LocalWriteFixtureKind::NestedTracked)
+            .expect("fixture should build");
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "changed\n",
+    )
+    .expect("tracked file should be modified");
+
+    run_capture(rit_binary(), ["add", "nested/tracked.txt"], fixture.path());
+    run_capture(rit_binary(), ["commit", "-m", "changed"], fixture.path());
+    let (stdout, stderr) = run_capture(
+        rit_binary(),
+        ["file-history", "nested/tracked.txt"],
+        fixture.path(),
+    );
+    let lines = stdout.lines().collect::<Vec<_>>();
+
+    assert_eq!(stderr, "");
+    assert_eq!(lines.len(), 3);
+    assert_eq!(lines[0], "file-history: nested/tracked.txt");
+    assert!(lines[1].contains(" M 100644 "));
+    assert!(lines[1].ends_with(" nested/tracked.txt"));
+    assert!(lines[2].contains(" A 100644 "));
+    assert!(lines[2].ends_with(" nested/tracked.txt"));
+}
+
 #[test]
 fn ignore_explain_prints_matching_rules() {
     let fixture = LocalWriteFixture::new("ignore-explain", LocalWriteFixtureKind::NestedTracked)
