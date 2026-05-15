@@ -130,14 +130,16 @@ fn parse_pathspec_file_line(line: &str) -> Result<String, ()> {
     if !line.starts_with('"') {
         return Ok(line.to_owned());
     }
-    if !line.ends_with('"') || line.len() == 1 {
+    if line.len() == 1 {
         return Err(());
     }
 
-    let quoted = &line[1..line.len() - 1];
     let mut output = Vec::new();
-    let mut chars = quoted.chars().peekable();
+    let mut chars = line[1..].chars().peekable();
     while let Some(ch) = chars.next() {
+        if ch == '"' {
+            return String::from_utf8(output).map_err(|_| ());
+        }
         if ch != '\\' {
             let mut bytes = [0; 4];
             output.extend_from_slice(ch.encode_utf8(&mut bytes).as_bytes());
@@ -173,7 +175,7 @@ fn parse_pathspec_file_line(line: &str) -> Result<String, ()> {
             _ => return Err(()),
         }
     }
-    String::from_utf8(output).map_err(|_| ())
+    Err(())
 }
 
 fn git_file_read_error(error: &io::Error) -> String {

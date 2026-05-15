@@ -229,6 +229,8 @@ Completion criteria:
       fatal output for `add`, `restore`, and `reset`.
     - [x] Quoted empty pathspec-file entries are rejected with Git-compatible
       fatal output for `add`, `restore`, and `reset`.
+    - [x] Quoted pathspec-file entries ignore trailing bytes after the closing
+      quote like Git for `add`, `restore`, and `reset`.
     - [x] Empty NUL-delimited pathspec-file entries are rejected with
       Git-compatible fatal output for `add`, `restore`, and `reset`, while a
       trailing NUL terminator remains allowed.

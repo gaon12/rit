@@ -152,6 +152,9 @@
 - 2026-05-15 quoted empty pathspec-file slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for quoted
   empty entries in `--pathspec-from-file`.
+- 2026-05-15 quoted pathspec trailing-bytes slice checked `git add -h`,
+  `git restore -h`, `git reset -h`, and direct Git comparisons for bytes after
+  the closing quote in quoted `--pathspec-from-file` entries.
 - 2026-05-15 empty NUL pathspec-file entry slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for leading
   empty entries in `--pathspec-from-file --pathspec-file-nul`.
@@ -424,6 +427,8 @@
   entries before any `add`, `restore`, or `reset` mutation is applied.
 - Added Git-compatible rejection for quoted empty pathspec-file entries before
   any `add`, `restore`, or `reset` mutation is applied.
+- Quoted pathspec-file entries now stop at the first unescaped closing quote
+  and ignore trailing bytes, matching Git's text pathspec-file parser.
 - Added Git-compatible rejection for empty NUL-delimited pathspec-file entries
   before any `add`, `restore`, or `reset` mutation is applied, while keeping a
   final trailing NUL terminator valid like Git.
