@@ -91,6 +91,11 @@
   the remote Git service command. `GIT_SSH_VARIANT` overrides configured
   `ssh.variant`; `auto` infers known command basenames and otherwise keeps
   OpenSSH-shaped arguments.
+- 2026-05-16 fetch negotiation haves slice checked `git fetch -h` negotiation
+  options and wired local reachable commit IDs into HTTP and SSH upload-pack
+  requests. `rit fetch` now advertises `have` lines from HEAD, local branches,
+  and lightweight tags before `done`; full multi-round negotiation remains a
+  later M7 item.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
 - 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git

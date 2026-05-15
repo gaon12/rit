@@ -356,9 +356,9 @@ impl Repository {
             .as_ref()
             .map(|refspec| refspec.source.as_str())
             .unwrap_or("HEAD");
+        let haves = self.fetch_negotiation_haves()?;
         let client = BlockingSmartHttpClient::default();
-        let negotiation =
-            client.negotiate_upload_pack(&options.location, wanted_ref, Vec::new())?;
+        let negotiation = client.negotiate_upload_pack(&options.location, wanted_ref, haves)?;
         let source_name = options.location.original().to_owned();
         self.finish_remote_fetch(
             options,
@@ -391,8 +391,8 @@ impl Repository {
             .as_ref()
             .map(|refspec| refspec.source.as_str())
             .unwrap_or("HEAD");
-        let negotiation =
-            executor.negotiate_upload_pack(&options.location, wanted_ref, Vec::new())?;
+        let haves = self.fetch_negotiation_haves()?;
+        let negotiation = executor.negotiate_upload_pack(&options.location, wanted_ref, haves)?;
         let source_name = options.location.original().to_owned();
         self.finish_remote_fetch(
             options,
@@ -504,6 +504,50 @@ impl Repository {
             source: source_name,
             object_count: ingested.object_ids.len(),
         })
+    }
+
+    fn fetch_negotiation_haves(&self) -> Result<Vec<ObjectId>> {
+        let mut roots = Vec::new();
+        if let Some(head) = self.resolve_head()? {
+            roots.push(head);
+        }
+        for branch in self.list_branches()? {
+            roots.push(branch.target);
+        }
+        for tag in self.list_tags()? {
+            roots.push(tag.target);
+        }
+        self.collect_reachable_commit_ids(&roots)
+    }
+
+    fn collect_reachable_commit_ids(&self, roots: &[ObjectId]) -> Result<Vec<ObjectId>> {
+        let mut seen = HashSet::new();
+        let mut ordered = Vec::new();
+        for root in roots {
+            self.collect_reachable_commit_ids_inner(*root, &mut seen, &mut ordered)?;
+        }
+        Ok(ordered)
+    }
+
+    fn collect_reachable_commit_ids_inner(
+        &self,
+        object_id: ObjectId,
+        seen: &mut HashSet<ObjectId>,
+        ordered: &mut Vec<ObjectId>,
+    ) -> Result<()> {
+        if !seen.insert(object_id) {
+            return Ok(());
+        }
+        let object = self.read_object(object_id)?;
+        if object.kind != ObjectKind::Commit {
+            return Ok(());
+        }
+        ordered.push(object_id);
+        let commit = parse_commit(&object.data)?;
+        for parent in commit.parents {
+            self.collect_reachable_commit_ids_inner(parent, seen, ordered)?;
+        }
+        Ok(())
     }
 
     /// Collects objects reachable from one object ID in a simple deterministic order.
@@ -1369,6 +1413,7 @@ mod tests {
     fn fetch_remote_http_ingests_pack_and_writes_fetch_head() {
         let temp = temp_path("remote-http-fetch");
         let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        let local_commit = write_local_commit(&repository, "local commit", None);
         let object_data = b"hello";
         let object_id = hash_object(ObjectKind::Blob, object_data);
         let pack = pack_with_one_blob(object_data);
@@ -1391,6 +1436,7 @@ mod tests {
             .fetch_remote_http(&options)
             .expect("remote fetch should ingest pack");
         let requests = request_handle.join().expect("server thread");
+        let post_request = String::from_utf8_lossy(&requests[1]);
 
         assert_eq!(result.fetch_head, object_id);
         assert_eq!(result.object_count, 1);
@@ -1413,6 +1459,7 @@ mod tests {
             format!("{object_id}\t\tbranch 'main' of {base_url}/repo.git\n")
         );
         assert_eq!(requests.len(), 2);
+        assert!(post_request.contains(&format!("have {local_commit}\n")));
 
         remove_dir_all(&temp);
     }
@@ -1421,6 +1468,7 @@ mod tests {
     fn fetch_remote_ssh_ingests_pack_and_writes_fetch_head() {
         let temp = temp_path("remote-ssh-fetch");
         let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        let local_commit = write_local_commit(&repository, "local commit", None);
         let object_data = b"hello";
         let object_id = hash_object(ObjectKind::Blob, object_data);
         let pack = pack_with_one_blob(object_data);
@@ -1442,6 +1490,7 @@ mod tests {
                     .expect("response should parse"),
                 pack_bytes: pack,
             },
+            expected_haves: vec![local_commit],
         };
         let options = RemoteFetchOptions::new(location).with_refspec(refspec);
 
@@ -1599,6 +1648,34 @@ mod tests {
         body
     }
 
+    fn write_local_commit(
+        repository: &Repository,
+        message: &str,
+        parent: Option<crate::ObjectId>,
+    ) -> crate::ObjectId {
+        let tree_id = repository
+            .loose_objects()
+            .write_object(ObjectKind::Tree, b"")
+            .expect("empty tree should write");
+        let parent_line = parent
+            .map(|parent| format!("parent {parent}\n"))
+            .unwrap_or_default();
+        let commit = format!(
+            "tree {tree_id}\n{parent_line}author Test User <test@example.test> 1700000000 +0000\ncommitter Test User <test@example.test> 1700000000 +0000\n\n{message}\n"
+        );
+        let commit_id = repository
+            .loose_objects()
+            .write_object(ObjectKind::Commit, commit.as_bytes())
+            .expect("commit should write");
+        let branch_path = repository
+            .common_dir()
+            .join("refs")
+            .join("heads")
+            .join("master");
+        fs::write(branch_path, format!("{commit_id}\n")).expect("branch ref should write");
+        commit_id
+    }
+
     fn pack_with_one_blob(data: &[u8]) -> Vec<u8> {
         let mut object = Vec::new();
         object.push(0x30 | data.len() as u8);
@@ -1616,6 +1693,7 @@ mod tests {
 
     struct FakeSshUploadPackExecutor {
         negotiation: RemotePackNegotiation,
+        expected_haves: Vec<crate::ObjectId>,
     }
 
     impl SshUploadPackExecutor for FakeSshUploadPackExecutor {
@@ -1623,10 +1701,11 @@ mod tests {
             &self,
             location: &TransportLocation,
             wanted_ref: &str,
-            _haves: Vec<crate::ObjectId>,
+            haves: Vec<crate::ObjectId>,
         ) -> crate::Result<RemotePackNegotiation> {
             assert_eq!(location.protocol(), crate::TransportProtocol::Ssh);
             assert_eq!(wanted_ref, self.negotiation.wanted_ref);
+            assert_eq!(haves, self.expected_haves);
             Ok(self.negotiation.clone())
         }
     }

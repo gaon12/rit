@@ -434,6 +434,8 @@ Completion criteria:
     smart HTTP client.
   - [x] Wire negotiated plain HTTP pack ingestion into `rit fetch`.
   - [x] Wire single-round SSH upload-pack ingestion into `rit fetch`.
+  - [x] Send local reachable commit `have` lines from HEAD, branches, and tags
+    during HTTP and SSH fetch negotiation.
   - [ ] Multi-round negotiation, thin-pack fixups, and advanced capability
     parity.
 - [x] Push basics.
