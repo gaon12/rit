@@ -2342,12 +2342,7 @@ fn op_command(
         }
         [subcommand, id] if subcommand == "restore" => match repository.operations().restore(id) {
             Ok(result) => {
-                writeln!(
-                    stdout,
-                    "Restored operation {} to {}",
-                    result.id,
-                    &result.restored_head.to_hex()[..7]
-                )?;
+                write_restore_result(stdout, "Restored operation", &result)?;
                 Ok(ExitCode::SUCCESS)
             }
             Err(error) => write_command_error(stderr, error),
@@ -2378,15 +2373,35 @@ fn undo_command(
     };
     match repository.operations().undo_last() {
         Ok(result) => {
-            writeln!(
-                stdout,
-                "Undid operation {} and restored {}",
-                result.id,
-                &result.restored_head.to_hex()[..7]
-            )?;
+            write_restore_result(stdout, "Undid operation", &result)?;
             Ok(ExitCode::SUCCESS)
         }
         Err(error) => write_command_error(stderr, error),
+    }
+}
+
+fn write_restore_result(
+    stdout: &mut dyn Write,
+    prefix: &str,
+    result: &rit_core::OperationRestoreResult,
+) -> io::Result<()> {
+    match result.restored_head {
+        Some(head) if result.restored_worktree => writeln!(
+            stdout,
+            "{prefix} {} and restored {}",
+            result.id,
+            &head.to_hex()[..7]
+        ),
+        Some(head) if result.restored_index => writeln!(
+            stdout,
+            "{prefix} {} and restored index at {}",
+            result.id,
+            &head.to_hex()[..7]
+        ),
+        None if result.restored_index => {
+            writeln!(stdout, "{prefix} {} and restored index", result.id)
+        }
+        _ => writeln!(stdout, "{prefix} {}", result.id),
     }
 }
 

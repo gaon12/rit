@@ -1258,6 +1258,39 @@ fn operation_journal_records_index_and_worktree_commands() {
 }
 
 #[test]
+fn undo_after_add_restores_index_without_reverting_worktree() {
+    let fixture = LocalWriteFixture::new(
+        "operation-journal-add-undo",
+        LocalWriteFixtureKind::NestedTracked,
+    )
+    .expect("fixture should build");
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "staged\n",
+    )
+    .expect("tracked file should be modified");
+
+    run_capture(rit_binary(), ["add", "nested/tracked.txt"], fixture.path());
+    assert_eq!(
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], fixture.path()).0,
+        "M  nested/tracked.txt\n"
+    );
+
+    let undo_output = run_capture(rit_binary(), ["undo"], fixture.path()).0;
+
+    assert!(undo_output.contains("restored index"));
+    assert_eq!(
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], fixture.path()).0,
+        " M nested/tracked.txt\n"
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.path().join("nested").join("tracked.txt"))
+            .expect("tracked file should read"),
+        "staged\n"
+    );
+}
+
+#[test]
 fn operation_journal_records_branch_and_tag_ref_commands() {
     let fixture = LocalWriteFixture::new(
         "operation-journal-refs",

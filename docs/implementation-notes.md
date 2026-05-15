@@ -409,8 +409,12 @@
   now append operation records for explicit local ref changes.
 - Successful `rit fetch` operations and smart-remote `rit push` success paths
   now append operation records for explicit transport writes.
+- Index-changing operation records now write a `.git/rit/ops/<id>/before.index`
+  sidecar when the pre-operation index exists. `rit undo` and
+  `rit op restore <id>` can use that sidecar to restore index-only operations
+  without rewriting the working tree.
 - Still unsupported: command-aware undo modes, reversible patches for
-  index-only/worktree-only operations and complete object creation inventories.
+  worktree-only operations and complete object creation inventories.
 
 ### M9: Large-file backends
 

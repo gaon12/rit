@@ -17,6 +17,12 @@ pub struct OperationSnapshot {
     pub branch: Option<String>,
     /// SHA-1 checksum of the raw index file, when an index exists.
     pub index_checksum: Option<String>,
+    /// Raw index contents captured before an operation.
+    ///
+    /// This is not serialized into the operation log. When an operation is
+    /// recorded, rit stores the bytes in a per-operation sidecar file so
+    /// index-only changes can be undone without touching the working tree.
+    pub index_contents: Option<Vec<u8>>,
 }
 
 /// One operation journal record stored under `.git/rit/ops.log`.
@@ -61,8 +67,12 @@ pub struct OperationLog {
 pub struct OperationRestoreResult {
     /// Restored operation ID.
     pub id: String,
-    /// Commit restored into HEAD and the working tree.
-    pub restored_head: ObjectId,
+    /// Commit restored into HEAD and the working tree, when HEAD changed.
+    pub restored_head: Option<ObjectId>,
+    /// Whether the index was restored.
+    pub restored_index: bool,
+    /// Whether working tree files were restored from a commit tree.
+    pub restored_worktree: bool,
 }
 
 /// Entry point for operation-journal APIs.
@@ -80,10 +90,16 @@ impl Repository {
 impl RepositoryOperations<'_> {
     /// Captures the current HEAD, branch, and index checksum.
     pub fn snapshot(&self) -> Result<OperationSnapshot> {
+        let index_contents =
+            read_index_contents(self.repository.git_dir().join("index").as_path())?;
+        let index_checksum = index_contents
+            .as_ref()
+            .map(|contents| hex(&sha1_bytes(contents)));
         Ok(OperationSnapshot {
             head: self.repository.resolve_head()?,
             branch: self.repository.current_branch_name()?,
-            index_checksum: index_checksum(self.repository.git_dir().join("index").as_path())?,
+            index_checksum,
+            index_contents,
         })
     }
 
@@ -108,8 +124,12 @@ impl RepositoryOperations<'_> {
         changed_paths: Vec<String>,
         created_object_ids: Vec<ObjectId>,
     ) -> Result<OperationRecord> {
+        let id = next_operation_id();
+        if before.index_checksum != after.index_checksum {
+            save_before_index(self.repository, &id, &before)?;
+        }
         let record = OperationRecord {
-            id: next_operation_id(),
+            id,
             command: command.to_owned(),
             summary: summary.to_owned(),
             before,
@@ -198,14 +218,7 @@ impl RepositoryOperations<'_> {
             .into_iter()
             .find(|record| record.id == id)
             .ok_or_else(|| RitError::invalid_input(format!("operation not found: {id}")))?;
-        restore_snapshot(self.repository, &record.before)?;
-        Ok(OperationRestoreResult {
-            id: record.id,
-            restored_head: record
-                .before
-                .head
-                .expect("restore_snapshot requires a before HEAD"),
-        })
+        restore_record(self.repository, &record)
     }
 
     /// Restores the state captured before the last operation in the journal.
@@ -217,6 +230,36 @@ impl RepositoryOperations<'_> {
             .ok_or_else(|| RitError::invalid_input("operation journal is empty"))?;
         self.restore(&last.id)
     }
+}
+
+fn restore_record(
+    repository: &Repository,
+    record: &OperationRecord,
+) -> Result<OperationRestoreResult> {
+    let head_changed =
+        record.before.head != record.after.head || record.before.branch != record.after.branch;
+    if head_changed {
+        restore_snapshot(repository, &record.before)?;
+        return Ok(OperationRestoreResult {
+            id: record.id.clone(),
+            restored_head: record.before.head,
+            restored_index: true,
+            restored_worktree: true,
+        });
+    }
+    if record.before.index_checksum != record.after.index_checksum {
+        restore_before_index(repository, record)?;
+        return Ok(OperationRestoreResult {
+            id: record.id.clone(),
+            restored_head: record.before.head,
+            restored_index: true,
+            restored_worktree: false,
+        });
+    }
+    Err(RitError::invalid_input(format!(
+        "operation {} has no restorable HEAD or index change",
+        record.id
+    )))
 }
 
 fn restore_snapshot(repository: &Repository, snapshot: &OperationSnapshot) -> Result<()> {
@@ -241,6 +284,57 @@ fn restore_snapshot(repository: &Repository, snapshot: &OperationSnapshot) -> Re
     Ok(())
 }
 
+fn save_before_index(
+    repository: &Repository,
+    operation_id: &str,
+    snapshot: &OperationSnapshot,
+) -> Result<()> {
+    let Some(contents) = snapshot.index_contents.as_deref() else {
+        return Ok(());
+    };
+    let path = operation_artifact_dir(repository, operation_id)?.join("before.index");
+    write_bytes_atomically(&path, contents)
+}
+
+fn restore_before_index(repository: &Repository, record: &OperationRecord) -> Result<()> {
+    let index_path = repository.git_dir().join("index");
+    if record.before.index_checksum.is_none() {
+        if index_path.exists() {
+            fs::remove_file(&index_path).map_err(|source| RitError::io(&index_path, source))?;
+        }
+        return Ok(());
+    }
+    let backup_path = operation_artifact_dir(repository, &record.id)?.join("before.index");
+    let contents = fs::read(&backup_path).map_err(|source| RitError::io(&backup_path, source))?;
+    let checksum = hex(&sha1_bytes(&contents));
+    if Some(checksum.as_str()) != record.before.index_checksum.as_deref() {
+        return Err(RitError::invalid_input(format!(
+            "operation {} index backup checksum does not match journal",
+            record.id
+        )));
+    }
+    write_bytes_atomically(&index_path, &contents)
+}
+
+fn operation_artifact_dir(
+    repository: &Repository,
+    operation_id: &str,
+) -> Result<std::path::PathBuf> {
+    if !operation_id
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || character == '-' || character == '_')
+    {
+        return Err(RitError::invalid_input(format!(
+            "operation id is not safe for sidecar storage: {operation_id}"
+        )));
+    }
+    Ok(repository
+        .git_dir()
+        .join("rit")
+        .join("ops")
+        .join(operation_id))
+}
+
 fn append_record(repository: &Repository, record: &OperationRecord) -> Result<()> {
     let path = log_path(repository);
     if let Some(parent) = path.parent() {
@@ -258,12 +352,13 @@ fn log_path(repository: &Repository) -> std::path::PathBuf {
     repository.git_dir().join("rit").join("ops.log")
 }
 
-fn index_checksum(path: &Path) -> Result<Option<String>> {
+fn read_index_contents(path: &Path) -> Result<Option<Vec<u8>>> {
     if !path.exists() {
         return Ok(None);
     }
-    let bytes = fs::read(path).map_err(|source| RitError::io(path, source))?;
-    Ok(Some(hex(&sha1_bytes(&bytes))))
+    fs::read(path)
+        .map(Some)
+        .map_err(|source| RitError::io(path, source))
 }
 
 fn next_operation_id() -> String {
@@ -358,6 +453,7 @@ fn parse_snapshot(input: &str) -> Result<OperationSnapshot> {
         head,
         branch,
         index_checksum,
+        index_contents: None,
     })
 }
 
@@ -502,6 +598,10 @@ fn unescape(input: &str) -> Result<String> {
 }
 
 fn write_text_atomically(path: &Path, contents: &str) -> Result<()> {
+    write_bytes_atomically(path, contents.as_bytes())
+}
+
+fn write_bytes_atomically(path: &Path, contents: &[u8]) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|source| RitError::io(parent, source))?;
     }
@@ -512,7 +612,7 @@ fn write_text_atomically(path: &Path, contents: &str) -> Result<()> {
             .create_new(true)
             .open(&lock_path)
             .map_err(|source| RitError::io(&lock_path, source))?;
-        file.write_all(contents.as_bytes())
+        file.write_all(contents)
             .map_err(|source| RitError::io(&lock_path, source))?;
         file.sync_all()
             .map_err(|source| RitError::io(&lock_path, source))?;
@@ -622,7 +722,9 @@ mod tests {
             .undo_last()
             .expect("undo should restore");
 
-        assert_eq!(result.restored_head, base);
+        assert_eq!(result.restored_head, Some(base));
+        assert!(result.restored_index);
+        assert!(result.restored_worktree);
         assert_eq!(
             repository.resolve_head().expect("head should read"),
             Some(base)
@@ -630,6 +732,69 @@ mod tests {
         assert_eq!(
             fs::read_to_string(root.join("tracked.txt")).expect("file should read"),
             "base\n"
+        );
+        remove_dir_all(&root);
+    }
+
+    #[test]
+    fn operation_journal_undo_restores_index_without_touching_worktree() {
+        let root = temp_path("operation-journal-index-undo");
+        let repository = Repository::init(&InitOptions::new(&root)).expect("repo should init");
+        write_identity(&repository);
+        fs::write(root.join("tracked.txt"), "base\n").expect("base file should be written");
+        repository
+            .add_paths(&["tracked.txt".to_owned()])
+            .expect("base file should be added");
+        let head = repository
+            .commit_index("base")
+            .expect("base commit should work")
+            .commit_id;
+
+        fs::write(root.join("tracked.txt"), "changed\n").expect("changed file should be written");
+        let before = repository
+            .operations()
+            .snapshot()
+            .expect("snapshot should work");
+        repository
+            .add_paths(&["tracked.txt".to_owned()])
+            .expect("changed file should be staged");
+        let after = repository
+            .operations()
+            .snapshot()
+            .expect("snapshot should work");
+        assert_ne!(before.index_checksum, after.index_checksum);
+
+        repository
+            .operations()
+            .record_with_details(
+                "add",
+                "add tracked.txt",
+                before.clone(),
+                after,
+                vec!["tracked.txt".to_owned()],
+                Vec::new(),
+            )
+            .expect("record should append");
+
+        let result = repository
+            .operations()
+            .undo_last()
+            .expect("index-only undo should restore");
+
+        assert_eq!(result.restored_head, Some(head));
+        assert!(result.restored_index);
+        assert!(!result.restored_worktree);
+        assert_eq!(
+            repository
+                .operations()
+                .snapshot()
+                .expect("snapshot should work")
+                .index_checksum,
+            before.index_checksum
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("tracked.txt")).expect("file should read"),
+            "changed\n"
         );
         remove_dir_all(&root);
     }
