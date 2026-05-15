@@ -507,7 +507,10 @@ Completion criteria:
     - [x] Content conflicts with mode changes preserve Git-shaped stage modes.
     - [x] Content, binary, and add/add conflicts print Git-shaped
       `Auto-merging` lines and omit rit-only pre-merge debug output.
-    - [ ] Remaining full conflict result message parity.
+    - [x] Supported conflict result messages have exact Git-vs-rit stdout,
+      stderr, exit-code, status, and index-stage compatibility coverage.
+    - [ ] Remaining full conflict result message parity for unsupported merge
+      strategies and conflict variants.
 
 Completion criteria:
 - Interrupted operations leave clear state and can be continued, aborted, or

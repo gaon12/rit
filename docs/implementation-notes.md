@@ -639,6 +639,10 @@
 - Content, binary, and add/add conflicts now print Git-shaped `Auto-merging`
   lines, and conflicted merge output no longer includes rit-only pre-merge
   target debug text.
+- Added exact Git-vs-rit compatibility coverage for supported merge conflict
+  result output across content, modify/delete, binary, add/add, and
+  regular-file/symlink distinct-type conflicts. The comparison includes exit
+  code, stdout, stderr, porcelain status, and `ls-files --stage`.
 - Still unsupported: remaining full conflict result message parity, strategies,
   merge hooks, `cherry-pick`, `rebase`, and `stash`.
 
