@@ -2,6 +2,8 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use crate::{capture_operation_snapshot, record_operation};
+
 pub fn clone_command(
     args: &[String],
     stdout: &mut dyn Write,
@@ -112,6 +114,7 @@ pub fn fetch_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
+    let before = capture_operation_snapshot(&repository, stderr)?;
 
     let refspec = match positional.get(1) {
         Some(refspec) => match rit_core::FetchRefSpec::parse(refspec) {
@@ -135,6 +138,7 @@ pub fn fetch_command(
             }
             match repository.fetch_local(&options) {
                 Ok(result) => {
+                    record_fetch_operation(&repository, &result.source, before, stderr)?;
                     if !quiet {
                         writeln!(stdout, "From {}", result.source)?;
                         writeln!(stdout, " * branch            HEAD       -> FETCH_HEAD")?;
@@ -154,6 +158,7 @@ pub fn fetch_command(
             }
             match repository.fetch_remote_http(&options) {
                 Ok(result) => {
+                    record_fetch_operation(&repository, &result.source, before, stderr)?;
                     if !quiet {
                         writeln!(stdout, "From {}", result.source)?;
                         writeln!(stdout, " * branch            HEAD       -> FETCH_HEAD")?;
@@ -173,6 +178,7 @@ pub fn fetch_command(
             }
             match repository.fetch_remote_ssh(&options) {
                 Ok(result) => {
+                    record_fetch_operation(&repository, &result.source, before, stderr)?;
                     if !quiet {
                         writeln!(stdout, "From {}", result.source)?;
                         writeln!(stdout, " * branch            HEAD       -> FETCH_HEAD")?;
@@ -226,6 +232,7 @@ pub fn push_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
+    let before = capture_operation_snapshot(&repository, stderr)?;
     let options = rit_core::RemotePushOptions::new(location, refspec);
     let result = match options.location.protocol() {
         rit_core::TransportProtocol::Http | rit_core::TransportProtocol::Https => {
@@ -242,6 +249,14 @@ pub fn push_command(
     };
     match result {
         Ok(result) => {
+            record_operation(
+                &repository,
+                "push",
+                &format!("push {}", result.destination),
+                before,
+                Vec::new(),
+                stderr,
+            )?;
             if !quiet {
                 writeln!(stdout, "To {}", options.location.original())?;
                 writeln!(
@@ -257,6 +272,22 @@ pub fn push_command(
             Ok(ExitCode::from(1))
         }
     }
+}
+
+fn record_fetch_operation(
+    repository: &rit_core::Repository,
+    source: &str,
+    before: Option<rit_core::OperationSnapshot>,
+    stderr: &mut dyn Write,
+) -> io::Result<()> {
+    record_operation(
+        repository,
+        "fetch",
+        &format!("fetch {source}"),
+        before,
+        Vec::new(),
+        stderr,
+    )
 }
 
 fn default_clone_directory(source: &std::path::Path) -> PathBuf {

@@ -2337,6 +2337,9 @@ fn fetch_local_copies_objects_and_writes_fetch_head() {
     let git_commit = run_capture("git", ["cat-file", "-p", "FETCH_HEAD"], &git_target).0;
     let rit_commit = run_capture(rit_binary(), ["cat-file", "-p", "FETCH_HEAD"], &rit_target).0;
     assert_eq!(git_commit, rit_commit);
+    let op_log = run_capture(rit_binary(), ["op", "log"], &rit_target).0;
+    assert!(op_log.contains(" fetch "));
+    assert!(op_log.contains("fetch "));
 
     let _ = fs::remove_dir_all(workspace);
 }
@@ -2426,6 +2429,9 @@ fn fetch_local_refspec_updates_destination_ref() {
     )
     .0;
     assert_eq!(git_commit, rit_commit);
+    let op_log = run_capture(rit_binary(), ["op", "log"], &rit_target).0;
+    assert!(op_log.contains(" fetch "));
+    assert!(op_log.contains("fetch "));
 
     let _ = fs::remove_dir_all(workspace);
 }

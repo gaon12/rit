@@ -407,6 +407,8 @@
   the first index-only/worktree-changing journal slice.
 - Successful `rit branch` create/delete and `rit tag` create/delete operations
   now append operation records for explicit local ref changes.
+- Successful `rit fetch` operations and smart-remote `rit push` success paths
+  now append operation records for explicit transport writes.
 - Still unsupported: command-aware undo modes, reversible patches for
   index-only/worktree-only operations and complete object creation inventories.
 
@@ -1013,7 +1015,7 @@
   index checksums, changed paths, and known created object IDs.
 - Recorded commands: commit, checkout, switch, fast-forward and conflicted
   merge, merge abort, add, restore, pathspec reset, branch create/delete, and
-  tag create/delete.
+  tag create/delete, fetch, and smart-remote push success paths.
 - Malformed operation journal lines are skipped with warnings and do not block
   reading later valid records.
 - Unsupported options: filtering, complete object creation inventories, and

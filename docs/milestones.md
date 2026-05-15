@@ -582,7 +582,8 @@ Completion criteria:
   `fetch`, and `push` where applicable.
   - [x] Record successful `add`, `restore`, and `reset` operations.
   - [x] Record successful `branch` and `tag` ref operations.
-  - [ ] Record successful `fetch` and `push` operations where applicable.
+  - [x] Record successful `fetch` operations and smart-remote `push` success
+    paths where applicable.
 - [ ] Make undo semantics command-aware, such as commit undo that can preserve
   changes when requested.
 - [x] Add corruption handling for malformed operation journal lines.
