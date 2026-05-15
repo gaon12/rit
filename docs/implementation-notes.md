@@ -654,6 +654,10 @@
 - Clean `rit cherry-pick -n/--no-commit <commit>` now applies the same clean
   tree change to the index/worktree without advancing `HEAD` or writing
   sequencer state.
+- Conflicting single-commit `rit cherry-pick <commit>` now writes
+  `CHERRY_PICK_HEAD`, `MERGE_MSG`, unmerged index stages, and conflict markers
+  for the first supported conflict slice. `rit cherry-pick --abort` restores
+  `ORIG_HEAD` and clears the cherry-pick state.
 - Still unsupported: remaining full conflict result message parity, strategies,
   full merge hook/editor parity, full `cherry-pick`, `rebase`, and `stash`.
 
@@ -1308,21 +1312,22 @@
 - Baseline command checked: `git cherry-pick -h`
 - Supported options: one target commit, plus `-n`/`--no-commit` and
   `--commit` toggles.
-- Unsupported options: multiple commits, `--continue`, `--skip`, `--abort`,
-  `--quit`, `--no-commit`, `--mainline`, `--ff`, signing, signoff, strategy
-  options, empty-commit handling, and conflict continuation.
+- Unsupported options: multiple commits, `--continue`, `--skip`, `--quit`,
+  `--mainline`, `--ff`, signing, signoff, strategy options, empty-commit
+  handling, and conflict continuation.
 - Git-compatible behavior: clean single-parent picks apply the picked commit's
   parent-to-commit tree change onto `HEAD`, create a new one-parent commit, and
   preserve the picked author and commit message. With `-n`/`--no-commit`, the
   change is staged and materialized without advancing `HEAD` or writing
-  `CHERRY_PICK_HEAD`.
-- Intentional differences: output is simplified and conflict handling currently
-  fails before mutating the repository instead of starting a cherry-pick
-  sequence.
+  `CHERRY_PICK_HEAD`. Conflicting picks write `CHERRY_PICK_HEAD`, `MERGE_MSG`,
+  unmerged index stages, and worktree conflict markers; `--abort` restores
+  `ORIG_HEAD`.
+- Intentional differences: output and hints are simplified, and sequencer
+  state for multiple commits is not implemented.
 - Repository mutation: yes, for clean picks it updates the worktree, index,
   `ORIG_HEAD`, and current `HEAD`.
-- Risk: moderate; this first slice requires a clean worktree and does not yet
-  write sequencer state for conflicts.
+- Risk: moderate; this first slice requires a clean worktree and writes only
+  single-commit cherry-pick state.
 
 ### `rit op` and `rit undo`
 

@@ -483,8 +483,12 @@ Completion criteria:
     preserves the picked author/message, and creates a new one-parent commit.
   - [x] Clean `-n`/`--no-commit` cherry-pick applies the change to the
     index/worktree without advancing `HEAD` or writing sequencer state.
-  - [ ] Conflict state, sequencer operations, merge commits with `--mainline`,
-    `--continue`, `--abort`, `--quit`, and `--skip`.
+  - [x] Conflicting single-commit cherry-pick writes `CHERRY_PICK_HEAD`,
+    `MERGE_MSG`, unmerged index stages, and conflict markers.
+  - [x] `cherry-pick --abort` restores `ORIG_HEAD` for the first conflicted
+    cherry-pick slice.
+  - [ ] Sequencer operations, merge commits with `--mainline`, `--continue`,
+    `--quit`, and `--skip`.
 - [ ] `rit rebase`
 - [ ] `rit stash`
 - [~] Conflict index stages.

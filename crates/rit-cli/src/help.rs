@@ -187,8 +187,9 @@ Fast-forward the current branch to a local branch or revision, create a clean me
 
 const CHERRY_PICK_HELP: &str = "\
 rit cherry-pick [-n|--no-commit] <commit>
+rit cherry-pick --abort
 
-Apply one non-merge commit onto the current HEAD when the change merges cleanly.
+Apply one non-merge commit onto the current HEAD, or abort an in-progress conflicted cherry-pick.
 ";
 
 const AUTH_HELP: &str = "\

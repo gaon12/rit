@@ -248,6 +248,10 @@ pub struct CherryPickResult {
     pub picked_id: ObjectId,
     /// New commit created on top of `HEAD`, or `None` for `--no-commit`.
     pub commit_id: Option<ObjectId>,
+    /// Paths left conflicted by the pick.
+    pub conflict_paths: Vec<String>,
+    /// Structured conflict output for porcelain formatting.
+    pub conflict_reports: Vec<MergeConflictReport>,
 }
 
 /// Options that affect cherry-pick execution.
@@ -288,6 +292,17 @@ struct CleanMergeCommitInput<'a> {
     base_entries: &'a [IndexEntry],
     head_entries: &'a [IndexEntry],
     target_entries: &'a [IndexEntry],
+}
+
+struct ConflictedCherryPickStart<'a> {
+    target_label: &'a str,
+    picked_id: ObjectId,
+    head_id: ObjectId,
+    message: &'a str,
+    base_entries: &'a [IndexEntry],
+    head_entries: &'a [IndexEntry],
+    picked_entries: &'a [IndexEntry],
+    conflict_stages: &'a [MergeConflictStagePlan],
 }
 
 /// Options that affect commit metadata without changing the committed tree.
@@ -1074,9 +1089,24 @@ impl Repository {
         let plan =
             non_fast_forward_merge_workflow_plan(&base_entries, &head_entries, &picked_entries);
         if !plan.conflict_stages.is_empty() {
-            return Err(RitError::invalid_input(
-                "cherry-pick conflict handling is not implemented",
-            ));
+            let target_label = cherry_pick_conflict_label(picked_id, &picked_commit.message);
+            self.start_conflicted_cherry_pick(ConflictedCherryPickStart {
+                target_label: &target_label,
+                picked_id,
+                head_id,
+                message: &picked_commit.message,
+                base_entries: &base_entries,
+                head_entries: &head_entries,
+                picked_entries: &picked_entries,
+                conflict_stages: &plan.conflict_stages,
+            })?;
+            self.refresh_indexdb_after_git_write();
+            return Ok(CherryPickResult {
+                picked_id,
+                commit_id: None,
+                conflict_paths: plan.conflict_paths,
+                conflict_reports: self.merge_conflict_reports(&plan.conflict_stages)?,
+            });
         }
 
         let Some(worktree) = self.worktree() else {
@@ -1112,6 +1142,8 @@ impl Repository {
             return Ok(CherryPickResult {
                 picked_id,
                 commit_id: None,
+                conflict_paths: Vec::new(),
+                conflict_reports: Vec::new(),
             });
         }
 
@@ -1134,7 +1166,81 @@ impl Repository {
         Ok(CherryPickResult {
             picked_id,
             commit_id: Some(result.commit_id),
+            conflict_paths: Vec::new(),
+            conflict_reports: Vec::new(),
         })
+    }
+
+    fn start_conflicted_cherry_pick(&self, input: ConflictedCherryPickStart<'_>) -> Result<()> {
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "cherry-pick must be run in a repository with a working tree",
+            ));
+        };
+        let symlinks_enabled = self.core_symlinks_enabled()?;
+        let merged_entries = self.non_fast_forward_merge_index_entries(
+            input.base_entries,
+            input.head_entries,
+            input.picked_entries,
+            input.conflict_stages,
+            input.target_label,
+        )?;
+        let conflict_paths = input
+            .conflict_stages
+            .iter()
+            .map(|stage| stage.path.as_str())
+            .collect::<BTreeSet<_>>();
+        write_non_conflicting_merge_worktree_changes(
+            self,
+            worktree,
+            input.head_entries,
+            &merged_entries,
+            &conflict_paths,
+            symlinks_enabled,
+        )?;
+        write_conflict_markers(
+            self,
+            worktree,
+            input.conflict_stages,
+            input.target_label,
+            symlinks_enabled,
+        )?;
+        write_text_atomically(
+            &self.git_dir().join("ORIG_HEAD"),
+            &format!("{}\n", input.head_id),
+        )?;
+        Index {
+            entries: merged_entries,
+            extensions: Vec::new(),
+        }
+        .write(&self.git_dir().join("index"))?;
+        write_text_atomically(
+            &self.git_dir().join("CHERRY_PICK_HEAD"),
+            &format!("{}\n", input.picked_id),
+        )?;
+        write_text_atomically(
+            &self.git_dir().join("MERGE_MSG"),
+            &cherry_pick_message_with_conflicts(input.message, &conflict_paths),
+        )
+    }
+
+    /// Aborts an in-progress cherry-pick and restores the tree saved in `ORIG_HEAD`.
+    pub fn abort_cherry_pick(&self) -> Result<ObjectId> {
+        let cherry_pick_head_path = self.git_dir().join("CHERRY_PICK_HEAD");
+        if !cherry_pick_head_path.exists() {
+            return Err(RitError::invalid_input("no cherry-pick to abort"));
+        }
+        let original_head_path = self.git_dir().join("ORIG_HEAD");
+        let original_head_text = fs::read_to_string(&original_head_path)
+            .map_err(|source| RitError::io(&original_head_path, source))?;
+        let original_head = ObjectId::from_hex(original_head_text.trim())?;
+
+        self.checkout_commit_tree(original_head)?;
+        self.update_head(original_head)?;
+        remove_file_if_exists(&cherry_pick_head_path)?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))?;
+        self.refresh_indexdb_after_git_write();
+        Ok(original_head)
     }
 
     fn start_conflicted_merge(&self, input: ConflictedMergeStart<'_>) -> Result<()> {
@@ -2070,6 +2176,26 @@ fn merge_message_with_conflicts(target: &str, conflict_paths: &BTreeSet<&str>) -
         message.push('\n');
     }
     message
+}
+
+fn cherry_pick_conflict_label(picked_id: ObjectId, message: &str) -> String {
+    let subject = message.lines().next().unwrap_or("").trim();
+    if subject.is_empty() {
+        picked_id.to_hex()[..7].to_owned()
+    } else {
+        format!("{} ({subject})", &picked_id.to_hex()[..7])
+    }
+}
+
+fn cherry_pick_message_with_conflicts(message: &str, conflict_paths: &BTreeSet<&str>) -> String {
+    let mut output = message.trim_end_matches('\n').to_owned();
+    output.push_str("\n\n# Conflicts:\n");
+    for path in conflict_paths {
+        output.push_str("#\t");
+        output.push_str(path);
+        output.push('\n');
+    }
+    output
 }
 
 fn remove_file_if_exists(path: &Path) -> Result<()> {
