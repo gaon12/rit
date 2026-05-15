@@ -197,6 +197,8 @@ Completion criteria:
       `reset`.
     - [x] Empty pathspec files match Git behavior for `add`, `restore`, and
       `reset`.
+    - [x] Empty `--pathspec-from-file=` values match Git behavior for `add`,
+      `restore`, and `reset`.
     - [x] `--pathspec-file-nul` without `--pathspec-from-file` is rejected
       with Git-compatible fatal output for `add`, `restore`, and `reset`.
     - [x] `--pathspec-from-file` without a value is rejected with

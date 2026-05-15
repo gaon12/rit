@@ -46,7 +46,9 @@ pub fn read_pathspecs_from_file(
     command: &str,
     stderr: &mut dyn Write,
 ) -> io::Result<PathspecFileRead> {
-    let data = if file_name == "-" {
+    let data = if file_name.is_empty() {
+        Vec::new()
+    } else if file_name == "-" {
         let mut data = Vec::new();
         if let Err(error) = io::stdin().read_to_end(&mut data) {
             writeln!(
