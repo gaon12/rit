@@ -96,6 +96,10 @@
   requests. `rit fetch` now advertises `have` lines from HEAD, local branches,
   and lightweight tags before `done`; full multi-round negotiation remains a
   later M7 item.
+- 2026-05-16 packless fetch slice changed remote upload-pack negotiation to
+  represent pack bytes as optional. HTTP and SSH fetch now accept an ACK-only
+  already-have response, update `FETCH_HEAD` and destination refs, and report
+  zero ingested objects instead of trying to parse an empty pack.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
 - 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git

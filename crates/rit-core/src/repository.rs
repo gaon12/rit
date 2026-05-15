@@ -364,7 +364,7 @@ impl Repository {
             options,
             source_name,
             negotiation.want_id,
-            &negotiation.pack_bytes,
+            negotiation.pack_bytes.as_deref(),
         )
     }
 
@@ -398,7 +398,7 @@ impl Repository {
             options,
             source_name,
             negotiation.want_id,
-            &negotiation.pack_bytes,
+            negotiation.pack_bytes.as_deref(),
         )
     }
 
@@ -480,9 +480,16 @@ impl Repository {
         options: &RemoteFetchOptions,
         source_name: String,
         fetch_head: ObjectId,
-        pack_bytes: &[u8],
+        pack_bytes: Option<&[u8]>,
     ) -> Result<RemoteFetchResult> {
-        let ingested = self.loose_objects().ingest_pack(pack_bytes)?;
+        let object_count = match pack_bytes {
+            Some(pack_bytes) => self
+                .loose_objects()
+                .ingest_pack(pack_bytes)?
+                .object_ids
+                .len(),
+            None => 0,
+        };
         let fetch_head_line = match &options.refspec {
             Some(refspec) => {
                 validate_full_ref_name(&refspec.destination)?;
@@ -502,7 +509,7 @@ impl Repository {
         Ok(RemoteFetchResult {
             fetch_head,
             source: source_name,
-            object_count: ingested.object_ids.len(),
+            object_count,
         })
     }
 
@@ -1465,6 +1472,45 @@ mod tests {
     }
 
     #[test]
+    fn fetch_remote_http_accepts_packless_already_have_response() {
+        let temp = temp_path("remote-http-fetch-packless");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        let local_commit = write_local_commit(&repository, "local commit", None);
+        let advertisement = upload_pack_advertisement(local_commit);
+        let upload_pack = upload_pack_response_without_pack(local_commit);
+        let (base_url, request_handle) = serve_http_requests(vec![
+            http_response(
+                "application/x-git-upload-pack-advertisement",
+                &advertisement,
+            ),
+            http_response("application/x-git-upload-pack-result", &upload_pack),
+        ]);
+        let refspec =
+            FetchRefSpec::parse("refs/heads/main:refs/remotes/origin/main").expect("refspec");
+        let options =
+            RemoteFetchOptions::new(TransportLocation::parse(&format!("{base_url}/repo.git")))
+                .with_refspec(refspec);
+
+        let result = repository
+            .fetch_remote_http(&options)
+            .expect("packless remote fetch should succeed");
+        let requests = request_handle.join().expect("server thread");
+        let post_request = String::from_utf8_lossy(&requests[1]);
+
+        assert_eq!(result.fetch_head, local_commit);
+        assert_eq!(result.object_count, 0);
+        assert_eq!(
+            repository
+                .resolve_revision("refs/remotes/origin/main")
+                .expect("destination ref should resolve"),
+            local_commit
+        );
+        assert!(post_request.contains(&format!("have {local_commit}\n")));
+
+        remove_dir_all(&temp);
+    }
+
+    #[test]
     fn fetch_remote_ssh_ingests_pack_and_writes_fetch_head() {
         let temp = temp_path("remote-ssh-fetch");
         let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
@@ -1488,7 +1534,7 @@ mod tests {
                 want_id: object_id,
                 response: crate::UploadPackResponse::parse(&upload_pack_response_with_pack(&pack))
                     .expect("response should parse"),
-                pack_bytes: pack,
+                pack_bytes: Some(pack),
             },
             expected_haves: vec![local_commit],
         };
@@ -1517,6 +1563,51 @@ mod tests {
             fs::read_to_string(repository.git_dir().join("FETCH_HEAD"))
                 .expect("FETCH_HEAD should be written"),
             format!("{object_id}\t\tbranch 'main' of git@example.test:org/repo.git\n")
+        );
+
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn fetch_remote_ssh_accepts_packless_already_have_response() {
+        let temp = temp_path("remote-ssh-fetch-packless");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        let local_commit = write_local_commit(&repository, "local commit", None);
+        let advertisement = upload_pack_git_protocol_advertisement(local_commit);
+        let advertisement = SmartHttpAdvertisement::parse_git_protocol(
+            SmartHttpService::UploadPack,
+            &advertisement,
+        )
+        .expect("advertisement should parse");
+        let refspec =
+            FetchRefSpec::parse("refs/heads/main:refs/remotes/origin/main").expect("refspec");
+        let location = TransportLocation::parse("git@example.test:org/repo.git");
+        let executor = FakeSshUploadPackExecutor {
+            negotiation: RemotePackNegotiation {
+                advertisement,
+                wanted_ref: "refs/heads/main".to_owned(),
+                want_id: local_commit,
+                response: crate::UploadPackResponse::parse(&upload_pack_response_without_pack(
+                    local_commit,
+                ))
+                .expect("response should parse"),
+                pack_bytes: None,
+            },
+            expected_haves: vec![local_commit],
+        };
+        let options = RemoteFetchOptions::new(location).with_refspec(refspec);
+
+        let result = repository
+            .fetch_remote_ssh_with_executor(&options, &executor)
+            .expect("packless SSH fetch should succeed");
+
+        assert_eq!(result.fetch_head, local_commit);
+        assert_eq!(result.object_count, 0);
+        assert_eq!(
+            repository
+                .resolve_revision("refs/remotes/origin/main")
+                .expect("destination ref should resolve"),
+            local_commit
         );
 
         remove_dir_all(&temp);
@@ -1629,6 +1720,13 @@ mod tests {
         let mut body = Vec::new();
         test_pkt_line(&mut body, b"NAK\n");
         body.extend_from_slice(pack);
+        body
+    }
+
+    fn upload_pack_response_without_pack(object_id: crate::ObjectId) -> Vec<u8> {
+        let mut body = Vec::new();
+        test_pkt_line(&mut body, format!("ACK {object_id} common\n").as_bytes());
+        body.extend_from_slice(b"0000");
         body
     }
 

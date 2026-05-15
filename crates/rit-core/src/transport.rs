@@ -98,8 +98,9 @@ pub struct RemotePackNegotiation {
     pub want_id: ObjectId,
     /// Parsed upload-pack response returned by the server.
     pub response: UploadPackResponse,
-    /// Raw pack bytes extracted from raw or side-band upload-pack data.
-    pub pack_bytes: Vec<u8>,
+    /// Raw pack bytes extracted from raw or side-band upload-pack data, if the
+    /// server needed to send objects.
+    pub pack_bytes: Option<Vec<u8>>,
 }
 
 /// Command metadata needed to start a Git service over SSH.
@@ -418,9 +419,7 @@ fn negotiate_upload_pack_process(
 
     let response = UploadPackResponse::parse(&response_bytes)?;
     reject_upload_pack_error(&response)?;
-    let pack_bytes = response
-        .pack_bytes()?
-        .ok_or_else(|| RitError::invalid_input("upload-pack response did not include a pack"))?;
+    let pack_bytes = response.pack_bytes()?;
 
     Ok(RemotePackNegotiation {
         advertisement,
@@ -775,9 +774,7 @@ impl BlockingSmartHttpClient {
         let response = self.post_upload_pack(location, &request)?;
         let parsed_response = UploadPackResponse::parse(&response.body)?;
         reject_upload_pack_error(&parsed_response)?;
-        let pack_bytes = parsed_response.pack_bytes()?.ok_or_else(|| {
-            RitError::invalid_input("upload-pack response did not include pack data")
-        })?;
+        let pack_bytes = parsed_response.pack_bytes()?;
 
         Ok(RemotePackNegotiation {
             advertisement,
@@ -2270,7 +2267,7 @@ mod tests {
 
         assert_eq!(negotiation.wanted_ref, "refs/heads/main");
         assert_eq!(negotiation.want_id, want);
-        assert_eq!(negotiation.pack_bytes, b"PACKdata");
+        assert_eq!(negotiation.pack_bytes, Some(b"PACKdata".to_vec()));
         assert!(post_request.starts_with("POST /repo.git/git-upload-pack HTTP/1.1\r\n"));
         assert!(post_request.contains(
             "want 0a53e9ddeaddad63ad106860237bbf53411d11a7 \
