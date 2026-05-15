@@ -102,6 +102,9 @@
 - 2026-05-15 empty pathspec-from-file value slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   `--pathspec-from-file=`.
+- 2026-05-15 pathspec-file argument mixing slice checked `git add -h`,
+  `git restore -h`, `git reset -h`, and direct Git comparisons for
+  `--pathspec-from-file` combined with ordinary pathspec arguments.
 - 2026-05-15 pathspec-file option validation slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   `--pathspec-file-nul` without `--pathspec-from-file`.
@@ -356,6 +359,9 @@
   `reset` treats the empty file as a full pathspec reset of the index.
 - Empty `--pathspec-from-file=` values follow the same empty-input behavior
   as Git instead of attempting to open an empty file name.
+- `--pathspec-from-file` cannot be mixed with ordinary pathspec arguments,
+  matching Git's fatal pre-mutation validation for `add`, `restore`, and
+  `reset`.
 - `--pathspec-file-nul` without `--pathspec-from-file` is rejected before any
   `add`, `restore`, or `reset` mutation with Git's fatal dependency message.
 - `--pathspec-from-file` without a following value is rejected before any

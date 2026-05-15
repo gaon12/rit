@@ -1283,6 +1283,10 @@ fn parse_add_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Option<
         write_pathspec_file_nul_requires_file(stderr)?;
         return Ok(Some(ParsedAddArgs::exit(128)));
     }
+    if pathspec_file.is_some() && !paths.is_empty() {
+        write_pathspec_file_cannot_mix_with_args(stderr)?;
+        return Ok(Some(ParsedAddArgs::exit(128)));
+    }
     if let Some(file_name) = pathspec_file {
         match pathspec_args::read_pathspecs_from_file(&file_name, pathspec_file_nul, "add", stderr)?
         {
@@ -1661,6 +1665,10 @@ fn parse_restore_args(
         write_pathspec_file_nul_requires_file(stderr)?;
         return Ok(Some(ParsedRestoreArgs::exit(128)));
     }
+    if pathspec_file.is_some() && !paths.is_empty() {
+        write_pathspec_file_cannot_mix_with_args(stderr)?;
+        return Ok(Some(ParsedRestoreArgs::exit(128)));
+    }
     if let Some(file_name) = pathspec_file {
         match pathspec_args::read_pathspecs_from_file(
             &file_name,
@@ -1812,6 +1820,10 @@ fn parse_reset_args(
     }
     if pathspec_file_nul && pathspec_file.is_none() {
         write_pathspec_file_nul_requires_file(stderr)?;
+        return Ok(Some(ParsedResetArgs::exit(128)));
+    }
+    if pathspec_file.is_some() && !paths.is_empty() {
+        write_pathspec_file_cannot_mix_with_args(stderr)?;
         return Ok(Some(ParsedResetArgs::exit(128)));
     }
     if let Some(file_name) = pathspec_file {
@@ -2739,6 +2751,13 @@ fn write_pathspec_file_nul_requires_file(stderr: &mut dyn Write) -> io::Result<(
     writeln!(
         stderr,
         "fatal: the option '--pathspec-file-nul' requires '--pathspec-from-file'"
+    )
+}
+
+fn write_pathspec_file_cannot_mix_with_args(stderr: &mut dyn Write) -> io::Result<()> {
+    writeln!(
+        stderr,
+        "fatal: '--pathspec-from-file' and pathspec arguments cannot be used together"
     )
 }
 
