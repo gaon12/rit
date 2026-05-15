@@ -199,6 +199,8 @@ Completion criteria:
       `reset`.
     - [x] Empty `--pathspec-from-file=` values match Git behavior for `add`,
       `restore`, and `reset`.
+    - [x] Repeated `--pathspec-from-file` uses the last file like Git for
+      `add`, `restore`, and `reset`.
     - [x] `--pathspec-from-file` mixed with pathspec arguments is rejected
       with Git-compatible fatal output for `add`, `restore`, and `reset`.
     - [x] `--pathspec-file-nul` without `--pathspec-from-file` is rejected
