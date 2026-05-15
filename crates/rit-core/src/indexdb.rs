@@ -5,6 +5,11 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 
+mod file_history;
+
+pub use file_history::IndexedFileChange;
+use file_history::{indexed_file_history, refresh_file_changes_for_commit};
+
 /// Current SQLite auxiliary index schema version.
 pub const INDEXDB_SCHEMA_VERSION: i64 = 1;
 
@@ -335,6 +340,12 @@ impl<'repo> IndexDb<'repo> {
             .collect()
     }
 
+    /// Reads indexed first-parent changes for one repository-relative path.
+    pub fn file_history(&self, path: &str) -> Result<Vec<IndexedFileChange>> {
+        let connection = self.open_supported_read_only()?;
+        indexed_file_history(&connection, path)
+    }
+
     fn open_supported_read_only(&self) -> Result<Connection> {
         let storage = self.storage();
         if !storage.database_path.exists() {
@@ -658,6 +669,7 @@ fn refresh_commits(
             insert_commit_parent(connection, object_id, parent_order, parent)?;
             stack.push(parent);
         }
+        refresh_file_changes_for_commit(connection, repository, object_id, &commit)?;
         indexed += 1;
     }
     Ok(indexed)

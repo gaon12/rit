@@ -360,7 +360,7 @@ Completion criteria:
 - [ ] Implement fallback to canonical Git object/index/refs data when indexdb
   is missing, stale, or corrupted.
 - [x] Add indexed commit query API.
-- [ ] Add indexed file history API.
+- [x] Add indexed file history API.
 - [x] Add indexed refs snapshot API.
 - [ ] Add optional indexed path history command such as `rit file-history <path>`.
 - [ ] Add compatibility tests proving indexdb does not change Git-compatible

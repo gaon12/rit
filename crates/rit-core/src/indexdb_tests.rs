@@ -280,6 +280,64 @@ fn indexdb_recent_commit_query_api_orders_newest_first() {
 }
 
 #[test]
+fn indexdb_file_history_query_api_reads_first_parent_changes() {
+    let temp = temp_path("file-history-query");
+    let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+    write_user_config(&repository);
+    fs::write(temp.join("file.txt"), "one\n").expect("file should be written");
+    fs::write(temp.join("keep.txt"), "keep\n").expect("keep file should be written");
+    repository
+        .add_paths(&["file.txt".to_owned(), "keep.txt".to_owned()])
+        .expect("add should work");
+    let first = repository
+        .commit_index("first")
+        .expect("first commit should work")
+        .commit_id;
+    std::thread::sleep(Duration::from_secs(1));
+    fs::write(temp.join("file.txt"), "two\n").expect("file should be modified");
+    repository
+        .add_paths(&["file.txt".to_owned()])
+        .expect("add should work");
+    let second = repository
+        .commit_index("second")
+        .expect("second commit should work")
+        .commit_id;
+    std::thread::sleep(Duration::from_secs(1));
+    fs::remove_file(temp.join("file.txt")).expect("file should be removed");
+    repository
+        .add_paths(&["file.txt".to_owned()])
+        .expect("delete should be staged");
+    let third = repository
+        .commit_index("third")
+        .expect("third commit should work")
+        .commit_id;
+    repository.indexdb().ensure().expect("ensure should work");
+
+    let history = repository
+        .indexdb()
+        .file_history("file.txt")
+        .expect("file history should load");
+    let missing = repository
+        .indexdb()
+        .file_history("missing.txt")
+        .expect("missing file history should load");
+
+    assert_eq!(history.len(), 3);
+    assert_eq!(history[0].commit_id, third);
+    assert_eq!(history[0].change_kind, "D");
+    assert_eq!(history[0].object_id, None);
+    assert_eq!(history[0].mode, None);
+    assert_eq!(history[1].commit_id, second);
+    assert_eq!(history[1].change_kind, "M");
+    assert_eq!(history[1].mode, Some(0o100644));
+    assert_eq!(history[2].commit_id, first);
+    assert_eq!(history[2].change_kind, "A");
+    assert_eq!(history[2].path, "file.txt");
+    assert!(missing.is_empty());
+    remove_dir_all(&temp);
+}
+
+#[test]
 fn indexdb_write_through_records_refs_and_checkout_state() {
     let temp = temp_path("write-through-refs");
     let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");

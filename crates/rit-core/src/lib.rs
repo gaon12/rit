@@ -63,7 +63,8 @@ pub use index::{
 };
 #[cfg(feature = "indexdb")]
 pub use indexdb::{
-    IndexDb, IndexDbEnsureResult, IndexDbStatus, IndexDbStorage, IndexedCommit, IndexedRef,
+    IndexDb, IndexDbEnsureResult, IndexDbStatus, IndexDbStorage, IndexedCommit, IndexedFileChange,
+    IndexedRef,
 };
 #[cfg(feature = "lfs")]
 pub use large_files::{
