@@ -246,8 +246,28 @@ pub struct MergeConflictStageEntry {
 pub struct CherryPickResult {
     /// Commit that was selected by the user.
     pub picked_id: ObjectId,
-    /// New commit created on top of `HEAD`.
-    pub commit_id: ObjectId,
+    /// New commit created on top of `HEAD`, or `None` for `--no-commit`.
+    pub commit_id: Option<ObjectId>,
+}
+
+/// Options that affect cherry-pick execution.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CherryPickOptions {
+    /// Whether to create a commit after applying the change.
+    pub commit: bool,
+}
+
+impl CherryPickOptions {
+    /// Builds default cherry-pick options that create a commit.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Default for CherryPickOptions {
+    fn default() -> Self {
+        Self { commit: true }
+    }
 }
 
 struct ConflictedMergeStart<'a> {
@@ -1017,6 +1037,15 @@ impl Repository {
 
     /// Applies a single commit onto the current `HEAD` when it merges cleanly.
     pub fn cherry_pick(&self, target: &str) -> Result<CherryPickResult> {
+        self.cherry_pick_with_options(target, &CherryPickOptions::default())
+    }
+
+    /// Applies a single commit onto the current `HEAD` with explicit options.
+    pub fn cherry_pick_with_options(
+        &self,
+        target: &str,
+        options: &CherryPickOptions,
+    ) -> Result<CherryPickResult> {
         ensure_clean_for_checkout(self)?;
         let head_id = self
             .resolve_head()?
@@ -1078,6 +1107,13 @@ impl Repository {
             extensions: Vec::new(),
         }
         .write(&self.git_dir().join("index"))?;
+        if !options.commit {
+            self.refresh_indexdb_after_git_write();
+            return Ok(CherryPickResult {
+                picked_id,
+                commit_id: None,
+            });
+        }
 
         let result = self.commit_index_with_parents(
             &picked_commit.message,
@@ -1097,7 +1133,7 @@ impl Repository {
         )?;
         Ok(CherryPickResult {
             picked_id,
-            commit_id: result.commit_id,
+            commit_id: Some(result.commit_id),
         })
     }
 

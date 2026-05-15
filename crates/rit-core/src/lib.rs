@@ -140,10 +140,10 @@ pub use workspace_profile::{
     LazyMaterializationPolicy, RitConfig, WorkspacePrefetchPlan, WorkspaceProfile,
 };
 pub use write::{
-    AddOptions, AddPlan, CherryPickResult, CommitHookMode, CommitOptions, CommitPlan, CommitResult,
-    FileModeOverride, MergeConflictKind, MergeConflictReport, MergeConflictSide,
-    MergeConflictStageEntry, MergeConflictStagePlan, MergeOptions, MergePlan, MergeResult,
-    ResetPlan, SignatureIdentity, SignatureTime,
+    AddOptions, AddPlan, CherryPickOptions, CherryPickResult, CommitHookMode, CommitOptions,
+    CommitPlan, CommitResult, FileModeOverride, MergeConflictKind, MergeConflictReport,
+    MergeConflictSide, MergeConflictStageEntry, MergeConflictStagePlan, MergeOptions, MergePlan,
+    MergeResult, ResetPlan, SignatureIdentity, SignatureTime,
 };
 
 /// Returns the crate version used by the CLI and tests.

@@ -481,8 +481,10 @@ Completion criteria:
 - [~] `rit cherry-pick`
   - [x] Clean single-parent cherry-pick applies the picked commit onto `HEAD`,
     preserves the picked author/message, and creates a new one-parent commit.
+  - [x] Clean `-n`/`--no-commit` cherry-pick applies the change to the
+    index/worktree without advancing `HEAD` or writing sequencer state.
   - [ ] Conflict state, sequencer operations, merge commits with `--mainline`,
-    `--no-commit`, `--continue`, `--abort`, `--quit`, and `--skip`.
+    `--continue`, `--abort`, `--quit`, and `--skip`.
 - [ ] `rit rebase`
 - [ ] `rit stash`
 - [~] Conflict index stages.

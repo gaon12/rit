@@ -651,6 +651,9 @@
   commits. It applies the picked commit's parent-to-commit tree change onto
   `HEAD`, materializes the resulting index/worktree, preserves picked
   author/message metadata, and creates a new one-parent commit.
+- Clean `rit cherry-pick -n/--no-commit <commit>` now applies the same clean
+  tree change to the index/worktree without advancing `HEAD` or writing
+  sequencer state.
 - Still unsupported: remaining full conflict result message parity, strategies,
   full merge hook/editor parity, full `cherry-pick`, `rebase`, and `stash`.
 
@@ -1303,13 +1306,16 @@
 ### `rit cherry-pick`
 
 - Baseline command checked: `git cherry-pick -h`
-- Supported options: one target commit with no options.
+- Supported options: one target commit, plus `-n`/`--no-commit` and
+  `--commit` toggles.
 - Unsupported options: multiple commits, `--continue`, `--skip`, `--abort`,
   `--quit`, `--no-commit`, `--mainline`, `--ff`, signing, signoff, strategy
   options, empty-commit handling, and conflict continuation.
 - Git-compatible behavior: clean single-parent picks apply the picked commit's
   parent-to-commit tree change onto `HEAD`, create a new one-parent commit, and
-  preserve the picked author and commit message.
+  preserve the picked author and commit message. With `-n`/`--no-commit`, the
+  change is staged and materialized without advancing `HEAD` or writing
+  `CHERRY_PICK_HEAD`.
 - Intentional differences: output is simplified and conflict handling currently
   fails before mutating the repository instead of starting a cherry-pick
   sequence.

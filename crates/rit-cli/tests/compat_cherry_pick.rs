@@ -85,6 +85,43 @@ fn clean_single_parent_cherry_pick_matches_git_state() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn clean_no_commit_cherry_pick_matches_git_state() {
+    let root = temp_path("no-commit");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_clean_cherry_pick(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let original_head = run_capture("git", ["rev-parse", "HEAD"], &git_repo).stdout;
+    let git_pick = run_capture("git", ["cherry-pick", "--no-commit", "topic"], &git_repo);
+    let rit_pick = run_capture(
+        rit_binary(),
+        ["cherry-pick", "--no-commit", "topic"],
+        &rit_repo,
+    );
+
+    assert_eq!(git_pick.exit_code, 0, "git stderr: {}", git_pick.stderr);
+    assert_eq!(rit_pick.exit_code, 0, "rit stderr: {}", rit_pick.stderr);
+    assert_eq!(git_pick.stdout, rit_pick.stdout);
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &git_repo).stdout,
+        original_head
+    );
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &rit_repo).stdout,
+        original_head
+    );
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert!(!git_repo.join(".git").join("CHERRY_PICK_HEAD").exists());
+    assert!(!rit_repo.join(".git").join("CHERRY_PICK_HEAD").exists());
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct CapturedCommand {
     exit_code: i32,
     stdout: String,

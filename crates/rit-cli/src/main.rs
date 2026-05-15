@@ -2356,44 +2356,49 @@ fn cherry_pick_command(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    let target = match args {
-        [target] if !target.starts_with('-') => target,
-        [option, ..] if option.starts_with('-') => {
-            writeln!(stderr, "rit: unsupported cherry-pick option '{option}'")?;
+    let mut commit = true;
+    let mut target = None;
+    for arg in args {
+        if arg == "-n" || arg == "--no-commit" {
+            commit = false;
+        } else if arg == "--commit" {
+            commit = true;
+        } else if arg.starts_with('-') {
+            writeln!(stderr, "rit: unsupported cherry-pick option '{arg}'")?;
             return Ok(ExitCode::from(129));
-        }
-        [_] => {
-            writeln!(stderr, "rit: cherry-pick requires a target revision")?;
-            return Ok(ExitCode::from(129));
-        }
-        [_, extra, ..] => {
+        } else if target.is_some() {
             writeln!(
                 stderr,
-                "rit: cherry-pick currently supports only one target revision, unexpected '{extra}'"
+                "rit: cherry-pick currently supports only one target revision, unexpected '{arg}'"
             )?;
             return Ok(ExitCode::from(129));
+        } else {
+            target = Some(arg.as_str());
         }
-        [] => {
-            writeln!(stderr, "rit: cherry-pick requires a target revision")?;
-            return Ok(ExitCode::from(129));
-        }
+    }
+    let Some(target) = target else {
+        writeln!(stderr, "rit: cherry-pick requires a target revision")?;
+        return Ok(ExitCode::from(129));
     };
     let repository = match discover_repository(stderr)? {
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
     let before = capture_operation_snapshot(&repository, stderr)?;
-    match repository.cherry_pick(target) {
+    match repository.cherry_pick_with_options(target, &rit_core::CherryPickOptions { commit }) {
         Ok(result) => {
+            let created_objects = result.commit_id.into_iter().collect::<Vec<_>>();
             record_operation(
                 &repository,
                 "cherry-pick",
                 &format!("cherry-pick {target}"),
                 before,
-                vec![result.commit_id],
+                created_objects,
                 stderr,
             )?;
-            writeln!(stdout, "[{}] {}", &result.commit_id.to_hex()[..7], target)?;
+            if let Some(commit_id) = result.commit_id {
+                writeln!(stdout, "[{}] {}", &commit_id.to_hex()[..7], target)?;
+            }
             Ok(ExitCode::SUCCESS)
         }
         Err(error) => write_command_error(stderr, error),
