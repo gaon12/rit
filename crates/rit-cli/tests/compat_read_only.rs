@@ -659,6 +659,10 @@ fn diff_pathspec_outputs_match_git() {
             vec!["diff", "--name-only", "--", ":(glob)**/*.txt"],
         ),
         (
+            vec!["diff", "--name-only", "--", ":(glob)**base.txt"],
+            vec!["diff", "--name-only", "--", ":(glob)**base.txt"],
+        ),
+        (
             vec!["diff", "--name-only", "--", ":(top)nested/base.txt"],
             vec!["diff", "--name-only", "--", ":(top)nested/base.txt"],
         ),
@@ -733,6 +737,7 @@ fn status_pathspec_outputs_match_git() {
         ["status", "--porcelain=v1", "--", ":(literal)a.txt"],
         ["status", "--porcelain=v1", "--", ":(glob)*.txt"],
         ["status", "--porcelain=v1", "--", ":(glob)**/*.txt"],
+        ["status", "--porcelain=v1", "--", ":(glob)**base.txt"],
         ["status", "--porcelain=v1", "--", ":(top)nested/base.txt"],
         ["status", "--porcelain=v1", "--", ":/nested/base.txt"],
         ["status", "--porcelain=v1", "--", ":(icase)camel.txt"],

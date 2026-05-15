@@ -299,7 +299,7 @@ fn pathspec_glob_matches(pattern: &str, path: &str) -> bool {
             return false;
         }
 
-        if pattern[pattern_index..].starts_with(b"**") {
+        if pattern[pattern_index..].starts_with(b"**") && pattern_index + 2 == pattern.len() {
             if matches_from(pattern, path, pattern_index + 2, path_index) {
                 return true;
             }
@@ -727,6 +727,21 @@ mod tests {
 
         assert!(pathspec.matches("a.txt"));
         assert!(pathspec.matches("nested/a.txt"));
+    }
+
+    #[test]
+    fn glob_magic_double_star_crosses_slashes_only_in_git_special_forms() {
+        let pathspec =
+            PathspecSet::from_args(&[":(glob)**base.txt".to_owned()]).expect("valid pathspec");
+
+        assert!(pathspec.matches("base.txt"));
+        assert!(!pathspec.matches("nested/base.txt"));
+
+        let pathspec = PathspecSet::from_args(&[":(glob)nested/base**.txt".to_owned()])
+            .expect("valid pathspec");
+
+        assert!(pathspec.matches("nested/base.txt"));
+        assert!(!pathspec.matches("nested/deep/base.txt"));
     }
 
     #[test]

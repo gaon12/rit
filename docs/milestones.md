@@ -199,6 +199,9 @@ Completion criteria:
       and `reset`.
     - [x] POSIX bracket character classes such as `[[:digit:]]` in shared
       pathspec glob matching.
+    - [x] `:(glob)` double-star matching crosses slashes only in Git's special
+      `**/` and trailing `**` forms; other `**` pairs stay within one path
+      component.
     - [x] `--pathspec-from-file` and `--pathspec-file-nul` for `add`,
       `restore`, and `reset`.
     - [x] `--pathspec-from-file=-` stdin pathspecs for `add`, `restore`, and

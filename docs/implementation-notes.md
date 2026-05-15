@@ -45,6 +45,10 @@
   `git add -h`, `git diff -h`, and direct Git comparisons for
   `:(attr:name)`, `:(attr:-name)`, `:(attr:name=value)`, and `:(attr:!name)`
   in `status`, `diff`, `ls-files`, and `add`.
+- 2026-05-16 glob double-star component slice checked `git add -h`,
+  `git status -h`, `git diff -h`, and direct Git comparisons for `:(glob)`
+  patterns where `**` appears inside one path component instead of in Git's
+  special `**/` or trailing `**` forms.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
 - 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git
@@ -354,6 +358,9 @@
   first-parent `log`, and `show --no-patch`.
 - Added ASCII POSIX bracket character class support, such as `[[:digit:]]`,
   to the shared pathspec wildcard matcher.
+- Refined `:(glob)` double-star matching so `**/` and trailing `**` can cross
+  directories, while component-local forms such as `**base.txt` behave like
+  ordinary stars and do not cross `/`, matching Git.
 - Added positive pathspec magic support for `:(literal)`, `:(glob)`,
   `:(top)`, and `:/` with Git comparison coverage for status, diff, ls-files,
   first-parent `log`, `show --no-patch`, and `add`.
