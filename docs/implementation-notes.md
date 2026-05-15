@@ -129,6 +129,9 @@
 - 2026-05-15 non-UTF-8 pathspec-file slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for non-UTF-8
   bytes in text `--pathspec-from-file` inputs.
+- 2026-05-15 text pathspec-file NUL byte slice checked `git add -h`,
+  `git restore -h`, `git reset -h`, and direct Git comparisons for NUL bytes
+  embedded inside text `--pathspec-from-file` lines.
 - 2026-05-15 pathspec-file option validation slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   `--pathspec-file-nul` without `--pathspec-from-file`.
@@ -403,6 +406,8 @@
   `could not open ... for reading` message and exit code before any mutation.
 - Non-UTF-8 bytes in text pathspec files are decoded lossily so unmatched
   pathspec behavior follows Git instead of failing as an input encoding error.
+- NUL bytes inside text pathspec-file lines truncate that line before normal
+  empty-entry and quoted-entry parsing, matching Git's non-NUL mode behavior.
 - `--pathspec-file-nul` without `--pathspec-from-file` is rejected before any
   `add`, `restore`, or `reset` mutation with Git's fatal dependency message.
 - `--pathspec-from-file` without a following value is rejected before any
