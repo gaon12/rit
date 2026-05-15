@@ -102,6 +102,9 @@
 - 2026-05-15 pathspec-file option validation slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   `--pathspec-file-nul` without `--pathspec-from-file`.
+- 2026-05-15 pathspec-from-file missing value slice checked `git add -h`,
+  `git restore -h`, `git reset -h`, and direct Git comparisons for
+  `--pathspec-from-file` without a value.
 - 2026-05-12 stdin pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file=-`.
 - 2026-05-12 stdin NUL pathspec-file slice checked `git add -h`,
@@ -350,6 +353,8 @@
   `reset` treats the empty file as a full pathspec reset of the index.
 - `--pathspec-file-nul` without `--pathspec-from-file` is rejected before any
   `add`, `restore`, or `reset` mutation with Git's fatal dependency message.
+- `--pathspec-from-file` without a following value is rejected before any
+  `add`, `restore`, or `reset` mutation with Git's option-value error.
 - Added Git-compatible rejection for empty line-delimited pathspec-file
   entries before any `add`, `restore`, or `reset` mutation is applied.
 - Added Git-compatible rejection for empty NUL-delimited pathspec-file entries

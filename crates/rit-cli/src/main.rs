@@ -1238,6 +1238,10 @@ fn parse_add_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Option<
 
     while index < args.len() {
         let arg = &args[index];
+        if pathspec_from_file_missing_value(args, index, after_separator) {
+            write_pathspec_from_file_requires_value(stderr)?;
+            return Ok(Some(ParsedAddArgs::exit(129)));
+        }
         if arg == "--" && !after_separator {
             after_separator = true;
         } else if pathspec_args::handle_pathspec_file_option(
@@ -1630,6 +1634,10 @@ fn parse_restore_args(
     let mut index = 0;
     while index < args.len() {
         let arg = &args[index];
+        if pathspec_from_file_missing_value(args, index, after_separator) {
+            write_pathspec_from_file_requires_value(stderr)?;
+            return Ok(Some(ParsedRestoreArgs::exit(129)));
+        }
         if arg == "--" && !after_separator {
             after_separator = true;
         } else if pathspec_args::handle_pathspec_file_option(
@@ -1779,6 +1787,10 @@ fn parse_reset_args(
     let mut index = 0;
     while index < args.len() {
         let arg = &args[index];
+        if pathspec_from_file_missing_value(args, index, after_separator) {
+            write_pathspec_from_file_requires_value(stderr)?;
+            return Ok(Some(ParsedResetArgs::exit(129)));
+        }
         if arg == "--" && !after_separator {
             after_separator = true;
         } else if pathspec_args::handle_pathspec_file_option(
@@ -2727,6 +2739,17 @@ fn write_pathspec_file_nul_requires_file(stderr: &mut dyn Write) -> io::Result<(
     writeln!(
         stderr,
         "fatal: the option '--pathspec-file-nul' requires '--pathspec-from-file'"
+    )
+}
+
+fn pathspec_from_file_missing_value(args: &[String], index: usize, after_separator: bool) -> bool {
+    !after_separator && args[index] == "--pathspec-from-file" && index + 1 >= args.len()
+}
+
+fn write_pathspec_from_file_requires_value(stderr: &mut dyn Write) -> io::Result<()> {
+    writeln!(
+        stderr,
+        "error: option `pathspec-from-file' requires a value"
     )
 }
 
