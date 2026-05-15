@@ -20,6 +20,82 @@ fn indexdb_uses_git_rit_storage_location() {
         storage.lock_path,
         repository.common_dir().join("rit").join("indexdb.lock")
     );
+    assert_eq!(
+        storage.worktree_directory,
+        repository.common_dir().join("rit")
+    );
+    assert_eq!(
+        storage.worktree_cache_path,
+        repository
+            .common_dir()
+            .join("rit")
+            .join("worktree-cache.sqlite")
+    );
+    assert_eq!(
+        storage.worktree_lock_path,
+        repository
+            .common_dir()
+            .join("rit")
+            .join("worktree-cache.lock")
+    );
+    remove_dir_all(&temp);
+}
+
+#[test]
+fn indexdb_uses_worktree_cache_location_for_linked_worktrees() {
+    let temp = temp_path("linked-worktree-storage");
+    let main_worktree = temp.join("main");
+    let linked_worktree = temp.join("linked");
+    let repository = Repository::init(&InitOptions::new(&main_worktree)).expect("init should work");
+    let linked_git_dir = repository.git_dir().join("worktrees").join("linked");
+    fs::create_dir_all(&linked_git_dir).expect("linked git dir should be written");
+    fs::create_dir_all(&linked_worktree).expect("linked worktree should be written");
+    fs::write(
+        linked_worktree.join(".git"),
+        format!("gitdir: {}\n", linked_git_dir.display()),
+    )
+    .expect(".git file should be written");
+    fs::write(linked_git_dir.join("commondir"), "../..").expect("commondir should be written");
+    fs::write(linked_git_dir.join("HEAD"), "ref: refs/heads/master\n")
+        .expect("linked HEAD should be written");
+
+    let linked_repository =
+        Repository::open(&linked_worktree).expect("linked worktree should open");
+    let storage = linked_repository.indexdb().storage();
+
+    assert_eq!(
+        storage.database_path,
+        linked_repository
+            .common_dir()
+            .join("rit")
+            .join("indexdb.sqlite")
+    );
+    assert_eq!(
+        storage.worktree_directory,
+        linked_repository
+            .common_dir()
+            .join("rit")
+            .join("worktrees")
+            .join("linked")
+    );
+    assert_eq!(
+        storage.worktree_cache_path,
+        linked_repository
+            .common_dir()
+            .join("rit")
+            .join("worktrees")
+            .join("linked")
+            .join("worktree-cache.sqlite")
+    );
+    assert_eq!(
+        storage.worktree_lock_path,
+        linked_repository
+            .common_dir()
+            .join("rit")
+            .join("worktrees")
+            .join("linked")
+            .join("worktree-cache.lock")
+    );
     remove_dir_all(&temp);
 }
 

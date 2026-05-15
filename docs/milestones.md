@@ -333,7 +333,7 @@ Completion criteria:
 - [x] Add `indexdb` Cargo feature.
 - [x] Add `rit-indexdb` crate or internal module behind the `indexdb` feature.
 - [x] Define indexdb storage location under `.git/rit/`.
-- [ ] Define shared repository DB and worktree-specific cache layout.
+- [x] Define shared repository DB and worktree-specific cache layout.
 - [x] Add schema versioning and migration model.
 - [x] Add `cache_state` table.
 - [x] Add `commits` table.

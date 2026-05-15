@@ -52,6 +52,9 @@
 - 2026-05-16 diff `-z` summary slice checked `git diff -h` and direct Git
   byte-shape comparisons for `--name-only`, `--name-status`, and `--numstat`,
   including rename output fields.
+- 2026-05-16 indexdb layout slice checked existing linked worktree discovery
+  behavior and added explicit shared repository DB plus worktree-local cache
+  storage paths.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
 - 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git
@@ -212,17 +215,21 @@
   is rit-specific and has no Git command baseline. Added feature-gated SQLite
   support with `rit indexdb`, `status`, `build`, `update`, `repair`, `rebuild`,
   `drop`, and `vacuum`.
-- IndexDB storage is `.git/rit/indexdb.sqlite` using the repository common
-  directory. `.git/rit/indexdb.lock` is reserved in the public storage layout.
+- IndexDB shared repository storage is `.git/rit/indexdb.sqlite` using the
+  repository common directory. `.git/rit/indexdb.lock` is reserved in the
+  public storage layout. Worktree-local caches use
+  `.git/rit/worktree-cache.sqlite` for the primary worktree and
+  `.git/rit/worktrees/<worktree-id>/worktree-cache.sqlite` for linked
+  worktrees.
 - IndexDB schema version 1 creates `cache_state`, `commits`,
   `commit_parents`, `file_changes`, and `refs_snapshot`. Object IDs are stored
   as `hash_kind` plus binary object-id bytes, not fixed SHA-1 text columns.
 - Source of truth: IndexDB stores reproducible metadata only. `drop` removes
   the SQLite file without touching Git objects, refs, `.git/index`, or working
   tree files. Normal Git-compatible commands do not require IndexDB.
-- Unsupported behavior: worktree-specific cache DBs, indexed file-history
-  queries, corruption repair beyond rebuild, and migration beyond rebuild
-  guidance.
+- Unsupported behavior: writing worktree-specific cache DB contents, indexed
+  file-history queries, corruption repair beyond rebuild, and migration beyond
+  rebuild guidance.
 - 2026-05-13 IndexDB write-through slice: when the `indexdb` feature is built
   and `.git/rit/indexdb.sqlite` already exists, successful rit-created commits,
   branch/tag ref changes, checkout state changes, and fast-forward merges

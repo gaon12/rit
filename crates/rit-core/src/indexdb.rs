@@ -17,6 +17,12 @@ pub struct IndexDbStorage {
     pub database_path: PathBuf,
     /// Future lock-file path documented for external tooling and repair plans.
     pub lock_path: PathBuf,
+    /// Directory for worktree-local cache data.
+    pub worktree_directory: PathBuf,
+    /// Worktree-local SQLite cache path.
+    pub worktree_cache_path: PathBuf,
+    /// Future worktree-local lock-file path.
+    pub worktree_lock_path: PathBuf,
 }
 
 /// Status of the optional SQLite auxiliary index.
@@ -65,9 +71,13 @@ impl<'repo> IndexDb<'repo> {
     /// Returns the storage layout for this repository.
     pub fn storage(&self) -> IndexDbStorage {
         let directory = self.repository.common_dir().join("rit");
+        let worktree_directory = worktree_indexdb_directory(self.repository, &directory);
         IndexDbStorage {
             database_path: directory.join("indexdb.sqlite"),
             lock_path: directory.join("indexdb.lock"),
+            worktree_cache_path: worktree_directory.join("worktree-cache.sqlite"),
+            worktree_lock_path: worktree_directory.join("worktree-cache.lock"),
+            worktree_directory,
             directory,
         }
     }
@@ -230,6 +240,16 @@ impl<'repo> IndexDb<'repo> {
         connection.execute_batch("VACUUM;").map_err(sqlite_error)?;
         self.status()
     }
+}
+
+fn worktree_indexdb_directory(repository: &Repository, directory: &std::path::Path) -> PathBuf {
+    let linked_worktrees_root = repository.common_dir().join("worktrees");
+    if let Ok(relative_git_dir) = repository.git_dir().strip_prefix(&linked_worktrees_root)
+        && let Some(worktree_id) = relative_git_dir.components().next()
+    {
+        return directory.join("worktrees").join(worktree_id.as_os_str());
+    }
+    directory.to_path_buf()
 }
 
 fn open_read_write(path: &PathBuf) -> Result<Connection> {

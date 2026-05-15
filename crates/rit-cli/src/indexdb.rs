@@ -96,6 +96,16 @@ fn print_result(
 fn print_status(status: &rit_core::IndexDbStatus, stdout: &mut dyn Write) -> io::Result<()> {
     writeln!(stdout, "path: {}", status.storage.database_path.display())?;
     writeln!(stdout, "lock-path: {}", status.storage.lock_path.display())?;
+    writeln!(
+        stdout,
+        "worktree-cache-path: {}",
+        status.storage.worktree_cache_path.display()
+    )?;
+    writeln!(
+        stdout,
+        "worktree-lock-path: {}",
+        status.storage.worktree_lock_path.display()
+    )?;
     writeln!(stdout, "exists: {}", status.exists)?;
     match status.schema_version {
         Some(version) => writeln!(stdout, "schema-version: {version}")?,
