@@ -1,7 +1,8 @@
 use crate::index::{Index, join_slash_path};
 use crate::object::parse_tree_entries;
 use crate::{
-    ObjectId, ObjectKind, PathspecSet, Repository, Result, RitError, hash_object, parse_commit,
+    GitConfig, ObjectId, ObjectKind, PathspecSet, Repository, Result, RitError, hash_object,
+    parse_commit,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -396,6 +397,7 @@ impl Repository {
         };
         let index = Index::read(&self.git_dir().join("index"))?;
         let attributes = self.root_attributes()?;
+        let options = self.diff_options_with_config(options)?;
         let mut files = Vec::new();
         let mut copy_sources = Vec::new();
 
@@ -480,13 +482,13 @@ impl Repository {
 
         let mut warnings = Vec::new();
         if options.find_renames {
-            warnings.extend(detect_patch_renames(&mut files, options)?);
+            warnings.extend(detect_patch_renames(&mut files, &options)?);
         }
         if options.find_copies {
             warnings.extend(detect_patch_copies_from_sources(
                 &mut files,
                 &copy_sources,
-                options,
+                &options,
             )?);
         }
 
@@ -528,6 +530,7 @@ impl Repository {
             .collect::<BTreeMap<_, _>>();
         let head_entries = self.head_diff_entries()?;
         let attributes = self.root_attributes()?;
+        let options = self.diff_options_with_config(options)?;
         let paths = index_entries
             .keys()
             .chain(head_entries.keys())
@@ -595,7 +598,7 @@ impl Repository {
                 &mut files,
                 &head_entries,
                 &index_entries,
-                options,
+                &options,
             )?);
         }
         if options.find_copies {
@@ -603,7 +606,7 @@ impl Repository {
                 &mut files,
                 &head_entries,
                 &index_entries,
-                options,
+                &options,
             )?);
         }
 
@@ -640,6 +643,7 @@ impl Repository {
             .collect::<BTreeMap<_, _>>();
         let head_entries = self.head_diff_entries()?;
         let attributes = self.root_attributes()?;
+        let options = self.diff_options_with_config(options)?;
         let paths = index_entries
             .keys()
             .chain(head_entries.keys())
@@ -701,18 +705,43 @@ impl Repository {
 
         let mut warnings = Vec::new();
         if options.find_renames {
-            warnings.extend(detect_patch_renames(&mut files, options)?);
+            warnings.extend(detect_patch_renames(&mut files, &options)?);
         }
         if options.find_copies {
             warnings.extend(self.detect_patch_copies(
                 &mut files,
                 &head_entries,
                 &index_entries,
-                options,
+                &options,
             )?);
         }
 
         Ok(DiffPatch { files, warnings })
+    }
+
+    fn diff_options_with_config(&self, options: &DiffOptions) -> Result<DiffOptions> {
+        let mut effective_options = options.clone();
+        if effective_options.rename_limit.is_none() {
+            effective_options.rename_limit = self.configured_diff_rename_limit()?;
+        }
+        Ok(effective_options)
+    }
+
+    fn configured_diff_rename_limit(&self) -> Result<Option<usize>> {
+        let config_path = self.common_dir().join("config");
+        if !config_path.exists() {
+            return Ok(None);
+        }
+        let config = GitConfig::read(&config_path)?;
+        let Some(value) = config.get("diff", "renamelimit") else {
+            return Ok(None);
+        };
+        let limit = value.parse::<usize>().map_err(|_| {
+            RitError::invalid_input(format!(
+                "bad numeric config value '{value}' for 'diff.renamelimit'"
+            ))
+        })?;
+        Ok(Some(limit))
     }
 
     fn read_blob(&self, object_id: ObjectId) -> Result<crate::GitObject> {

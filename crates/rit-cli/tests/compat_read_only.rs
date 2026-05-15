@@ -251,6 +251,31 @@ fn diff_cached_rename_limit_warning_outputs_match_git() {
 }
 
 #[test]
+fn diff_cached_rename_limit_config_outputs_match_git() {
+    let fixture = RenameLimitFixture::new("cached-rename-limit-config");
+    run_git(fixture.path(), ["config", "diff.renameLimit", "1"]);
+
+    for args in [
+        vec!["diff", "--cached", "-M", "--name-status"],
+        vec!["diff", "--cached", "-M"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached rename limit config {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_worktree_rename_limit_warning_outputs_match_git() {
     let fixture = WorktreeIntentRenameLimitFixture::new("worktree-rename-limit");
 
@@ -269,6 +294,29 @@ fn diff_worktree_rename_limit_warning_outputs_match_git() {
         assert!(
             outcome.is_match(),
             "worktree rename limit {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
+fn diff_worktree_rename_limit_config_outputs_match_git() {
+    let fixture = WorktreeIntentRenameLimitFixture::new("worktree-rename-limit-config");
+    run_git(fixture.path(), ["config", "diff.renameLimit", "1"]);
+
+    for args in [vec!["diff", "-M", "--name-status"], vec!["diff", "-M"]] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree rename limit config {:?}\n{}",
             args,
             outcome.report()
         );

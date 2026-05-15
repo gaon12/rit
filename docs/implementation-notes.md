@@ -99,6 +99,9 @@
 - 2026-05-15 rename-limit warning slice checked `git diff -h` and direct Git
   comparisons for cached `diff -M -l1` stdout and stderr when exhaustive
   rename detection is skipped.
+- 2026-05-15 diff.renameLimit config slice checked `git diff -h` and direct
+  Git comparisons for cached and worktree `diff -M` stdout/stderr when
+  `diff.renameLimit=1` skips exhaustive rename detection.
 - 2026-05-15 fractional rename/copy threshold slice checked `git diff -h` and
   direct Git comparisons for cached `-M5`, `-M05`, `--find-renames=5`,
   `--find-renames=05`, `-C5`, `-C05`, `--find-copies=5`,
@@ -389,6 +392,9 @@
 - Diff summary and patch results now carry Git-shaped warnings; the CLI writes
   rename-limit warnings to stderr for supported `diff` output modes when
   exhaustive similarity detection is skipped.
+- `diff.renameLimit` from Git config is now used as the default rename/copy
+  candidate limit when the CLI does not provide `-l<n>`; explicit `-l<n>`
+  still wins.
 - Percent-less `-M<n>`/`-C<n>` and `--find-renames=<n>`/`--find-copies=<n>`
   values now use Git's fractional notation: `5` means 50%, `05` means 5%,
   and `400` means 40%. Percent-suffixed values above 100 are accepted and
