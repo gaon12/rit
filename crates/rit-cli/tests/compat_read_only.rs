@@ -54,6 +54,37 @@ fn diff_cached_outputs_match_git() {
     }
 }
 
+#[cfg(feature = "indexdb")]
+#[test]
+fn indexdb_metadata_does_not_change_git_compatible_outputs() {
+    let fixture = DiffFixture::new("indexdb-output-neutral");
+    let commands = [
+        vec!["status", "--porcelain=v1"],
+        vec!["diff", "--name-status"],
+        vec!["diff", "--cached", "--name-status"],
+        vec!["ls-files", "--stage"],
+    ];
+    let before = commands
+        .iter()
+        .map(|args| run_capture_args(rit_binary(), &os_arg_slice(args), fixture.path()))
+        .collect::<Vec<_>>();
+
+    let (indexdb_stdout, indexdb_stderr) = run_capture(rit_binary(), ["indexdb"], fixture.path());
+
+    assert!(indexdb_stdout.contains("indexdb: ensure\n"));
+    assert_eq!(indexdb_stderr, "");
+    for (index, args) in commands.iter().enumerate() {
+        let after = run_capture_args(rit_binary(), &os_arg_slice(args), fixture.path());
+        let git = run_capture_args("git", &os_arg_slice(args), fixture.path());
+
+        assert_eq!(
+            after, before[index],
+            "{args:?} changed after indexdb ensure"
+        );
+        assert_eq!(after, git, "{args:?} differs from git after indexdb ensure");
+    }
+}
+
 #[test]
 fn diff_cached_exact_rename_outputs_match_git() {
     let fixture = ExactRenameFixture::new("cached-exact-rename");
@@ -2515,6 +2546,11 @@ fn rit_command_slice(args: &[&str]) -> CommandSpec {
 
 fn os_args<const N: usize>(args: [&str; N]) -> Vec<OsString> {
     args.into_iter().map(OsString::from).collect()
+}
+
+#[cfg(feature = "indexdb")]
+fn os_arg_slice(args: &[&str]) -> Vec<OsString> {
+    args.iter().map(OsString::from).collect()
 }
 
 fn rit_binary() -> OsString {

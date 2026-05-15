@@ -65,6 +65,9 @@
 - 2026-05-16 `rit file-history <path>` slice added a read-only CLI over
   indexdb file history rows. The command ensures reproducible index metadata
   exists, then prints newest-first first-parent path changes.
+- 2026-05-16 indexdb output-neutrality slice added compatibility coverage that
+  `rit indexdb` metadata creation does not change `status`, `diff`, or
+  `ls-files` output and that those outputs still match Git afterward.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
 - 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git
@@ -249,6 +252,10 @@
   clear missing-feature error in minimal builds. It creates or updates
   `.git/rit/indexdb.sqlite` as reproducible metadata but does not modify Git
   objects, refs, index entries, or working tree files.
+- Compatibility coverage now captures representative Git-compatible read
+  command output before and after `rit indexdb` creates metadata, then compares
+  the post-indexdb output with Git. This guards the “indexdb is not source of
+  truth” rule for user-visible command behavior.
 - Source of truth: IndexDB stores reproducible metadata only. `drop` removes
   the SQLite file without touching Git objects, refs, `.git/index`, or working
   tree files. Normal Git-compatible commands do not require IndexDB.
