@@ -241,6 +241,15 @@ pub struct MergeConflictStageEntry {
     pub object_id: ObjectId,
 }
 
+/// Result of applying one commit onto `HEAD` with `cherry-pick`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CherryPickResult {
+    /// Commit that was selected by the user.
+    pub picked_id: ObjectId,
+    /// New commit created on top of `HEAD`.
+    pub commit_id: ObjectId,
+}
+
 struct ConflictedMergeStart<'a> {
     target: &'a str,
     target_id: ObjectId,
@@ -1004,6 +1013,92 @@ impl Repository {
         self.update_head(new_id)?;
         self.refresh_indexdb_after_git_write();
         Ok(MergeResult::FastForward { old_id, new_id })
+    }
+
+    /// Applies a single commit onto the current `HEAD` when it merges cleanly.
+    pub fn cherry_pick(&self, target: &str) -> Result<CherryPickResult> {
+        ensure_clean_for_checkout(self)?;
+        let head_id = self
+            .resolve_head()?
+            .ok_or_else(|| RitError::invalid_input("cherry-pick requires an existing HEAD"))?;
+        let picked_id = self.resolve_revision(target)?;
+        let picked_object = self.read_object(picked_id)?;
+        if picked_object.kind != ObjectKind::Commit {
+            return Err(RitError::invalid_input(format!(
+                "cherry-pick target {picked_id} is {}, not commit",
+                picked_object.kind
+            )));
+        }
+        let picked_commit = parse_commit(&picked_object.data)?;
+        if picked_commit.parents.len() > 1 {
+            return Err(RitError::invalid_input(
+                "cherry-pick of merge commits requires --mainline, which is not implemented",
+            ));
+        }
+
+        let base_entries = match picked_commit.parents.first().copied() {
+            Some(parent_id) => self.commit_index_entries(parent_id)?,
+            None => Vec::new(),
+        };
+        let head_entries = self.commit_index_entries(head_id)?;
+        let picked_entries = self.commit_index_entries(picked_id)?;
+        let plan =
+            non_fast_forward_merge_workflow_plan(&base_entries, &head_entries, &picked_entries);
+        if !plan.conflict_stages.is_empty() {
+            return Err(RitError::invalid_input(
+                "cherry-pick conflict handling is not implemented",
+            ));
+        }
+
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "cherry-pick must be run in a repository with a working tree",
+            ));
+        };
+        let symlinks_enabled = self.core_symlinks_enabled()?;
+        let merged_entries = self.non_fast_forward_merge_index_entries(
+            &base_entries,
+            &head_entries,
+            &picked_entries,
+            &[],
+            target,
+        )?;
+        let conflict_paths = BTreeSet::new();
+        write_non_conflicting_merge_worktree_changes(
+            self,
+            worktree,
+            &head_entries,
+            &merged_entries,
+            &conflict_paths,
+            symlinks_enabled,
+        )?;
+        write_text_atomically(&self.git_dir().join("ORIG_HEAD"), &format!("{head_id}\n"))?;
+        Index {
+            entries: merged_entries,
+            extensions: Vec::new(),
+        }
+        .write(&self.git_dir().join("index"))?;
+
+        let result = self.commit_index_with_parents(
+            &picked_commit.message,
+            &CommitOptions {
+                author: Some(SignatureIdentity {
+                    name: picked_commit.author.name,
+                    email: picked_commit.author.email,
+                }),
+                author_date: Some(SignatureTime {
+                    timestamp: picked_commit.author.timestamp,
+                    offset: picked_commit.author.offset,
+                }),
+                ..CommitOptions::default()
+            },
+            &[head_id],
+            false,
+        )?;
+        Ok(CherryPickResult {
+            picked_id,
+            commit_id: result.commit_id,
+        })
     }
 
     fn start_conflicted_merge(&self, input: ConflictedMergeStart<'_>) -> Result<()> {

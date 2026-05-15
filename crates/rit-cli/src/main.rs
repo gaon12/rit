@@ -59,6 +59,9 @@ fn run(
         [command, rest @ ..] if command == "checkout" => checkout_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "switch" => switch_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "merge" => merge_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "cherry-pick" => {
+            cherry_pick_command(rest, stdout, stderr)
+        }
         [command, rest @ ..] if command == "auth" => auth::auth_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "indexdb" => {
             indexdb::indexdb_command(rest, stdout, stderr)
@@ -2348,6 +2351,55 @@ fn merge_command(
     }
 }
 
+fn cherry_pick_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let target = match args {
+        [target] if !target.starts_with('-') => target,
+        [option, ..] if option.starts_with('-') => {
+            writeln!(stderr, "rit: unsupported cherry-pick option '{option}'")?;
+            return Ok(ExitCode::from(129));
+        }
+        [_] => {
+            writeln!(stderr, "rit: cherry-pick requires a target revision")?;
+            return Ok(ExitCode::from(129));
+        }
+        [_, extra, ..] => {
+            writeln!(
+                stderr,
+                "rit: cherry-pick currently supports only one target revision, unexpected '{extra}'"
+            )?;
+            return Ok(ExitCode::from(129));
+        }
+        [] => {
+            writeln!(stderr, "rit: cherry-pick requires a target revision")?;
+            return Ok(ExitCode::from(129));
+        }
+    };
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    let before = capture_operation_snapshot(&repository, stderr)?;
+    match repository.cherry_pick(target) {
+        Ok(result) => {
+            record_operation(
+                &repository,
+                "cherry-pick",
+                &format!("cherry-pick {target}"),
+                before,
+                vec![result.commit_id],
+                stderr,
+            )?;
+            writeln!(stdout, "[{}] {}", &result.commit_id.to_hex()[..7], target)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(error) => write_command_error(stderr, error),
+    }
+}
+
 struct ParsedMergeArgs {
     target: Option<String>,
     plan: bool,
@@ -3356,6 +3408,15 @@ mod tests {
         assert!(stdout.contains("mode: glob\n"));
         assert!(stdout.contains("ignore-case: true\n"));
         assert!(stdout.contains("exclude: true\n"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn cherry_pick_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "cherry-pick"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit cherry-pick"));
         assert_eq!(stderr, "");
     }
 

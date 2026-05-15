@@ -647,8 +647,12 @@
   `pre-merge-commit`, pass `merge` to `prepare-commit-msg`, leave `MERGE_HEAD`
   and `MERGE_MSG` when a verification hook blocks the commit, and honor
   `--no-verify` for the automatic clean merge commit path.
+- Added the first `rit cherry-pick <commit>` slice for clean single-parent
+  commits. It applies the picked commit's parent-to-commit tree change onto
+  `HEAD`, materializes the resulting index/worktree, preserves picked
+  author/message metadata, and creates a new one-parent commit.
 - Still unsupported: remaining full conflict result message parity, strategies,
-  full merge hook/editor parity, `cherry-pick`, `rebase`, and `stash`.
+  full merge hook/editor parity, full `cherry-pick`, `rebase`, and `stash`.
 
 ### M16: Operation journal and universal undo
 
@@ -1296,6 +1300,24 @@
   state files for conflicted non-fast-forward merges.
 - Risk: moderate; requires a clean worktree before writing.
 
+### `rit cherry-pick`
+
+- Baseline command checked: `git cherry-pick -h`
+- Supported options: one target commit with no options.
+- Unsupported options: multiple commits, `--continue`, `--skip`, `--abort`,
+  `--quit`, `--no-commit`, `--mainline`, `--ff`, signing, signoff, strategy
+  options, empty-commit handling, and conflict continuation.
+- Git-compatible behavior: clean single-parent picks apply the picked commit's
+  parent-to-commit tree change onto `HEAD`, create a new one-parent commit, and
+  preserve the picked author and commit message.
+- Intentional differences: output is simplified and conflict handling currently
+  fails before mutating the repository instead of starting a cherry-pick
+  sequence.
+- Repository mutation: yes, for clean picks it updates the worktree, index,
+  `ORIG_HEAD`, and current `HEAD`.
+- Risk: moderate; this first slice requires a clean worktree and does not yet
+  write sequencer state for conflicts.
+
 ### `rit op` and `rit undo`
 
 - Baseline command checked: rit-specific command, no Git equivalent.
@@ -1304,8 +1326,8 @@
 - Supported metadata: before/after HEAD snapshots, current branch snapshots,
   index checksums, changed paths, and known created object IDs.
 - Recorded commands: commit, checkout, switch, fast-forward and conflicted
-  merge, merge abort, add, restore, pathspec reset, branch create/delete, and
-  tag create/delete, fetch, and smart-remote push success paths.
+  merge, merge abort, cherry-pick, add, restore, pathspec reset, branch
+  create/delete, tag create/delete, fetch, and smart-remote push success paths.
 - Malformed operation journal lines are skipped with warnings and do not block
   reading later valid records.
 - Unsupported options: filtering, complete object creation inventories, and

@@ -478,7 +478,11 @@ Completion criteria:
   - [x] Clean merge commits run `pre-merge-commit` hooks and honor
     `--no-verify` for that hook.
   - [ ] Full conflict handling, merge hooks, and strategies.
-- [ ] `rit cherry-pick`
+- [~] `rit cherry-pick`
+  - [x] Clean single-parent cherry-pick applies the picked commit onto `HEAD`,
+    preserves the picked author/message, and creates a new one-parent commit.
+  - [ ] Conflict state, sequencer operations, merge commits with `--mainline`,
+    `--no-commit`, `--continue`, `--abort`, `--quit`, and `--skip`.
 - [ ] `rit rebase`
 - [ ] `rit stash`
 - [~] Conflict index stages.
@@ -660,7 +664,7 @@ Completion criteria:
 - [x] Capture before/after HEAD, current branch, and index checksum snapshots.
 - [x] Record successful `rit commit`, `rit checkout`, `rit switch`,
   fast-forward/conflicted `rit merge`, `rit merge --abort`, and
-  `rit merge --continue` operations from the CLI.
+  `rit merge --continue`, and clean `rit cherry-pick` operations from the CLI.
 - [x] Implement `rit op log`.
 - [x] Implement `rit op restore <id>` for restorable HEAD snapshots.
 - [x] Implement `rit undo` as restore-last-operation.

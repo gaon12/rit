@@ -29,6 +29,7 @@ Core commands:
   checkout      Switch branches
   switch        Switch branches
   merge         Merge a branch or revision into the current branch
+  cherry-pick   Apply one clean commit onto HEAD
   auth          Explain remote authentication selection
   indexdb       Manage optional SQLite auxiliary index metadata
   file-history  Show indexed first-parent path history
@@ -184,6 +185,12 @@ rit merge explain <target>
 Fast-forward the current branch to a local branch or revision, create a clean merge commit, start a conflicted text merge, abort, quit, or continue an in-progress merge, print a dry-run plan, or explain the merge decision without writing.
 ";
 
+const CHERRY_PICK_HELP: &str = "\
+rit cherry-pick <commit>
+
+Apply one non-merge commit onto the current HEAD when the change merges cleanly.
+";
+
 const AUTH_HELP: &str = "\
 rit auth explain <url>
 
@@ -284,6 +291,7 @@ pub fn print_command_help(
         "checkout" => stdout.write_all(CHECKOUT_HELP.as_bytes())?,
         "switch" => stdout.write_all(SWITCH_HELP.as_bytes())?,
         "merge" => stdout.write_all(MERGE_HELP.as_bytes())?,
+        "cherry-pick" => stdout.write_all(CHERRY_PICK_HELP.as_bytes())?,
         "auth" => stdout.write_all(AUTH_HELP.as_bytes())?,
         "indexdb" => stdout.write_all(INDEXDB_HELP.as_bytes())?,
         "file-history" => stdout.write_all(FILE_HISTORY_HELP.as_bytes())?,
