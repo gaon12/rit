@@ -83,8 +83,14 @@
 - 2026-05-16 SSH transport config slice checked Git 2.52.0 docs for
   `core.sshCommand`, `GIT_SSH_COMMAND`, `GIT_SSH`, and `ssh.variant`, then
   wired repository `.git/config` `core.sshCommand` into process-based SSH
-  fetch/push. Current precedence is `GIT_SSH_COMMAND`, `core.sshCommand`,
-  `GIT_SSH`, then `ssh`; `ssh.variant` parity remains a later M7 item.
+  fetch/push. Current command precedence is `GIT_SSH_COMMAND`,
+  `core.sshCommand`, `GIT_SSH`, then `ssh`.
+- 2026-05-16 SSH variant slice followed Git 2.52.0 `ssh.variant` docs for
+  the current argument shapes: OpenSSH uses `-p`, plink/putty/tortoiseplink
+  use `-P`, tortoiseplink adds `-batch`, and `simple` passes only host plus
+  the remote Git service command. `GIT_SSH_VARIANT` overrides configured
+  `ssh.variant`; `auto` infers known command basenames and otherwise keeps
+  OpenSSH-shaped arguments.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
 - 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git

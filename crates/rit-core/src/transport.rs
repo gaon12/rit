@@ -128,16 +128,66 @@ pub struct SshProcessInvocation {
     pub args: Vec<String>,
 }
 
+/// SSH command-line variant used to shape host and port arguments.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum SshVariant {
+    /// Infer from the SSH command basename where possible.
+    #[default]
+    Auto,
+    /// OpenSSH-compatible arguments.
+    Ssh,
+    /// Only pass host and remote command.
+    Simple,
+    /// PuTTY plink arguments.
+    Plink,
+    /// PuTTY arguments.
+    Putty,
+    /// TortoisePlink arguments.
+    TortoisePlink,
+}
+
+impl SshVariant {
+    fn from_config_value(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "auto" => Self::Auto,
+            "simple" => Self::Simple,
+            "plink" => Self::Plink,
+            "putty" => Self::Putty,
+            "tortoiseplink" => Self::TortoisePlink,
+            _ => Self::Ssh,
+        }
+    }
+
+    fn infer_from_program(program: &str) -> Self {
+        let basename = program
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or(program)
+            .to_ascii_lowercase();
+        let name = basename.strip_suffix(".exe").unwrap_or(&basename);
+        match name {
+            "plink" => Self::Plink,
+            "putty" => Self::Putty,
+            "tortoiseplink" => Self::TortoisePlink,
+            "ssh" => Self::Ssh,
+            _ => Self::Ssh,
+        }
+    }
+}
+
 /// Repository-level SSH process configuration.
 ///
 /// Environment variables are still read at process start time and take the
 /// same precedence as Git: `GIT_SSH_COMMAND`, then `core.sshCommand`, then
-/// `GIT_SSH`, finally plain `ssh`.
+/// `GIT_SSH`, finally plain `ssh`. `GIT_SSH_VARIANT` overrides
+/// `ssh.variant` for argument shape.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct SshProcessConfig {
     /// Command from `core.sshCommand`, in the same shell-like form as
     /// `GIT_SSH_COMMAND`.
     pub core_ssh_command: Option<String>,
+    /// Configured `ssh.variant` argument behavior.
+    pub ssh_variant: Option<SshVariant>,
 }
 
 impl SshProcessConfig {
@@ -148,6 +198,10 @@ impl SshProcessConfig {
                 .get("core", "sshcommand")
                 .filter(|value| !value.trim().is_empty())
                 .map(ToOwned::to_owned),
+            ssh_variant: config
+                .get("ssh", "variant")
+                .filter(|value| !value.trim().is_empty())
+                .map(SshVariant::from_config_value),
         }
     }
 }
@@ -443,15 +497,28 @@ fn command_to_process(
 ) -> Result<Command> {
     let git_ssh_command = env::var("GIT_SSH_COMMAND").ok();
     let git_ssh = env::var("GIT_SSH").ok();
+    let git_ssh_variant = env::var("GIT_SSH_VARIANT").ok();
+    let ssh_variant = configured_ssh_variant(git_ssh_variant.as_deref(), process_config);
     let invocation = ssh_process_invocation(
         command,
         git_ssh_command.as_deref(),
         process_config.core_ssh_command.as_deref(),
         git_ssh.as_deref(),
+        ssh_variant,
     )?;
     let mut process = Command::new(&invocation.program);
     process.args(&invocation.args);
     Ok(process)
+}
+
+fn configured_ssh_variant(
+    git_ssh_variant: Option<&str>,
+    process_config: &SshProcessConfig,
+) -> Option<SshVariant> {
+    git_ssh_variant
+        .filter(|value| !value.trim().is_empty())
+        .map(SshVariant::from_config_value)
+        .or(process_config.ssh_variant)
 }
 
 fn ssh_process_invocation(
@@ -459,6 +526,7 @@ fn ssh_process_invocation(
     git_ssh_command: Option<&str>,
     core_ssh_command: Option<&str>,
     git_ssh: Option<&str>,
+    ssh_variant: Option<SshVariant>,
 ) -> Result<SshProcessInvocation> {
     let (program, mut args) = match git_ssh_command.filter(|value| !value.trim().is_empty()) {
         Some(command) => parse_git_ssh_command(command)?,
@@ -470,14 +538,32 @@ fn ssh_process_invocation(
             },
         },
     };
-    add_ssh_process_args(&mut args, command);
+    let ssh_variant = match ssh_variant.unwrap_or_default() {
+        SshVariant::Auto => SshVariant::infer_from_program(&program),
+        variant => variant,
+    };
+    add_ssh_process_args(&mut args, command, ssh_variant);
     Ok(SshProcessInvocation { program, args })
 }
 
-fn add_ssh_process_args(args: &mut Vec<String>, command: &SshServiceCommand) {
-    if let Some(port) = command.port {
-        args.push("-p".to_owned());
-        args.push(port.to_string());
+fn add_ssh_process_args(args: &mut Vec<String>, command: &SshServiceCommand, variant: SshVariant) {
+    match variant {
+        SshVariant::Ssh | SshVariant::Auto => {
+            if let Some(port) = command.port {
+                args.push("-p".to_owned());
+                args.push(port.to_string());
+            }
+        }
+        SshVariant::Plink | SshVariant::Putty | SshVariant::TortoisePlink => {
+            if let Some(port) = command.port {
+                args.push("-P".to_owned());
+                args.push(port.to_string());
+            }
+            if variant == SshVariant::TortoisePlink {
+                args.push("-batch".to_owned());
+            }
+        }
+        SshVariant::Simple => {}
     }
     args.push(command.target());
     args.push(command.remote_command.clone());
@@ -1605,7 +1691,7 @@ fn is_windows_drive_path(input: &str) -> bool {
 mod tests {
     use super::{
         BlockingSmartHttpClient, FetchRefSpec, SmartHttpAdvertisement, SmartHttpService,
-        SshProcessConfig, SshProcessInvocation, SshServiceCommand, SshServiceExecutor,
+        SshProcessConfig, SshProcessInvocation, SshServiceCommand, SshServiceExecutor, SshVariant,
         TransportLocation, TransportProtocol, UploadPackAckStatus, UploadPackAcknowledgement,
         UploadPackRequest, UploadPackResponse, UploadPackSideBand,
     };
@@ -1701,7 +1787,7 @@ mod tests {
             .ssh_service_command(SmartHttpService::UploadPack)
             .expect("ssh command");
 
-        let invocation = super::ssh_process_invocation(&command, None, None, None)
+        let invocation = super::ssh_process_invocation(&command, None, None, None, None)
             .expect("default invocation should build");
 
         assert_eq!(
@@ -1727,6 +1813,7 @@ mod tests {
             Some("plink -batch -i 'key file.ppk'"),
             None,
             None,
+            None,
         )
         .expect("GIT_SSH_COMMAND invocation should build");
 
@@ -1738,7 +1825,7 @@ mod tests {
                     "-batch".to_owned(),
                     "-i".to_owned(),
                     "key file.ppk".to_owned(),
-                    "-p".to_owned(),
+                    "-P".to_owned(),
                     "2222".to_owned(),
                     "git@example.test".to_owned(),
                     "git-receive-pack '/project.git'".to_owned(),
@@ -1753,8 +1840,9 @@ mod tests {
             .ssh_service_command(SmartHttpService::UploadPack)
             .expect("ssh command");
 
-        let invocation = super::ssh_process_invocation(&command, None, None, Some("custom-ssh"))
-            .expect("GIT_SSH invocation should build");
+        let invocation =
+            super::ssh_process_invocation(&command, None, None, Some("custom-ssh"), None)
+                .expect("GIT_SSH invocation should build");
 
         assert_eq!(invocation.program, "custom-ssh");
         assert_eq!(
@@ -1776,6 +1864,7 @@ mod tests {
             &command,
             None,
             Some("ssh -i 'key file' -o StrictHostKeyChecking=no"),
+            None,
             None,
         )
         .expect("core.sshCommand invocation should build");
@@ -1809,6 +1898,7 @@ mod tests {
             Some("env-ssh -v"),
             Some("config-ssh -q"),
             Some("git-ssh"),
+            None,
         )
         .expect("GIT_SSH_COMMAND should win");
 
@@ -1823,9 +1913,14 @@ mod tests {
             .ssh_service_command(SmartHttpService::UploadPack)
             .expect("ssh command");
 
-        let invocation =
-            super::ssh_process_invocation(&command, None, Some("config-ssh -q"), Some("git-ssh"))
-                .expect("core.sshCommand should win over GIT_SSH");
+        let invocation = super::ssh_process_invocation(
+            &command,
+            None,
+            Some("config-ssh -q"),
+            Some("git-ssh"),
+            None,
+        )
+        .expect("core.sshCommand should win over GIT_SSH");
 
         assert_eq!(invocation.program, "config-ssh");
         assert!(invocation.args.contains(&"-q".to_owned()));
@@ -1845,7 +1940,118 @@ mod tests {
             SshProcessConfig::from_git_config(&config),
             SshProcessConfig {
                 core_ssh_command: Some("ssh -i key".to_owned()),
+                ssh_variant: None,
             }
+        );
+    }
+
+    #[test]
+    fn ssh_process_config_reads_ssh_variant() {
+        let config = GitConfig::parse(
+            r#"
+            [ssh]
+                variant = tortoiseplink
+            "#,
+        )
+        .expect("config should parse");
+
+        assert_eq!(
+            SshProcessConfig::from_git_config(&config),
+            SshProcessConfig {
+                core_ssh_command: None,
+                ssh_variant: Some(SshVariant::TortoisePlink),
+            }
+        );
+    }
+
+    #[test]
+    fn git_ssh_variant_overrides_configured_variant() {
+        let config = SshProcessConfig {
+            core_ssh_command: None,
+            ssh_variant: Some(SshVariant::Simple),
+        };
+
+        assert_eq!(
+            super::configured_ssh_variant(Some("plink"), &config),
+            Some(SshVariant::Plink)
+        );
+    }
+
+    #[test]
+    fn explicit_plink_variant_uses_capital_port_flag() {
+        let command = TransportLocation::parse("ssh://git@example.test:2222/project.git")
+            .ssh_service_command(SmartHttpService::UploadPack)
+            .expect("ssh command");
+
+        let invocation = super::ssh_process_invocation(
+            &command,
+            Some("custom-ssh -batch"),
+            None,
+            None,
+            Some(SshVariant::Plink),
+        )
+        .expect("plink variant invocation should build");
+
+        assert_eq!(
+            invocation.args,
+            vec![
+                "-batch".to_owned(),
+                "-P".to_owned(),
+                "2222".to_owned(),
+                "git@example.test".to_owned(),
+                "git-upload-pack '/project.git'".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn tortoiseplink_variant_adds_batch() {
+        let command = TransportLocation::parse("ssh://git@example.test:2222/project.git")
+            .ssh_service_command(SmartHttpService::ReceivePack)
+            .expect("ssh command");
+
+        let invocation = super::ssh_process_invocation(
+            &command,
+            Some("tortoiseplink"),
+            None,
+            None,
+            Some(SshVariant::TortoisePlink),
+        )
+        .expect("tortoiseplink variant invocation should build");
+
+        assert_eq!(
+            invocation.args,
+            vec![
+                "-P".to_owned(),
+                "2222".to_owned(),
+                "-batch".to_owned(),
+                "git@example.test".to_owned(),
+                "git-receive-pack '/project.git'".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn simple_variant_omits_port_arguments() {
+        let command = TransportLocation::parse("ssh://git@example.test:2222/project.git")
+            .ssh_service_command(SmartHttpService::UploadPack)
+            .expect("ssh command");
+
+        let invocation = super::ssh_process_invocation(
+            &command,
+            Some("simple-ssh"),
+            None,
+            None,
+            Some(SshVariant::Simple),
+        )
+        .expect("simple variant invocation should build");
+
+        assert_eq!(
+            invocation.args,
+            vec![
+                "git@example.test".to_owned(),
+                "git-upload-pack '/project.git'".to_owned(),
+            ]
         );
     }
 

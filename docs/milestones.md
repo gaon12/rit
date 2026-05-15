@@ -414,7 +414,7 @@ Completion criteria:
     configuration.
     - [x] Read `core.sshCommand` from `.git/config` for process-based SSH
       fetch and push, with Git-shaped precedence behind `GIT_SSH_COMMAND`.
-    - [ ] Add `ssh.variant` and `GIT_SSH_VARIANT` argument-shape parity for
+    - [x] Add `ssh.variant` and `GIT_SSH_VARIANT` argument-shape parity for
       OpenSSH, plink, putty, tortoiseplink, and simple variants.
 - [~] Fetch refs negotiation.
   - [x] Single local fetch refspec updates a destination ref after copying

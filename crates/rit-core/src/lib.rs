@@ -125,8 +125,9 @@ pub use transport::{
     ReceivePackStatus, RemotePackNegotiation, SmartHttpAdvertisement, SmartHttpPostRequest,
     SmartHttpRequest, SmartHttpResponse, SmartHttpService, SshProcessConfig, SshProcessInvocation,
     SshReceivePackExecutor, SshServiceCommand, SshServiceExecutor, SshUploadPackExecutor,
-    TransportLocation, TransportProtocol, UploadPackAckStatus, UploadPackAcknowledgement,
-    UploadPackRequest, UploadPackResponse, UploadPackSideBand, run_ssh_upload_pack,
+    SshVariant, TransportLocation, TransportProtocol, UploadPackAckStatus,
+    UploadPackAcknowledgement, UploadPackRequest, UploadPackResponse, UploadPackSideBand,
+    run_ssh_upload_pack,
 };
 pub use vfs::{
     FallbackMaterializedAction, FallbackMaterializedBackend, FallbackMaterializedPlan,

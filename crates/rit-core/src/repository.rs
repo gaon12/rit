@@ -1350,7 +1350,7 @@ mod tests {
         let repository = Repository::init(&InitOptions::new(&root)).expect("repo should init");
         let config_path = repository.common_dir().join("config");
         let mut config = fs::read_to_string(&config_path).expect("config should be readable");
-        config.push_str("\n[core]\n\tsshCommand = ssh -i config-key\n");
+        config.push_str("\n[core]\n\tsshCommand = ssh -i config-key\n[ssh]\n\tvariant = simple\n");
         fs::write(&config_path, config).expect("config should be updated");
 
         let process_config = repository
@@ -1361,6 +1361,7 @@ mod tests {
             process_config.core_ssh_command.as_deref(),
             Some("ssh -i config-key")
         );
+        assert_eq!(process_config.ssh_variant, Some(crate::SshVariant::Simple));
         remove_dir_all(&root);
     }
 
