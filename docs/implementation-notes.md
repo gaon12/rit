@@ -68,6 +68,9 @@
 - 2026-05-16 indexdb output-neutrality slice added compatibility coverage that
   `rit indexdb` metadata creation does not change `status`, `diff`, or
   `ls-files` output and that those outputs still match Git afterward.
+- 2026-05-16 indexdb corruption-safety validation now asserts ordinary status
+  and a later rit commit still succeed when `.git/rit/indexdb.sqlite` contains
+  invalid SQLite bytes.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
 - 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git
@@ -256,6 +259,9 @@
   command output before and after `rit indexdb` creates metadata, then compares
   the post-indexdb output with Git. This guards the “indexdb is not source of
   truth” rule for user-visible command behavior.
+- Corruption coverage keeps broken indexdb scoped to optional metadata: status
+  reads canonical Git/index/worktree state, and write-through refresh failures
+  do not prevent the Git commit from being created.
 - Source of truth: IndexDB stores reproducible metadata only. `drop` removes
   the SQLite file without touching Git objects, refs, `.git/index`, or working
   tree files. Normal Git-compatible commands do not require IndexDB.

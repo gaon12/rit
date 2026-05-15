@@ -365,7 +365,7 @@ Completion criteria:
 - [x] Add optional indexed path history command such as `rit file-history <path>`.
 - [x] Add compatibility tests proving indexdb does not change Git-compatible
   command output.
-- [ ] Add corruption tests proving broken indexdb never corrupts the repository.
+- [x] Add corruption tests proving broken indexdb never corrupts the repository.
 - [ ] Add linked worktree tests proving worktree cache isolation.
 - [ ] Add benchmark tests for large commit history and file history queries.
 
