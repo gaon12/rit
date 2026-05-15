@@ -157,6 +157,8 @@ Completion criteria:
     when added paths are represented by Git intent-to-add index entries.
   - [x] Worktree `-l<n>` exhaustive rename-limit warnings for non-exact
     intent-to-add rename detection.
+  - [x] Worktree `-l<n>` exhaustive rename-limit warnings for intent-to-add
+    copy detection.
   - [x] Worktree `--find-copies-harder` copy detection from unchanged index
     sources for Git intent-to-add entries.
   - [ ] Broader worktree rename/copy detection, full rename limits, and
