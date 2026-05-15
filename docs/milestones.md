@@ -163,6 +163,10 @@ Completion criteria:
     cached and worktree intent-to-add copy detection.
   - [x] Worktree `--find-copies-harder` copy detection from unchanged index
     sources for Git intent-to-add entries.
+  - [x] Percent-less `-M<n>` and `-C<n>` similarity thresholds use Git's
+    fractional notation, so `-M5`/`-C5` mean 50% while `-M05`/`-C05` mean 5%.
+  - [x] Similarity thresholds above 100% are accepted like Git and simply
+    cannot match ordinary rename/copy scores.
   - [ ] Broader worktree rename/copy detection, full rename limits, and
     advanced Git diffcore parity.
 - [x] Binary diff accounting for summary modes.

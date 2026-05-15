@@ -200,6 +200,33 @@ fn diff_cached_similarity_rename_outputs_match_git() {
 }
 
 #[test]
+fn diff_cached_fractional_rename_threshold_outputs_match_git() {
+    let fixture = LowSimilarityRenameFixture::new("cached-fractional-rename-threshold");
+
+    for args in [
+        vec!["diff", "--cached", "-M5", "--name-status"],
+        vec!["diff", "--cached", "-M05", "--name-status"],
+        vec!["diff", "--cached", "--find-renames=5", "--name-status"],
+        vec!["diff", "--cached", "--find-renames=05", "--name-status"],
+        vec!["diff", "--cached", "-M101%", "--name-status"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached fractional rename threshold {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_cached_rename_limit_warning_outputs_match_git() {
     let fixture = RenameLimitFixture::new("cached-rename-limit");
 
@@ -294,6 +321,33 @@ fn diff_cached_copy_outputs_match_git() {
         assert!(
             outcome.is_match(),
             "cached copy {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
+fn diff_cached_fractional_copy_threshold_outputs_match_git() {
+    let fixture = LowSimilarityCopyFixture::new("cached-fractional-copy-threshold");
+
+    for args in [
+        vec!["diff", "--cached", "-C5", "--name-status"],
+        vec!["diff", "--cached", "-C05", "--name-status"],
+        vec!["diff", "--cached", "--find-copies=5", "--name-status"],
+        vec!["diff", "--cached", "--find-copies=05", "--name-status"],
+        vec!["diff", "--cached", "-C101%", "--name-status"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached fractional copy threshold {:?}\n{}",
             args,
             outcome.report()
         );
@@ -1485,6 +1539,42 @@ impl Drop for SimilarityRenameFixture {
     }
 }
 
+struct LowSimilarityRenameFixture {
+    path: PathBuf,
+}
+
+impl LowSimilarityRenameFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("old.txt"), "same1\nsame2\nold3\nold4\nold5\n")
+            .expect("base file should be written");
+        run_git(&path, ["add", "old.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+        fs::remove_file(path.join("old.txt")).expect("old file should be removed");
+        fs::write(path.join("new.txt"), "same1\nsame2\nnew3\nnew4\nnew5\n")
+            .expect("low-similarity rename destination should be written");
+        run_git(&path, ["add", "-A"]);
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for LowSimilarityRenameFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
 struct RenameLimitFixture {
     path: PathBuf,
 }
@@ -1565,6 +1655,43 @@ impl CopyFixture {
 }
 
 impl Drop for CopyFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct LowSimilarityCopyFixture {
+    path: PathBuf,
+}
+
+impl LowSimilarityCopyFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("old.txt"), "same1\nsame2\nold3\nold4\nold5\n")
+            .expect("base file should be written");
+        run_git(&path, ["add", "old.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+        fs::write(path.join("old.txt"), "source\nchanged\nold3\nold4\nold5\n")
+            .expect("copy source file should be modified");
+        fs::write(path.join("copy.txt"), "same1\nsame2\nnew3\nnew4\nnew5\n")
+            .expect("low-similarity copy destination should be written");
+        run_git(&path, ["add", "-A"]);
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for LowSimilarityCopyFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

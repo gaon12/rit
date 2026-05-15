@@ -99,6 +99,10 @@
 - 2026-05-15 rename-limit warning slice checked `git diff -h` and direct Git
   comparisons for cached `diff -M -l1` stdout and stderr when exhaustive
   rename detection is skipped.
+- 2026-05-15 fractional rename/copy threshold slice checked `git diff -h` and
+  direct Git comparisons for cached `-M5`, `-M05`, `--find-renames=5`,
+  `--find-renames=05`, `-C5`, `-C05`, `--find-copies=5`,
+  `--find-copies=05`, and thresholds above 100%.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
   `--pathspec-file-nul`, including a quoted pathspec entry.
@@ -385,6 +389,10 @@
 - Diff summary and patch results now carry Git-shaped warnings; the CLI writes
   rename-limit warnings to stderr for supported `diff` output modes when
   exhaustive similarity detection is skipped.
+- Percent-less `-M<n>`/`-C<n>` and `--find-renames=<n>`/`--find-copies=<n>`
+  values now use Git's fractional notation: `5` means 50%, `05` means 5%,
+  and `400` means 40%. Percent-suffixed values above 100 are accepted and
+  naturally match no ordinary similarity score, like Git.
 - Added local write compatibility coverage that compares Git and rit porcelain
   state after directory pathspec `add`, `restore`, and `reset`.
 - Added local write compatibility coverage for simple wildcard and

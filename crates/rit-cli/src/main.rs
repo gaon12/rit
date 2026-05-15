@@ -847,7 +847,7 @@ fn parse_similarity_option(
     option: &str,
     short_prefix: &str,
     long_prefix: &str,
-) -> Result<u8, String> {
+) -> Result<u32, String> {
     let raw_value = if let Some(value) = option.strip_prefix(long_prefix) {
         value
     } else if let Some(value) = option.strip_prefix(short_prefix) {
@@ -855,19 +855,26 @@ fn parse_similarity_option(
     } else {
         return Err(format!("invalid similarity option '{option}'"));
     };
-    let value = raw_value.trim_end_matches('%');
+    let (value, is_percent) = raw_value
+        .strip_suffix('%')
+        .map(|value| (value, true))
+        .unwrap_or((raw_value, false));
     if value.is_empty() {
         return Err(format!("missing similarity threshold in '{option}'"));
     }
     let threshold = value
-        .parse::<u8>()
+        .parse::<u32>()
         .map_err(|_| format!("invalid similarity threshold in '{option}'"))?;
-    if threshold > 100 {
-        return Err(format!(
-            "similarity threshold must be between 0 and 100 in '{option}'"
-        ));
+    if is_percent {
+        return Ok(threshold);
     }
-    Ok(threshold)
+
+    // Git treats a percent-less -M/-C value as a fraction written without the
+    // leading `0.`: -M5 is 50%, -M05 is 5%, and -M400 is 40%.
+    let denominator = 10u128.checked_pow(value.len() as u32).unwrap_or(u128::MAX);
+    let numerator = u128::from(threshold) * 100;
+    let fractional_percent = numerator.div_ceil(denominator);
+    Ok(fractional_percent.min(u128::from(u32::MAX)) as u32)
 }
 
 fn parse_rename_limit_option(option: &str) -> Result<usize, String> {

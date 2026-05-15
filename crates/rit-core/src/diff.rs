@@ -323,10 +323,10 @@ pub struct DiffOptions {
     pub find_copies: bool,
     /// Also consider unchanged HEAD paths as copy sources.
     pub find_copies_harder: bool,
-    /// Minimum similarity score for rename detection.
-    pub rename_similarity_threshold: u8,
-    /// Minimum similarity score for copy detection.
-    pub copy_similarity_threshold: u8,
+    /// Minimum similarity percentage for rename detection.
+    pub rename_similarity_threshold: u32,
+    /// Minimum similarity percentage for copy detection.
+    pub copy_similarity_threshold: u32,
     /// Optional cap for rename/copy candidate paths. `0` means unlimited.
     pub rename_limit: Option<usize>,
 }
@@ -1027,7 +1027,7 @@ impl Repository {
             }
             let old_object = self.read_blob(old_entry.object_id)?;
             let candidate_score = similarity_score(&old_object.data, new_data)?;
-            if candidate_score < options.copy_similarity_threshold {
+            if u32::from(candidate_score) < options.copy_similarity_threshold {
                 continue;
             }
             let should_replace = best
@@ -1365,7 +1365,7 @@ fn best_copy_match_from_sources(
             continue;
         }
         let candidate_score = similarity_score(&source.data, new_data)?;
-        if candidate_score < options.copy_similarity_threshold {
+        if u32::from(candidate_score) < options.copy_similarity_threshold {
             continue;
         }
         let should_replace = best
@@ -1463,7 +1463,7 @@ fn best_similarity_match<T>(
     mut is_candidate: impl FnMut(&T) -> bool,
     mut can_compare: impl FnMut(&T) -> bool,
     mut score: impl FnMut(&T) -> Result<u8>,
-    threshold: u8,
+    threshold: u32,
     excluded_index: usize,
 ) -> Result<Option<SimilarityMatch>> {
     let mut best = None;
@@ -1472,7 +1472,7 @@ fn best_similarity_match<T>(
             continue;
         }
         let candidate_score = score(file)?;
-        if candidate_score < threshold {
+        if u32::from(candidate_score) < threshold {
             continue;
         }
         let should_replace = best
