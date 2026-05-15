@@ -117,6 +117,8 @@ Completion criteria:
 - [x] `rit diff --name-status`
 - [x] `rit diff --stat`
 - [x] `rit diff --numstat`
+  - [x] `-z` NUL-terminated output for `--name-only`, `--name-status`,
+    and `--numstat`, including rename/copy field layout.
 - [x] `rit diff` patch output.
   - [x] Small text patch output for default and cached diff scopes.
   - [x] No-newline markers for default and cached text patch output.

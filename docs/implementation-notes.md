@@ -49,6 +49,9 @@
   `git status -h`, `git diff -h`, and direct Git comparisons for `:(glob)`
   patterns where `**` appears inside one path component instead of in Git's
   special `**/` or trailing `**` forms.
+- 2026-05-16 diff `-z` summary slice checked `git diff -h` and direct Git
+  byte-shape comparisons for `--name-only`, `--name-status`, and `--numstat`,
+  including rename output fields.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
 - 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git
@@ -361,6 +364,8 @@
 - Refined `:(glob)` double-star matching so `**/` and trailing `**` can cross
   directories, while component-local forms such as `**base.txt` behave like
   ordinary stars and do not cross `/`, matching Git.
+- Added `git diff -z` compatible NUL-terminated output for `--name-only`,
+  `--name-status`, and `--numstat`, including rename/copy field splitting.
 - Added positive pathspec magic support for `:(literal)`, `:(glob)`,
   `:(top)`, and `:/` with Git comparison coverage for status, diff, ls-files,
   first-parent `log`, `show --no-patch`, and `add`.

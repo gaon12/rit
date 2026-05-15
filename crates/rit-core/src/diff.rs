@@ -22,6 +22,16 @@ impl DiffSummary {
         self.files.iter().map(|file| file.path.as_str()).collect()
     }
 
+    /// Renders Git-like `-z --name-only` output.
+    pub fn to_name_only_z(&self) -> Vec<u8> {
+        let mut output = Vec::new();
+        for file in &self.files {
+            output.extend_from_slice(file.path.as_bytes());
+            output.push(0);
+        }
+        output
+    }
+
     /// Renders a Git-like `--name-status` summary.
     pub fn to_name_status_text(&self) -> String {
         let mut output = String::new();
@@ -44,6 +54,30 @@ impl DiffSummary {
         output
     }
 
+    /// Renders Git-like `-z --name-status` output.
+    pub fn to_name_status_z(&self) -> Vec<u8> {
+        let mut output = Vec::new();
+        for file in &self.files {
+            if file.status == 'R' || file.status == 'C' {
+                output.extend_from_slice(
+                    format!("{}{:03}", file.status, file.similarity_score.unwrap_or(100))
+                        .as_bytes(),
+                );
+                output.push(0);
+                output.extend_from_slice(file.old_path.as_deref().unwrap_or(&file.path).as_bytes());
+                output.push(0);
+                output.extend_from_slice(file.path.as_bytes());
+                output.push(0);
+            } else {
+                output.push(file.status as u8);
+                output.push(0);
+                output.extend_from_slice(file.path.as_bytes());
+                output.push(0);
+            }
+        }
+        output
+    }
+
     /// Renders a Git-like `--numstat` summary for text files.
     pub fn to_numstat_text(&self) -> String {
         let mut output = String::new();
@@ -58,6 +92,31 @@ impl DiffSummary {
             output.push('\t');
             output.push_str(&file.display_path());
             output.push('\n');
+        }
+        output
+    }
+
+    /// Renders Git-like `-z --numstat` output.
+    pub fn to_numstat_z(&self) -> Vec<u8> {
+        let mut output = Vec::new();
+        for file in &self.files {
+            if file.binary {
+                output.extend_from_slice(b"-\t-");
+            } else {
+                output.extend_from_slice(file.insertions.to_string().as_bytes());
+                output.push(b'\t');
+                output.extend_from_slice(file.deletions.to_string().as_bytes());
+            }
+            output.push(b'\t');
+            if file.status == 'R' || file.status == 'C' {
+                output.push(0);
+                output.extend_from_slice(file.old_path.as_deref().unwrap_or(&file.path).as_bytes());
+                output.push(0);
+                output.extend_from_slice(file.path.as_bytes());
+            } else {
+                output.extend_from_slice(file.path.as_bytes());
+            }
+            output.push(0);
         }
         output
     }
@@ -1916,6 +1975,51 @@ mod tests {
         };
 
         assert_eq!(summary.to_name_status_text(), "C079\told.txt\tcopy.txt\n");
+    }
+
+    #[test]
+    fn nul_terminated_diff_summaries_match_git_field_shape() {
+        let summary = DiffSummary {
+            files: vec![
+                DiffFileStat {
+                    status: 'M',
+                    old_path: None,
+                    path: "a b.txt".to_owned(),
+                    similarity_score: None,
+                    insertions: 2,
+                    deletions: 1,
+                    binary: false,
+                    old_size: 0,
+                    new_size: 0,
+                },
+                DiffFileStat {
+                    status: 'R',
+                    old_path: Some("old.txt".to_owned()),
+                    path: "new.txt".to_owned(),
+                    similarity_score: Some(100),
+                    insertions: 0,
+                    deletions: 0,
+                    binary: false,
+                    old_size: 4,
+                    new_size: 4,
+                },
+            ],
+            warnings: Vec::new(),
+        };
+
+        assert_eq!(summary.to_name_only_z(), b"a b.txt\0new.txt\0");
+        assert_eq!(
+            summary.to_name_status_z(),
+            b"M\0a b.txt\0R100\0old.txt\0new.txt\0"
+        );
+        assert_eq!(
+            summary.to_numstat_z(),
+            [
+                b"2\t1\ta b.txt\0".as_slice(),
+                b"0\t0\t\0old.txt\0new.txt\0".as_slice()
+            ]
+            .concat()
+        );
     }
 
     #[test]

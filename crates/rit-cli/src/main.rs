@@ -689,6 +689,7 @@ fn diff_command(
     let mut copy_similarity_threshold = 50;
     let mut rename_limit = None;
     let mut output_mode = None;
+    let mut nul_terminated = false;
     let mut pathspec_args = Vec::new();
     let mut after_separator = false;
 
@@ -696,6 +697,7 @@ fn diff_command(
         match arg.as_str() {
             "--" if !after_separator => after_separator = true,
             "--cached" | "--staged" if !after_separator => cached = true,
+            "-z" if !after_separator => nul_terminated = true,
             "-M" | "--find-renames" if !after_separator => find_renames = true,
             "-C" | "--find-copies" if !after_separator => find_copies = true,
             "--find-copies-harder" if !after_separator => {
@@ -821,12 +823,28 @@ fn diff_command(
 
     match output_mode {
         "--name-only" => {
-            for path in diff.name_only() {
-                writeln!(stdout, "{path}")?;
+            if nul_terminated {
+                stdout.write_all(&diff.to_name_only_z())?;
+            } else {
+                for path in diff.name_only() {
+                    writeln!(stdout, "{path}")?;
+                }
             }
         }
-        "--name-status" => stdout.write_all(diff.to_name_status_text().as_bytes())?,
-        "--numstat" => stdout.write_all(diff.to_numstat_text().as_bytes())?,
+        "--name-status" => {
+            if nul_terminated {
+                stdout.write_all(&diff.to_name_status_z())?;
+            } else {
+                stdout.write_all(diff.to_name_status_text().as_bytes())?;
+            }
+        }
+        "--numstat" => {
+            if nul_terminated {
+                stdout.write_all(&diff.to_numstat_z())?;
+            } else {
+                stdout.write_all(diff.to_numstat_text().as_bytes())?;
+            }
+        }
         "--stat" => stdout.write_all(diff.to_stat_text().as_bytes())?,
         _ => unreachable!("validated above"),
     }

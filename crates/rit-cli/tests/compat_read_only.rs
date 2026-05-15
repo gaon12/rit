@@ -20,6 +20,18 @@ fn diff_worktree_outputs_match_git() {
 
         assert!(outcome.is_match(), "diff {option}\n{}", outcome.report());
     }
+
+    for option in ["--name-only", "--name-status", "--numstat"] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command(["diff", "-z", option]),
+            rit_command(["diff", "-z", option]),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(outcome.is_match(), "diff -z {option}\n{}", outcome.report());
+    }
 }
 
 #[test]
@@ -53,6 +65,9 @@ fn diff_cached_exact_rename_outputs_match_git() {
         vec!["diff", "--cached", "-M", "--stat"],
         vec!["diff", "--cached", "-M"],
         vec!["diff", "--cached", "-M", "-l1", "--name-status"],
+        vec!["diff", "--cached", "-M", "-z", "--name-only"],
+        vec!["diff", "--cached", "-M", "-z", "--name-status"],
+        vec!["diff", "--cached", "-M", "-z", "--numstat"],
     ] {
         let outcome = compare(&CompareOptions::new(
             fixture.path(),
