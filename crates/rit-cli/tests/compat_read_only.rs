@@ -276,6 +276,31 @@ fn diff_cached_rename_limit_config_outputs_match_git() {
 }
 
 #[test]
+fn diff_bad_rename_limit_config_error_matches_git() {
+    let fixture = RenameLimitFixture::new("bad-rename-limit-config");
+    run_git(fixture.path(), ["config", "diff.renameLimit", "bad"]);
+
+    for args in [
+        vec!["diff", "--cached", "-M", "--name-status"],
+        vec!["diff", "--cached", "-M"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "bad rename limit config {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_worktree_rename_limit_warning_outputs_match_git() {
     let fixture = WorktreeIntentRenameLimitFixture::new("worktree-rename-limit");
 

@@ -738,7 +738,7 @@ impl Repository {
         };
         let limit = value.parse::<usize>().map_err(|_| {
             RitError::invalid_input(format!(
-                "bad numeric config value '{value}' for 'diff.renamelimit'"
+                "bad numeric config value '{value}' for 'diff.renamelimit' in file .git/config: invalid unit"
             ))
         })?;
         Ok(Some(limit))

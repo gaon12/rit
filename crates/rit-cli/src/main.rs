@@ -801,8 +801,7 @@ fn diff_command(
                 }
             },
             Err(error) => {
-                writeln!(stderr, "rit: {error}")?;
-                return Ok(ExitCode::from(1));
+                return write_diff_error(stderr, &error);
             }
         }
     }
@@ -815,8 +814,7 @@ fn diff_command(
     let diff = match diff_result {
         Ok(diff) => diff,
         Err(error) => {
-            writeln!(stderr, "rit: {error}")?;
-            return Ok(ExitCode::from(1));
+            return write_diff_error(stderr, &error);
         }
     };
     write_diff_warnings(stderr, &diff.warnings)?;
@@ -834,6 +832,16 @@ fn diff_command(
     }
 
     Ok(ExitCode::SUCCESS)
+}
+
+fn write_diff_error(stderr: &mut dyn Write, error: &rit_core::RitError) -> io::Result<ExitCode> {
+    let message = error.to_string();
+    if message.starts_with("bad numeric config value ") {
+        writeln!(stderr, "fatal: {message}")?;
+        return Ok(ExitCode::from(128));
+    }
+    writeln!(stderr, "rit: {message}")?;
+    Ok(ExitCode::from(1))
 }
 
 fn write_diff_warnings(stderr: &mut dyn Write, warnings: &[String]) -> io::Result<()> {

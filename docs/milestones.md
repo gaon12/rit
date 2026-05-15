@@ -153,6 +153,8 @@ Completion criteria:
     when similarity detection is skipped.
   - [x] `diff.renameLimit` config is honored as the rename/copy candidate
     limit when no `-l<n>` CLI override is provided.
+  - [x] Invalid `diff.renameLimit` config values fail with Git-compatible
+    fatal output and exit code.
   - [x] Worktree rename/copy detection for default `diff -M/-C` when added
     paths are represented by Git intent-to-add index entries.
   - [x] Worktree non-exact rename similarity thresholds for default `diff -M`
