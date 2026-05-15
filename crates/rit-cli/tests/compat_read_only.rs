@@ -173,6 +173,30 @@ fn diff_cached_similarity_rename_outputs_match_git() {
 }
 
 #[test]
+fn diff_cached_rename_limit_warning_outputs_match_git() {
+    let fixture = RenameLimitFixture::new("cached-rename-limit");
+
+    for args in [
+        vec!["diff", "--cached", "-M", "-l1", "--name-status"],
+        vec!["diff", "--cached", "-M", "-l1"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached rename limit {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_cached_copy_outputs_match_git() {
     let fixture = CopyFixture::new("cached-copy");
 
@@ -1200,6 +1224,54 @@ impl SimilarityRenameFixture {
 }
 
 impl Drop for SimilarityRenameFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct RenameLimitFixture {
+    path: PathBuf,
+}
+
+impl RenameLimitFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        for index in 1..=5 {
+            fs::write(
+                path.join(format!("old{index}.txt")),
+                format!("common\nline{index}\nkeep\n"),
+            )
+            .expect("old file should be written");
+        }
+        run_git(&path, ["add", "."]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+
+        for index in 1..=5 {
+            fs::remove_file(path.join(format!("old{index}.txt")))
+                .expect("old file should be removed");
+            fs::write(
+                path.join(format!("new{index}.txt")),
+                format!("common\nchanged{index}\nkeep\n"),
+            )
+            .expect("new file should be written");
+        }
+        run_git(&path, ["add", "-A"]);
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for RenameLimitFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

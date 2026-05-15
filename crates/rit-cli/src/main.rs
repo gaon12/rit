@@ -794,11 +794,18 @@ fn diff_command(
         } else {
             repository.diff_worktree_to_index_patch_with_options(&pathspecs, &diff_options)
         };
-        match patch_result.and_then(|patch| patch.to_patch_text()) {
-            Ok(text) => {
-                stdout.write_all(text.as_bytes())?;
-                return Ok(ExitCode::SUCCESS);
-            }
+        match patch_result {
+            Ok(patch) => match patch.to_patch_text() {
+                Ok(text) => {
+                    write_diff_warnings(stderr, &patch.warnings)?;
+                    stdout.write_all(text.as_bytes())?;
+                    return Ok(ExitCode::SUCCESS);
+                }
+                Err(error) => {
+                    writeln!(stderr, "rit: {error}")?;
+                    return Ok(ExitCode::from(1));
+                }
+            },
             Err(error) => {
                 writeln!(stderr, "rit: {error}")?;
                 return Ok(ExitCode::from(1));
@@ -818,6 +825,7 @@ fn diff_command(
             return Ok(ExitCode::from(1));
         }
     };
+    write_diff_warnings(stderr, &diff.warnings)?;
 
     match output_mode {
         "--name-only" => {
@@ -832,6 +840,13 @@ fn diff_command(
     }
 
     Ok(ExitCode::SUCCESS)
+}
+
+fn write_diff_warnings(stderr: &mut dyn Write, warnings: &[String]) -> io::Result<()> {
+    for warning in warnings {
+        writeln!(stderr, "{warning}")?;
+    }
+    Ok(())
 }
 
 fn parse_similarity_option(

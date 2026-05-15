@@ -58,7 +58,9 @@ The current codebase implements an early local Git subset:
   as copy sources in cached diff. Exact renames are detected before the
   exhaustive `-l<n>` similarity limit is applied, and the supported limit
   model counts source/destination candidate width rather than total changed
-  paths for one-source/one-destination similarity detection.
+  paths for one-source/one-destination similarity detection. When the
+  supported exhaustive similarity pass is skipped by `-l<n>`, rit emits the
+  Git-shaped warning on stderr.
 - Default worktree diff supports rename/copy detection with `-M[<n>]` and
   `-C[<n>]` for the Git-compatible intent-to-add slice, where added worktree
   paths are already represented in the index by `git add -N`.

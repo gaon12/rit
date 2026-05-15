@@ -11,6 +11,8 @@ use std::fs;
 pub struct DiffSummary {
     /// Changed file stats in stable path order.
     pub files: Vec<DiffFileStat>,
+    /// Git-shaped warnings discovered while computing the diff.
+    pub warnings: Vec<String>,
 }
 
 impl DiffSummary {
@@ -146,6 +148,8 @@ impl DiffSummary {
 pub struct DiffPatch {
     /// Changed files in stable path order.
     pub files: Vec<DiffPatchFile>,
+    /// Git-shaped warnings discovered while computing the diff.
+    pub warnings: Vec<String>,
 }
 
 impl DiffPatch {
@@ -368,7 +372,7 @@ impl Repository {
         options: &DiffOptions,
     ) -> Result<DiffSummary> {
         let patch = self.diff_worktree_to_index_patch_with_options(pathspecs, options)?;
-        patch_files_to_summary(&patch.files)
+        patch_files_to_summary(&patch)
     }
 
     /// Computes default `git diff` patch output.
@@ -474,14 +478,19 @@ impl Repository {
             });
         }
 
+        let mut warnings = Vec::new();
         if options.find_renames {
-            detect_patch_renames(&mut files, options)?;
+            warnings.extend(detect_patch_renames(&mut files, options)?);
         }
         if options.find_copies {
-            detect_patch_copies_from_sources(&mut files, &copy_sources, options)?;
+            warnings.extend(detect_patch_copies_from_sources(
+                &mut files,
+                &copy_sources,
+                options,
+            )?);
         }
 
-        Ok(DiffPatch { files })
+        Ok(DiffPatch { files, warnings })
     }
 
     /// Computes `git diff --cached` scope: index compared with `HEAD`.
@@ -580,14 +589,25 @@ impl Repository {
             }
         }
 
+        let mut warnings = Vec::new();
         if options.find_renames {
-            self.detect_summary_renames(&mut files, &head_entries, &index_entries, options)?;
+            warnings.extend(self.detect_summary_renames(
+                &mut files,
+                &head_entries,
+                &index_entries,
+                options,
+            )?);
         }
         if options.find_copies {
-            self.detect_summary_copies(&mut files, &head_entries, &index_entries, options)?;
+            warnings.extend(self.detect_summary_copies(
+                &mut files,
+                &head_entries,
+                &index_entries,
+                options,
+            )?);
         }
 
-        Ok(DiffSummary { files })
+        Ok(DiffSummary { files, warnings })
     }
 
     /// Computes `git diff --cached` patch output.
@@ -679,14 +699,20 @@ impl Repository {
             }
         }
 
+        let mut warnings = Vec::new();
         if options.find_renames {
-            detect_patch_renames(&mut files, options)?;
+            warnings.extend(detect_patch_renames(&mut files, options)?);
         }
         if options.find_copies {
-            self.detect_patch_copies(&mut files, &head_entries, &index_entries, options)?;
+            warnings.extend(self.detect_patch_copies(
+                &mut files,
+                &head_entries,
+                &index_entries,
+                options,
+            )?);
         }
 
-        Ok(DiffPatch { files })
+        Ok(DiffPatch { files, warnings })
     }
 
     fn read_blob(&self, object_id: ObjectId) -> Result<crate::GitObject> {
@@ -759,10 +785,12 @@ impl Repository {
         old_entries: &BTreeMap<String, DiffTreeEntry>,
         new_entries: &BTreeMap<String, DiffTreeEntry>,
         options: &DiffOptions,
-    ) -> Result<()> {
+    ) -> Result<Vec<String>> {
         self.detect_exact_summary_renames(files, old_entries, new_entries)?;
-        if rename_limit_exceeded(files.iter().map(|file| file.status), options) {
-            return Ok(());
+        if let Some(candidate_count) =
+            rename_limit_exceeded_count(files.iter().map(|file| file.status), options)
+        {
+            return Ok(rename_limit_warnings(candidate_count));
         }
         let mut remove_indexes = Vec::new();
         for delete_index in 0..files.len() {
@@ -822,7 +850,7 @@ impl Repository {
         for index in remove_indexes.into_iter().rev() {
             files.remove(index);
         }
-        Ok(())
+        Ok(Vec::new())
     }
 
     fn detect_exact_summary_renames(
@@ -880,9 +908,11 @@ impl Repository {
         old_entries: &BTreeMap<String, DiffTreeEntry>,
         new_entries: &BTreeMap<String, DiffTreeEntry>,
         options: &DiffOptions,
-    ) -> Result<()> {
-        if rename_limit_exceeded(files.iter().map(|file| file.status), options) {
-            return Ok(());
+    ) -> Result<Vec<String>> {
+        if let Some(candidate_count) =
+            rename_limit_exceeded_count(files.iter().map(|file| file.status), options)
+        {
+            return Ok(rename_limit_warnings(candidate_count));
         }
         for add_index in 0..files.len() {
             if files[add_index].status != 'A' {
@@ -923,7 +953,7 @@ impl Repository {
                 new_size: new_object.data.len(),
             };
         }
-        Ok(())
+        Ok(Vec::new())
     }
 
     fn best_copy_match(
@@ -976,7 +1006,12 @@ impl Repository {
         old_entries: &BTreeMap<String, DiffTreeEntry>,
         new_entries: &BTreeMap<String, DiffTreeEntry>,
         options: &DiffOptions,
-    ) -> Result<()> {
+    ) -> Result<Vec<String>> {
+        if let Some(candidate_count) =
+            rename_limit_exceeded_count(files.iter().map(|file| file.status), options)
+        {
+            return Ok(rename_limit_warnings(candidate_count));
+        }
         for add_index in 0..files.len() {
             if files[add_index].status != 'A' {
                 continue;
@@ -1015,14 +1050,19 @@ impl Repository {
                 new_data,
             };
         }
-        Ok(())
+        Ok(Vec::new())
     }
 }
 
-fn detect_patch_renames(files: &mut Vec<DiffPatchFile>, options: &DiffOptions) -> Result<()> {
+fn detect_patch_renames(
+    files: &mut Vec<DiffPatchFile>,
+    options: &DiffOptions,
+) -> Result<Vec<String>> {
     detect_exact_patch_renames(files);
-    if rename_limit_exceeded(files.iter().map(|file| file.status), options) {
-        return Ok(());
+    if let Some(candidate_count) =
+        rename_limit_exceeded_count(files.iter().map(|file| file.status), options)
+    {
+        return Ok(rename_limit_warnings(candidate_count));
     }
     let mut remove_indexes = Vec::new();
     for delete_index in 0..files.len() {
@@ -1068,7 +1108,7 @@ fn detect_patch_renames(files: &mut Vec<DiffPatchFile>, options: &DiffOptions) -
     for index in remove_indexes.into_iter().rev() {
         files.remove(index);
     }
-    Ok(())
+    Ok(Vec::new())
 }
 
 fn detect_exact_patch_renames(files: &mut Vec<DiffPatchFile>) {
@@ -1111,12 +1151,18 @@ fn detect_exact_patch_renames(files: &mut Vec<DiffPatchFile>) {
     }
 }
 
+#[cfg(test)]
 fn rename_limit_exceeded(statuses: impl Iterator<Item = char>, options: &DiffOptions) -> bool {
-    let Some(limit) = options.rename_limit else {
-        return false;
-    };
+    rename_limit_exceeded_count(statuses, options).is_some()
+}
+
+fn rename_limit_exceeded_count(
+    statuses: impl Iterator<Item = char>,
+    options: &DiffOptions,
+) -> Option<usize> {
+    let limit = options.rename_limit?;
     if limit == 0 {
-        return false;
+        return None;
     }
     let mut destination_count = 0;
     let mut source_count = 0;
@@ -1128,7 +1174,16 @@ fn rename_limit_exceeded(statuses: impl Iterator<Item = char>, options: &DiffOpt
         }
     }
     let candidate_count = destination_count.max(source_count);
-    candidate_count > limit
+    (candidate_count > limit).then_some(candidate_count)
+}
+
+fn rename_limit_warnings(candidate_count: usize) -> Vec<String> {
+    vec![
+        "warning: exhaustive rename detection was skipped due to too many files.".to_owned(),
+        format!(
+            "warning: you may want to set your diff.renameLimit variable to at least {candidate_count} and retry the command."
+        ),
+    ]
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1156,9 +1211,11 @@ fn detect_patch_copies_from_sources(
     files: &mut [DiffPatchFile],
     copy_sources: &[CopySource],
     options: &DiffOptions,
-) -> Result<()> {
-    if rename_limit_exceeded(files.iter().map(|file| file.status), options) {
-        return Ok(());
+) -> Result<Vec<String>> {
+    if let Some(candidate_count) =
+        rename_limit_exceeded_count(files.iter().map(|file| file.status), options)
+    {
+        return Ok(rename_limit_warnings(candidate_count));
     }
     for file in files.iter_mut() {
         if file.status != 'A' {
@@ -1177,7 +1234,7 @@ fn detect_patch_copies_from_sources(
         file.old_object_id = match_candidate.object_id;
         file.old_data = match_candidate.data;
     }
-    Ok(())
+    Ok(Vec::new())
 }
 
 fn best_copy_match_from_sources(
@@ -1219,9 +1276,9 @@ struct CopySourceMatch {
     data: Vec<u8>,
 }
 
-fn patch_files_to_summary(files: &[DiffPatchFile]) -> Result<DiffSummary> {
-    let mut summary_files = Vec::with_capacity(files.len());
-    for file in files {
+fn patch_files_to_summary(patch: &DiffPatch) -> Result<DiffSummary> {
+    let mut summary_files = Vec::with_capacity(patch.files.len());
+    for file in &patch.files {
         let (insertions, deletions, binary) = match file.status {
             'A' => (
                 count_lines(&file.new_data),
@@ -1249,6 +1306,7 @@ fn patch_files_to_summary(files: &[DiffPatchFile]) -> Result<DiffSummary> {
     }
     Ok(DiffSummary {
         files: summary_files,
+        warnings: patch.warnings.clone(),
     })
 }
 
@@ -1631,6 +1689,7 @@ mod tests {
                 old_size: 0,
                 new_size: 0,
             }],
+            warnings: Vec::new(),
         };
 
         assert_eq!(
@@ -1653,6 +1712,7 @@ mod tests {
                 old_size: 0,
                 new_size: 0,
             }],
+            warnings: Vec::new(),
         };
 
         assert_eq!(summary.to_name_status_text(), "A\ta.txt\n");
@@ -1672,6 +1732,7 @@ mod tests {
                 old_size: 0,
                 new_size: 0,
             }],
+            warnings: Vec::new(),
         };
 
         assert_eq!(summary.to_numstat_text(), "2\t1\ta.txt\n");
@@ -1691,6 +1752,7 @@ mod tests {
                 old_size: 24,
                 new_size: 24,
             }],
+            warnings: Vec::new(),
         };
 
         assert_eq!(summary.to_name_status_text(), "C079\told.txt\tcopy.txt\n");
@@ -1731,6 +1793,7 @@ mod tests {
                 old_size: 5,
                 new_size: 7,
             }],
+            warnings: Vec::new(),
         };
 
         assert_eq!(summary.to_numstat_text(), "-\t-\tbin.dat\n");
@@ -1795,6 +1858,7 @@ mod tests {
                 old_data: vec![0, 1],
                 new_data: vec![0, 1, 2],
             }],
+            warnings: Vec::new(),
         };
 
         let text = patch.to_patch_text().expect("binary patch should render");
