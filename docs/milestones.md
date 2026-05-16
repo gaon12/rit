@@ -686,7 +686,7 @@ Completion criteria:
 - [x] TypeScript semantic adapter.
 - [x] Python semantic adapter.
 - [x] JSON output model.
-- [ ] Use indexdb as an optional acceleration layer for semantic impact queries.
+- [x] Use indexdb as an optional acceleration layer for semantic impact queries.
 
 Completion criteria:
 - Semantic output is structured and can distinguish code-only changes from

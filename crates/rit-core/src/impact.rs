@@ -32,8 +32,13 @@ pub struct ImpactReport {
     pub reviewer_hints: Vec<WorkspaceRecommendationHint>,
     /// Semantic path classification reused by the impact report.
     pub semantic: SemanticDiffReport,
+    /// Paths touched by commits in the range when optional indexdb data could
+    /// answer the range cheaply.
+    pub history_touched_paths: Vec<String>,
     /// Whether an indexdb-enabled build can accelerate follow-up history queries.
     pub indexdb_acceleration_available: bool,
+    /// Whether this report used indexdb for range-level impact hints.
+    pub indexdb_acceleration_used: bool,
 }
 
 /// One large file touched by an impact range.
@@ -51,13 +56,19 @@ impl Repository {
         let (base_revision, target_revision) = parse_impact_range(range)?;
         let base = self.resolve_revision(base_revision)?;
         let target = self.resolve_revision(target_revision)?;
+        let history_touched_paths = self.indexdb_history_touched_paths(base, target)?;
+        let indexdb_acceleration_used = history_touched_paths.is_some();
         let diff = self.diff_commits_with_pathspecs(base, target, &PathspecSet::all())?;
         let changed_paths = diff
             .files
             .iter()
             .map(|file| file.path.clone())
             .collect::<Vec<_>>();
-        let semantic = semantic_report_from_paths(changed_paths.clone());
+        let semantic_paths = history_touched_paths
+            .as_ref()
+            .filter(|paths| !paths.is_empty())
+            .unwrap_or(&changed_paths);
+        let semantic = semantic_report_from_paths(semantic_paths.clone());
         let changed_packages = self.changed_packages_for_paths(&changed_paths)?;
         let affected_tests = affected_tests(&changed_paths, &changed_packages);
         let public_api_changes = public_api_changes(&changed_paths);
@@ -91,7 +102,9 @@ impl Repository {
             large_file_changes,
             reviewer_hints,
             semantic,
+            history_touched_paths: history_touched_paths.unwrap_or_default(),
             indexdb_acceleration_available: cfg!(feature = "indexdb"),
+            indexdb_acceleration_used,
         })
     }
 
@@ -149,6 +162,25 @@ impl Repository {
         });
         hints.dedup();
         Ok(hints)
+    }
+
+    #[cfg(feature = "indexdb")]
+    fn indexdb_history_touched_paths(
+        &self,
+        base: crate::ObjectId,
+        target: crate::ObjectId,
+    ) -> Result<Option<Vec<String>>> {
+        self.indexdb()
+            .changed_paths_between_first_parent(base, target)
+    }
+
+    #[cfg(not(feature = "indexdb"))]
+    fn indexdb_history_touched_paths(
+        &self,
+        _base: crate::ObjectId,
+        _target: crate::ObjectId,
+    ) -> Result<Option<Vec<String>>> {
+        Ok(None)
     }
 }
 
@@ -210,6 +242,14 @@ fn public_api_changes(changed_paths: &[String]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::{affected_tests, parse_impact_range, public_api_changes};
+    #[cfg(feature = "indexdb")]
+    use crate::{InitOptions, Repository};
+    #[cfg(feature = "indexdb")]
+    use std::fs;
+    #[cfg(feature = "indexdb")]
+    use std::path::{Path, PathBuf};
+    #[cfg(feature = "indexdb")]
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn parses_two_dot_and_three_dot_ranges() {
@@ -235,5 +275,65 @@ mod tests {
             affected_tests(&paths, &["crates/rit-core".to_owned()])
                 .contains(&"crates/rit-core/tests/impact.rs".to_owned())
         );
+    }
+
+    #[cfg(feature = "indexdb")]
+    #[test]
+    fn impact_uses_indexdb_for_history_touched_paths() {
+        let temp = temp_path("impact-indexdb");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        write_user_config(&repository);
+
+        fs::write(temp.join("src.rs"), "pub fn one() {}\n").expect("file should be written");
+        repository
+            .add_paths(&["src.rs".to_owned()])
+            .expect("add should work");
+        let first = repository
+            .commit_index("first")
+            .expect("commit should work")
+            .commit_id;
+
+        fs::write(temp.join("src.rs"), "pub fn two() {}\n").expect("file should be updated");
+        repository
+            .add_paths(&["src.rs".to_owned()])
+            .expect("add should work");
+        let second = repository
+            .commit_index("second")
+            .expect("commit should work")
+            .commit_id;
+
+        repository.indexdb().ensure().expect("indexdb should build");
+        let report = repository
+            .impact_report(&format!("{first}..{second}"))
+            .expect("impact should report");
+
+        assert!(report.indexdb_acceleration_used);
+        assert_eq!(report.history_touched_paths, vec!["src.rs".to_owned()]);
+        remove_dir_all(&temp);
+    }
+
+    #[cfg(feature = "indexdb")]
+    fn write_user_config(repository: &Repository) {
+        fs::write(
+            repository.git_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n[user]\n\tname = Rit Test\n\temail = rit@example.test\n",
+        )
+        .expect("config should be written");
+    }
+
+    #[cfg(feature = "indexdb")]
+    fn temp_path(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("rit-impact-{name}-{unique}"))
+    }
+
+    #[cfg(feature = "indexdb")]
+    fn remove_dir_all(path: &Path) {
+        if path.exists() {
+            fs::remove_dir_all(path).expect("temporary directory should be removed");
+        }
     }
 }

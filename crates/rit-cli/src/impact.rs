@@ -46,8 +46,16 @@ fn print_impact_report(stdout: &mut dyn Write, report: &rit_core::ImpactReport) 
         "indexdb-acceleration: {}",
         report.indexdb_acceleration_available
     )?;
+    writeln!(
+        stdout,
+        "indexdb-acceleration-used: {}",
+        report.indexdb_acceleration_used
+    )?;
     for path in &report.changed_paths {
         writeln!(stdout, "changed: {path}")?;
+    }
+    for path in &report.history_touched_paths {
+        writeln!(stdout, "history-touched: {path}")?;
     }
     for package in &report.changed_packages {
         writeln!(stdout, "package: {package}")?;

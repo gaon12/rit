@@ -1,6 +1,6 @@
 use crate::{ObjectId, ObjectKind, Repository, Result, RitError, object::sha1_bytes, parse_commit};
 use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fs;
 use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
@@ -353,6 +353,23 @@ impl<'repo> IndexDb<'repo> {
             return Ok(history);
         }
         canonical_file_history(self.repository, path)
+    }
+
+    /// Reads paths touched by commits on the first-parent walk from `target`
+    /// back to `base`, using indexdb only when it is healthy and fresh.
+    ///
+    /// `None` means the auxiliary database cannot answer the query safely, so
+    /// callers should fall back to canonical Git object reads.
+    pub fn changed_paths_between_first_parent(
+        &self,
+        base: ObjectId,
+        target: ObjectId,
+    ) -> Result<Option<Vec<String>>> {
+        if !self.can_use_indexdb_for_queries()? {
+            return Ok(None);
+        }
+        let connection = self.open_supported_read_only()?;
+        indexed_changed_paths_between_first_parent(&connection, base, target)
     }
 
     fn can_use_indexdb_for_queries(&self) -> Result<bool> {
@@ -881,6 +898,81 @@ fn indexed_commit_parents(connection: &Connection, object_id: ObjectId) -> Resul
             })
         })
         .collect()
+}
+
+fn indexed_changed_paths_between_first_parent(
+    connection: &Connection,
+    base: ObjectId,
+    target: ObjectId,
+) -> Result<Option<Vec<String>>> {
+    let mut touched_paths = BTreeSet::new();
+    let mut current = target;
+
+    loop {
+        if current == base {
+            return Ok(Some(touched_paths.into_iter().collect()));
+        }
+        let Some(parent) = indexed_first_parent(connection, current)? else {
+            return Ok(None);
+        };
+        if !indexed_commit_exists(connection, current)? {
+            return Ok(None);
+        }
+        for path in indexed_changed_paths_for_commit(connection, current)? {
+            touched_paths.insert(path);
+        }
+        current = parent;
+    }
+}
+
+fn indexed_commit_exists(connection: &Connection, object_id: ObjectId) -> Result<bool> {
+    let count = connection
+        .query_row(
+            "SELECT COUNT(*) FROM commits WHERE hash_kind = 'sha1' AND object_id = ?1",
+            params![object_id.as_bytes().to_vec()],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(sqlite_error)?;
+    Ok(count > 0)
+}
+
+fn indexed_first_parent(connection: &Connection, object_id: ObjectId) -> Result<Option<ObjectId>> {
+    let mut statement = connection
+        .prepare(
+            "SELECT parent_object_id FROM commit_parents
+             WHERE hash_kind = 'sha1' AND object_id = ?1 AND parent_order = 0",
+        )
+        .map_err(sqlite_error)?;
+    let mut rows = statement
+        .query(params![object_id.as_bytes().to_vec()])
+        .map_err(sqlite_error)?;
+    let Some(row) = rows.next().map_err(sqlite_error)? else {
+        return Ok(None);
+    };
+    let bytes = row.get::<_, Vec<u8>>(0).map_err(sqlite_error)?;
+    object_id_from_snapshot_bytes(Some(&bytes))
+        .map(Some)
+        .ok_or_else(|| RitError::invalid_input("indexdb parent row contains an invalid object id"))
+}
+
+fn indexed_changed_paths_for_commit(
+    connection: &Connection,
+    object_id: ObjectId,
+) -> Result<Vec<String>> {
+    let mut statement = connection
+        .prepare(
+            "SELECT path FROM file_changes
+             WHERE hash_kind = 'sha1' AND object_id = ?1
+             ORDER BY path",
+        )
+        .map_err(sqlite_error)?;
+    let rows = statement
+        .query_map(params![object_id.as_bytes().to_vec()], |row| {
+            row.get::<_, String>(0)
+        })
+        .map_err(sqlite_error)?;
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .map_err(sqlite_error)
 }
 
 fn insert_commit(

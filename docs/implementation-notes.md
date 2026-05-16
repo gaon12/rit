@@ -1679,3 +1679,14 @@
   config expansion, interactive prompts, keychain lookups, OAuth/device flows,
   and host-specific auth provider selection.
 - Repository mutation: no.
+
+### Impact indexdb acceleration
+
+- 2026-05-17 M12/M22 follow-up: `Repository::impact_report()` now asks the
+  optional indexdb for first-parent range touched paths when the database is
+  healthy and fresh.
+- The canonical commit diff remains the source for final changed paths and
+  large-file sizes. Indexdb is used only for range-level semantic impact hints
+  and exposes whether acceleration was actually used.
+- Unsupported behavior: merge-base interpretation for `...` ranges and
+  arbitrary revision suffix syntax such as `HEAD~1`.
