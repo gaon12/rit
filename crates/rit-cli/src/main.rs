@@ -2694,6 +2694,13 @@ fn rebase_command(
                         .map(|branch_name| format!("refs/heads/{branch_name}"))
                         .unwrap_or_else(|| "detached HEAD".to_owned());
                     writeln!(stderr, "Successfully rebased and updated {updated}.")?;
+                } else if result.replayed_count > 0 {
+                    write!(stderr, "Rebasing (1/{})\r", result.replayed_count)?;
+                    let updated = result
+                        .branch_name
+                        .map(|branch_name| format!("refs/heads/{branch_name}"))
+                        .unwrap_or_else(|| "detached HEAD".to_owned());
+                    writeln!(stderr, "Successfully rebased and updated {updated}.")?;
                 } else if let Some(branch_name) = result.branch_name {
                     writeln!(stdout, "Current branch {branch_name} is up to date.")?;
                 } else {

@@ -513,6 +513,8 @@ Completion criteria:
     the upstream is already an ancestor of `HEAD`.
   - [x] `rit rebase <upstream>` fast-forwards the current branch or detached
     `HEAD` when `HEAD` is already an ancestor of the upstream.
+  - [x] `rit rebase <upstream>` replays one clean linear commit onto the
+    upstream and updates the current branch.
   - [x] `rit rebase --abort` restores the original branch, index, and
     worktree from Git-compatible rebase state and removes rebase conflict
     metadata.
@@ -525,7 +527,7 @@ Completion criteria:
     the current commit and updating the original branch to the current `HEAD`.
   - [x] `rit rebase --quit` removes Git-compatible `rebase-apply` and
     `rebase-merge` state while preserving HEAD, index, and worktree.
-  - [ ] Rebase start that replays commits, multi-step continue/skip, todo
+  - [ ] Multi-commit replay, replay conflicts, multi-step continue/skip, todo
     editing, autostash, hooks, apply/merge backends, and strategy options.
 - [~] `rit stash`
   - [x] `rit stash list` reads the Git-compatible `refs/stash` reflog and

@@ -503,6 +503,8 @@ pub struct RebaseStartResult {
     pub branch_name: Option<String>,
     /// Whether the branch moved to the upstream commit.
     pub fast_forwarded: bool,
+    /// Number of commits replayed onto the upstream.
+    pub replayed_count: usize,
 }
 
 impl Repository {
@@ -1537,10 +1539,12 @@ impl Repository {
                 upstream_id,
                 branch_name,
                 fast_forwarded: false,
+                replayed_count: 0,
             });
         }
         if self.commit_is_ancestor(head_id, upstream_id)? {
             ensure_clean_for_checkout(self)?;
+            write_text_atomically(&self.git_dir().join("ORIG_HEAD"), &format!("{head_id}\n"))?;
             self.checkout_commit_tree(upstream_id)?;
             self.update_head(upstream_id)?;
             self.refresh_indexdb_after_git_write();
@@ -1550,12 +1554,108 @@ impl Repository {
                 upstream_id,
                 branch_name,
                 fast_forwarded: true,
+                replayed_count: 0,
             });
         }
 
-        Err(RitError::invalid_input(
-            "rebase start that replays commits is not implemented",
-        ))
+        let Some(merge_base) = self.find_merge_base(head_id, upstream_id)? else {
+            return Err(RitError::invalid_input(
+                "rebase start without a merge base is not implemented",
+            ));
+        };
+        let commits_to_replay = self.first_parent_commits_since(head_id, merge_base)?;
+        if commits_to_replay.len() != 1 {
+            return Err(RitError::invalid_input(
+                "rebase start currently supports replaying exactly one commit",
+            ));
+        }
+        ensure_clean_for_checkout(self)?;
+        let picked_id = commits_to_replay[0];
+        let picked_object = self.read_object(picked_id)?;
+        if picked_object.kind != ObjectKind::Commit {
+            return Err(RitError::invalid_input(format!(
+                "rebase target {picked_id} is {}, not commit",
+                picked_object.kind
+            )));
+        }
+        let picked_commit = parse_commit(&picked_object.data)?;
+        let Some(parent_id) = picked_commit.parents.first().copied() else {
+            return Err(RitError::invalid_input(
+                "rebase replay of root commits is not implemented",
+            ));
+        };
+        if picked_commit.parents.len() != 1 || parent_id != merge_base {
+            return Err(RitError::invalid_input(
+                "rebase replay currently supports one linear commit",
+            ));
+        }
+        let base_entries = self.commit_index_entries(parent_id)?;
+        let upstream_entries = self.commit_index_entries(upstream_id)?;
+        let picked_entries = self.commit_index_entries(picked_id)?;
+        let plan =
+            non_fast_forward_merge_workflow_plan(&base_entries, &upstream_entries, &picked_entries);
+        if !plan.conflict_stages.is_empty() {
+            return Err(RitError::invalid_input(
+                "rebase start with conflicts is not implemented",
+            ));
+        }
+
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "rebase must be run in a repository with a working tree",
+            ));
+        };
+        write_text_atomically(&self.git_dir().join("ORIG_HEAD"), &format!("{head_id}\n"))?;
+        self.checkout_commit_tree(upstream_id)?;
+        self.update_head(upstream_id)?;
+        let symlinks_enabled = self.core_symlinks_enabled()?;
+        let merged_entries = self.non_fast_forward_merge_index_entries(
+            &base_entries,
+            &upstream_entries,
+            &picked_entries,
+            &[],
+            upstream,
+        )?;
+        let conflict_paths = BTreeSet::new();
+        write_non_conflicting_merge_worktree_changes(
+            self,
+            worktree,
+            &upstream_entries,
+            &merged_entries,
+            &conflict_paths,
+            symlinks_enabled,
+        )?;
+        Index {
+            entries: merged_entries,
+            extensions: Vec::new(),
+        }
+        .write(&self.git_dir().join("index"))?;
+        let result = self.commit_index_with_parents(
+            &picked_commit.message,
+            &CommitOptions {
+                author: Some(SignatureIdentity {
+                    name: picked_commit.author.name,
+                    email: picked_commit.author.email,
+                }),
+                author_date: Some(SignatureTime {
+                    timestamp: picked_commit.author.timestamp,
+                    offset: picked_commit.author.offset,
+                }),
+                verify: false,
+                ..CommitOptions::default()
+            },
+            &[upstream_id],
+            false,
+        )?;
+        self.refresh_indexdb_after_git_write();
+        Ok(RebaseStartResult {
+            old_head_id: head_id,
+            new_head_id: result.commit_id,
+            upstream_id,
+            branch_name,
+            fast_forwarded: false,
+            replayed_count: 1,
+        })
     }
 
     /// Aborts an in-progress rebase and restores the original branch, index, and worktree.
@@ -1969,6 +2069,34 @@ impl Repository {
             stack.extend(commit.parents);
         }
         Ok(None)
+    }
+
+    fn first_parent_commits_since(
+        &self,
+        head_id: ObjectId,
+        stop_at: ObjectId,
+    ) -> Result<Vec<ObjectId>> {
+        let mut commits = Vec::new();
+        let mut current_id = head_id;
+        while current_id != stop_at {
+            commits.push(current_id);
+            let object = self.read_object(current_id)?;
+            if object.kind != ObjectKind::Commit {
+                return Err(RitError::invalid_input(format!(
+                    "object {current_id} is {}, not commit",
+                    object.kind
+                )));
+            }
+            let commit = parse_commit(&object.data)?;
+            let Some(parent_id) = commit.parents.first().copied() else {
+                return Err(RitError::invalid_input(
+                    "rebase replay reached a root commit before the merge base",
+                ));
+            };
+            current_id = parent_id;
+        }
+        commits.reverse();
+        Ok(commits)
     }
 
     fn commit_ancestor_set(&self, start: ObjectId) -> Result<HashSet<ObjectId>> {
