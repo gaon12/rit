@@ -22,6 +22,7 @@ Core commands:
   log           Show commit history
   add           Add file contents to the index
   commit        Record staged changes
+  compat        Compare safe rit commands against Git
   branch        List, create, or delete branches
   tag           List, create, or delete lightweight tags
   restore       Restore working tree or staged files
@@ -134,6 +135,14 @@ const COMMIT_HELP: &str = "\
 rit commit [-m <message>] [--plan]
 
 Create a commit from the current index and advance HEAD, or print the planned commit without writing.
+";
+
+const COMPAT_HELP: &str = "\
+rit compat check [--] <command> [args...]
+rit compat report --since <rev>
+rit compat fixture generate [path]
+
+Compare read-only rit command output against the current Git executable, summarize a small compatibility report for the current repository, or create a basic Git fixture repository. This compatibility command is allowed to invoke Git as a reference implementation; normal rit commands must not shell out to Git.
 ";
 
 const BRANCH_HELP: &str = "\
@@ -337,6 +346,7 @@ pub fn print_command_help(
         "log" => stdout.write_all(LOG_HELP.as_bytes())?,
         "add" => stdout.write_all(ADD_HELP.as_bytes())?,
         "commit" => stdout.write_all(COMMIT_HELP.as_bytes())?,
+        "compat" => stdout.write_all(COMPAT_HELP.as_bytes())?,
         "branch" => stdout.write_all(BRANCH_HELP.as_bytes())?,
         "tag" => stdout.write_all(TAG_HELP.as_bytes())?,
         "restore" => stdout.write_all(RESTORE_HELP.as_bytes())?,

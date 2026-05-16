@@ -1712,3 +1712,16 @@
   `operations`, `impact`, and `indexdb`.
 - The schemas describe the existing typed Rust models and current JSON command
   output where JSON output already exists.
+
+### Compatibility oracle
+
+- Baseline checked: `git --version` and `git help -a` on Git
+  2.52.0.windows.1.
+- 2026-05-17 M24: `rit compat check [--] <command> [args...]` compares
+  read-only commands against Git in the current repository.
+- `rit compat report --since <rev>` lists changed paths according to Git and
+  runs a small read-only compatibility suite for the current repository.
+- `rit compat fixture generate [path]` creates a basic Git fixture repository
+  for external compatibility experiments.
+- Repository mutation: `compat check` and `compat report` are read-only; fixture
+  generation writes only the requested new fixture path.

@@ -3,6 +3,7 @@ use std::io::{self, Write};
 use std::process::ExitCode;
 
 mod auth;
+mod compat;
 mod doctor;
 mod file_history;
 mod graph;
@@ -55,6 +56,7 @@ fn run(
         [command, rest @ ..] if command == "log" => log_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "add" => add_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "commit" => commit_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "compat" => compat::compat_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "branch" => branch_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "tag" => tag_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "restore" => restore_command(rest, stderr),
@@ -4199,6 +4201,15 @@ mod tests {
         assert_eq!(code, ExitCode::from(129));
         assert_eq!(stdout, "");
         assert!(stderr.contains("-m <message>"));
+    }
+
+    #[test]
+    fn compat_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "compat"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit compat check"));
+        assert_eq!(stderr, "");
     }
 
     #[test]

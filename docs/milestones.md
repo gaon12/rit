@@ -838,10 +838,10 @@ Completion criteria:
 
 ## M24: Compatibility Oracle
 
-- [ ] Add `rit compat check <command>`.
-- [ ] Add `rit compat report --since <rev>`.
-- [ ] Add `rit compat fixture generate`.
-- [ ] Let users validate Git compatibility against their own repositories.
+- [x] Add `rit compat check <command>`.
+- [x] Add `rit compat report --since <rev>`.
+- [x] Add `rit compat fixture generate`.
+- [x] Let users validate Git compatibility against their own repositories.
 
 ## M25: Large File Audit And Migration Plan
 
