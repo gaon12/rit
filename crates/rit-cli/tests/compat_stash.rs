@@ -248,6 +248,34 @@ fn stash_store_existing_commit_matches_git_list_and_ref() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn stash_store_default_message_and_quiet_match_git() {
+    let root = temp_path("store-default");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    fs::write(repo_file(&git_repo, "tracked.txt"), "stored\n")
+        .expect("tracked change should write");
+    let created = run_capture("git", ["stash", "create"], &git_repo);
+    assert_eq!(created.exit_code, 0, "git stderr: {}", created.stderr);
+    let stash_id = created.stdout.trim().to_owned();
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_store = run_capture("git", ["stash", "store", "-q", &stash_id], &git_repo);
+    let rit_store = run_capture(rit_binary(), ["stash", "store", "-q", &stash_id], &rit_repo);
+
+    assert_eq!(git_store.exit_code, 0, "git stderr: {}", git_store.stderr);
+    assert_eq!(rit_store.exit_code, 0, "rit stderr: {}", rit_store.stderr);
+    assert_eq!(git_store.stdout, rit_store.stdout);
+    assert_eq!(git_store.stderr, rit_store.stderr);
+    assert_eq!(
+        run_capture("git", ["stash", "list"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct CapturedCommand {
     exit_code: i32,
     stdout: String,

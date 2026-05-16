@@ -1393,7 +1393,8 @@
   output through the shared diff formatter.
 - Git-compatible behavior: `rit stash store` resolves an existing commit,
   appends a loose stash reflog entry using the configured committer identity,
-  and updates loose `.git/refs/stash`.
+  and updates loose `.git/refs/stash`. `-q` is accepted and the default
+  message is `Created via "git stash store".`
 - Repository mutation: no for `stash list`.
 - Repository mutation: no for `stash show`.
 - Repository mutation: yes for `stash clear`; it removes loose `.git/refs/stash`
