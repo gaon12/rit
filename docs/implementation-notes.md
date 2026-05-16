@@ -1370,15 +1370,17 @@
 ### `rit rebase`
 
 - Baseline command checked: `git rebase -h`
-- Supported options: `rit rebase <upstream>` for already up-to-date branches,
-  `rit rebase --abort`, `rit rebase --continue`,
+- Supported options: `rit rebase <upstream>` for already up-to-date branches
+  and fast-forward rebases, `rit rebase --abort`, `rit rebase --continue`,
   `rit rebase --show-current-patch`, `rit rebase --skip`, `rit rebase --quit`
 - Unsupported options: rebase start that replays commits, multi-step
   `--continue`/`--skip`, `--edit-todo`, interactive mode, autostash,
   apply/merge backend selection, hooks, strategy options, and todo editing.
 - Git-compatible behavior: `rit rebase <upstream>` resolves a local branch or
-  revision and, when that upstream is already an ancestor of `HEAD`, prints
-  Git's up-to-date message without mutating the repository. `rit rebase
+  revision. When that upstream is already an ancestor of `HEAD`, it prints
+  Git's up-to-date message without mutating the repository. When `HEAD` is an
+  ancestor of upstream, it checks out the upstream tree, updates the current
+  branch or detached `HEAD`, and prints Git's success message. `rit rebase
   --abort` reads `orig-head` and `head-name`, restores the original branch,
   index, and working tree, then removes `.git/rebase-apply`,
   `.git/rebase-merge`, `REBASE_HEAD`, `MERGE_MSG`, and `AUTO_MERGE`.

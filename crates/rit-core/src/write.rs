@@ -494,11 +494,15 @@ pub struct RebaseContinueResult {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RebaseStartResult {
     /// Current `HEAD` commit.
-    pub head_id: ObjectId,
+    pub old_head_id: ObjectId,
+    /// Commit now checked out after the start operation.
+    pub new_head_id: ObjectId,
     /// Resolved upstream commit.
     pub upstream_id: ObjectId,
     /// Current branch name, when `HEAD` is symbolic.
     pub branch_name: Option<String>,
+    /// Whether the branch moved to the upstream commit.
+    pub fast_forwarded: bool,
 }
 
 impl Repository {
@@ -1519,22 +1523,39 @@ impl Repository {
         Ok(())
     }
 
-    /// Starts a rebase when the current branch is already based on `upstream`.
-    pub fn rebase_up_to_date(&self, upstream: &str) -> Result<RebaseStartResult> {
+    /// Starts a rebase for the currently supported no-op and fast-forward cases.
+    pub fn start_rebase(&self, upstream: &str) -> Result<RebaseStartResult> {
         let head_id = self
             .resolve_head()?
             .ok_or_else(|| RitError::invalid_input("rebase requires an existing HEAD"))?;
         let upstream_id = self.resolve_merge_target(upstream)?;
-        if !self.commit_is_ancestor(upstream_id, head_id)? {
-            return Err(RitError::invalid_input(
-                "rebase start currently supports only up-to-date branches",
-            ));
+        let branch_name = self.current_branch_name()?;
+        if self.commit_is_ancestor(upstream_id, head_id)? {
+            return Ok(RebaseStartResult {
+                old_head_id: head_id,
+                new_head_id: head_id,
+                upstream_id,
+                branch_name,
+                fast_forwarded: false,
+            });
         }
-        Ok(RebaseStartResult {
-            head_id,
-            upstream_id,
-            branch_name: self.current_branch_name()?,
-        })
+        if self.commit_is_ancestor(head_id, upstream_id)? {
+            ensure_clean_for_checkout(self)?;
+            self.checkout_commit_tree(upstream_id)?;
+            self.update_head(upstream_id)?;
+            self.refresh_indexdb_after_git_write();
+            return Ok(RebaseStartResult {
+                old_head_id: head_id,
+                new_head_id: upstream_id,
+                upstream_id,
+                branch_name,
+                fast_forwarded: true,
+            });
+        }
+
+        Err(RitError::invalid_input(
+            "rebase start that replays commits is not implemented",
+        ))
     }
 
     /// Aborts an in-progress rebase and restores the original branch, index, and worktree.

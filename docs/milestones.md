@@ -511,6 +511,8 @@ Completion criteria:
 - [~] `rit rebase`
   - [x] `rit rebase <upstream>` reports Git-compatible up-to-date status when
     the upstream is already an ancestor of `HEAD`.
+  - [x] `rit rebase <upstream>` fast-forwards the current branch or detached
+    `HEAD` when `HEAD` is already an ancestor of the upstream.
   - [x] `rit rebase --abort` restores the original branch, index, and
     worktree from Git-compatible rebase state and removes rebase conflict
     metadata.

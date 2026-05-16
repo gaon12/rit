@@ -2686,9 +2686,15 @@ fn rebase_command(
             Ok(_) => Ok(ExitCode::SUCCESS),
             Err(error) => write_rebase_error(stderr, error),
         },
-        RebaseAction::Start { upstream } => match repository.rebase_up_to_date(&upstream) {
+        RebaseAction::Start { upstream } => match repository.start_rebase(&upstream) {
             Ok(result) => {
-                if let Some(branch_name) = result.branch_name {
+                if result.fast_forwarded {
+                    let updated = result
+                        .branch_name
+                        .map(|branch_name| format!("refs/heads/{branch_name}"))
+                        .unwrap_or_else(|| "detached HEAD".to_owned());
+                    writeln!(stderr, "Successfully rebased and updated {updated}.")?;
+                } else if let Some(branch_name) = result.branch_name {
                     writeln!(stdout, "Current branch {branch_name} is up to date.")?;
                 } else {
                     writeln!(stdout, "HEAD is up to date.")?;
