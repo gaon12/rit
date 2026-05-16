@@ -856,13 +856,11 @@ Completion criteria:
 
 1. Continue M8 merge with binary/delete/mode conflict handling,
    abort/continue, and merge-commit workflow planning.
-2. Continue M16 operation journal with reversible worktree patches and
-   command-aware undo modes.
-3. Add indexdb fallback/query APIs for missing, stale, or corrupted auxiliary
+2. Add indexdb fallback/query APIs for missing, stale, or corrupted auxiliary
    data.
-4. Add indexdb corruption, stale cache, and external Git reconciliation test
+3. Add indexdb corruption, stale cache, and external Git reconciliation test
    plan.
-5. Keep M6 case-sensitivity parity under verification as new path lookup
+4. Keep M6 case-sensitivity parity under verification as new path lookup
    surfaces are added.
 
 ## Implementation Notes
