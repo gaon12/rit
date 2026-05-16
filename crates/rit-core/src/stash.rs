@@ -169,6 +169,16 @@ impl Repository {
         })
     }
 
+    /// Applies one tracked stash entry and drops it from the loose stash reflog.
+    ///
+    /// This uses the same intentionally small apply implementation as
+    /// [`Repository::stash_apply`], so it currently requires the stash base to
+    /// match `HEAD` and does not restore the index.
+    pub fn stash_pop(&self, display_index: usize, name: String) -> Result<StashDropResult> {
+        self.stash_apply(display_index)?;
+        self.stash_drop(display_index, name)
+    }
+
     /// Lists stashes by reading the Git-compatible `refs/stash` reflog.
     pub fn stash_list(&self) -> Result<Vec<StashListEntry>> {
         let mut messages = self

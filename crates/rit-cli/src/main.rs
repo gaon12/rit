@@ -130,6 +130,11 @@ fn stash_command(
                 return Ok(ExitCode::from(129));
             }
         }
+        [subcommand, rest @ ..] if subcommand == "pop" => {
+            if parse_stash_pop_args(rest, stderr)?.is_none() {
+                return Ok(ExitCode::from(129));
+            }
+        }
         [subcommand, rest @ ..] if subcommand == "push" => {
             if parse_stash_push_args(rest, stderr)?.is_none() {
                 return Ok(ExitCode::from(129));
@@ -174,6 +179,22 @@ fn stash_command(
         };
         return match repository.stash_apply(apply_args.index) {
             Ok(_result) => Ok(ExitCode::SUCCESS),
+            Err(error) => write_stash_error(stderr, error),
+        };
+    }
+    if let [subcommand, rest @ ..] = args
+        && subcommand == "pop"
+    {
+        let Some(pop_args) = parse_stash_pop_args(rest, stderr)? else {
+            return Ok(ExitCode::from(129));
+        };
+        return match repository.stash_pop(pop_args.index, pop_args.name.clone()) {
+            Ok(result) => {
+                if !pop_args.quiet {
+                    writeln!(stdout, "Dropped {} ({})", result.name, result.object_id)?;
+                }
+                Ok(ExitCode::SUCCESS)
+            }
             Err(error) => write_stash_error(stderr, error),
         };
     }
@@ -353,6 +374,12 @@ struct StashDropArgs {
     quiet: bool,
 }
 
+struct StashPopArgs {
+    index: usize,
+    name: String,
+    quiet: bool,
+}
+
 struct StashApplyArgs {
     index: usize,
 }
@@ -431,6 +458,31 @@ fn parse_stash_apply_args(
 
     let (index, _) = parse_stash_name(stash.unwrap_or("refs/stash@{0}"))?;
     Ok(Some(StashApplyArgs { index }))
+}
+
+fn parse_stash_pop_args(
+    args: &[String],
+    stderr: &mut dyn Write,
+) -> io::Result<Option<StashPopArgs>> {
+    let mut quiet = false;
+    let mut stash = None;
+    for arg in args {
+        match arg.as_str() {
+            "-q" | "--quiet" => quiet = true,
+            _ if arg.starts_with('-') => {
+                writeln!(stderr, "rit: unsupported stash pop option '{arg}'")?;
+                return Ok(None);
+            }
+            _ if stash.is_none() => stash = Some(arg.as_str()),
+            _ => {
+                writeln!(stderr, "rit: stash pop accepts at most one stash")?;
+                return Ok(None);
+            }
+        }
+    }
+
+    let (index, name) = parse_stash_name(stash.unwrap_or("refs/stash@{0}"))?;
+    Ok(Some(StashPopArgs { index, name, quiet }))
 }
 
 fn parse_stash_store_args(

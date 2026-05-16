@@ -227,6 +227,7 @@ rit stash [push [(-m|--message) <message>] [-q|--quiet]]
 rit stash show [-p|--patch|--stat|--name-only|--name-status|--numstat] [<stash>]
 rit stash drop [-q|--quiet] [<stash>]
 rit stash apply [-q|--quiet] [<stash>]
+rit stash pop [-q|--quiet] [<stash>]
 rit stash create [<message>]
 rit stash store [(-m|--message) <message>] [-q|--quiet] <commit>
 rit stash clear
