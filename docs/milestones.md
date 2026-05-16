@@ -501,6 +501,8 @@ Completion criteria:
     commit message.
   - [x] Clean `--ff` cherry-pick fast-forwards when `HEAD` is the picked
     commit's parent.
+  - [x] Clean `-s`/`--signoff` cherry-pick appends a committer signoff
+    trailer.
   - [ ] Full multi-commit sequencer state across conflicts, multi-target
     `--no-commit`, strategy options, conflict continuation for merge commits,
     and editor/hook parity.

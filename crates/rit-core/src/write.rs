@@ -265,6 +265,8 @@ pub struct CherryPickOptions {
     pub append_origin: bool,
     /// Whether to fast-forward when `HEAD` is the picked commit's parent.
     pub fast_forward: bool,
+    /// Whether to append a Signed-off-by trailer for the committer.
+    pub signoff: bool,
 }
 
 impl CherryPickOptions {
@@ -281,6 +283,7 @@ impl Default for CherryPickOptions {
             mainline: None,
             append_origin: false,
             fast_forward: false,
+            signoff: false,
         }
     }
 }
@@ -1168,8 +1171,21 @@ impl Repository {
             });
         }
 
-        let commit_message =
-            cherry_pick_commit_message(&picked_commit.message, picked_id, options.append_origin);
+        let signoff = if options.signoff {
+            let signatures = read_commit_signatures(self, &CommitOptions::default())?;
+            Some(format!(
+                "Signed-off-by: {} <{}>",
+                signatures.committer.name, signatures.committer.email
+            ))
+        } else {
+            None
+        };
+        let commit_message = cherry_pick_commit_message(
+            &picked_commit.message,
+            picked_id,
+            options.append_origin,
+            signoff.as_deref(),
+        );
         let result = self.commit_index_with_parents(
             &commit_message,
             &CommitOptions {
@@ -2281,15 +2297,31 @@ fn cherry_pick_message_with_conflicts(message: &str, conflict_paths: &BTreeSet<&
     output
 }
 
-fn cherry_pick_commit_message(message: &str, picked_id: ObjectId, append_origin: bool) -> String {
-    if !append_origin {
+fn cherry_pick_commit_message(
+    message: &str,
+    picked_id: ObjectId,
+    append_origin: bool,
+    signoff: Option<&str>,
+) -> String {
+    if !append_origin && signoff.is_none() {
         return message.to_owned();
     }
     let mut output = message.trim_end_matches('\n').to_owned();
-    if !output.is_empty() {
-        output.push_str("\n\n");
+    if append_origin {
+        if !output.is_empty() {
+            output.push_str("\n\n");
+        }
+        output.push_str(&format!("(cherry picked from commit {picked_id})"));
     }
-    output.push_str(&format!("(cherry picked from commit {picked_id})\n"));
+    if let Some(signoff) = signoff {
+        if !output.is_empty() {
+            output.push_str("\n\n");
+        }
+        output.push_str(signoff);
+    }
+    if !output.is_empty() {
+        output.push('\n');
+    }
     output
 }
 

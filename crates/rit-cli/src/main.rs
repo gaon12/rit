@@ -2364,6 +2364,7 @@ fn cherry_pick_command(
     let mut mainline = None;
     let mut append_origin = false;
     let mut fast_forward = false;
+    let mut signoff = false;
     let mut targets = Vec::new();
     let mut index = 0;
     while index < args.len() {
@@ -2374,6 +2375,10 @@ fn cherry_pick_command(
             commit = true;
         } else if arg == "-x" {
             append_origin = true;
+        } else if arg == "-s" || arg == "--signoff" {
+            signoff = true;
+        } else if arg == "--no-signoff" {
+            signoff = false;
         } else if arg == "--ff" {
             fast_forward = true;
         } else if arg == "--no-ff" {
@@ -2533,6 +2538,7 @@ fn cherry_pick_command(
         mainline,
         append_origin,
         fast_forward,
+        signoff,
     };
     let mut created_objects = Vec::new();
     for target in &targets {
