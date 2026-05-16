@@ -509,7 +509,12 @@ Completion criteria:
     conflict continuation, strategy options, conflict continuation for merge
     commits, and editor/hook parity.
 - [ ] `rit rebase`
-- [ ] `rit stash`
+- [~] `rit stash`
+  - [x] `rit stash list` reads the Git-compatible `refs/stash` reflog and
+    prints entries in newest-first order.
+  - [ ] `stash push`, `apply`, `pop`, `drop`, `clear`, `show`, branch/export/
+    import, pathspecs, staged/keep-index/untracked modes, and conflict apply
+    handling.
 - [~] Conflict index stages.
   - [x] Preserve stage 0/1/2/3 in index read, write, sorting, and
     `ls-files --stage` output.

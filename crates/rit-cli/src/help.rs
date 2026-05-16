@@ -30,6 +30,7 @@ Core commands:
   switch        Switch branches
   merge         Merge a branch or revision into the current branch
   cherry-pick   Apply one clean commit onto HEAD
+  stash         List saved working tree states
   auth          Explain remote authentication selection
   indexdb       Manage optional SQLite auxiliary index metadata
   file-history  Show indexed first-parent path history
@@ -195,6 +196,12 @@ rit cherry-pick --quit
 Apply one non-merge commit onto the current HEAD, or manage an in-progress conflicted cherry-pick.
 ";
 
+const STASH_HELP: &str = "\
+rit stash list
+
+List entries from the Git-compatible refs/stash reflog.
+";
+
 const AUTH_HELP: &str = "\
 rit auth explain <url>
 
@@ -296,6 +303,7 @@ pub fn print_command_help(
         "switch" => stdout.write_all(SWITCH_HELP.as_bytes())?,
         "merge" => stdout.write_all(MERGE_HELP.as_bytes())?,
         "cherry-pick" => stdout.write_all(CHERRY_PICK_HELP.as_bytes())?,
+        "stash" => stdout.write_all(STASH_HELP.as_bytes())?,
         "auth" => stdout.write_all(AUTH_HELP.as_bytes())?,
         "indexdb" => stdout.write_all(INDEXDB_HELP.as_bytes())?,
         "file-history" => stdout.write_all(FILE_HISTORY_HELP.as_bytes())?,

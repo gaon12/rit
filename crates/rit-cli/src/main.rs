@@ -62,6 +62,7 @@ fn run(
         [command, rest @ ..] if command == "cherry-pick" => {
             cherry_pick_command(rest, stdout, stderr)
         }
+        [command, rest @ ..] if command == "stash" => stash_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "auth" => auth::auth_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "indexdb" => {
             indexdb::indexdb_command(rest, stdout, stderr)
@@ -94,6 +95,38 @@ fn run(
 fn print_version(stdout: &mut dyn Write) -> io::Result<ExitCode> {
     writeln!(stdout, "rit version {}", rit_core::version())?;
     Ok(ExitCode::SUCCESS)
+}
+
+fn stash_command(
+    args: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    match args {
+        [subcommand] if subcommand == "list" => {}
+        [] => {
+            writeln!(stderr, "rit: stash requires a supported subcommand")?;
+            return Ok(ExitCode::from(129));
+        }
+        [subcommand, ..] => {
+            writeln!(stderr, "rit: unsupported stash subcommand '{subcommand}'")?;
+            return Ok(ExitCode::from(129));
+        }
+    }
+
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    match repository.stash_list() {
+        Ok(entries) => {
+            for entry in entries {
+                writeln!(stdout, "stash@{{{}}}: {}", entry.index, entry.message)?;
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(error) => write_command_error(stderr, error),
+    }
 }
 
 fn workspace_command(
@@ -3654,6 +3687,15 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit cherry-pick"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn stash_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "stash"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit stash list"));
         assert_eq!(stderr, "");
     }
 

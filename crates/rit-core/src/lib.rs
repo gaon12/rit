@@ -43,6 +43,7 @@ pub mod semantic_rust;
 #[cfg(feature = "semantic-typescript")]
 pub mod semantic_typescript;
 pub mod sparse;
+pub mod stash;
 pub mod status;
 pub mod transport;
 pub mod vfs;
@@ -115,6 +116,7 @@ pub use semantic_typescript::{
     TypeScriptFunctionChange, TypeScriptSemanticSummary, summarize_typescript_functions,
 };
 pub use sparse::{SparseCheckout, SparseCheckoutMode, SparseCheckoutPattern};
+pub use stash::StashListEntry;
 pub use status::{
     IgnoreExplanation, IgnoreRuleExplanation, PorcelainStatus, StatusBranchHeader, StatusEntry,
     StatusExplanation, StatusOptions, UntrackedFilesMode,

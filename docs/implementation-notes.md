@@ -1367,6 +1367,20 @@
 - Risk: moderate; this first slice requires a clean worktree and writes only
   single-commit cherry-pick state.
 
+### `rit stash`
+
+- Baseline command checked: `git stash -h`
+- Supported options: `rit stash list`.
+- Unsupported options: default `stash push`, `push`, `save`, `show`, `drop`,
+  `pop`, `apply`, `branch`, `clear`, `create`, `store`, `export`, `import`,
+  pathspecs, staged/keep-index/untracked modes, and stash apply conflict
+  handling.
+- Git-compatible behavior: `rit stash list` reads `.git/logs/refs/stash`
+  directly, prints newest entries first as `stash@{n}: <reflog message>`, and
+  prints nothing when no stash reflog exists.
+- Repository mutation: no for `stash list`.
+- Risk: low; the first slice is read-only.
+
 ### `rit op` and `rit undo`
 
 - Baseline command checked: rit-specific command, no Git equivalent.
