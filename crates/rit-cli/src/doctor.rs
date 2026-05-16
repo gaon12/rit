@@ -6,9 +6,10 @@ pub fn doctor_command(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    let json = match args {
-        [] => false,
-        [flag] if flag == "--json" => true,
+    let mode = match args {
+        [] => DoctorOutputMode::Text,
+        [flag] if flag == "--json" => DoctorOutputMode::Json,
+        [flag] if flag == "--explain" => DoctorOutputMode::Explain,
         [flag, ..] => {
             writeln!(stderr, "rit: unsupported doctor option '{flag}'")?;
             return Ok(ExitCode::from(129));
@@ -23,10 +24,10 @@ pub fn doctor_command(
         }
     };
     let report = repository.doctor();
-    if json {
-        write_report_json(&report, stdout)?;
-    } else {
-        print_report(&report, stdout)?;
+    match mode {
+        DoctorOutputMode::Text => print_report(&report, stdout)?,
+        DoctorOutputMode::Json => write_report_json(&report, stdout)?,
+        DoctorOutputMode::Explain => print_explained_report(&report, stdout)?,
     }
 
     if report.has_errors() {
@@ -34,6 +35,12 @@ pub fn doctor_command(
     } else {
         Ok(ExitCode::SUCCESS)
     }
+}
+
+enum DoctorOutputMode {
+    Text,
+    Json,
+    Explain,
 }
 
 fn print_report(report: &rit_core::DoctorReport, stdout: &mut dyn Write) -> io::Result<()> {
@@ -57,6 +64,23 @@ fn print_report(report: &rit_core::DoctorReport, stdout: &mut dyn Write) -> io::
         )?;
     }
 
+    Ok(())
+}
+
+fn print_explained_report(
+    report: &rit_core::DoctorReport,
+    stdout: &mut dyn Write,
+) -> io::Result<()> {
+    print_report(report, stdout)?;
+    writeln!(stdout, "explain:")?;
+    for check in &report.checks {
+        writeln!(
+            stdout,
+            "- {}: {}",
+            check.name,
+            doctor_check_explanation(check)
+        )?;
+    }
     Ok(())
 }
 
@@ -113,6 +137,20 @@ fn severity_label(severity: rit_core::DoctorSeverity) -> &'static str {
     }
 }
 
+fn doctor_check_explanation(check: &rit_core::DoctorCheck) -> &'static str {
+    match check.name.as_str() {
+        "git-dir" => "checks that the worktree points at a readable Git directory",
+        "common-dir" => "checks the shared Git directory used for objects, refs, and config",
+        "objects-dir" => "checks that loose objects can be stored under the common directory",
+        "pack-dir" => "checks that packfiles have a standard storage directory",
+        "head-file" => "checks that this worktree has a HEAD file to resolve",
+        "git-config" => "checks whether .git/config exists and can be parsed",
+        "rit-config" => "checks optional rit.toml or .rit.toml configuration parsing",
+        "head-object" => "checks that HEAD resolves to an existing commit or an unborn branch",
+        _ => "checks a repository health rule and reports its current result",
+    }
+}
+
 fn json_severity_label(severity: rit_core::DoctorSeverity) -> &'static str {
     match severity {
         rit_core::DoctorSeverity::Ok => "ok",
@@ -129,7 +167,7 @@ fn json_optional_string(value: Option<&str>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::write_report_json;
+    use super::{print_explained_report, write_report_json};
     use rit_core::{DoctorCheck, DoctorReport, DoctorSeverity};
 
     #[test]
@@ -153,5 +191,27 @@ mod tests {
         assert!(text.contains("\"worktree\": \"repo\\\"root\""));
         assert!(text.contains("\"severity\": \"warning\""));
         assert!(text.contains("HEAD is unborn\\nnew branch"));
+    }
+
+    #[test]
+    fn doctor_explain_prints_check_reasons() {
+        let report = DoctorReport {
+            worktree: Some("repo".to_owned()),
+            git_dir: ".git".to_owned(),
+            common_dir: ".git".to_owned(),
+            bare: false,
+            checks: vec![DoctorCheck {
+                name: "git-config".to_owned(),
+                severity: DoctorSeverity::Ok,
+                detail: "Git config is readable".to_owned(),
+            }],
+        };
+        let mut output = Vec::new();
+
+        print_explained_report(&report, &mut output).expect("explain should be written");
+        let text = String::from_utf8(output).expect("explain should be utf-8");
+
+        assert!(text.contains("explain:\n"));
+        assert!(text.contains("- git-config: checks whether .git/config exists and can be parsed"));
     }
 }
