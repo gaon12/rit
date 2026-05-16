@@ -10,6 +10,7 @@ mod graph;
 mod help;
 mod impact;
 mod indexdb;
+mod large_files;
 mod op;
 mod pathspec_args;
 mod remote;
@@ -72,6 +73,9 @@ fn run(
         [command, rest @ ..] if command == "auth" => auth::auth_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "indexdb" => {
             indexdb::indexdb_command(rest, stdout, stderr)
+        }
+        [command, rest @ ..] if command == "large-files" => {
+            large_files::large_files_command(rest, stdout, stderr)
         }
         [command, rest @ ..] if command == "file-history" => {
             file_history::file_history_command(rest, stdout, stderr)
@@ -4390,6 +4394,15 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit schema <status|diff|doctor|operations|impact|indexdb>"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn large_files_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "large-files"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit large-files audit"));
         assert_eq!(stderr, "");
     }
 

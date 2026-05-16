@@ -845,10 +845,10 @@ Completion criteria:
 
 ## M25: Large File Audit And Migration Plan
 
-- [ ] Add `rit large-files audit`.
-- [ ] Report large blobs in current history.
-- [ ] Recommend LFS/Xet tracking patterns.
-- [ ] Produce a safe migration plan before any rewrite or tracking change.
+- [x] Add `rit large-files audit`.
+- [x] Report large blobs in current history.
+- [x] Recommend LFS/Xet tracking patterns.
+- [x] Produce a safe migration plan before any rewrite or tracking change.
 
 ## Active Queue
 

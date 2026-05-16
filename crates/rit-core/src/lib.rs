@@ -19,6 +19,7 @@ pub mod index;
 pub mod indexdb;
 #[cfg(all(test, feature = "indexdb"))]
 mod indexdb_tests;
+pub mod large_file_audit;
 #[cfg(any(feature = "lfs", feature = "xet"))]
 pub mod large_files;
 pub mod merge_conflict;
@@ -79,6 +80,10 @@ pub use index::{
 pub use indexdb::{
     IndexDb, IndexDbEnsureResult, IndexDbStatus, IndexDbStorage, IndexedCommit, IndexedFileChange,
     IndexedRef,
+};
+pub use large_file_audit::{
+    DEFAULT_LARGE_FILE_AUDIT_THRESHOLD, LargeBlobFinding, LargeFileMigrationStep,
+    LargeFileTrackingRecommendation, LargeFilesAuditReport,
 };
 #[cfg(feature = "lfs")]
 pub use large_files::{

@@ -35,6 +35,7 @@ Core commands:
   stash         List saved working tree states
   auth          Explain remote authentication selection
   indexdb       Manage optional SQLite auxiliary index metadata
+  large-files   Audit and plan large-file tracking
   file-history  Show indexed first-parent path history
   graph         Show the local branch, stash, and worktree graph
   impact        Summarize package and CI impact for a commit range
@@ -242,6 +243,12 @@ rit indexdb [status|build|update|repair|rebuild|drop|vacuum]
 Manage the optional SQLite auxiliary index under .git/rit/indexdb.sqlite. The database is reproducible metadata and is never the source of truth for Git objects, refs, index, or working tree state.
 ";
 
+const LARGE_FILES_HELP: &str = "\
+rit large-files audit [--threshold <bytes>]
+
+Audit blobs reachable from HEAD history, recommend LFS/Xet tracking patterns, and print a safe migration plan. This command does not rewrite history or change tracking rules.
+";
+
 const FILE_HISTORY_HELP: &str = "\
 rit file-history <path>
 
@@ -359,6 +366,7 @@ pub fn print_command_help(
         "stash" => stdout.write_all(STASH_HELP.as_bytes())?,
         "auth" => stdout.write_all(AUTH_HELP.as_bytes())?,
         "indexdb" => stdout.write_all(INDEXDB_HELP.as_bytes())?,
+        "large-files" => stdout.write_all(LARGE_FILES_HELP.as_bytes())?,
         "file-history" => stdout.write_all(FILE_HISTORY_HELP.as_bytes())?,
         "graph" => stdout.write_all(GRAPH_HELP.as_bytes())?,
         "impact" => stdout.write_all(IMPACT_HELP.as_bytes())?,

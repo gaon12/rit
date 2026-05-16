@@ -1725,3 +1725,12 @@
   for external compatibility experiments.
 - Repository mutation: `compat check` and `compat report` are read-only; fixture
   generation writes only the requested new fixture path.
+
+### Large-file audit
+
+- 2026-05-17 M25: `Repository::large_files_audit()` scans commits reachable
+  from HEAD for regular Git blobs at or above the audit threshold.
+- `rit large-files audit [--threshold <bytes>]` prints large blob findings,
+  LFS/Xet tracking recommendations, and a safe migration plan.
+- Repository mutation: no. The audit does not rewrite history, edit
+  `.gitattributes`, or add tracking rules.
