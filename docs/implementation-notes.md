@@ -1755,3 +1755,14 @@
 - `rit reset` now mirrors that no-op acceptance for non-wildcard tracked
   pathspecs with mismatched case. Wildcard and advanced pathspec parity remain
   tracked separately in M4/M6.
+
+### System keychain adapters
+
+- 2026-05-17 M11 follow-up: `SystemKeychainProvider` now dispatches through
+  the configured `KeychainProviderKind` instead of ignoring explicit provider
+  selection.
+- macOS Keychain support uses the platform `security` tool for generic
+  password read, store, and erase operations.
+- freedesktop Secret Service support uses the libsecret `secret-tool` command
+  for lookup, store, and clear operations, passing secrets through stdin for
+  store.

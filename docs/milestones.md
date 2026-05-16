@@ -667,11 +667,11 @@ Completion criteria:
 - [x] SSH agent integration.
   - [x] Model `SSH_AUTH_SOCK` based agent availability.
   - [x] Agent protocol identity lookup and signing.
-- [~] OS keychain adapters.
+- [x] OS keychain adapters.
   - [x] Model platform default keychain adapter selection.
   - [x] Windows Credential Manager read/write implementation.
-  - [ ] macOS Keychain read/write implementation.
-  - [ ] freedesktop Secret Service/libsecret read/write implementation.
+  - [x] macOS Keychain read/write implementation.
+  - [x] freedesktop Secret Service/libsecret read/write implementation.
 - [x] CI non-interactive mode.
   - [x] Disable auth prompts for CI-like environments and
     `GIT_TERMINAL_PROMPT=0`.
