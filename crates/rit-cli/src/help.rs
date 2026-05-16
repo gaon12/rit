@@ -186,7 +186,7 @@ Fast-forward the current branch to a local branch or revision, create a clean me
 ";
 
 const CHERRY_PICK_HELP: &str = "\
-rit cherry-pick [-n|--no-commit] <commit>
+rit cherry-pick [-n|--no-commit] [-m <parent-number>] <commit>
 rit cherry-pick --abort
 rit cherry-pick --continue
 rit cherry-pick --quit

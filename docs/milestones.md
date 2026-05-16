@@ -491,8 +491,10 @@ Completion criteria:
     using the picked commit's author/message and clears cherry-pick state.
   - [x] `cherry-pick --quit` clears cherry-pick state while preserving the
     conflicted index and worktree.
-  - [ ] Multi-commit sequencer operations, merge commits with `--mainline`,
-    `--skip`, strategy options, and editor/hook parity.
+  - [x] Clean merge commit cherry-pick supports `-m`/`--mainline` parent
+    selection.
+  - [ ] Multi-commit sequencer operations, `--skip`, strategy options,
+    conflict continuation for merge commits, and editor/hook parity.
 - [ ] `rit rebase`
 - [ ] `rit stash`
 - [~] Conflict index stages.

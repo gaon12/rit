@@ -2360,12 +2360,30 @@ fn cherry_pick_command(
     let mut abort = false;
     let mut quit = false;
     let mut continue_pick = false;
+    let mut mainline = None;
     let mut target = None;
-    for arg in args {
+    let mut index = 0;
+    while index < args.len() {
+        let arg = &args[index];
         if arg == "-n" || arg == "--no-commit" {
             commit = false;
         } else if arg == "--commit" {
             commit = true;
+        } else if arg == "-m" || arg == "--mainline" {
+            index += 1;
+            let Some(value) = args.get(index) else {
+                writeln!(stderr, "rit: cherry-pick {arg} requires a parent number")?;
+                return Ok(ExitCode::from(129));
+            };
+            let Some(parent_number) = parse_cherry_pick_mainline(value, stderr)? else {
+                return Ok(ExitCode::from(129));
+            };
+            mainline = Some(parent_number);
+        } else if let Some(value) = arg.strip_prefix("--mainline=") {
+            let Some(parent_number) = parse_cherry_pick_mainline(value, stderr)? else {
+                return Ok(ExitCode::from(129));
+            };
+            mainline = Some(parent_number);
         } else if arg == "--abort" {
             abort = true;
         } else if arg == "--quit" {
@@ -2384,6 +2402,7 @@ fn cherry_pick_command(
         } else {
             target = Some(arg.as_str());
         }
+        index += 1;
     }
     let state_option_count = [abort, quit, continue_pick]
         .into_iter()
@@ -2479,7 +2498,9 @@ fn cherry_pick_command(
         None => return Ok(ExitCode::from(128)),
     };
     let before = capture_operation_snapshot(&repository, stderr)?;
-    match repository.cherry_pick_with_options(target, &rit_core::CherryPickOptions { commit }) {
+    match repository
+        .cherry_pick_with_options(target, &rit_core::CherryPickOptions { commit, mainline })
+    {
         Ok(result) => {
             let created_objects = result.commit_id.into_iter().collect::<Vec<_>>();
             if result.conflict_paths.is_empty() {
@@ -2527,6 +2548,19 @@ fn cherry_pick_command(
             Ok(ExitCode::SUCCESS)
         }
         Err(error) => write_command_error(stderr, error),
+    }
+}
+
+fn parse_cherry_pick_mainline(value: &str, stderr: &mut dyn Write) -> io::Result<Option<usize>> {
+    match value.parse::<usize>() {
+        Ok(parent_number) if parent_number > 0 => Ok(Some(parent_number)),
+        _ => {
+            writeln!(
+                stderr,
+                "rit: cherry-pick mainline parent number must be a positive integer"
+            )?;
+            Ok(None)
+        }
     }
 }
 

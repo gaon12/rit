@@ -259,6 +259,8 @@ pub struct CherryPickResult {
 pub struct CherryPickOptions {
     /// Whether to create a commit after applying the change.
     pub commit: bool,
+    /// Parent number to use when cherry-picking a merge commit.
+    pub mainline: Option<usize>,
 }
 
 impl CherryPickOptions {
@@ -270,7 +272,10 @@ impl CherryPickOptions {
 
 impl Default for CherryPickOptions {
     fn default() -> Self {
-        Self { commit: true }
+        Self {
+            commit: true,
+            mainline: None,
+        }
     }
 }
 
@@ -1074,13 +1079,8 @@ impl Repository {
             )));
         }
         let picked_commit = parse_commit(&picked_object.data)?;
-        if picked_commit.parents.len() > 1 {
-            return Err(RitError::invalid_input(
-                "cherry-pick of merge commits requires --mainline, which is not implemented",
-            ));
-        }
-
-        let base_entries = match picked_commit.parents.first().copied() {
+        let base_id = cherry_pick_base_parent(&picked_commit.parents, options.mainline)?;
+        let base_entries = match base_id {
             Some(parent_id) => self.commit_index_entries(parent_id)?,
             None => Vec::new(),
         };
@@ -2245,6 +2245,33 @@ fn cherry_pick_message_with_conflicts(message: &str, conflict_paths: &BTreeSet<&
         output.push('\n');
     }
     output
+}
+
+fn cherry_pick_base_parent(
+    parents: &[ObjectId],
+    mainline: Option<usize>,
+) -> Result<Option<ObjectId>> {
+    match (parents.len(), mainline) {
+        (0, None) => Ok(None),
+        (0, Some(_)) => Err(RitError::invalid_input(
+            "mainline was specified but commit is not a merge",
+        )),
+        (1, None) => Ok(Some(parents[0])),
+        (1, Some(_)) => Err(RitError::invalid_input(
+            "mainline was specified but commit is not a merge",
+        )),
+        (_, None) => Err(RitError::invalid_input(
+            "cherry-pick of merge commit requires --mainline",
+        )),
+        (parent_count, Some(mainline)) => {
+            if mainline == 0 || mainline > parent_count {
+                return Err(RitError::invalid_input(format!(
+                    "mainline parent number {mainline} is out of range"
+                )));
+            }
+            Ok(Some(parents[mainline - 1]))
+        }
+    }
 }
 
 fn cleanup_commented_commit_message(message: &str) -> String {

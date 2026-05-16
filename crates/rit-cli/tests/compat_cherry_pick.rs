@@ -123,6 +123,80 @@ fn clean_no_commit_cherry_pick_matches_git_state() {
 }
 
 #[test]
+fn clean_merge_commit_cherry_pick_with_mainline_matches_git_state() {
+    let root = temp_path("mainline");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_merge_commit_cherry_pick(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_pick = run_capture("git", ["cherry-pick", "-m", "1", "merge-topic"], &git_repo);
+    let rit_pick = run_capture(
+        rit_binary(),
+        ["cherry-pick", "-m", "1", "merge-topic"],
+        &rit_repo,
+    );
+
+    assert_eq!(git_pick.exit_code, 0, "git stderr: {}", git_pick.stderr);
+    assert_eq!(rit_pick.exit_code, 0, "rit stderr: {}", rit_pick.stderr);
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture(
+            "git",
+            ["show", "--pretty=format:", "--name-only", "HEAD"],
+            &git_repo
+        )
+        .stdout,
+        run_capture(
+            "git",
+            ["show", "--pretty=format:", "--name-only", "HEAD"],
+            &rit_repo
+        )
+        .stdout
+    );
+    assert_eq!(
+        run_capture(
+            "git",
+            [
+                "show",
+                "--pretty=format:%an <%ae>%n%s",
+                "--no-patch",
+                "HEAD"
+            ],
+            &git_repo,
+        )
+        .stdout,
+        run_capture(
+            "git",
+            [
+                "show",
+                "--pretty=format:%an <%ae>%n%s",
+                "--no-patch",
+                "HEAD"
+            ],
+            &rit_repo,
+        )
+        .stdout
+    );
+    assert_eq!(
+        run_capture(
+            "git",
+            ["rev-list", "--parents", "-n", "1", "HEAD"],
+            &rit_repo
+        )
+        .stdout
+        .split_whitespace()
+        .count(),
+        2
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn conflicting_cherry_pick_writes_git_shaped_state_and_abort_restores_head() {
     let root = temp_path("conflict");
     let git_repo = root.join("git");
@@ -310,6 +384,21 @@ fn setup_conflicting_cherry_pick(repo: &Path) {
     commit_text(repo, "a.txt", "topic\n", "pick me");
     run_git(repo, ["checkout", "--quiet", "master"]);
     commit_text(repo, "a.txt", "head\n", "head");
+}
+
+fn setup_merge_commit_cherry_pick(repo: &Path) {
+    init_repo(repo);
+    commit_text(repo, "base.txt", "base\n", "base");
+    run_git(repo, ["checkout", "--quiet", "-b", "side"]);
+    commit_text(repo, "side.txt", "side\n", "side");
+    run_git(repo, ["checkout", "--quiet", "master"]);
+    commit_text(repo, "main.txt", "main\n", "main");
+    run_git(
+        repo,
+        ["merge", "--no-ff", "--quiet", "side", "-m", "merge side"],
+    );
+    run_git(repo, ["branch", "merge-topic"]);
+    run_git(repo, ["checkout", "--quiet", "-b", "replay", "HEAD~1"]);
 }
 
 fn init_repo(repo: &Path) {
