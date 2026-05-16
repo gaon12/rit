@@ -756,7 +756,7 @@ Completion criteria:
   - [x] Store reversible worktree sidecars for selected worktree-changing
     operations and let `undo` restore pre-operation file contents or missing
     paths.
-- [~] Add journal records for `add`, `restore`, `reset`, `branch`, `tag`,
+- [x] Add journal records for `add`, `restore`, `reset`, `branch`, `tag`,
   `fetch`, and `push` where applicable.
   - [x] Record successful `add`, `restore`, and `reset` operations.
   - [x] Record successful `branch` and `tag` ref operations.
