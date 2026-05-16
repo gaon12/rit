@@ -79,6 +79,8 @@ impl Repository {
         check_pack_index_state(&mut report, &self.common_dir().join("objects").join("pack"));
         check_commit_graph(&mut report, &self.common_dir().join("objects").join("info"));
         check_rit_metadata(&mut report, self);
+        #[cfg(feature = "indexdb")]
+        check_indexdb(&mut report, self);
 
         report
     }
@@ -244,6 +246,42 @@ fn check_rit_metadata(report: &mut DoctorReport, repository: &Repository) {
     }
 }
 
+#[cfg(feature = "indexdb")]
+fn check_indexdb(report: &mut DoctorReport, repository: &Repository) {
+    match repository.indexdb().status() {
+        Ok(status) if !status.exists => ok(
+            report,
+            "indexdb-state",
+            format!(
+                "indexdb is not built at {}; optional acceleration is disabled",
+                status.storage.database_path.display()
+            ),
+        ),
+        Ok(status) if status.healthy && !status.stale => ok(
+            report,
+            "indexdb-state",
+            format!(
+                "indexdb schema version {} is healthy and fresh",
+                status.schema_version.unwrap_or_default()
+            ),
+        ),
+        Ok(status) => warning(
+            report,
+            "indexdb-state",
+            format!(
+                "indexdb needs attention at {}: {}",
+                status.storage.database_path.display(),
+                status.stale_reasons.join("; ")
+            ),
+        ),
+        Err(error) => warning(
+            report,
+            "indexdb-state",
+            format!("could not inspect indexdb: {error}"),
+        ),
+    }
+}
+
 fn count_loose_objects(objects_dir: &Path) -> std::io::Result<usize> {
     let mut count = 0;
     for entry in fs::read_dir(objects_dir)? {
@@ -349,6 +387,22 @@ mod tests {
         assert!(report.has_errors());
         assert!(report.checks.iter().any(|check| {
             check.name == "head-object" && check.severity == DoctorSeverity::Error
+        }));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(feature = "indexdb")]
+    #[test]
+    fn doctor_reports_optional_missing_indexdb() {
+        let root = temp_path("doctor-indexdb-missing");
+        let repository = Repository::init(&InitOptions::new(&root)).expect("repo should init");
+
+        let report = repository.doctor();
+
+        assert!(report.checks.iter().any(|check| {
+            check.name == "indexdb-state"
+                && check.severity == DoctorSeverity::Ok
+                && check.detail.contains("optional acceleration is disabled")
         }));
         let _ = fs::remove_dir_all(root);
     }

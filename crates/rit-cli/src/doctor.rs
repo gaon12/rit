@@ -175,6 +175,7 @@ fn doctor_check_explanation(check: &rit_core::DoctorCheck) -> &'static str {
         "rit-metadata" => {
             "checks rit sidecar metadata without treating it as Git's source of truth"
         }
+        "indexdb-state" => "checks optional SQLite indexdb health without using it as Git truth",
         _ => "checks a repository health rule and reports its current result",
     }
 }

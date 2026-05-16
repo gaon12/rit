@@ -848,6 +848,9 @@
   readability.
 - Added `rit doctor --fix-plan`, a read-only view that combines the doctor
   report with the conservative `Repository::repair_plan` actions.
+- With the `indexdb` feature enabled, `rit doctor` reports optional indexdb
+  presence, schema health, freshness/staleness, and open/read failures without
+  treating indexdb as the repository source of truth.
 - Added conservative `Repository::repair_plan`, `Repository::apply_repair_plan`,
   and `rit repair [--dry-run|--apply]`; the first repair action set only creates
   missing standard Git directories and refuses paths outside the repository.

@@ -700,7 +700,7 @@ Completion criteria:
 - [x] Protected branch policy.
 - [x] `rit doctor`
 - [x] `rit repair`
-- [ ] `rit doctor` checks indexdb state, schema version, staleness, and
+- [x] `rit doctor` checks indexdb state, schema version, staleness, and
   corruption.
 - [ ] `rit repair` can rebuild or drop corrupted indexdb without touching Git
   objects.
