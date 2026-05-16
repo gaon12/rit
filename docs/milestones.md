@@ -497,6 +497,8 @@ Completion criteria:
     cherry-pick slice and clears state.
   - [x] Clean multi-target cherry-pick applies commits in order and records
     the created commit ids.
+  - [x] Clean `-x` cherry-pick appends the original commit id to the created
+    commit message.
   - [ ] Full multi-commit sequencer state across conflicts, multi-target
     `--no-commit`, strategy options, conflict continuation for merge commits,
     and editor/hook parity.

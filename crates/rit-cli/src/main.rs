@@ -2362,6 +2362,7 @@ fn cherry_pick_command(
     let mut continue_pick = false;
     let mut skip = false;
     let mut mainline = None;
+    let mut append_origin = false;
     let mut targets = Vec::new();
     let mut index = 0;
     while index < args.len() {
@@ -2370,6 +2371,8 @@ fn cherry_pick_command(
             commit = false;
         } else if arg == "--commit" {
             commit = true;
+        } else if arg == "-x" {
+            append_origin = true;
         } else if arg == "-m" || arg == "--mainline" {
             index += 1;
             let Some(value) = args.get(index) else {
@@ -2520,7 +2523,11 @@ fn cherry_pick_command(
         None => return Ok(ExitCode::from(128)),
     };
     let before = capture_operation_snapshot(&repository, stderr)?;
-    let options = rit_core::CherryPickOptions { commit, mainline };
+    let options = rit_core::CherryPickOptions {
+        commit,
+        mainline,
+        append_origin,
+    };
     let mut created_objects = Vec::new();
     for target in &targets {
         match repository.cherry_pick_with_options(target, &options) {

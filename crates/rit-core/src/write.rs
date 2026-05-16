@@ -261,6 +261,8 @@ pub struct CherryPickOptions {
     pub commit: bool,
     /// Parent number to use when cherry-picking a merge commit.
     pub mainline: Option<usize>,
+    /// Whether to append the original commit id to the created commit message.
+    pub append_origin: bool,
 }
 
 impl CherryPickOptions {
@@ -275,6 +277,7 @@ impl Default for CherryPickOptions {
         Self {
             commit: true,
             mainline: None,
+            append_origin: false,
         }
     }
 }
@@ -1147,8 +1150,10 @@ impl Repository {
             });
         }
 
+        let commit_message =
+            cherry_pick_commit_message(&picked_commit.message, picked_id, options.append_origin);
         let result = self.commit_index_with_parents(
-            &picked_commit.message,
+            &commit_message,
             &CommitOptions {
                 author: Some(SignatureIdentity {
                     name: picked_commit.author.name,
@@ -2255,6 +2260,18 @@ fn cherry_pick_message_with_conflicts(message: &str, conflict_paths: &BTreeSet<&
         output.push_str(path);
         output.push('\n');
     }
+    output
+}
+
+fn cherry_pick_commit_message(message: &str, picked_id: ObjectId, append_origin: bool) -> String {
+    if !append_origin {
+        return message.to_owned();
+    }
+    let mut output = message.trim_end_matches('\n').to_owned();
+    if !output.is_empty() {
+        output.push_str("\n\n");
+    }
+    output.push_str(&format!("(cherry picked from commit {picked_id})\n"));
     output
 }
 
