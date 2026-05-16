@@ -846,6 +846,8 @@
 - Added read-only doctor maintenance findings for loose object counts,
   pack/index pairing, commit graph availability, and rit metadata journal
   readability.
+- Added `rit doctor --fix-plan`, a read-only view that combines the doctor
+  report with the conservative `Repository::repair_plan` actions.
 - Added conservative `Repository::repair_plan`, `Repository::apply_repair_plan`,
   and `rit repair [--dry-run|--apply]`; the first repair action set only creates
   missing standard Git directories and refuses paths outside the repository.
@@ -859,8 +861,9 @@
 - Baseline command checked: `git version 2.52.0.windows.1`; `git help -a`
   does not list `doctor`, while related Git maintenance commands include
   `git fsck` and `git maintenance`.
-- Supported options: `rit doctor`, `rit doctor --json`, `rit doctor --explain`.
-- Unsupported options: repair actions, full object graph fsck.
+- Supported options: `rit doctor`, `rit doctor --json`, `rit doctor --explain`,
+  and `rit doctor --fix-plan`.
+- Unsupported options: applying repair actions, full object graph fsck.
 - Intentional differences: `doctor` is a rit-specific read-only health summary,
   not a Git porcelain command.
 - Repository mutation: no.

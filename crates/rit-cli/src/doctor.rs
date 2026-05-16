@@ -10,6 +10,7 @@ pub fn doctor_command(
         [] => DoctorOutputMode::Text,
         [flag] if flag == "--json" => DoctorOutputMode::Json,
         [flag] if flag == "--explain" => DoctorOutputMode::Explain,
+        [flag] if flag == "--fix-plan" => DoctorOutputMode::FixPlan,
         [flag, ..] => {
             writeln!(stderr, "rit: unsupported doctor option '{flag}'")?;
             return Ok(ExitCode::from(129));
@@ -28,6 +29,7 @@ pub fn doctor_command(
         DoctorOutputMode::Text => print_report(&report, stdout)?,
         DoctorOutputMode::Json => write_report_json(&report, stdout)?,
         DoctorOutputMode::Explain => print_explained_report(&report, stdout)?,
+        DoctorOutputMode::FixPlan => print_fix_plan_report(&report, &repository, stdout)?,
     }
 
     if report.has_errors() {
@@ -41,6 +43,7 @@ enum DoctorOutputMode {
     Text,
     Json,
     Explain,
+    FixPlan,
 }
 
 fn print_report(report: &rit_core::DoctorReport, stdout: &mut dyn Write) -> io::Result<()> {
@@ -125,6 +128,25 @@ fn write_report_json(report: &rit_core::DoctorReport, stdout: &mut dyn Write) ->
     writeln!(stdout, "}}")
 }
 
+fn print_fix_plan_report(
+    report: &rit_core::DoctorReport,
+    repository: &rit_core::Repository,
+    stdout: &mut dyn Write,
+) -> io::Result<()> {
+    print_report(report, stdout)?;
+    let plan = repository.repair_plan();
+    if plan.is_empty() {
+        writeln!(stdout, "fix-plan: nothing to do")?;
+        return Ok(());
+    }
+
+    writeln!(stdout, "fix-plan: dry-run")?;
+    for action in plan.actions {
+        writeln!(stdout, "would: {}", action.description())?;
+    }
+    Ok(())
+}
+
 fn repository_label(report: &rit_core::DoctorReport) -> &str {
     report.worktree.as_deref().unwrap_or(&report.git_dir)
 }
@@ -173,8 +195,9 @@ fn json_optional_string(value: Option<&str>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{print_explained_report, write_report_json};
-    use rit_core::{DoctorCheck, DoctorReport, DoctorSeverity};
+    use super::{print_explained_report, print_fix_plan_report, write_report_json};
+    use rit_core::{DoctorCheck, DoctorReport, DoctorSeverity, InitOptions, Repository};
+    use std::fs;
 
     #[test]
     fn doctor_json_escapes_paths_and_checks() {
@@ -219,5 +242,31 @@ mod tests {
 
         assert!(text.contains("explain:\n"));
         assert!(text.contains("- git-config: checks whether .git/config exists and can be parsed"));
+    }
+
+    #[test]
+    fn doctor_fix_plan_prints_repair_actions_without_applying() {
+        let root = temp_path("doctor-fix-plan");
+        let repository = Repository::init(&InitOptions::new(&root)).expect("repo should init");
+        let pack_dir = repository.common_dir().join("objects").join("pack");
+        fs::remove_dir_all(&pack_dir).expect("pack dir should be removable");
+        let report = repository.doctor();
+        let mut output = Vec::new();
+
+        print_fix_plan_report(&report, &repository, &mut output)
+            .expect("fix plan should be written");
+        let text = String::from_utf8(output).expect("fix plan should be utf-8");
+
+        assert!(text.contains("fix-plan: dry-run"));
+        assert!(text.contains("would: create directory"));
+        assert!(!pack_dir.exists());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    fn temp_path(name: &str) -> std::path::PathBuf {
+        let suffix = std::process::id();
+        let path = std::env::temp_dir().join(format!("rit-cli-{name}-{suffix}"));
+        let _ = fs::remove_dir_all(&path);
+        path
     }
 }
