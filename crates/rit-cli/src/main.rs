@@ -130,6 +130,11 @@ fn stash_command(
                 return Ok(ExitCode::from(129));
             }
         }
+        [subcommand, rest @ ..] if subcommand == "branch" => {
+            if parse_stash_branch_args(rest, stderr)?.is_none() {
+                return Ok(ExitCode::from(129));
+            }
+        }
         [subcommand, rest @ ..] if subcommand == "apply" => {
             if parse_stash_apply_args(rest, stderr)?.is_none() {
                 return Ok(ExitCode::from(129));
@@ -212,6 +217,26 @@ fn stash_command(
                 Ok(ExitCode::SUCCESS)
             }
             Err(error) => write_command_error(stderr, error),
+        };
+    }
+    if let [subcommand, rest @ ..] = args
+        && subcommand == "branch"
+    {
+        let Some(branch_args) = parse_stash_branch_args(rest, stderr)? else {
+            return Ok(ExitCode::from(129));
+        };
+        return match repository.stash_branch(
+            &branch_args.branch,
+            branch_args.index,
+            branch_args.name.clone(),
+        ) {
+            Ok(result) => {
+                writeln!(stderr, "Switched to a new branch '{}'", branch_args.branch)?;
+                write_stash_human_status(&repository, stdout)?;
+                writeln!(stdout, "Dropped {} ({})", result.name, result.object_id)?;
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_stash_error(stderr, error),
         };
     }
     if let [subcommand, rest @ ..] = args
@@ -420,6 +445,12 @@ struct StashApplyArgs {
     quiet: bool,
 }
 
+struct StashBranchArgs {
+    branch: String,
+    index: usize,
+    name: String,
+}
+
 struct StashSaveArgs {
     message: Option<String>,
     quiet: bool,
@@ -497,6 +528,32 @@ fn parse_stash_save_args(
 
     let message = (!message_parts.is_empty()).then(|| message_parts.join(" "));
     Ok(Some(StashSaveArgs { message, quiet }))
+}
+
+fn parse_stash_branch_args(
+    args: &[String],
+    stderr: &mut dyn Write,
+) -> io::Result<Option<StashBranchArgs>> {
+    let Some(branch) = args.first() else {
+        writeln!(stderr, "rit: stash branch requires a branch name")?;
+        return Ok(None);
+    };
+    if branch.starts_with('-') {
+        writeln!(stderr, "rit: stash branch requires a branch name")?;
+        return Ok(None);
+    }
+    if args.len() > 2 {
+        writeln!(stderr, "rit: stash branch accepts at most one stash")?;
+        return Ok(None);
+    }
+
+    let (index, name) =
+        parse_stash_name(args.get(1).map(String::as_str).unwrap_or("refs/stash@{0}"))?;
+    Ok(Some(StashBranchArgs {
+        branch: branch.to_owned(),
+        index,
+        name,
+    }))
 }
 
 fn parse_stash_apply_args(

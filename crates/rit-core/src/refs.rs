@@ -66,6 +66,19 @@ impl Repository {
         let target = self.resolve_head()?.ok_or_else(|| {
             RitError::invalid_input("cannot create branch because HEAD does not point at a commit")
         })?;
+        self.create_branch_at(name, target)
+    }
+
+    /// Creates a local branch at a specific commit.
+    pub fn create_branch_at(&self, name: &str, target: ObjectId) -> Result<ObjectId> {
+        validate_ref_short_name(name)?;
+        let object = self.read_object(target)?;
+        if object.kind != ObjectKind::Commit {
+            return Err(RitError::invalid_input(format!(
+                "branch target {target} is {}, not commit",
+                object.kind
+            )));
+        }
         let path = self.common_dir().join("refs").join("heads").join(name);
         if path.exists() {
             return Err(RitError::invalid_input(format!(

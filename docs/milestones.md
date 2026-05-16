@@ -573,10 +573,13 @@ Completion criteria:
     drops the selected loose stash entry when `HEAD` matches the stash base.
   - [x] Default `stash apply` and `stash pop` print Git-compatible human status
     summaries for the same clean tracked apply/pop scope.
-  - [ ] `stash branch/export/import`, push pathspecs,
+  - [x] Basic `stash branch <branchname> [<stash>]` creates a branch at the
+    stash base, checks it out, applies the clean tracked stash, and drops the
+    selected loose stash entry on success.
+  - [ ] `stash export/import`, push pathspecs,
     staged/keep-index/untracked modes, untracked/all modes, packed stash ref
     cleanup, `--index`, broader show options, broader error parity, and
-    conflict/cross-branch apply/pop handling.
+    conflict handling for apply/pop/branch.
 - [~] Conflict index stages.
   - [x] Preserve stage 0/1/2/3 in index read, write, sorting, and
     `ls-files --stage` output.

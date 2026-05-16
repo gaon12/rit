@@ -464,6 +464,37 @@ fn stash_pop_default_prints_human_status_and_drop_like_git() {
 }
 
 #[test]
+fn stash_branch_default_matches_git_state_and_output() {
+    let root = temp_path("branch-default");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_stashes(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_branch = run_capture("git", ["stash", "branch", "topic"], &git_repo);
+    let rit_branch = run_capture(rit_binary(), ["stash", "branch", "topic"], &rit_repo);
+
+    assert_eq!(git_branch.exit_code, 0, "git stderr: {}", git_branch.stderr);
+    assert_eq!(rit_branch.exit_code, 0, "rit stderr: {}", rit_branch.stderr);
+    assert_eq!(git_branch.stdout, rit_branch.stdout);
+    assert_eq!(git_branch.stderr, rit_branch.stderr);
+    assert_eq!(
+        run_capture("git", ["branch", "--show-current"], &git_repo).stdout,
+        run_capture(rit_binary(), ["branch", "--show-current"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["stash", "list"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn stash_pop_quiet_older_entry_drops_selected_entry() {
     let root = temp_path("pop-older");
     let git_repo = root.join("git");

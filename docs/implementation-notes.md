@@ -1478,13 +1478,15 @@
   restoration when `HEAD` matches the stash base,
   `rit stash pop [-q|--quiet] [<stash>]` for the same clean tracked
   restoration followed by dropping the selected loose stash entry,
+  `rit stash branch <branchname> [<stash>]` for creating a branch at the
+  stash base and applying the same clean tracked stash scope,
   `rit stash create [<message>]`,
   `rit stash store [(-m|--message) <message>] [-q|--quiet] <commit>`, and
   `rit stash clear` for loose stash refs.
-- Unsupported options: `branch`, `export`, `import`, stash show untracked
-  display options, save `--patch`/`--staged`/untracked modes, push pathspecs,
+- Unsupported options: `export`, `import`, stash show untracked display
+  options, save `--patch`/`--staged`/untracked modes, push pathspecs,
   staged/keep-index/untracked modes, packed stash ref cleanup, `--index`, and
-  stash apply/pop conflict/cross-branch handling.
+  stash apply/pop/branch conflict handling.
 - Git-compatible behavior: `rit stash push` without untracked/pathspec options
   writes the usual two-parent stash shape for tracked changes, stores it in
   loose `refs/stash`, prints Git's saved/no-change messages, and restores the
@@ -1506,6 +1508,9 @@
 - Git-compatible behavior: default `rit stash pop [<stash>]` prints the checked
   Git human status summary before the dropped-entry message for the same clean
   tracked apply scope.
+- Git-compatible behavior: `rit stash branch <branchname> [<stash>]` creates a
+  new branch at the stash base, checks it out, applies the stash using the same
+  clean tracked apply path, and drops the selected loose stash entry on success.
 - Git-compatible behavior: `rit stash list` reads `.git/logs/refs/stash`
   directly, prints newest entries first as `stash@{n}: <reflog message>`, and
   prints nothing when no stash reflog exists.
@@ -1531,6 +1536,9 @@
 - Repository mutation: yes for `stash pop`; it writes/removes tracked worktree
   files, rewrites loose `.git/logs/refs/stash`, and updates loose
   `.git/refs/stash`.
+- Repository mutation: yes for `stash branch`; it creates a loose local branch,
+  updates `HEAD`, writes/removes tracked worktree files, rewrites loose
+  `.git/logs/refs/stash`, and updates loose `.git/refs/stash`.
 - Repository mutation: yes for `stash store`; it writes loose
   `.git/logs/refs/stash` and loose `.git/refs/stash`.
 - Risk: low to moderate; mutations are intentionally limited to loose stash

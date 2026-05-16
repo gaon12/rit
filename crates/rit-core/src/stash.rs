@@ -179,6 +179,24 @@ impl Repository {
         self.stash_drop(display_index, name)
     }
 
+    /// Creates a branch at the selected stash base, applies the stash, then drops it.
+    ///
+    /// This mirrors the currently supported clean tracked apply/pop scope. If
+    /// applying the stash fails, the newly checked out branch is left in place
+    /// and the stash entry is not dropped, matching Git's safety shape.
+    pub fn stash_branch(
+        &self,
+        branch_name: &str,
+        display_index: usize,
+        name: String,
+    ) -> Result<StashDropResult> {
+        let (base_id, _) = self.stash_diff_pair(display_index)?;
+        self.create_branch_at(branch_name, base_id)?;
+        self.checkout_branch(branch_name)?;
+        self.stash_apply(display_index)?;
+        self.stash_drop(display_index, name)
+    }
+
     /// Lists stashes by reading the Git-compatible `refs/stash` reflog.
     pub fn stash_list(&self) -> Result<Vec<StashListEntry>> {
         let mut messages = self
