@@ -14,7 +14,7 @@ drift.
 
 ## Current Baseline
 
-- Date: 2026-05-15
+- Date: 2026-05-17
 - Reference Git: `git version 2.52.0.windows.1`
 - Required recurring checks:
   - `git --version`
@@ -856,11 +856,7 @@ Completion criteria:
 
 1. Continue M8 merge with binary/delete/mode conflict handling,
    abort/continue, and merge-commit workflow planning.
-2. Add indexdb fallback/query APIs for missing, stale, or corrupted auxiliary
-   data.
-3. Add indexdb corruption, stale cache, and external Git reconciliation test
-   plan.
-4. Keep M6 case-sensitivity parity under verification as new path lookup
+2. Keep M6 case-sensitivity parity under verification as new path lookup
    surfaces are added.
 
 ## Implementation Notes
