@@ -702,7 +702,7 @@ Completion criteria:
 - [x] `rit repair`
 - [x] `rit doctor` checks indexdb state, schema version, staleness, and
   corruption.
-- [ ] `rit repair` can rebuild or drop corrupted indexdb without touching Git
+- [x] `rit repair` can rebuild or drop corrupted indexdb without touching Git
   objects.
 
 Completion criteria:

@@ -4287,6 +4287,7 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit repair"));
+        assert!(stdout.contains("--drop-indexdb"));
         assert_eq!(stderr, "");
     }
 
@@ -4297,6 +4298,15 @@ mod tests {
         assert_eq!(code, ExitCode::from(129));
         assert_eq!(stdout, "");
         assert!(stderr.contains("unsupported repair option"));
+    }
+
+    #[test]
+    fn repair_rejects_multiple_modes() {
+        let (code, stdout, stderr) = run_with(&["repair", "--dry-run", "--apply"]);
+
+        assert_eq!(code, ExitCode::from(129));
+        assert_eq!(stdout, "");
+        assert!(stderr.contains("choose only one repair mode"));
     }
 
     #[test]

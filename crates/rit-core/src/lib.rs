@@ -97,7 +97,9 @@ pub use pathspec::{PathspecExplanation, PathspecPatternExplanation, PathspecSet}
 pub use policy::{PolicyConfig, PolicyEnforcement, parse_size_limit};
 pub use policy_check::{PolicyFinding, PolicyFindingKind, PolicySeverity};
 pub use refs::{Branch, Tag};
-pub use repair::{RepairAction, RepairPlan, RepairResult};
+#[cfg(feature = "indexdb")]
+pub use repair::CorruptIndexDbRepair;
+pub use repair::{RepairAction, RepairOptions, RepairPlan, RepairResult};
 pub use repository::{
     InitOptions, LocalCloneOptions, LocalFetchOptions, LocalFetchResult, RemoteFetchOptions,
     RemoteFetchResult, RemotePushOptions, RemotePushResult, Repository,

@@ -286,9 +286,9 @@ Run read-only repository health checks and print text, JSON, explained check res
 ";
 
 const REPAIR_HELP: &str = "\
-rit repair [--dry-run|--apply]
+rit repair [--dry-run|--apply] [--drop-indexdb]
 
-Plan conservative repository repairs. Use --apply to create missing standard Git directories.
+Plan conservative repository repairs. Use --apply to perform them. Corrupted optional indexdb metadata is rebuilt by default; --drop-indexdb leaves it absent instead.
 ";
 
 pub fn print_command_help(

@@ -854,6 +854,10 @@
 - Added conservative `Repository::repair_plan`, `Repository::apply_repair_plan`,
   and `rit repair [--dry-run|--apply]`; the first repair action set only creates
   missing standard Git directories and refuses paths outside the repository.
+- With the `indexdb` feature enabled, `rit repair` plans corrupted indexdb
+  metadata as reproducible sidecar data: default repair rebuilds it from
+  canonical Git data, while `--drop-indexdb` deletes the auxiliary database
+  without touching Git objects, refs, index, or working tree files.
 - Policy defaults warn and do not block writes; blocking requires explicit
   `enforcement = "block"`.
 - Still unsupported: full object graph fsck, automatic ref/object repair, and
@@ -877,14 +881,16 @@
 - Baseline command checked: `git version 2.52.0.windows.1`; `git help -a`
   does not list `repair`, while related Git maintenance commands include
   `git fsck` and `git maintenance`.
-- Supported options: `rit repair`, `rit repair --dry-run`, `rit repair --apply`.
+- Supported options: `rit repair`, `rit repair --dry-run`, `rit repair --apply`,
+  and, with the `indexdb` feature, `rit repair --drop-indexdb`.
 - Unsupported options: object recovery, ref recovery, index repair, config
   rewrite, and JSON output.
 - Intentional differences: `repair` is a rit-specific safety command; it plans
-  by default and only creates missing standard Git directories with `--apply`.
+  by default, creates missing standard Git directories with `--apply`, and only
+  rebuilds or drops reproducible indexdb sidecar metadata when it is corrupted.
 - Repository mutation: only with `--apply`.
-- Risk: medium-low; it creates directories but does not overwrite existing
-  files or refs.
+- Risk: medium-low; it creates directories or replaces/removes optional indexdb
+  metadata but does not overwrite existing Git objects or refs.
 
 ### M14: VFS
 
