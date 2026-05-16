@@ -75,6 +75,12 @@ enum StashCleanupMode {
     KeepIndex,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StashChangeMode {
+    AllTracked,
+    StagedOnly,
+}
+
 impl Repository {
     /// Creates a stash commit for tracked changes without storing it in `refs/stash`.
     ///
@@ -82,7 +88,7 @@ impl Repository {
     /// and clean repositories return `None`.
     pub fn stash_create(&self, message: Option<&str>) -> Result<Option<ObjectId>> {
         Ok(self
-            .create_tracked_stash_commit(message, &PathspecSet::all())?
+            .create_tracked_stash_commit(message, &PathspecSet::all(), StashChangeMode::AllTracked)?
             .map(|created| created.object_id))
     }
 
@@ -113,13 +119,44 @@ impl Repository {
         self.stash_push_with_cleanup(message, pathspecs, StashCleanupMode::KeepIndex)
     }
 
+    /// Saves staged changes matching `pathspecs` and leaves unstaged paths alone.
+    pub fn stash_push_staged_with_pathspecs(
+        &self,
+        message: Option<&str>,
+        pathspecs: &PathspecSet,
+    ) -> Result<StashPushResult> {
+        self.ensure_staged_stash_cleanup_supported(pathspecs)?;
+        self.stash_push_with_mode(
+            message,
+            pathspecs,
+            StashCleanupMode::RestoreHead,
+            StashChangeMode::StagedOnly,
+        )
+    }
+
     fn stash_push_with_cleanup(
         &self,
         message: Option<&str>,
         pathspecs: &PathspecSet,
         cleanup_mode: StashCleanupMode,
     ) -> Result<StashPushResult> {
-        let Some(created) = self.create_tracked_stash_commit(message, pathspecs)? else {
+        self.stash_push_with_mode(
+            message,
+            pathspecs,
+            cleanup_mode,
+            StashChangeMode::AllTracked,
+        )
+    }
+
+    fn stash_push_with_mode(
+        &self,
+        message: Option<&str>,
+        pathspecs: &PathspecSet,
+        cleanup_mode: StashCleanupMode,
+        change_mode: StashChangeMode,
+    ) -> Result<StashPushResult> {
+        let Some(created) = self.create_tracked_stash_commit(message, pathspecs, change_mode)?
+        else {
             return Ok(StashPushResult::NoLocalChanges);
         };
         let head_id = self
@@ -402,11 +439,12 @@ impl Repository {
         &self,
         message: Option<&str>,
         pathspecs: &PathspecSet,
+        change_mode: StashChangeMode,
     ) -> Result<Option<CreatedStashCommit>> {
         let head_id = self
             .resolve_head()?
             .ok_or_else(|| RitError::invalid_input("stash create requires an existing HEAD"))?;
-        let target_paths = self.tracked_stash_target_paths(pathspecs)?;
+        let target_paths = self.tracked_stash_target_paths(pathspecs, change_mode)?;
         if target_paths.is_empty() {
             return Ok(None);
         }
@@ -421,7 +459,12 @@ impl Repository {
             &[head_id],
             &index_commit_message(&stash_message),
         )?;
-        let worktree_index = self.worktree_stash_index(head_id, &index, &target_paths)?;
+        let worktree_index = match change_mode {
+            StashChangeMode::AllTracked => {
+                self.worktree_stash_index(head_id, &index, &target_paths)?
+            }
+            StashChangeMode::StagedOnly => index_snapshot.clone(),
+        };
         let worktree_tree_id = self.write_tree_from_index(&worktree_index)?;
         let stash_id = self.write_stash_commit(
             worktree_tree_id,
@@ -435,19 +478,40 @@ impl Repository {
         }))
     }
 
-    fn tracked_stash_target_paths(&self, pathspecs: &PathspecSet) -> Result<Vec<String>> {
+    fn tracked_stash_target_paths(
+        &self,
+        pathspecs: &PathspecSet,
+        change_mode: StashChangeMode,
+    ) -> Result<Vec<String>> {
         let status = self.status_porcelain_v1_with_pathspecs(pathspecs)?;
         Ok(status
             .entries
             .into_iter()
-            .filter(|entry| {
-                entry.index_status != '?'
-                    && (entry.index_status != ' ' || entry.worktree_status != ' ')
+            .filter(|entry| match change_mode {
+                StashChangeMode::AllTracked => {
+                    entry.index_status != '?'
+                        && (entry.index_status != ' ' || entry.worktree_status != ' ')
+                }
+                StashChangeMode::StagedOnly => {
+                    entry.index_status != '?' && entry.index_status != ' '
+                }
             })
             .map(|entry| entry.path)
             .collect::<BTreeSet<_>>()
             .into_iter()
             .collect())
+    }
+
+    fn ensure_staged_stash_cleanup_supported(&self, pathspecs: &PathspecSet) -> Result<()> {
+        let status = self.status_porcelain_v1_with_pathspecs(pathspecs)?;
+        if status.entries.iter().any(|entry| {
+            entry.index_status != '?' && entry.index_status != ' ' && entry.worktree_status != ' '
+        }) {
+            return Err(RitError::invalid_input(
+                "stash push --staged currently requires selected staged paths to have no unstaged worktree changes",
+            ));
+        }
+        Ok(())
     }
 
     fn selected_index_stash_index(

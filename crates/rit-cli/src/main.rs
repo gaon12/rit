@@ -288,7 +288,9 @@ fn stash_command(
             Ok(pathspecs) => pathspecs,
             Err(error) => return write_command_error(stderr, error),
         };
-        let result = if push_args.keep_index {
+        let result = if push_args.staged {
+            repository.stash_push_staged_with_pathspecs(push_args.message.as_deref(), &pathspecs)
+        } else if push_args.keep_index {
             repository
                 .stash_push_keep_index_with_pathspecs(push_args.message.as_deref(), &pathspecs)
         } else {
@@ -476,6 +478,7 @@ struct StashPushArgs {
     message: Option<String>,
     quiet: bool,
     keep_index: bool,
+    staged: bool,
     pathspecs: Vec<String>,
 }
 
@@ -491,6 +494,7 @@ fn parse_stash_push_args(
             "-q" | "--quiet" => parsed.quiet = true,
             "-k" | "--keep-index" => parsed.keep_index = true,
             "--no-keep-index" => parsed.keep_index = false,
+            "-S" | "--staged" => parsed.staged = true,
             "-m" | "--message" => {
                 index += 1;
                 let Some(value) = args.get(index) else {
