@@ -575,6 +575,8 @@ Completion criteria:
   - [x] Basic `stash push --staged` records selected staged changes while
     leaving unrelated unstaged worktree changes in place for non-overlapping
     paths.
+  - [x] Basic `stash push --include-untracked` records untracked files in the
+    third stash parent and removes those files from the working tree.
   - [x] Basic legacy `stash save [-q] [<message>]` uses the same tracked-change
     stash shape as push and matches Git's saved/no-change output.
   - [x] `rit stash create [<message>]` creates the same tracked-change stash
@@ -589,9 +591,10 @@ Completion criteria:
     stash base, checks it out, applies the clean tracked stash, and drops the
     selected loose stash entry on success.
   - [ ] `stash export/import`,
-    untracked/all modes, packed stash ref cleanup, same-path staged+unstaged
-    `--staged` cleanup failure parity, `--index`, broader show options,
-    broader error parity, and conflict handling for apply/pop/branch.
+    `--all` ignored-file mode, packed stash ref cleanup, same-path
+    staged+unstaged `--staged` cleanup failure parity, `--index`, untracked
+    apply/pop restoration, broader show options, broader error parity, and
+    conflict handling for apply/pop/branch.
 - [~] Conflict index stages.
   - [x] Preserve stage 0/1/2/3 in index read, write, sorting, and
     `ls-files --stage` output.

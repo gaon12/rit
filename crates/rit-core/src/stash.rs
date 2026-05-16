@@ -9,7 +9,7 @@ use crate::index::{Index, IndexEntry, IndexEntryStat, join_slash_path};
 use crate::write::write_worktree_entry_atomically;
 use crate::{
     DiffPatch, DiffSummary, GitConfig, ObjectId, ObjectKind, PathspecSet, Repository, Result,
-    RitError, Signature, parse_commit,
+    RitError, Signature, StatusOptions, UntrackedFilesMode, parse_commit,
 };
 
 const ZERO_OBJECT_ID: &str = "0000000000000000000000000000000000000000";
@@ -67,6 +67,7 @@ struct CreatedStashCommit {
     object_id: ObjectId,
     message: String,
     paths: Vec<String>,
+    untracked_paths: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -88,7 +89,12 @@ impl Repository {
     /// and clean repositories return `None`.
     pub fn stash_create(&self, message: Option<&str>) -> Result<Option<ObjectId>> {
         Ok(self
-            .create_tracked_stash_commit(message, &PathspecSet::all(), StashChangeMode::AllTracked)?
+            .create_tracked_stash_commit(
+                message,
+                &PathspecSet::all(),
+                StashChangeMode::AllTracked,
+                false,
+            )?
             .map(|created| created.object_id))
     }
 
@@ -131,6 +137,22 @@ impl Repository {
             pathspecs,
             StashCleanupMode::RestoreHead,
             StashChangeMode::StagedOnly,
+            false,
+        )
+    }
+
+    /// Saves tracked and untracked changes matching `pathspecs`.
+    pub fn stash_push_include_untracked_with_pathspecs(
+        &self,
+        message: Option<&str>,
+        pathspecs: &PathspecSet,
+    ) -> Result<StashPushResult> {
+        self.stash_push_with_mode(
+            message,
+            pathspecs,
+            StashCleanupMode::RestoreHead,
+            StashChangeMode::AllTracked,
+            true,
         )
     }
 
@@ -145,6 +167,7 @@ impl Repository {
             pathspecs,
             cleanup_mode,
             StashChangeMode::AllTracked,
+            false,
         )
     }
 
@@ -154,8 +177,10 @@ impl Repository {
         pathspecs: &PathspecSet,
         cleanup_mode: StashCleanupMode,
         change_mode: StashChangeMode,
+        include_untracked: bool,
     ) -> Result<StashPushResult> {
-        let Some(created) = self.create_tracked_stash_commit(message, pathspecs, change_mode)?
+        let Some(created) =
+            self.create_tracked_stash_commit(message, pathspecs, change_mode, include_untracked)?
         else {
             return Ok(StashPushResult::NoLocalChanges);
         };
@@ -174,6 +199,7 @@ impl Repository {
         } else {
             self.restore_stash_paths_to_head(head_id, &created.paths)?;
         }
+        self.remove_stashed_untracked_paths(&created.untracked_paths)?;
         Ok(StashPushResult::Saved {
             object_id: created.object_id,
             message: created.message,
@@ -440,12 +466,18 @@ impl Repository {
         message: Option<&str>,
         pathspecs: &PathspecSet,
         change_mode: StashChangeMode,
+        include_untracked: bool,
     ) -> Result<Option<CreatedStashCommit>> {
         let head_id = self
             .resolve_head()?
             .ok_or_else(|| RitError::invalid_input("stash create requires an existing HEAD"))?;
         let target_paths = self.tracked_stash_target_paths(pathspecs, change_mode)?;
-        if target_paths.is_empty() {
+        let untracked_paths = if include_untracked {
+            self.untracked_stash_paths(pathspecs)?
+        } else {
+            Vec::new()
+        };
+        if target_paths.is_empty() && untracked_paths.is_empty() {
             return Ok(None);
         }
 
@@ -466,15 +498,23 @@ impl Repository {
             StashChangeMode::StagedOnly => index_snapshot.clone(),
         };
         let worktree_tree_id = self.write_tree_from_index(&worktree_index)?;
-        let stash_id = self.write_stash_commit(
-            worktree_tree_id,
-            &[head_id, index_commit_id],
-            &stash_message,
-        )?;
+        let mut parents = vec![head_id, index_commit_id];
+        if !untracked_paths.is_empty() {
+            let untracked_index = self.untracked_stash_index(&untracked_paths)?;
+            let untracked_tree_id = self.write_tree_from_index(&untracked_index)?;
+            let untracked_commit_id = self.write_stash_commit(
+                untracked_tree_id,
+                &[],
+                &self.untracked_commit_message(head_id)?,
+            )?;
+            parents.push(untracked_commit_id);
+        }
+        let stash_id = self.write_stash_commit(worktree_tree_id, &parents, &stash_message)?;
         Ok(Some(CreatedStashCommit {
             object_id: stash_id,
             message: stash_message,
             paths: target_paths,
+            untracked_paths,
         }))
     }
 
@@ -512,6 +552,62 @@ impl Repository {
             ));
         }
         Ok(())
+    }
+
+    fn untracked_stash_paths(&self, pathspecs: &PathspecSet) -> Result<Vec<String>> {
+        let status = self.status_porcelain_v1_with_options(
+            pathspecs,
+            StatusOptions {
+                untracked_files: UntrackedFilesMode::All,
+                include_branch_header: false,
+                include_ignored: false,
+            },
+        )?;
+        Ok(status
+            .entries
+            .into_iter()
+            .filter(|entry| entry.index_status == '?' && entry.worktree_status == '?')
+            .map(|entry| entry.path)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect())
+    }
+
+    fn untracked_stash_index(&self, untracked_paths: &[String]) -> Result<Index> {
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "stash push must be run in a repository with a working tree",
+            ));
+        };
+        let symlinks_enabled = self.core_symlinks_enabled()?;
+        let mut entries = Vec::new();
+        for path in untracked_paths {
+            let full_path = join_slash_path(worktree, path);
+            let metadata = fs::symlink_metadata(&full_path)
+                .map_err(|source| RitError::io(&full_path, source))?;
+            let is_symlink = metadata.file_type().is_symlink();
+            let store_symlink = is_symlink && symlinks_enabled;
+            let data = if store_symlink {
+                read_symlink_target_bytes(&full_path)?
+            } else {
+                fs::read(&full_path).map_err(|source| RitError::io(&full_path, source))?
+            };
+            let mode = if store_symlink { 0o120000 } else { 0o100644 };
+            let object_id = self.loose_objects().write_object(ObjectKind::Blob, &data)?;
+            entries.push(IndexEntry {
+                stat: IndexEntryStat::from_metadata(&metadata),
+                mode,
+                object_id,
+                stage: 0,
+                extended_flags: 0,
+                file_size: data.len().min(u32::MAX as usize) as u32,
+                path: path.clone(),
+            });
+        }
+        Ok(Index {
+            entries,
+            extensions: Vec::new(),
+        })
     }
 
     fn selected_index_stash_index(
@@ -624,6 +720,18 @@ impl Repository {
         self.restore_stash_paths_to_index(&head_index, target_paths)
     }
 
+    fn remove_stashed_untracked_paths(&self, untracked_paths: &[String]) -> Result<()> {
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "stash push must be run in a repository with a working tree",
+            ));
+        };
+        for path in untracked_paths {
+            remove_file_if_exists(&join_slash_path(worktree, path))?;
+        }
+        Ok(())
+    }
+
     fn restore_stash_paths_to_index(
         &self,
         source_index: &Index,
@@ -680,13 +788,23 @@ impl Repository {
     }
 
     fn stash_push_message(&self, head_id: ObjectId, message: Option<&str>) -> Result<String> {
-        let branch = self
-            .current_branch_name()?
-            .unwrap_or_else(|| "(no branch)".to_owned());
+        let (branch, short_id, subject) = self.head_message_parts(head_id)?;
         if let Some(message) = message {
             return Ok(format!("On {branch}: {message}"));
         }
 
+        Ok(format!("WIP on {branch}: {short_id} {subject}"))
+    }
+
+    fn untracked_commit_message(&self, head_id: ObjectId) -> Result<String> {
+        let (branch, short_id, subject) = self.head_message_parts(head_id)?;
+        Ok(format!("untracked files on {branch}: {short_id} {subject}"))
+    }
+
+    fn head_message_parts(&self, head_id: ObjectId) -> Result<(String, String, String)> {
+        let branch = self
+            .current_branch_name()?
+            .unwrap_or_else(|| "(no branch)".to_owned());
         let object = self.read_object(head_id)?;
         if object.kind != ObjectKind::Commit {
             return Err(RitError::invalid_input(format!(
@@ -696,7 +814,7 @@ impl Repository {
         }
         let commit = parse_commit(&object.data)?;
         let subject = commit.message.lines().next().unwrap_or("");
-        Ok(format!("WIP on {branch}: {} {subject}", short_id(head_id)))
+        Ok((branch, short_id(head_id), subject.to_owned()))
     }
 
     fn write_stash_commit(

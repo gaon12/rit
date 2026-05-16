@@ -1468,7 +1468,7 @@
 
 - Baseline command checked: `git stash -h`
 - Supported options: `rit stash list`,
-  `rit stash [push [(-m|--message) <message>] [-S|--staged] [-k|--keep-index] [-q|--quiet] [--pathspec-from-file <file>] [--pathspec-file-nul] [--] [<pathspec>...]]`
+  `rit stash [push [(-m|--message) <message>] [-S|--staged] [-k|--keep-index] [-u|--include-untracked] [-q|--quiet] [--pathspec-from-file <file>] [--pathspec-file-nul] [--] [<pathspec>...]]`
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [<message>]` as the legacy tracked-change save
   form,
@@ -1485,8 +1485,8 @@
   `rit stash clear` for loose stash refs.
 - Unsupported options: `export`, `import`, stash show untracked display
   options, save `--patch`/`--staged`/`--keep-index`/untracked modes, push
-  untracked modes, packed stash ref cleanup, `--index`, and stash
-  apply/pop/branch conflict handling.
+  `--all` ignored-file mode, packed stash ref cleanup, `--index`, untracked
+  apply/pop restoration, and stash apply/pop/branch conflict handling.
 - Git-compatible behavior: `rit stash push` without untracked/pathspec options
   writes the usual two-parent stash shape for tracked changes, stores it in
   loose `refs/stash`, prints Git's saved/no-change messages, and restores the
@@ -1505,6 +1505,10 @@
   changes only and restores those paths to `HEAD`, leaving unrelated unstaged
   worktree changes in place for the checked non-overlapping path scope. Same
   path staged+unstaged cleanup failure parity remains unsupported.
+- Git-compatible behavior: `rit stash push --include-untracked` records
+  untracked files in the third stash parent, removes those files from the
+  working tree, and leaves default `stash show` focused on tracked changes for
+  the checked non-ignored untracked file scope.
 - Git-compatible behavior: `rit stash save [-q] [<message>]` follows the same
   tracked-change implementation as push, accepts a legacy positional message,
   and matches Git's saved/no-change output for the checked scope.

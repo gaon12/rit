@@ -335,6 +335,88 @@ fn stash_push_nul_pathspec_from_file_matches_git() {
 }
 
 #[test]
+fn stash_push_include_untracked_stores_third_parent_like_git() {
+    let root = temp_path("push-include-untracked");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    fs::write(repo_file(&git_repo, "tracked.txt"), "tracked change\n")
+        .expect("git tracked change should write");
+    fs::write(repo_file(&rit_repo, "tracked.txt"), "tracked change\n")
+        .expect("rit tracked change should write");
+    fs::write(repo_file(&git_repo, "new.txt"), "new\n").expect("git untracked should write");
+    fs::write(repo_file(&rit_repo, "new.txt"), "new\n").expect("rit untracked should write");
+    fs::create_dir_all(repo_file(&git_repo, "dir")).expect("git untracked dir should create");
+    fs::create_dir_all(repo_file(&rit_repo, "dir")).expect("rit untracked dir should create");
+    fs::write(repo_file(&git_repo, "dir/nested.txt"), "nested\n")
+        .expect("git nested untracked should write");
+    fs::write(repo_file(&rit_repo, "dir/nested.txt"), "nested\n")
+        .expect("rit nested untracked should write");
+
+    let git_push = run_capture(
+        "git",
+        [
+            "stash",
+            "push",
+            "--include-untracked",
+            "-m",
+            "with untracked",
+        ],
+        &git_repo,
+    );
+    let rit_push = run_capture(
+        rit_binary(),
+        [
+            "stash",
+            "push",
+            "--include-untracked",
+            "-m",
+            "with untracked",
+        ],
+        &rit_repo,
+    );
+
+    assert_eq!(git_push.exit_code, 0, "git stderr: {}", git_push.stderr);
+    assert_eq!(rit_push.exit_code, 0, "rit stderr: {}", rit_push.stderr);
+    assert_eq!(git_push.stdout, rit_push.stdout);
+    assert_eq!(git_push.stderr, rit_push.stderr);
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1", "-uall"], &git_repo).stdout,
+        run_capture(
+            rit_binary(),
+            ["status", "--porcelain=v1", "-uall"],
+            &rit_repo
+        )
+        .stdout
+    );
+    assert_eq!(
+        run_capture("git", ["stash", "show", "--name-status"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "show", "--name-status"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture(
+            "git",
+            ["ls-tree", "-r", "--name-only", "refs/stash^3"],
+            &git_repo
+        )
+        .stdout,
+        run_capture(
+            "git",
+            ["ls-tree", "-r", "--name-only", "refs/stash^3"],
+            &rit_repo
+        )
+        .stdout
+    );
+    assert_eq!(
+        run_capture("git", ["stash", "list"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn stash_push_keep_index_keeps_staged_state_like_git() {
     let root = temp_path("push-keep-index");
     let git_repo = root.join("git");
