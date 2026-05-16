@@ -59,6 +59,7 @@ fn run(
         [command, rest @ ..] if command == "checkout" => checkout_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "switch" => switch_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "merge" => merge_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "rebase" => rebase_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "cherry-pick" => {
             cherry_pick_command(rest, stdout, stderr)
         }
@@ -2649,6 +2650,43 @@ fn merge_command(
     }
 }
 
+fn rebase_command(
+    args: &[String],
+    _stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    match args {
+        [flag] if flag == "--quit" => {}
+        [] => {
+            writeln!(stderr, "rit: rebase currently supports only --quit")?;
+            return Ok(ExitCode::from(129));
+        }
+        [unsupported, ..] => {
+            writeln!(stderr, "rit: unsupported rebase option '{unsupported}'")?;
+            return Ok(ExitCode::from(129));
+        }
+    }
+
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    match repository.quit_rebase() {
+        Ok(()) => Ok(ExitCode::SUCCESS),
+        Err(error) => write_rebase_error(stderr, error),
+    }
+}
+
+fn write_rebase_error(stderr: &mut dyn Write, error: rit_core::RitError) -> io::Result<ExitCode> {
+    if let rit_core::RitError::InvalidInput { message } = &error
+        && message == "no rebase in progress"
+    {
+        writeln!(stderr, "fatal: no rebase in progress")?;
+        return Ok(ExitCode::from(128));
+    }
+    write_command_error(stderr, error)
+}
+
 fn cherry_pick_command(
     args: &[String],
     stdout: &mut dyn Write,
@@ -3952,6 +3990,15 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit cherry-pick"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn rebase_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "rebase"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit rebase --quit"));
         assert_eq!(stderr, "");
     }
 

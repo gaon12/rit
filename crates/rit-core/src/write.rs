@@ -1461,6 +1461,18 @@ impl Repository {
         remove_file_if_exists(&self.git_dir().join("MERGE_MODE"))
     }
 
+    /// Forgets an in-progress rebase while leaving HEAD, the index, and worktree alone.
+    pub fn quit_rebase(&self) -> Result<()> {
+        let state = self.merge_state()?;
+        if state.rebase_apply.is_none() && state.rebase_merge.is_none() {
+            return Err(RitError::invalid_input("no rebase in progress"));
+        }
+        remove_dir_if_exists(&self.git_dir().join("rebase-apply"))?;
+        remove_dir_if_exists(&self.git_dir().join("rebase-merge"))?;
+        self.refresh_indexdb_after_git_write();
+        Ok(())
+    }
+
     /// Commits a resolved in-progress merge.
     pub fn continue_merge(&self, options: &CommitOptions) -> Result<CommitResult> {
         let state = self.merge_state()?;
@@ -2404,6 +2416,14 @@ fn cleanup_commented_commit_message(message: &str) -> String {
 
 fn remove_file_if_exists(path: &Path) -> Result<()> {
     match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(source) => Err(RitError::io(path, source)),
+    }
+}
+
+fn remove_dir_if_exists(path: &Path) -> Result<()> {
+    match fs::remove_dir_all(path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(source) => Err(RitError::io(path, source)),

@@ -29,6 +29,7 @@ Core commands:
   checkout      Switch branches
   switch        Switch branches
   merge         Merge a branch or revision into the current branch
+  rebase        Manage an in-progress rebase
   cherry-pick   Apply one clean commit onto HEAD
   stash         List saved working tree states
   auth          Explain remote authentication selection
@@ -196,6 +197,12 @@ rit cherry-pick --quit
 Apply one non-merge commit onto the current HEAD, or manage an in-progress conflicted cherry-pick.
 ";
 
+const REBASE_HELP: &str = "\
+rit rebase --quit
+
+Clear Git-compatible rebase state while leaving HEAD, the index, and working tree unchanged.
+";
+
 const STASH_HELP: &str = "\
 rit stash list
 rit stash show [-p|--patch|--stat|--name-only|--name-status|--numstat] [<stash>]
@@ -306,6 +313,7 @@ pub fn print_command_help(
         "checkout" => stdout.write_all(CHECKOUT_HELP.as_bytes())?,
         "switch" => stdout.write_all(SWITCH_HELP.as_bytes())?,
         "merge" => stdout.write_all(MERGE_HELP.as_bytes())?,
+        "rebase" => stdout.write_all(REBASE_HELP.as_bytes())?,
         "cherry-pick" => stdout.write_all(CHERRY_PICK_HELP.as_bytes())?,
         "stash" => stdout.write_all(STASH_HELP.as_bytes())?,
         "auth" => stdout.write_all(AUTH_HELP.as_bytes())?,

@@ -508,7 +508,11 @@ Completion criteria:
   - [ ] Full multi-commit sequencer state across conflicts, multi-target
     conflict continuation, strategy options, conflict continuation for merge
     commits, and editor/hook parity.
-- [ ] `rit rebase`
+- [~] `rit rebase`
+  - [x] `rit rebase --quit` removes Git-compatible `rebase-apply` and
+    `rebase-merge` state while preserving HEAD, index, and worktree.
+  - [ ] Rebase start, continue, abort, skip, todo editing, autostash, hooks,
+    apply/merge backends, and strategy options.
 - [~] `rit stash`
   - [x] `rit stash list` reads the Git-compatible `refs/stash` reflog and
     prints entries in newest-first order.

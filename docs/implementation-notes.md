@@ -1367,6 +1367,22 @@
 - Risk: moderate; this first slice requires a clean worktree and writes only
   single-commit cherry-pick state.
 
+### `rit rebase`
+
+- Baseline command checked: `git rebase -h`
+- Supported options: `rit rebase --quit`
+- Unsupported options: rebase start, `--continue`, `--abort`, `--skip`,
+  `--edit-todo`, `--show-current-patch`, interactive mode, autostash,
+  apply/merge backend selection, hooks, strategy options, and todo editing.
+- Git-compatible behavior: `rit rebase --quit` removes `.git/rebase-apply`
+  and `.git/rebase-merge` state without changing `HEAD`, the index, or the
+  working tree. When no rebase state exists it prints `fatal: no rebase in
+  progress` and exits 128.
+- Repository mutation: yes for `--quit`; only rebase state directories are
+  removed.
+- Risk: low; this first slice is state cleanup only and does not replay
+  commits.
+
 ### `rit stash`
 
 - Baseline command checked: `git stash -h`
