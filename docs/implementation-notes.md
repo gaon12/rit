@@ -1371,12 +1371,13 @@
 
 - Baseline command checked: `git rebase -h`
 - Supported options: `rit rebase <upstream>` for already up-to-date branches,
-  fast-forward rebases, and clean linear commit replay,
+  fast-forward rebases, clean linear commit replay, and final replay conflicts,
   `rit rebase --abort`, `rit rebase --continue`,
   `rit rebase --show-current-patch`, `rit rebase --skip`, `rit rebase --quit`
-- Unsupported options: replay conflicts, multi-step `--continue`/`--skip`
-  after conflicts, `--edit-todo`, interactive mode, autostash, apply/merge
-  backend selection, hooks, strategy options, and todo editing.
+- Unsupported options: replay conflicts with remaining todo entries,
+  multi-step `--continue`/`--skip` after conflicts, `--edit-todo`,
+  interactive mode, autostash, apply/merge backend selection, hooks, strategy
+  options, and todo editing.
 - Git-compatible behavior: `rit rebase <upstream>` resolves a local branch or
   revision. When that upstream is already an ancestor of `HEAD`, it prints
   Git's up-to-date message without mutating the repository. When `HEAD` is an
@@ -1384,8 +1385,12 @@
   branch or detached `HEAD`, and prints Git's success message. For clean linear
   commits, it applies each commit's tree changes onto upstream in order, writes
   new commits with the original authors/messages, updates the current branch,
-  and prints Git-shaped rebase progress and success messages. `rit rebase
-  --abort` reads `orig-head` and `head-name`,
+  and prints Git-shaped rebase progress and success messages. If the final
+  replayed commit conflicts, it leaves `HEAD` detached at the current rebased
+  base, preserves the original branch ref, writes Git-compatible unmerged index
+  stages, worktree conflict markers, `REBASE_HEAD`, `MERGE_MSG`, and
+  `.git/rebase-merge` metadata, then prints Git-shaped conflict output and
+  advice. `rit rebase --abort` reads `orig-head` and `head-name`,
   restores the original branch, index, and working tree, then removes
   `.git/rebase-apply`,
   `.git/rebase-merge`, `REBASE_HEAD`, `MERGE_MSG`, and `AUTO_MERGE`.

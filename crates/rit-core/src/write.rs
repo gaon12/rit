@@ -319,9 +319,36 @@ struct ConflictedCherryPickStart<'a> {
     conflict_stages: &'a [MergeConflictStagePlan],
 }
 
+struct ConflictedRebaseStart<'a> {
+    target_label: &'a str,
+    picked_id: ObjectId,
+    original_head: ObjectId,
+    onto_id: ObjectId,
+    head_name: Option<&'a str>,
+    current_step: usize,
+    total_steps: usize,
+    message: &'a str,
+    commit: &'a Commit,
+    base_entries: &'a [IndexEntry],
+    head_entries: &'a [IndexEntry],
+    picked_entries: &'a [IndexEntry],
+    conflict_stages: &'a [MergeConflictStagePlan],
+}
+
 struct RebaseReplayStep {
     commit: Commit,
     merged_entries: Vec<IndexEntry>,
+}
+
+struct RebaseReplayConflict {
+    commit_id: ObjectId,
+    commit: Commit,
+    base_entries: Vec<IndexEntry>,
+    picked_entries: Vec<IndexEntry>,
+    conflict_stages: Vec<MergeConflictStagePlan>,
+    conflict_reports: Vec<MergeConflictReport>,
+    current_step: usize,
+    total_steps: usize,
 }
 
 /// Options that affect commit metadata without changing the committed tree.
@@ -510,6 +537,12 @@ pub struct RebaseStartResult {
     pub fast_forwarded: bool,
     /// Number of commits replayed onto the upstream.
     pub replayed_count: usize,
+    /// Commit currently stopped by conflicts, when rebase could not finish.
+    pub stopped_commit_id: Option<ObjectId>,
+    /// First line of the stopped commit message, when rebase stopped.
+    pub stopped_message_summary: Option<String>,
+    /// Structured conflict output for porcelain formatting.
+    pub conflict_reports: Vec<MergeConflictReport>,
 }
 
 impl Repository {
@@ -1358,6 +1391,107 @@ impl Repository {
         )
     }
 
+    fn start_conflicted_rebase(&self, input: ConflictedRebaseStart<'_>) -> Result<()> {
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "rebase must be run in a repository with a working tree",
+            ));
+        };
+        let symlinks_enabled = self.core_symlinks_enabled()?;
+        let merged_entries = self.non_fast_forward_merge_index_entries(
+            input.base_entries,
+            input.head_entries,
+            input.picked_entries,
+            input.conflict_stages,
+            input.target_label,
+        )?;
+        let conflict_paths = input
+            .conflict_stages
+            .iter()
+            .map(|stage| stage.path.as_str())
+            .collect::<BTreeSet<_>>();
+        write_non_conflicting_merge_worktree_changes(
+            self,
+            worktree,
+            input.head_entries,
+            &merged_entries,
+            &conflict_paths,
+            symlinks_enabled,
+        )?;
+        write_conflict_markers(
+            self,
+            worktree,
+            input.conflict_stages,
+            input.target_label,
+            symlinks_enabled,
+        )?;
+
+        Index {
+            entries: merged_entries,
+            extensions: Vec::new(),
+        }
+        .write(&self.git_dir().join("index"))?;
+
+        let message = cherry_pick_message_with_conflicts(input.message, &conflict_paths);
+        write_text_atomically(
+            &self.git_dir().join("ORIG_HEAD"),
+            &format!("{}\n", input.original_head),
+        )?;
+        write_text_atomically(
+            &self.git_dir().join("REBASE_HEAD"),
+            &format!("{}\n", input.picked_id),
+        )?;
+        write_text_atomically(&self.git_dir().join("MERGE_MSG"), &message)?;
+
+        let rebase_dir = self.git_dir().join("rebase-merge");
+        remove_dir_if_exists(&rebase_dir)?;
+        fs::create_dir_all(&rebase_dir).map_err(|source| RitError::io(&rebase_dir, source))?;
+        write_text_atomically(
+            &rebase_dir.join("head-name"),
+            &format!("{}\n", input.head_name.unwrap_or("detached HEAD")),
+        )?;
+        write_text_atomically(&rebase_dir.join("onto"), &format!("{}\n", input.onto_id))?;
+        write_text_atomically(
+            &rebase_dir.join("orig-head"),
+            &format!("{}\n", input.original_head),
+        )?;
+        write_text_atomically(
+            &rebase_dir.join("msgnum"),
+            &format!("{}\n", input.current_step),
+        )?;
+        write_text_atomically(&rebase_dir.join("end"), &format!("{}\n", input.total_steps))?;
+        write_text_atomically(
+            &rebase_dir.join("stopped-sha"),
+            &format!("{}\n", input.picked_id),
+        )?;
+        write_text_atomically(&rebase_dir.join("message"), &message)?;
+        write_text_atomically(&rebase_dir.join("git-rebase-todo"), "")?;
+        write_text_atomically(
+            &rebase_dir.join("done"),
+            &format!(
+                "pick {} {}\n",
+                input.picked_id,
+                rebase_todo_subject(input.message)
+            ),
+        )?;
+        write_text_atomically(
+            &rebase_dir.join("author-script"),
+            &rebase_author_script(input.commit),
+        )?;
+        let parent_id = *input
+            .commit
+            .parents
+            .first()
+            .ok_or_else(|| RitError::invalid_input("rebase commit has no parent"))?;
+        let patch = self
+            .diff_commits_patch_with_pathspecs(parent_id, input.picked_id, &PathspecSet::all())?
+            .to_patch_text()?;
+        write_text_atomically(&rebase_dir.join("patch"), &patch)?;
+        write_text_atomically(&rebase_dir.join("interactive"), "")?;
+        write_text_atomically(&rebase_dir.join("no-reschedule-failed-exec"), "")?;
+        write_text_atomically(&rebase_dir.join("drop_redundant_commits"), "")
+    }
+
     /// Aborts an in-progress cherry-pick and restores the tree saved in `ORIG_HEAD`.
     pub fn abort_cherry_pick(&self) -> Result<ObjectId> {
         self.restore_cherry_pick_original_head("abort")
@@ -1545,6 +1679,9 @@ impl Repository {
                 branch_name,
                 fast_forwarded: false,
                 replayed_count: 0,
+                stopped_commit_id: None,
+                stopped_message_summary: None,
+                conflict_reports: Vec::new(),
             });
         }
         if self.commit_is_ancestor(head_id, upstream_id)? {
@@ -1560,6 +1697,9 @@ impl Repository {
                 branch_name,
                 fast_forwarded: true,
                 replayed_count: 0,
+                stopped_commit_id: None,
+                stopped_message_summary: None,
+                conflict_reports: Vec::new(),
             });
         }
 
@@ -1569,10 +1709,12 @@ impl Repository {
             ));
         };
         let replay_commit_ids = self.first_parent_commits_since(head_id, merge_base)?;
+        let total_steps = replay_commit_ids.len();
         let mut replay_steps = Vec::new();
+        let mut replay_conflict = None;
         let mut expected_parent = merge_base;
         let mut current_entries = self.commit_index_entries(upstream_id)?;
-        for picked_id in replay_commit_ids {
+        for (step_index, picked_id) in replay_commit_ids.into_iter().enumerate() {
             let picked_object = self.read_object(picked_id)?;
             if picked_object.kind != ObjectKind::Commit {
                 return Err(RitError::invalid_input(format!(
@@ -1599,9 +1741,23 @@ impl Repository {
                 &picked_entries,
             );
             if !plan.conflict_stages.is_empty() {
-                return Err(RitError::invalid_input(
-                    "rebase start with conflicts is not implemented",
-                ));
+                if step_index + 1 < total_steps {
+                    return Err(RitError::invalid_input(
+                        "rebase conflict with remaining commits is not implemented",
+                    ));
+                }
+                let conflict_reports = self.merge_conflict_reports(&plan.conflict_stages)?;
+                replay_conflict = Some(RebaseReplayConflict {
+                    commit_id: picked_id,
+                    commit: picked_commit,
+                    base_entries,
+                    picked_entries,
+                    conflict_stages: plan.conflict_stages,
+                    conflict_reports,
+                    current_step: step_index + 1,
+                    total_steps,
+                });
+                break;
             }
             let merged_entries = self.non_fast_forward_merge_index_entries(
                 &base_entries,
@@ -1626,7 +1782,10 @@ impl Repository {
         ensure_clean_for_checkout(self)?;
         write_text_atomically(&self.git_dir().join("ORIG_HEAD"), &format!("{head_id}\n"))?;
         self.checkout_commit_tree(upstream_id)?;
-        self.update_head(upstream_id)?;
+        write_text_atomically(&self.git_dir().join("HEAD"), &format!("{upstream_id}\n"))?;
+        let rebase_head_name = branch_name
+            .as_ref()
+            .map(|branch_name| format!("refs/heads/{branch_name}"));
         let symlinks_enabled = self.core_symlinks_enabled()?;
         let conflict_paths = BTreeSet::new();
         let mut parent_id = upstream_id;
@@ -1668,6 +1827,47 @@ impl Repository {
             new_head_id = result.commit_id;
             previous_entries = step.merged_entries;
         }
+        if let Some(conflict) = replay_conflict {
+            let target_label =
+                cherry_pick_conflict_label(conflict.commit_id, &conflict.commit.message);
+            self.start_conflicted_rebase(ConflictedRebaseStart {
+                target_label: &target_label,
+                picked_id: conflict.commit_id,
+                original_head: head_id,
+                onto_id: upstream_id,
+                head_name: rebase_head_name.as_deref(),
+                current_step: conflict.current_step,
+                total_steps: conflict.total_steps,
+                message: &conflict.commit.message,
+                commit: &conflict.commit,
+                base_entries: &conflict.base_entries,
+                head_entries: &previous_entries,
+                picked_entries: &conflict.picked_entries,
+                conflict_stages: &conflict.conflict_stages,
+            })?;
+            self.refresh_indexdb_after_git_write();
+            return Ok(RebaseStartResult {
+                old_head_id: head_id,
+                new_head_id: parent_id,
+                upstream_id,
+                branch_name,
+                fast_forwarded: false,
+                replayed_count,
+                stopped_commit_id: Some(conflict.commit_id),
+                stopped_message_summary: Some(
+                    conflict
+                        .commit
+                        .message
+                        .lines()
+                        .next()
+                        .unwrap_or("")
+                        .trim()
+                        .to_owned(),
+                ),
+                conflict_reports: conflict.conflict_reports,
+            });
+        }
+        self.restore_rebase_head(new_head_id, rebase_head_name.as_deref())?;
         self.refresh_indexdb_after_git_write();
         Ok(RebaseStartResult {
             old_head_id: head_id,
@@ -1676,6 +1876,9 @@ impl Repository {
             branch_name,
             fast_forwarded: false,
             replayed_count,
+            stopped_commit_id: None,
+            stopped_message_summary: None,
+            conflict_reports: Vec::new(),
         })
     }
 
@@ -2749,6 +2952,29 @@ fn cherry_pick_message_with_conflicts(message: &str, conflict_paths: &BTreeSet<&
         output.push('\n');
     }
     output
+}
+
+fn rebase_todo_subject(message: &str) -> String {
+    let subject = message.lines().next().unwrap_or("").trim();
+    if subject.is_empty() {
+        "# empty commit message".to_owned()
+    } else {
+        format!("# {subject}")
+    }
+}
+
+fn rebase_author_script(commit: &Commit) -> String {
+    format!(
+        "GIT_AUTHOR_NAME={}\nGIT_AUTHOR_EMAIL={}\nGIT_AUTHOR_DATE='@{} {}'\n",
+        shell_single_quote(&commit.author.name),
+        shell_single_quote(&commit.author.email),
+        commit.author.timestamp,
+        commit.author.offset
+    )
+}
+
+fn shell_single_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 fn cherry_pick_commit_message(

@@ -527,6 +527,67 @@ fn rebase_replays_two_clean_commits_like_git() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn rebase_stops_on_single_conflict_like_git() {
+    let root = temp_path("start-single-conflict");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    run_git(&git_repo, ["checkout", "-b", "topic"]);
+    fs::write(git_repo.join("tracked.txt"), "topic\n").expect("topic file should write");
+    run_git(&git_repo, ["commit", "--quiet", "-am", "topic"]);
+    run_git(&git_repo, ["checkout", "master"]);
+    fs::write(git_repo.join("tracked.txt"), "master\n").expect("master file should write");
+    run_git(&git_repo, ["commit", "--quiet", "-am", "master"]);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_rebase = run_capture("git", ["rebase", "topic"], &git_repo);
+    let rit_rebase = run_capture(rit_binary(), ["rebase", "topic"], &rit_repo);
+
+    assert_eq!(git_rebase.exit_code, 1, "git stderr: {}", git_rebase.stderr);
+    assert_eq!(rit_rebase.exit_code, 1, "rit stderr: {}", rit_rebase.stderr);
+    assert_eq!(git_rebase.stdout, rit_rebase.stdout);
+    assert_eq!(git_rebase.stderr, rit_rebase.stderr);
+    assert_eq!(
+        fs::read_to_string(git_repo.join("tracked.txt")).expect("git tracked file should read"),
+        fs::read_to_string(rit_repo.join("tracked.txt")).expect("rit tracked file should read")
+    );
+    for path in [
+        "HEAD",
+        "REBASE_HEAD",
+        "MERGE_MSG",
+        "refs/heads/master",
+        "rebase-merge/head-name",
+        "rebase-merge/onto",
+        "rebase-merge/orig-head",
+        "rebase-merge/msgnum",
+        "rebase-merge/end",
+        "rebase-merge/stopped-sha",
+        "rebase-merge/message",
+        "rebase-merge/git-rebase-todo",
+        "rebase-merge/done",
+        "rebase-merge/author-script",
+    ] {
+        assert_eq!(
+            fs::read_to_string(git_repo.join(".git").join(path))
+                .unwrap_or_else(|error| panic!("git state {path} should read: {error}")),
+            fs::read_to_string(rit_repo.join(".git").join(path))
+                .unwrap_or_else(|error| panic!("rit state {path} should read: {error}")),
+            "state file {path} should match"
+        );
+    }
+    assert_eq!(
+        run_capture("git", ["ls-files", "-s"], &git_repo).stdout,
+        run_capture(rit_binary(), ["ls-files", "-s"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct CapturedCommand {
     exit_code: i32,
     stdout: String,

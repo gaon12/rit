@@ -517,6 +517,10 @@ Completion criteria:
     upstream and updates the current branch.
   - [x] `rit rebase <upstream>` replays multiple clean linear commits onto the
     upstream and updates the current branch.
+  - [x] `rit rebase <upstream>` stops on a final replay conflict with
+    Git-compatible conflict output, `rebase-merge` metadata, `REBASE_HEAD`,
+    `MERGE_MSG`, detached `HEAD`, unmerged index stages, and worktree conflict
+    markers.
   - [x] `rit rebase --abort` restores the original branch, index, and
     worktree from Git-compatible rebase state and removes rebase conflict
     metadata.
@@ -529,8 +533,9 @@ Completion criteria:
     the current commit and updating the original branch to the current `HEAD`.
   - [x] `rit rebase --quit` removes Git-compatible `rebase-apply` and
     `rebase-merge` state while preserving HEAD, index, and worktree.
-  - [ ] Replay conflicts, multi-step continue/skip after conflicts, todo
-    editing, autostash, hooks, apply/merge backends, and strategy options.
+  - [ ] Replay conflicts with remaining todo entries, multi-step
+    continue/skip after conflicts, todo editing, autostash, hooks, apply/merge
+    backends, and strategy options.
 - [~] `rit stash`
   - [x] `rit stash list` reads the Git-compatible `refs/stash` reflog and
     prints entries in newest-first order.

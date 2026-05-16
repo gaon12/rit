@@ -2688,7 +2688,13 @@ fn rebase_command(
         },
         RebaseAction::Start { upstream } => match repository.start_rebase(&upstream) {
             Ok(result) => {
-                if result.fast_forwarded {
+                if !result.conflict_reports.is_empty() {
+                    for report in &result.conflict_reports {
+                        write_merge_conflict_report(stdout, report, &upstream)?;
+                    }
+                    write_rebase_conflict_advice(stderr, &result)?;
+                    return Ok(ExitCode::from(1));
+                } else if result.fast_forwarded {
                     let updated = result
                         .branch_name
                         .map(|branch_name| format!("refs/heads/{branch_name}"))
@@ -2748,6 +2754,47 @@ fn rebase_command(
             Err(error) => write_rebase_error(stderr, error),
         },
     }
+}
+
+fn write_rebase_conflict_advice(
+    stderr: &mut dyn Write,
+    result: &rit_core::RebaseStartResult,
+) -> io::Result<()> {
+    let total_steps = result.replayed_count + 1;
+    if result.replayed_count > 0 {
+        for step in 1..=result.replayed_count {
+            write!(stderr, "Rebasing ({step}/{total_steps})\r")?;
+        }
+    }
+    let Some(stopped_commit_id) = result.stopped_commit_id else {
+        return Ok(());
+    };
+    let current_step = result.replayed_count + 1;
+    write!(stderr, "Rebasing ({current_step}/{total_steps})\r")?;
+    let short_id = &stopped_commit_id.to_hex()[..7];
+    let summary = result.stopped_message_summary.as_deref().unwrap_or("");
+    writeln!(stderr, "error: could not apply {short_id}... {summary}")?;
+    writeln!(
+        stderr,
+        "hint: Resolve all conflicts manually, mark them as resolved with"
+    )?;
+    writeln!(
+        stderr,
+        "hint: \"git add/rm <conflicted_files>\", then run \"git rebase --continue\"."
+    )?;
+    writeln!(
+        stderr,
+        "hint: You can instead skip this commit: run \"git rebase --skip\"."
+    )?;
+    writeln!(
+        stderr,
+        "hint: To abort and get back to the state before \"git rebase\", run \"git rebase --abort\"."
+    )?;
+    writeln!(
+        stderr,
+        "hint: Disable this message with \"git config set advice.mergeConflict false\""
+    )?;
+    writeln!(stderr, "Could not apply {short_id}... # {summary}")
 }
 
 enum RebaseAction {
