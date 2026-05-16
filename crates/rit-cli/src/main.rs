@@ -285,6 +285,8 @@ fn stash_command(
         };
         let result = if push_args.staged {
             repository.stash_push_staged_with_pathspecs(push_args.message.as_deref(), &pathspecs)
+        } else if push_args.all {
+            repository.stash_push_all_with_pathspecs(push_args.message.as_deref(), &pathspecs)
         } else if push_args.include_untracked {
             repository.stash_push_include_untracked_with_pathspecs(
                 push_args.message.as_deref(),
@@ -480,6 +482,7 @@ struct StashPushArgs {
     keep_index: bool,
     staged: bool,
     include_untracked: bool,
+    all: bool,
     pathspecs: Vec<String>,
     exit_code: Option<u8>,
 }
@@ -525,6 +528,7 @@ fn parse_stash_push_args(
             "--no-keep-index" if !after_separator => parsed.keep_index = false,
             "-S" | "--staged" if !after_separator => parsed.staged = true,
             "-u" | "--include-untracked" if !after_separator => parsed.include_untracked = true,
+            "-a" | "--all" if !after_separator => parsed.all = true,
             "-m" | "--message" if !after_separator => {
                 index += 1;
                 let Some(value) = args.get(index) else {

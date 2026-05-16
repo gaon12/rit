@@ -223,7 +223,7 @@ Abort an in-progress rebase by restoring the original branch, index, and working
 
 const STASH_HELP: &str = "\
 rit stash list
-rit stash [push [(-m|--message) <message>] [-S|--staged] [-k|--keep-index] [-u|--include-untracked] [-q|--quiet] [--pathspec-from-file <file>] [--pathspec-file-nul] [--] [<pathspec>...]]
+rit stash [push [(-m|--message) <message>] [-S|--staged] [-k|--keep-index] [-u|--include-untracked] [-a|--all] [-q|--quiet] [--pathspec-from-file <file>] [--pathspec-file-nul] [--] [<pathspec>...]]
 rit stash save [-q|--quiet] [<message>]
 rit stash show [-p|--patch|--stat|--name-only|--name-status|--numstat] [<stash>]
 rit stash drop [-q|--quiet] [<stash>]

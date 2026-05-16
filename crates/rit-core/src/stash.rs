@@ -94,6 +94,7 @@ impl Repository {
                 &PathspecSet::all(),
                 StashChangeMode::AllTracked,
                 false,
+                false,
             )?
             .map(|created| created.object_id))
     }
@@ -138,6 +139,7 @@ impl Repository {
             StashCleanupMode::RestoreHead,
             StashChangeMode::StagedOnly,
             false,
+            false,
         )
     }
 
@@ -152,6 +154,23 @@ impl Repository {
             pathspecs,
             StashCleanupMode::RestoreHead,
             StashChangeMode::AllTracked,
+            true,
+            false,
+        )
+    }
+
+    /// Saves tracked, untracked, and ignored changes matching `pathspecs`.
+    pub fn stash_push_all_with_pathspecs(
+        &self,
+        message: Option<&str>,
+        pathspecs: &PathspecSet,
+    ) -> Result<StashPushResult> {
+        self.stash_push_with_mode(
+            message,
+            pathspecs,
+            StashCleanupMode::RestoreHead,
+            StashChangeMode::AllTracked,
+            true,
             true,
         )
     }
@@ -168,6 +187,7 @@ impl Repository {
             cleanup_mode,
             StashChangeMode::AllTracked,
             false,
+            false,
         )
     }
 
@@ -178,9 +198,15 @@ impl Repository {
         cleanup_mode: StashCleanupMode,
         change_mode: StashChangeMode,
         include_untracked: bool,
+        include_ignored: bool,
     ) -> Result<StashPushResult> {
-        let Some(created) =
-            self.create_tracked_stash_commit(message, pathspecs, change_mode, include_untracked)?
+        let Some(created) = self.create_tracked_stash_commit(
+            message,
+            pathspecs,
+            change_mode,
+            include_untracked,
+            include_ignored,
+        )?
         else {
             return Ok(StashPushResult::NoLocalChanges);
         };
@@ -467,13 +493,14 @@ impl Repository {
         pathspecs: &PathspecSet,
         change_mode: StashChangeMode,
         include_untracked: bool,
+        include_ignored: bool,
     ) -> Result<Option<CreatedStashCommit>> {
         let head_id = self
             .resolve_head()?
             .ok_or_else(|| RitError::invalid_input("stash create requires an existing HEAD"))?;
         let target_paths = self.tracked_stash_target_paths(pathspecs, change_mode)?;
         let untracked_paths = if include_untracked {
-            self.untracked_stash_paths(pathspecs)?
+            self.untracked_stash_paths(pathspecs, include_ignored)?
         } else {
             Vec::new()
         };
@@ -554,19 +581,28 @@ impl Repository {
         Ok(())
     }
 
-    fn untracked_stash_paths(&self, pathspecs: &PathspecSet) -> Result<Vec<String>> {
+    fn untracked_stash_paths(
+        &self,
+        pathspecs: &PathspecSet,
+        include_ignored: bool,
+    ) -> Result<Vec<String>> {
         let status = self.status_porcelain_v1_with_options(
             pathspecs,
             StatusOptions {
                 untracked_files: UntrackedFilesMode::All,
                 include_branch_header: false,
-                include_ignored: false,
+                include_ignored,
             },
         )?;
         Ok(status
             .entries
             .into_iter()
-            .filter(|entry| entry.index_status == '?' && entry.worktree_status == '?')
+            .filter(|entry| {
+                (entry.index_status == '?' && entry.worktree_status == '?')
+                    || (include_ignored
+                        && entry.index_status == '!'
+                        && entry.worktree_status == '!')
+            })
             .map(|entry| entry.path)
             .collect::<BTreeSet<_>>()
             .into_iter()
