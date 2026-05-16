@@ -1,9 +1,11 @@
 use std::fs;
 use std::io::Write;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{
-    DiffPatch, DiffSummary, ObjectId, ObjectKind, PathspecSet, Repository, Result, RitError,
+    DiffPatch, DiffSummary, GitConfig, ObjectId, ObjectKind, PathspecSet, Repository, Result,
+    RitError, Signature,
 };
 
 const ZERO_OBJECT_ID: &str = "0000000000000000000000000000000000000000";
@@ -90,6 +92,34 @@ impl Repository {
         })
     }
 
+    /// Stores an existing commit as the newest loose stash entry.
+    pub fn stash_store(&self, target: ObjectId, message: Option<&str>) -> Result<()> {
+        let object = self.read_object(target)?;
+        if object.kind != ObjectKind::Commit {
+            return Err(RitError::invalid_input(format!(
+                "stash store target {target} is {}, not commit",
+                object.kind
+            )));
+        }
+
+        let mut entries = self.read_stash_reflog()?;
+        let old_id = entries
+            .last()
+            .map(|entry| entry.new_id)
+            .unwrap_or(zero_object_id()?);
+        entries.push(StashReflogEntry {
+            old_id,
+            new_id: target,
+            rest: format!(
+                "{}\t{}",
+                format_reflog_signature(&self.reflog_committer()?),
+                message.unwrap_or("Created via \"git stash store\".")
+            ),
+        });
+        self.write_stash_reflog(&entries)?;
+        self.write_stash_ref(target)
+    }
+
     /// Shows the changes recorded by one stash against its first parent.
     pub fn stash_show(&self, display_index: usize, pathspecs: &PathspecSet) -> Result<DiffSummary> {
         let (base_id, stash_id) = self.stash_diff_pair(display_index)?;
@@ -163,6 +193,36 @@ impl Repository {
         let path = self.common_dir().join("refs").join("stash");
         write_file_atomically(&path, |file| writeln!(file, "{target}"))
     }
+
+    fn reflog_committer(&self) -> Result<Signature> {
+        let config_path = self.common_dir().join("config");
+        let name = std::env::var("GIT_COMMITTER_NAME")
+            .ok()
+            .or_else(|| read_config_value(&config_path, "user", "name"))
+            .ok_or_else(|| {
+                RitError::invalid_input(
+                    "committer identity unknown; set user.name or GIT_COMMITTER_NAME",
+                )
+            })?;
+        let email = std::env::var("GIT_COMMITTER_EMAIL")
+            .ok()
+            .or_else(|| read_config_value(&config_path, "user", "email"))
+            .ok_or_else(|| {
+                RitError::invalid_input(
+                    "committer identity unknown; set user.email or GIT_COMMITTER_EMAIL",
+                )
+            })?;
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| RitError::invalid_input("system time is before Unix epoch"))?
+            .as_secs() as i64;
+        Ok(Signature {
+            name,
+            email,
+            timestamp,
+            offset: "+0000".to_owned(),
+        })
+    }
 }
 
 fn parse_stash_reflog_entry(line: &str) -> Result<StashReflogEntry> {
@@ -185,12 +245,29 @@ fn parse_stash_reflog_entry(line: &str) -> Result<StashReflogEntry> {
 }
 
 fn relink_stash_reflog_entries(entries: &mut [StashReflogEntry]) -> Result<()> {
-    let mut previous = ObjectId::from_hex(ZERO_OBJECT_ID)?;
+    let mut previous = zero_object_id()?;
     for entry in entries {
         entry.old_id = previous;
         previous = entry.new_id;
     }
     Ok(())
+}
+
+fn zero_object_id() -> Result<ObjectId> {
+    ObjectId::from_hex(ZERO_OBJECT_ID)
+}
+
+fn read_config_value(path: &Path, section: &str, key: &str) -> Option<String> {
+    GitConfig::read(path)
+        .ok()
+        .and_then(|config| config.get(section, key).map(ToOwned::to_owned))
+}
+
+fn format_reflog_signature(signature: &Signature) -> String {
+    format!(
+        "{} <{}> {} {}",
+        signature.name, signature.email, signature.timestamp, signature.offset
+    )
 }
 
 fn remove_file_if_exists(path: &Path) -> Result<()> {

@@ -1372,12 +1372,13 @@
 - Baseline command checked: `git stash -h`
 - Supported options: `rit stash list`,
   `rit stash show [-p|--patch|--stat|--name-only|--name-status|--numstat] [<stash>]`,
-  `rit stash drop [-q|--quiet] [<stash>]`, and `rit stash clear` for loose stash
-  refs.
+  `rit stash drop [-q|--quiet] [<stash>]`,
+  `rit stash store [(-m|--message) <message>] [-q|--quiet] <commit>`, and
+  `rit stash clear` for loose stash refs.
 - Unsupported options: default `stash push`, `push`, `save`, `pop`, `apply`,
-  `branch`, `create`, `store`, `export`, `import`, stash show untracked display
-  options, pathspecs, staged/keep-index/untracked modes, packed stash ref
-  cleanup, and stash apply conflict handling.
+  `branch`, `create`, `export`, `import`, stash show untracked display options,
+  pathspecs, staged/keep-index/untracked modes, packed stash ref cleanup, and
+  stash apply conflict handling.
 - Git-compatible behavior: `rit stash list` reads `.git/logs/refs/stash`
   directly, prints newest entries first as `stash@{n}: <reflog message>`, and
   prints nothing when no stash reflog exists.
@@ -1390,11 +1391,16 @@
 - Git-compatible behavior: `rit stash show` diffs the selected stash commit
   against its first parent and renders patch/stat/name-only/name-status/numstat
   output through the shared diff formatter.
+- Git-compatible behavior: `rit stash store` resolves an existing commit,
+  appends a loose stash reflog entry using the configured committer identity,
+  and updates loose `.git/refs/stash`.
 - Repository mutation: no for `stash list`.
 - Repository mutation: no for `stash show`.
 - Repository mutation: yes for `stash clear`; it removes loose `.git/refs/stash`
   and `.git/logs/refs/stash`.
 - Repository mutation: yes for `stash drop`; it rewrites loose
+  `.git/logs/refs/stash` and loose `.git/refs/stash`.
+- Repository mutation: yes for `stash store`; it writes loose
   `.git/logs/refs/stash` and loose `.git/refs/stash`.
 - Risk: low to moderate; mutations are intentionally limited to loose stash
   state and do not yet edit packed stash refs.

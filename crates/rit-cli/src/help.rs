@@ -200,6 +200,7 @@ const STASH_HELP: &str = "\
 rit stash list
 rit stash show [-p|--patch|--stat|--name-only|--name-status|--numstat] [<stash>]
 rit stash drop [-q|--quiet] [<stash>]
+rit stash store [(-m|--message) <message>] [-q|--quiet] <commit>
 rit stash clear
 
 List, show, drop, or clear entries from the Git-compatible refs/stash reflog.

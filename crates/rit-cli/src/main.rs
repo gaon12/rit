@@ -115,6 +115,11 @@ fn stash_command(
                 return Ok(ExitCode::from(129));
             }
         }
+        [subcommand, rest @ ..] if subcommand == "store" => {
+            if parse_stash_store_args(rest, stderr)?.is_none() {
+                return Ok(ExitCode::from(129));
+            }
+        }
         [] => {
             writeln!(stderr, "rit: stash requires a supported subcommand")?;
             return Ok(ExitCode::from(129));
@@ -194,6 +199,21 @@ fn stash_command(
             Err(error) => write_stash_error(stderr, error),
         };
     }
+    if let [subcommand, rest @ ..] = args
+        && subcommand == "store"
+    {
+        let Some(store_args) = parse_stash_store_args(rest, stderr)? else {
+            return Ok(ExitCode::from(129));
+        };
+        let target = match repository.resolve_revision(&store_args.commit) {
+            Ok(target) => target,
+            Err(error) => return write_command_error(stderr, error),
+        };
+        return match repository.stash_store(target, store_args.message.as_deref()) {
+            Ok(()) => Ok(ExitCode::SUCCESS),
+            Err(error) => write_command_error(stderr, error),
+        };
+    }
 
     match repository.stash_list() {
         Ok(entries) => {
@@ -252,6 +272,53 @@ struct StashDropArgs {
     index: usize,
     name: String,
     quiet: bool,
+}
+
+struct StashStoreArgs {
+    commit: String,
+    message: Option<String>,
+}
+
+fn parse_stash_store_args(
+    args: &[String],
+    stderr: &mut dyn Write,
+) -> io::Result<Option<StashStoreArgs>> {
+    let mut message = None;
+    let mut commit = None;
+    let mut index = 0;
+    while index < args.len() {
+        let arg = &args[index];
+        match arg.as_str() {
+            "-q" | "--quiet" => {}
+            "-m" | "--message" => {
+                index += 1;
+                let Some(value) = args.get(index) else {
+                    writeln!(stderr, "error: switch `m' requires a value")?;
+                    return Ok(None);
+                };
+                message = Some(value.to_owned());
+            }
+            _ if arg.starts_with("--message=") => {
+                message = Some(arg.trim_start_matches("--message=").to_owned());
+            }
+            _ if arg.starts_with('-') => {
+                writeln!(stderr, "rit: unsupported stash store option '{arg}'")?;
+                return Ok(None);
+            }
+            _ if commit.is_none() => commit = Some(arg.to_owned()),
+            _ => {
+                writeln!(stderr, "rit: stash store accepts one commit")?;
+                return Ok(None);
+            }
+        }
+        index += 1;
+    }
+
+    let Some(commit) = commit else {
+        writeln!(stderr, "rit: stash store requires a commit")?;
+        return Ok(None);
+    };
+    Ok(Some(StashStoreArgs { commit, message }))
 }
 
 fn parse_stash_drop_args(

@@ -521,6 +521,8 @@ Completion criteria:
     `--name-only`, `--name-status`, and `--numstat` for loose stash entries.
   - [x] `rit stash show -p/--patch` renders Git-compatible patch output for
     loose stash entries.
+  - [x] `rit stash store` stores an existing commit in loose `refs/stash` with
+    a Git-compatible reflog message.
   - [ ] `stash push`, `apply`, `pop`, branch/export/import, push pathspecs,
     staged/keep-index/untracked modes, packed stash ref cleanup, broader show
     options, broader error parity, and conflict apply handling.
