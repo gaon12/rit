@@ -152,6 +152,90 @@ fn stash_push_options_without_push_word_match_git() {
 }
 
 #[test]
+fn stash_create_tracked_change_matches_git_without_storing_or_cleaning() {
+    let root = temp_path("create-tracked");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    fs::write(repo_file(&git_repo, "tracked.txt"), "created\n")
+        .expect("git tracked change should write");
+    fs::write(repo_file(&rit_repo, "tracked.txt"), "created\n")
+        .expect("rit tracked change should write");
+
+    let git_create = run_capture("git", ["stash", "create", "created msg"], &git_repo);
+    let rit_create = run_capture(rit_binary(), ["stash", "create", "created msg"], &rit_repo);
+    let git_id = git_create.stdout.trim();
+    let rit_id = rit_create.stdout.trim();
+
+    assert_eq!(git_create.exit_code, 0, "git stderr: {}", git_create.stderr);
+    assert_eq!(rit_create.exit_code, 0, "rit stderr: {}", rit_create.stderr);
+    assert!(is_hex_object_id(git_id), "git id: {git_id:?}");
+    assert!(is_hex_object_id(rit_id), "rit id: {rit_id:?}");
+    assert_eq!(git_create.stderr, rit_create.stderr);
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["stash", "list"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+    );
+    assert_eq!(
+        read_optional_file(&git_repo.join(".git").join("refs").join("stash")),
+        read_optional_file(&rit_repo.join(".git").join("refs").join("stash"))
+    );
+
+    let git_commit = run_capture("git", ["cat-file", "-p", git_id], &git_repo);
+    let rit_commit = run_capture("git", ["cat-file", "-p", rit_id], &rit_repo);
+    assert_eq!(git_commit.exit_code, 0, "git stderr: {}", git_commit.stderr);
+    assert_eq!(rit_commit.exit_code, 0, "rit stderr: {}", rit_commit.stderr);
+    assert_eq!(
+        commit_tree_line(&git_commit.stdout),
+        commit_tree_line(&rit_commit.stdout)
+    );
+    assert_eq!(
+        first_parent_line(&git_commit.stdout),
+        first_parent_line(&rit_commit.stdout)
+    );
+    assert_eq!(parent_count(&git_commit.stdout), 2);
+    assert_eq!(parent_count(&rit_commit.stdout), 2);
+    assert_eq!(
+        commit_message_line(&git_commit.stdout),
+        Some("On master: created msg")
+    );
+    assert_eq!(
+        commit_message_line(&rit_commit.stdout),
+        Some("On master: created msg")
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn stash_create_clean_tree_matches_git() {
+    let root = temp_path("create-clean");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_create = run_capture("git", ["stash", "create"], &git_repo);
+    let rit_create = run_capture(rit_binary(), ["stash", "create"], &rit_repo);
+
+    assert_eq!(git_create.exit_code, 0, "git stderr: {}", git_create.stderr);
+    assert_eq!(rit_create.exit_code, 0, "rit stderr: {}", rit_create.stderr);
+    assert_eq!(git_create.stdout, rit_create.stdout);
+    assert_eq!(git_create.stderr, rit_create.stderr);
+    assert_eq!(
+        run_capture("git", ["stash", "list"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn stash_show_summary_formats_match_git() {
     let root = temp_path("show");
     let git_repo = root.join("git");
@@ -446,6 +530,29 @@ fn copy_directory(from: &Path, to: &Path) {
 
 fn read_optional_file(path: &Path) -> Option<String> {
     fs::read_to_string(path).ok()
+}
+
+fn is_hex_object_id(value: &str) -> bool {
+    value.len() == 40 && value.chars().all(|character| character.is_ascii_hexdigit())
+}
+
+fn commit_tree_line(commit: &str) -> Option<&str> {
+    commit.lines().find(|line| line.starts_with("tree "))
+}
+
+fn first_parent_line(commit: &str) -> Option<&str> {
+    commit.lines().find(|line| line.starts_with("parent "))
+}
+
+fn parent_count(commit: &str) -> usize {
+    commit
+        .lines()
+        .filter(|line| line.starts_with("parent "))
+        .count()
+}
+
+fn commit_message_line(commit: &str) -> Option<&str> {
+    commit.lines().last()
 }
 
 fn rit_binary() -> OsString {

@@ -124,6 +124,7 @@ fn stash_command(
         }
         [subcommand] if subcommand == "list" => {}
         [subcommand] if subcommand == "clear" => {}
+        [subcommand, ..] if subcommand == "create" => {}
         [subcommand, rest @ ..] if subcommand == "push" => {
             if parse_stash_push_args(rest, stderr)?.is_none() {
                 return Ok(ExitCode::from(129));
@@ -157,6 +158,19 @@ fn stash_command(
     if matches!(args, [subcommand] if subcommand == "clear") {
         return match repository.stash_clear() {
             Ok(()) => Ok(ExitCode::SUCCESS),
+            Err(error) => write_command_error(stderr, error),
+        };
+    }
+    if let [subcommand, rest @ ..] = args
+        && subcommand == "create"
+    {
+        let message = (!rest.is_empty()).then(|| rest.join(" "));
+        return match repository.stash_create(message.as_deref()) {
+            Ok(Some(object_id)) => {
+                writeln!(stdout, "{object_id}")?;
+                Ok(ExitCode::SUCCESS)
+            }
+            Ok(None) => Ok(ExitCode::SUCCESS),
             Err(error) => write_command_error(stderr, error),
         };
     }

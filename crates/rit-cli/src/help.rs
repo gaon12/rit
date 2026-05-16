@@ -226,10 +226,11 @@ rit stash list
 rit stash [push [(-m|--message) <message>] [-q|--quiet]]
 rit stash show [-p|--patch|--stat|--name-only|--name-status|--numstat] [<stash>]
 rit stash drop [-q|--quiet] [<stash>]
+rit stash create [<message>]
 rit stash store [(-m|--message) <message>] [-q|--quiet] <commit>
 rit stash clear
 
-Save tracked changes, list, show, drop, or clear entries from the Git-compatible refs/stash reflog.
+Save tracked changes, create a stash commit, list, show, drop, or clear entries from the Git-compatible refs/stash reflog.
 ";
 
 const AUTH_HELP: &str = "\

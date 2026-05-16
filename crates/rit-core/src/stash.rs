@@ -50,42 +50,41 @@ struct StashReflogEntry {
     rest: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct CreatedStashCommit {
+    object_id: ObjectId,
+    message: String,
+}
+
 impl Repository {
+    /// Creates a stash commit for tracked changes without storing it in `refs/stash`.
+    ///
+    /// This mirrors `git stash create`: the index and working tree are left as-is,
+    /// and clean repositories return `None`.
+    pub fn stash_create(&self, message: Option<&str>) -> Result<Option<ObjectId>> {
+        Ok(self
+            .create_tracked_stash_commit(message)?
+            .map(|created| created.object_id))
+    }
+
     /// Saves tracked index and working-tree changes as a loose `refs/stash` entry.
     ///
     /// This implements the default `git stash push` shape for tracked paths.
     /// Untracked files, pathspec filtering, `--keep-index`, and apply/pop are
     /// intentionally left to later milestone slices.
     pub fn stash_push(&self, message: Option<&str>) -> Result<StashPushResult> {
+        let Some(created) = self.create_tracked_stash_commit(message)? else {
+            return Ok(StashPushResult::NoLocalChanges);
+        };
         let head_id = self
             .resolve_head()?
             .ok_or_else(|| RitError::invalid_input("stash push requires an existing HEAD"))?;
-        if !self.has_tracked_stash_changes()? {
-            return Ok(StashPushResult::NoLocalChanges);
-        }
 
-        let index = Index::read(&self.git_dir().join("index"))?;
-        ensure_stashable_index(&index)?;
-        let index_tree_id = self.write_tree_from_index(&index)?;
-        let stash_message = self.stash_push_message(head_id, message)?;
-        let index_commit_id = self.write_stash_commit(
-            index_tree_id,
-            &[head_id],
-            &index_commit_message(&stash_message),
-        )?;
-        let worktree_index = self.worktree_stash_index(&index)?;
-        let worktree_tree_id = self.write_tree_from_index(&worktree_index)?;
-        let stash_id = self.write_stash_commit(
-            worktree_tree_id,
-            &[head_id, index_commit_id],
-            &stash_message,
-        )?;
-
-        self.stash_store(stash_id, Some(&stash_message))?;
+        self.stash_store(created.object_id, Some(&created.message))?;
         self.checkout_commit_tree(head_id)?;
         Ok(StashPushResult::Saved {
-            object_id: stash_id,
-            message: stash_message,
+            object_id: created.object_id,
+            message: created.message,
         })
     }
 
@@ -245,6 +244,39 @@ impl Repository {
     fn write_stash_ref(&self, target: ObjectId) -> Result<()> {
         let path = self.common_dir().join("refs").join("stash");
         write_file_atomically(&path, |file| writeln!(file, "{target}"))
+    }
+
+    fn create_tracked_stash_commit(
+        &self,
+        message: Option<&str>,
+    ) -> Result<Option<CreatedStashCommit>> {
+        let head_id = self
+            .resolve_head()?
+            .ok_or_else(|| RitError::invalid_input("stash create requires an existing HEAD"))?;
+        if !self.has_tracked_stash_changes()? {
+            return Ok(None);
+        }
+
+        let index = Index::read(&self.git_dir().join("index"))?;
+        ensure_stashable_index(&index)?;
+        let index_tree_id = self.write_tree_from_index(&index)?;
+        let stash_message = self.stash_push_message(head_id, message)?;
+        let index_commit_id = self.write_stash_commit(
+            index_tree_id,
+            &[head_id],
+            &index_commit_message(&stash_message),
+        )?;
+        let worktree_index = self.worktree_stash_index(&index)?;
+        let worktree_tree_id = self.write_tree_from_index(&worktree_index)?;
+        let stash_id = self.write_stash_commit(
+            worktree_tree_id,
+            &[head_id, index_commit_id],
+            &stash_message,
+        )?;
+        Ok(Some(CreatedStashCommit {
+            object_id: stash_id,
+            message: stash_message,
+        }))
     }
 
     fn has_tracked_stash_changes(&self) -> Result<bool> {
