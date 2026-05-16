@@ -69,6 +69,12 @@ struct CreatedStashCommit {
     paths: Vec<String>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StashCleanupMode {
+    RestoreHead,
+    KeepIndex,
+}
+
 impl Repository {
     /// Creates a stash commit for tracked changes without storing it in `refs/stash`.
     ///
@@ -83,7 +89,7 @@ impl Repository {
     /// Saves tracked index and working-tree changes as a loose `refs/stash` entry.
     ///
     /// This implements the default `git stash push` shape for tracked paths.
-    /// Untracked files, `--keep-index`, and pathspec file expansion are
+    /// Untracked files, staged-only mode, and pathspec file expansion are
     /// intentionally left to later milestone slices.
     pub fn stash_push(&self, message: Option<&str>) -> Result<StashPushResult> {
         self.stash_push_with_pathspecs(message, &PathspecSet::all())
@@ -95,15 +101,42 @@ impl Repository {
         message: Option<&str>,
         pathspecs: &PathspecSet,
     ) -> Result<StashPushResult> {
+        self.stash_push_with_cleanup(message, pathspecs, StashCleanupMode::RestoreHead)
+    }
+
+    /// Saves tracked changes matching `pathspecs` while keeping index state.
+    pub fn stash_push_keep_index_with_pathspecs(
+        &self,
+        message: Option<&str>,
+        pathspecs: &PathspecSet,
+    ) -> Result<StashPushResult> {
+        self.stash_push_with_cleanup(message, pathspecs, StashCleanupMode::KeepIndex)
+    }
+
+    fn stash_push_with_cleanup(
+        &self,
+        message: Option<&str>,
+        pathspecs: &PathspecSet,
+        cleanup_mode: StashCleanupMode,
+    ) -> Result<StashPushResult> {
         let Some(created) = self.create_tracked_stash_commit(message, pathspecs)? else {
             return Ok(StashPushResult::NoLocalChanges);
         };
         let head_id = self
             .resolve_head()?
             .ok_or_else(|| RitError::invalid_input("stash push requires an existing HEAD"))?;
+        let cleanup_index = if cleanup_mode == StashCleanupMode::KeepIndex {
+            Some(Index::read(&self.git_dir().join("index"))?)
+        } else {
+            None
+        };
 
         self.stash_store(created.object_id, Some(&created.message))?;
-        self.restore_stash_paths_to_head(head_id, &created.paths)?;
+        if let Some(index) = cleanup_index {
+            self.restore_stash_paths_to_index(&index, &created.paths)?;
+        } else {
+            self.restore_stash_paths_to_head(head_id, &created.paths)?;
+        }
         Ok(StashPushResult::Saved {
             object_id: created.object_id,
             message: created.message,
@@ -520,12 +553,31 @@ impl Repository {
         head_id: ObjectId,
         target_paths: &[String],
     ) -> Result<()> {
+        let head_index = Index {
+            entries: self.commit_index_entries(head_id)?,
+            extensions: Vec::new(),
+        };
+        self.restore_stash_paths_to_index(&head_index, target_paths)
+    }
+
+    fn restore_stash_paths_to_index(
+        &self,
+        source_index: &Index,
+        target_paths: &[String],
+    ) -> Result<()> {
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
                 "stash push must be run in a repository with a working tree",
             ));
         };
-        let head_entries = index_entries_by_path(self.commit_index_entries(head_id)?);
+        let source_entries = index_entries_by_path(
+            source_index
+                .entries
+                .iter()
+                .filter(|entry| entry.stage == 0)
+                .cloned()
+                .collect(),
+        );
         let index_path = self.git_dir().join("index");
         let index = Index::read(&index_path)?;
         let mut index_entries = index_entries_by_path(index.entries);
@@ -533,7 +585,7 @@ impl Repository {
 
         for path in target_paths {
             let full_path = join_slash_path(worktree, path);
-            match head_entries.get(path) {
+            match source_entries.get(path) {
                 Some(entry) => {
                     index_entries.insert(path.clone(), entry.clone());
                     let object = self.read_object(entry.object_id)?;

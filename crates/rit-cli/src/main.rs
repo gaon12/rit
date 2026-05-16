@@ -288,8 +288,13 @@ fn stash_command(
             Ok(pathspecs) => pathspecs,
             Err(error) => return write_command_error(stderr, error),
         };
-        return match repository.stash_push_with_pathspecs(push_args.message.as_deref(), &pathspecs)
-        {
+        let result = if push_args.keep_index {
+            repository
+                .stash_push_keep_index_with_pathspecs(push_args.message.as_deref(), &pathspecs)
+        } else {
+            repository.stash_push_with_pathspecs(push_args.message.as_deref(), &pathspecs)
+        };
+        return match result {
             Ok(rit_core::StashPushResult::NoLocalChanges) => {
                 if !push_args.quiet {
                     writeln!(stdout, "No local changes to save")?;
@@ -470,6 +475,7 @@ struct StashStoreArgs {
 struct StashPushArgs {
     message: Option<String>,
     quiet: bool,
+    keep_index: bool,
     pathspecs: Vec<String>,
 }
 
@@ -483,6 +489,8 @@ fn parse_stash_push_args(
         let arg = &args[index];
         match arg.as_str() {
             "-q" | "--quiet" => parsed.quiet = true,
+            "-k" | "--keep-index" => parsed.keep_index = true,
+            "--no-keep-index" => parsed.keep_index = false,
             "-m" | "--message" => {
                 index += 1;
                 let Some(value) = args.get(index) else {
