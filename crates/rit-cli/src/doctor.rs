@@ -147,6 +147,12 @@ fn doctor_check_explanation(check: &rit_core::DoctorCheck) -> &'static str {
         "git-config" => "checks whether .git/config exists and can be parsed",
         "rit-config" => "checks optional rit.toml or .rit.toml configuration parsing",
         "head-object" => "checks that HEAD resolves to an existing commit or an unborn branch",
+        "loose-objects" => "counts loose objects that may benefit from routine packing",
+        "pack-index-state" => "checks that pack files and pack indexes are paired",
+        "commit-graph" => "checks whether a commit graph is available for faster history walks",
+        "rit-metadata" => {
+            "checks rit sidecar metadata without treating it as Git's source of truth"
+        }
         _ => "checks a repository health rule and reports its current result",
     }
 }

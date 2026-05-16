@@ -1,4 +1,5 @@
 use crate::{GitConfig, ObjectKind, Repository, RitError};
+use std::fs;
 use std::path::Path;
 
 /// Severity of one `rit doctor` check.
@@ -74,6 +75,10 @@ impl Repository {
         check_git_config(&mut report, &self.common_dir().join("config"));
         check_rit_config(&mut report, self);
         check_head_object(&mut report, self);
+        check_loose_objects(&mut report, &self.common_dir().join("objects"));
+        check_pack_index_state(&mut report, &self.common_dir().join("objects").join("pack"));
+        check_commit_graph(&mut report, &self.common_dir().join("objects").join("info"));
+        check_rit_metadata(&mut report, self);
 
         report
     }
@@ -154,6 +159,130 @@ fn check_head_object(report: &mut DoctorReport, repository: &Repository) {
     }
 }
 
+fn check_loose_objects(report: &mut DoctorReport, objects_dir: &Path) {
+    match count_loose_objects(objects_dir) {
+        Ok(count) if count > 1_000 => warning(
+            report,
+            "loose-objects",
+            format!("{count} loose objects; consider packing during maintenance"),
+        ),
+        Ok(count) => ok(report, "loose-objects", format!("{count} loose objects")),
+        Err(error) => warning(
+            report,
+            "loose-objects",
+            format!("could not count loose objects: {error}"),
+        ),
+    }
+}
+
+fn check_pack_index_state(report: &mut DoctorReport, pack_dir: &Path) {
+    match count_pack_files(pack_dir) {
+        Ok((packs, indexes)) if packs == indexes => ok(
+            report,
+            "pack-index-state",
+            format!("{packs} pack files and {indexes} pack indexes"),
+        ),
+        Ok((packs, indexes)) => warning(
+            report,
+            "pack-index-state",
+            format!("{packs} pack files but {indexes} pack indexes"),
+        ),
+        Err(error) => warning(
+            report,
+            "pack-index-state",
+            format!("could not inspect pack directory: {error}"),
+        ),
+    }
+}
+
+fn check_commit_graph(report: &mut DoctorReport, objects_info_dir: &Path) {
+    let commit_graph = objects_info_dir.join("commit-graph");
+    if commit_graph.is_file() {
+        ok(
+            report,
+            "commit-graph",
+            format!("{} exists", commit_graph.display()),
+        );
+    } else {
+        warning(
+            report,
+            "commit-graph",
+            "commit graph is not present; history walks use object traversal".to_owned(),
+        );
+    }
+}
+
+fn check_rit_metadata(report: &mut DoctorReport, repository: &Repository) {
+    let rit_dir = repository.git_dir().join("rit");
+    if !rit_dir.exists() {
+        ok(
+            report,
+            "rit-metadata",
+            "no rit metadata directory is present".to_owned(),
+        );
+        return;
+    }
+    match repository.operations().log_with_warnings() {
+        Ok(log) if log.warnings.is_empty() => ok(
+            report,
+            "rit-metadata",
+            "rit operation journal is readable".to_owned(),
+        ),
+        Ok(log) => warning(
+            report,
+            "rit-metadata",
+            format!(
+                "rit operation journal has {} malformed line(s)",
+                log.warnings.len()
+            ),
+        ),
+        Err(error) => warning(
+            report,
+            "rit-metadata",
+            format!("could not inspect rit metadata: {error}"),
+        ),
+    }
+}
+
+fn count_loose_objects(objects_dir: &Path) -> std::io::Result<usize> {
+    let mut count = 0;
+    for entry in fs::read_dir(objects_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if !path.is_dir()
+            || name.len() != 2
+            || !name.chars().all(|character| character.is_ascii_hexdigit())
+        {
+            continue;
+        }
+        for object_entry in fs::read_dir(path)? {
+            let object_entry = object_entry?;
+            if object_entry.file_type()?.is_file() {
+                count += 1;
+            }
+        }
+    }
+    Ok(count)
+}
+
+fn count_pack_files(pack_dir: &Path) -> std::io::Result<(usize, usize)> {
+    let mut packs = 0;
+    let mut indexes = 0;
+    for entry in fs::read_dir(pack_dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        match path.extension().and_then(|extension| extension.to_str()) {
+            Some("pack") => packs += 1,
+            Some("idx") => indexes += 1,
+            _ => {}
+        }
+    }
+    Ok((packs, indexes))
+}
+
 fn ok(report: &mut DoctorReport, name: &str, detail: String) {
     push_check(report, name, DoctorSeverity::Ok, detail);
 }
@@ -193,6 +322,18 @@ mod tests {
 
         assert!(!report.has_errors());
         assert!(report.checks.iter().any(|check| check.name == "git-dir"));
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|check| check.name == "loose-objects")
+        );
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|check| check.name == "pack-index-state")
+        );
         let _ = fs::remove_dir_all(root);
     }
 

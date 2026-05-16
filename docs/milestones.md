@@ -809,7 +809,7 @@ Completion criteria:
 - [x] Add `rit doctor --explain`.
 - [x] Add `rit doctor --json`.
 - [ ] Add `rit doctor --fix-plan`.
-- [ ] Explain performance and maintenance findings such as loose objects,
+- [x] Explain performance and maintenance findings such as loose objects,
   pack/index state, commit graph, and stale rit metadata.
 
 ## M21: Workspace Recommendation

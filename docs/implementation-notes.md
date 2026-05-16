@@ -843,6 +843,9 @@
   structured `DoctorReport` used by the text output.
 - Added `rit doctor --explain` to print the normal health report plus a short
   reason for each repository check.
+- Added read-only doctor maintenance findings for loose object counts,
+  pack/index pairing, commit graph availability, and rit metadata journal
+  readability.
 - Added conservative `Repository::repair_plan`, `Repository::apply_repair_plan`,
   and `rit repair [--dry-run|--apply]`; the first repair action set only creates
   missing standard Git directories and refuses paths outside the repository.
