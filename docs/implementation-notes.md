@@ -247,6 +247,10 @@
 - 2026-05-16 added the common `WritePlan` wrapper and `WritePlanEffects`
   model so existing add, commit, reset, and merge dry-run plans can be handled
   through one structured Rust API without flattening them into CLI text.
+- 2026-05-16 expanded `WritePlanEffects` coverage so plans describe ref
+  changes, index paths, worktree paths, object writes, hooks, and policy-check
+  surfaces before a write command is applied. Current policy entries are marked
+  with `will_run = false` until write-time policy enforcement is wired in.
 - 2026-05-13 explainable pathspec slice used the existing Git-compatible
   pathspec parser; `rit pathspec explain <pathspec>` is rit-specific and
   prints normalized patterns, matching mode, exclusions, wildcard use,

@@ -785,7 +785,7 @@ Completion criteria:
 - [x] Add `rit reset --plan`.
 - [x] Add structured plan type for `rit merge`.
 - [x] Add `rit merge --plan`.
-- [ ] Ensure plans describe refs, index paths, worktree paths, object writes,
+- [x] Ensure plans describe refs, index paths, worktree paths, object writes,
   hooks, and policy checks before applying changes.
 
 ## M18: Explainable Git Expansion

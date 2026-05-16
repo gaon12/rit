@@ -176,7 +176,10 @@ pub struct PlannedPolicyCheck {
 }
 
 fn add_effects(plan: &AddPlan) -> WritePlanEffects {
-    let mut effects = WritePlanEffects::default();
+    let mut effects = WritePlanEffects {
+        policy_checks: path_content_policy_checks(),
+        ..WritePlanEffects::default()
+    };
     for path in &plan.paths_to_add {
         effects
             .index_paths
@@ -195,7 +198,10 @@ fn add_effects(plan: &AddPlan) -> WritePlanEffects {
 }
 
 fn commit_effects(plan: &CommitPlan) -> WritePlanEffects {
-    let mut effects = WritePlanEffects::default();
+    let mut effects = WritePlanEffects {
+        policy_checks: vec![policy_check("protected-branch", false)],
+        ..WritePlanEffects::default()
+    };
     if !plan.is_empty() {
         effects.refs.push(PlannedRefChange {
             name: "HEAD".to_owned(),
@@ -260,6 +266,7 @@ fn merge_effects(plan: &MergePlan) -> WritePlanEffects {
                     new_id: Some(*new_id),
                     action: PlannedRefAction::Update,
                 }],
+                policy_checks: vec![policy_check("protected-branch", false)],
                 ..WritePlanEffects::default()
             };
             for path in paths_to_update {
@@ -294,6 +301,7 @@ fn merge_effects(plan: &MergePlan) -> WritePlanEffects {
                     new_id: None,
                     action: PlannedRefAction::Update,
                 }],
+                policy_checks: vec![policy_check("protected-branch", false)],
                 ..WritePlanEffects::default()
             };
             if conflict_paths.is_empty() {
@@ -318,6 +326,20 @@ fn merge_effects(plan: &MergePlan) -> WritePlanEffects {
             }
             effects
         }
+    }
+}
+
+fn path_content_policy_checks() -> Vec<PlannedPolicyCheck> {
+    vec![
+        policy_check("blob-size", false),
+        policy_check("secret-pattern", false),
+    ]
+}
+
+fn policy_check(name: &str, will_run: bool) -> PlannedPolicyCheck {
+    PlannedPolicyCheck {
+        name: name.to_owned(),
+        will_run,
     }
 }
 

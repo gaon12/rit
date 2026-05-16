@@ -4,7 +4,7 @@ use crate::write::{
 };
 use crate::{
     ObjectId, PlannedHook, PlannedObjectWrite, PlannedPathAction, PlannedPathChange,
-    PlannedRefAction, PlannedRefChange, WritePlan, WritePlanKind,
+    PlannedPolicyCheck, PlannedRefAction, PlannedRefChange, WritePlan, WritePlanKind,
 };
 
 fn object_id(hex: &str) -> ObjectId {
@@ -15,6 +15,13 @@ fn path_change(path: &str, action: PlannedPathAction) -> PlannedPathChange {
     PlannedPathChange {
         path: path.to_owned(),
         action,
+    }
+}
+
+fn policy_check(name: &str, will_run: bool) -> PlannedPolicyCheck {
+    PlannedPolicyCheck {
+        name: name.to_owned(),
+        will_run,
     }
 }
 
@@ -69,6 +76,13 @@ fn add_write_plan_effects_describe_index_and_blob_writes() {
             kind: ObjectKind::Blob,
             path: Some("new.txt".to_owned()),
         }]
+    );
+    assert_eq!(
+        plan.effects().policy_checks,
+        vec![
+            policy_check("blob-size", false),
+            policy_check("secret-pattern", false),
+        ]
     );
 }
 
@@ -133,6 +147,10 @@ fn commit_write_plan_effects_describe_refs_objects_and_hooks() {
             },
         ]
     );
+    assert_eq!(
+        effects.policy_checks,
+        vec![policy_check("protected-branch", false)]
+    );
 }
 
 #[test]
@@ -164,4 +182,8 @@ fn merge_write_plan_effects_describe_conflict_surfaces() {
         vec![path_change("both.txt", PlannedPathAction::Conflict)]
     );
     assert!(effects.object_writes.is_empty());
+    assert_eq!(
+        effects.policy_checks,
+        vec![policy_check("protected-branch", false)]
+    );
 }
