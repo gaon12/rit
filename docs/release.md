@@ -79,12 +79,11 @@ Recommended target triples for the first release matrix:
 
 ## License And Attribution
 
-The workspace license is `MIT OR Apache-2.0`, matching `Cargo.toml`.
+The workspace license is `MIT`.
 
 Release archives must include:
 
 - `LICENSE-MIT`
-- `LICENSE-APACHE`
 - `THIRD-PARTY-NOTICES.md`
 
 The third-party notice table is generated from `cargo metadata --locked` using
