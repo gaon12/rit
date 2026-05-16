@@ -99,7 +99,7 @@ pub use object::{GitObject, ObjectId, ObjectKind, TreeEntry, hash_object};
 pub use odb::{IngestedPack, LooseObjectDb, StoredPack, StoredPackIndex};
 pub use operations::{
     OperationJournalWarning, OperationLog, OperationRecord, OperationRestoreResult,
-    OperationSnapshot, RepositoryOperations,
+    OperationSnapshot, OperationUndoOptions, RepositoryOperations,
 };
 pub use partial_clone::{PartialClonePolicy, PromisorRemote};
 pub use pathspec::{PathspecExplanation, PathspecPatternExplanation, PathspecSet};

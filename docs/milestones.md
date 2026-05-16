@@ -760,7 +760,7 @@ Completion criteria:
   - [x] Record successful `branch` and `tag` ref operations.
   - [x] Record successful `fetch` operations and smart-remote `push` success
     paths where applicable.
-- [ ] Make undo semantics command-aware, such as commit undo that can preserve
+- [x] Make undo semantics command-aware, such as commit undo that can preserve
   changes when requested.
 - [x] Add corruption handling for malformed operation journal lines.
 - [x] Add linked-worktree journal isolation tests.

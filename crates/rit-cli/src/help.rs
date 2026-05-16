@@ -258,9 +258,10 @@ Inspect or restore the rit operation journal stored under .git/rit/ops.log.
 ";
 
 const UNDO_HELP: &str = "\
-rit undo
+rit undo [--preserve-changes]
 
 Restore HEAD and the working tree to the state captured before the last restorable rit operation.
+Use --preserve-changes with commit undo to move HEAD back while keeping the commit contents staged and present in the working tree.
 ";
 
 const SHOW_HELP: &str = "\

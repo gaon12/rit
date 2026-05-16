@@ -75,6 +75,27 @@ pub struct OperationRestoreResult {
     pub restored_worktree: bool,
 }
 
+/// Options for command-aware undo behavior.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct OperationUndoOptions {
+    /// For supported commands, keep the resulting content in the index and
+    /// working tree while moving HEAD back to the previous commit.
+    pub preserve_changes: bool,
+}
+
+impl OperationUndoOptions {
+    /// Creates default undo options.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Keeps supported command changes in the index and working tree.
+    pub fn preserve_changes(mut self) -> Self {
+        self.preserve_changes = true;
+        self
+    }
+}
+
 /// Entry point for operation-journal APIs.
 pub struct RepositoryOperations<'a> {
     repository: &'a Repository,
@@ -223,12 +244,20 @@ impl RepositoryOperations<'_> {
 
     /// Restores the state captured before the last operation in the journal.
     pub fn undo_last(&self) -> Result<OperationRestoreResult> {
+        self.undo_last_with_options(OperationUndoOptions::new())
+    }
+
+    /// Restores the state before the last operation with command-aware options.
+    pub fn undo_last_with_options(
+        &self,
+        options: OperationUndoOptions,
+    ) -> Result<OperationRestoreResult> {
         let last = self
             .log()?
             .into_iter()
             .last()
             .ok_or_else(|| RitError::invalid_input("operation journal is empty"))?;
-        self.restore(&last.id)
+        restore_record_with_options(self.repository, &last, &options)
     }
 }
 
@@ -236,8 +265,31 @@ fn restore_record(
     repository: &Repository,
     record: &OperationRecord,
 ) -> Result<OperationRestoreResult> {
+    restore_record_with_options(repository, record, &OperationUndoOptions::new())
+}
+
+fn restore_record_with_options(
+    repository: &Repository,
+    record: &OperationRecord,
+    options: &OperationUndoOptions,
+) -> Result<OperationRestoreResult> {
     let head_changed =
         record.before.head != record.after.head || record.before.branch != record.after.branch;
+    if options.preserve_changes {
+        if record.command == "commit" && head_changed {
+            restore_head_only(repository, &record.before)?;
+            return Ok(OperationRestoreResult {
+                id: record.id.clone(),
+                restored_head: record.before.head,
+                restored_index: false,
+                restored_worktree: false,
+            });
+        }
+        return Err(RitError::invalid_input(format!(
+            "operation {} ({}) does not support preserve-changes undo",
+            record.id, record.command
+        )));
+    }
     if head_changed {
         restore_snapshot(repository, &record.before)?;
         return Ok(OperationRestoreResult {
@@ -260,6 +312,27 @@ fn restore_record(
         "operation {} has no restorable HEAD or index change",
         record.id
     )))
+}
+
+fn restore_head_only(repository: &Repository, snapshot: &OperationSnapshot) -> Result<()> {
+    let head = snapshot
+        .head
+        .ok_or_else(|| RitError::invalid_input("operation has no restorable HEAD"))?;
+    if let Some(branch) = &snapshot.branch {
+        let ref_path = repository
+            .common_dir()
+            .join("refs")
+            .join("heads")
+            .join(branch);
+        write_text_atomically(&ref_path, &format!("{head}\n"))?;
+        write_text_atomically(
+            &repository.git_dir().join("HEAD"),
+            &format!("ref: refs/heads/{branch}\n"),
+        )?;
+    } else {
+        write_text_atomically(&repository.git_dir().join("HEAD"), &format!("{head}\n"))?;
+    }
+    Ok(())
 }
 
 fn restore_snapshot(repository: &Repository, snapshot: &OperationSnapshot) -> Result<()> {
@@ -732,6 +805,77 @@ mod tests {
         assert_eq!(
             fs::read_to_string(root.join("tracked.txt")).expect("file should read"),
             "base\n"
+        );
+        remove_dir_all(&root);
+    }
+
+    #[test]
+    fn commit_undo_can_preserve_index_and_worktree_changes() {
+        let root = temp_path("operation-journal-preserve-commit");
+        let repository = Repository::init(&InitOptions::new(&root)).expect("repo should init");
+        write_identity(&repository);
+        fs::write(root.join("tracked.txt"), "base\n").expect("base file should be written");
+        repository
+            .add_paths(&["tracked.txt".to_owned()])
+            .expect("base file should be added");
+        let base = repository
+            .commit_index("base")
+            .expect("base commit should work")
+            .commit_id;
+
+        fs::write(root.join("tracked.txt"), "changed\n").expect("changed file should be written");
+        repository
+            .add_paths(&["tracked.txt".to_owned()])
+            .expect("changed file should be staged");
+        let before = repository
+            .operations()
+            .snapshot()
+            .expect("snapshot should work");
+        let next = repository
+            .commit_index("next")
+            .expect("next commit should work")
+            .commit_id;
+        let after = repository
+            .operations()
+            .snapshot()
+            .expect("snapshot should work");
+        let after_index_checksum = after.index_checksum.clone();
+
+        repository
+            .operations()
+            .record_with_details(
+                "commit",
+                "commit next",
+                before,
+                after,
+                vec!["tracked.txt".to_owned()],
+                vec![next],
+            )
+            .expect("record should append");
+
+        let result = repository
+            .operations()
+            .undo_last_with_options(OperationUndoOptions::new().preserve_changes())
+            .expect("preserve undo should move only HEAD");
+
+        assert_eq!(result.restored_head, Some(base));
+        assert!(!result.restored_index);
+        assert!(!result.restored_worktree);
+        assert_eq!(
+            repository.resolve_head().expect("head should read"),
+            Some(base)
+        );
+        assert_eq!(
+            repository
+                .operations()
+                .snapshot()
+                .expect("snapshot should work")
+                .index_checksum,
+            after_index_checksum
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("tracked.txt")).expect("file should read"),
+            "changed\n"
         );
         remove_dir_all(&root);
     }

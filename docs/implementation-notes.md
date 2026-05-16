@@ -1690,3 +1690,14 @@
   and exposes whether acceleration was actually used.
 - Unsupported behavior: merge-base interpretation for `...` ranges and
   arbitrary revision suffix syntax such as `HEAD~1`.
+
+### Command-aware undo
+
+- 2026-05-17 M16 follow-up: `rit undo --preserve-changes` supports commit
+  undo by moving HEAD back to the pre-commit snapshot while leaving the index
+  and working tree at the committed content.
+- The default `rit undo` behavior is unchanged and still restores HEAD, index,
+  and working tree for restorable HEAD-changing operations.
+- Unsupported behavior: `--preserve-changes` for non-commit journal records
+  intentionally returns a clear error instead of guessing a command-specific
+  strategy.

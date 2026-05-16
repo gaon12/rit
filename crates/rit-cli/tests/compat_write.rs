@@ -2261,6 +2261,41 @@ fn operation_journal_records_commit_and_undo_restores_head() {
 }
 
 #[test]
+fn undo_preserve_changes_moves_head_back_without_reverting_commit_contents() {
+    let fixture = LocalWriteFixture::new(
+        "operation-journal-commit-preserve",
+        LocalWriteFixtureKind::NestedTracked,
+    )
+    .expect("fixture should build");
+    let base = run_capture("git", ["rev-parse", "HEAD"], fixture.path()).0;
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "journaled\n",
+    )
+    .expect("tracked file should be modified");
+
+    run_capture(rit_binary(), ["add", "nested/tracked.txt"], fixture.path());
+    run_capture(rit_binary(), ["commit", "-m", "journaled"], fixture.path());
+
+    let undo_output = run_capture(rit_binary(), ["undo", "--preserve-changes"], fixture.path()).0;
+
+    assert!(undo_output.contains("moved HEAD"));
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], fixture.path()).0,
+        base
+    );
+    assert_eq!(
+        fs::read_to_string(fixture.path().join("nested").join("tracked.txt"))
+            .expect("tracked file should read"),
+        "journaled\n"
+    );
+    assert_eq!(
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], fixture.path()).0,
+        "M  nested/tracked.txt\n"
+    );
+}
+
+#[test]
 fn operation_journal_records_index_and_worktree_commands() {
     let fixture = LocalWriteFixture::new(
         "operation-journal-index",

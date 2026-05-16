@@ -3449,15 +3449,23 @@ fn undo_command(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    if !args.is_empty() {
-        writeln!(stderr, "rit: undo does not accept arguments yet")?;
-        return Ok(ExitCode::from(129));
+    let mut options = rit_core::OperationUndoOptions::new();
+    for arg in args {
+        match arg.as_str() {
+            "--preserve-changes" => {
+                options = options.preserve_changes();
+            }
+            _ => {
+                writeln!(stderr, "rit: unsupported undo option '{arg}'")?;
+                return Ok(ExitCode::from(129));
+            }
+        }
     }
     let repository = match discover_repository(stderr)? {
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    match repository.operations().undo_last() {
+    match repository.operations().undo_last_with_options(options) {
         Ok(result) => {
             write_restore_result(stdout, "Undid operation", &result)?;
             Ok(ExitCode::SUCCESS)
@@ -3481,6 +3489,12 @@ fn write_restore_result(
         Some(head) if result.restored_index => writeln!(
             stdout,
             "{prefix} {} and restored index at {}",
+            result.id,
+            &head.to_hex()[..7]
+        ),
+        Some(head) => writeln!(
+            stdout,
+            "{prefix} {} and moved HEAD to {}",
             result.id,
             &head.to_hex()[..7]
         ),
