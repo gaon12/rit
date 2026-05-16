@@ -520,7 +520,7 @@ Completion criteria:
   - [x] `rit rebase <upstream>` stops on a final replay conflict with
     Git-compatible conflict output, `rebase-merge` metadata, `REBASE_HEAD`,
     `MERGE_MSG`, detached `HEAD`, unmerged index stages, and worktree conflict
-    markers.
+    markers, including cases where earlier commits replayed cleanly first.
   - [x] `rit rebase --abort` restores the original branch, index, and
     worktree from Git-compatible rebase state and removes rebase conflict
     metadata.

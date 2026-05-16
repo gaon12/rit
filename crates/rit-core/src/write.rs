@@ -329,6 +329,7 @@ struct ConflictedRebaseStart<'a> {
     total_steps: usize,
     message: &'a str,
     commit: &'a Commit,
+    done_todo_entries: &'a [(ObjectId, String)],
     base_entries: &'a [IndexEntry],
     head_entries: &'a [IndexEntry],
     picked_entries: &'a [IndexEntry],
@@ -336,6 +337,7 @@ struct ConflictedRebaseStart<'a> {
 }
 
 struct RebaseReplayStep {
+    commit_id: ObjectId,
     commit: Commit,
     merged_entries: Vec<IndexEntry>,
 }
@@ -1466,14 +1468,11 @@ impl Repository {
         )?;
         write_text_atomically(&rebase_dir.join("message"), &message)?;
         write_text_atomically(&rebase_dir.join("git-rebase-todo"), "")?;
-        write_text_atomically(
-            &rebase_dir.join("done"),
-            &format!(
-                "pick {} {}\n",
-                input.picked_id,
-                rebase_todo_subject(input.message)
-            ),
-        )?;
+        let mut done_text = String::new();
+        for (commit_id, subject) in input.done_todo_entries {
+            done_text.push_str(&format!("pick {commit_id} {subject}\n"));
+        }
+        write_text_atomically(&rebase_dir.join("done"), &done_text)?;
         write_text_atomically(
             &rebase_dir.join("author-script"),
             &rebase_author_script(input.commit),
@@ -1769,6 +1768,7 @@ impl Repository {
             current_entries = merged_entries.clone();
             expected_parent = picked_id;
             replay_steps.push(RebaseReplayStep {
+                commit_id: picked_id,
                 commit: picked_commit,
                 merged_entries,
             });
@@ -1792,6 +1792,7 @@ impl Repository {
         let mut previous_entries = self.commit_index_entries(upstream_id)?;
         let replayed_count = replay_steps.len();
         let mut new_head_id = upstream_id;
+        let mut done_todo_entries = Vec::new();
         for step in replay_steps {
             write_non_conflicting_merge_worktree_changes(
                 self,
@@ -1826,10 +1827,15 @@ impl Repository {
             parent_id = result.commit_id;
             new_head_id = result.commit_id;
             previous_entries = step.merged_entries;
+            done_todo_entries.push((step.commit_id, rebase_todo_subject(&step.commit.message)));
         }
         if let Some(conflict) = replay_conflict {
             let target_label =
                 cherry_pick_conflict_label(conflict.commit_id, &conflict.commit.message);
+            done_todo_entries.push((
+                conflict.commit_id,
+                rebase_todo_subject(&conflict.commit.message),
+            ));
             self.start_conflicted_rebase(ConflictedRebaseStart {
                 target_label: &target_label,
                 picked_id: conflict.commit_id,
@@ -1840,6 +1846,7 @@ impl Repository {
                 total_steps: conflict.total_steps,
                 message: &conflict.commit.message,
                 commit: &conflict.commit,
+                done_todo_entries: &done_todo_entries,
                 base_entries: &conflict.base_entries,
                 head_entries: &previous_entries,
                 picked_entries: &conflict.picked_entries,

@@ -1389,7 +1389,8 @@
   replayed commit conflicts, it leaves `HEAD` detached at the current rebased
   base, preserves the original branch ref, writes Git-compatible unmerged index
   stages, worktree conflict markers, `REBASE_HEAD`, `MERGE_MSG`, and
-  `.git/rebase-merge` metadata, then prints Git-shaped conflict output and
+  `.git/rebase-merge` metadata including completed `done` todo entries for any
+  earlier clean replayed commits, then prints Git-shaped conflict output and
   advice. `rit rebase --abort` reads `orig-head` and `head-name`,
   restores the original branch, index, and working tree, then removes
   `.git/rebase-apply`,
