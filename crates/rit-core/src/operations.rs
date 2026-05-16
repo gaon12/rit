@@ -877,6 +877,104 @@ mod tests {
         remove_dir_all(&root);
     }
 
+    #[test]
+    fn linked_worktree_operation_journals_are_isolated() {
+        let root = temp_path("operation-journal-linked-worktree");
+        let main_worktree = root.join("main");
+        let linked_worktree = root.join("linked");
+        let repository =
+            Repository::init(&InitOptions::new(&main_worktree)).expect("repo should init");
+        write_identity(&repository);
+        fs::write(main_worktree.join("tracked.txt"), "base\n")
+            .expect("base file should be written");
+        repository
+            .add_paths(&["tracked.txt".to_owned()])
+            .expect("base file should be added");
+        let head = repository
+            .commit_index("base")
+            .expect("base commit should work")
+            .commit_id;
+
+        let linked_git_dir = repository.git_dir().join("worktrees").join("linked");
+        fs::create_dir_all(&linked_git_dir).expect("linked git dir should be created");
+        fs::create_dir_all(&linked_worktree).expect("linked worktree should be created");
+        fs::write(
+            linked_worktree.join(".git"),
+            format!("gitdir: {}\n", linked_git_dir.display()),
+        )
+        .expect(".git file should be written");
+        fs::write(linked_git_dir.join("commondir"), "../..").expect("commondir should be written");
+        fs::write(linked_git_dir.join("HEAD"), "ref: refs/heads/linked\n")
+            .expect("linked HEAD should be written");
+        fs::create_dir_all(repository.common_dir().join("refs").join("heads"))
+            .expect("heads dir should exist");
+        fs::write(
+            repository
+                .common_dir()
+                .join("refs")
+                .join("heads")
+                .join("linked"),
+            format!("{head}\n"),
+        )
+        .expect("linked branch should be written");
+        let linked_repository =
+            Repository::open(&linked_worktree).expect("linked worktree should open");
+
+        assert_eq!(repository.common_dir(), linked_repository.common_dir());
+        assert_ne!(repository.git_dir(), linked_repository.git_dir());
+
+        let main_snapshot = repository
+            .operations()
+            .snapshot()
+            .expect("main snapshot should work");
+        repository
+            .operations()
+            .record(
+                "op",
+                "main worktree operation",
+                main_snapshot.clone(),
+                main_snapshot,
+            )
+            .expect("main record should append");
+        let linked_snapshot = linked_repository
+            .operations()
+            .snapshot()
+            .expect("linked snapshot should work");
+        linked_repository
+            .operations()
+            .record(
+                "op",
+                "linked worktree operation",
+                linked_snapshot.clone(),
+                linked_snapshot,
+            )
+            .expect("linked record should append");
+
+        assert_ne!(log_path(&repository), log_path(&linked_repository));
+        assert_eq!(
+            repository
+                .operations()
+                .log()
+                .expect("main log should read")
+                .into_iter()
+                .map(|record| record.summary)
+                .collect::<Vec<_>>(),
+            vec!["main worktree operation"]
+        );
+        assert_eq!(
+            linked_repository
+                .operations()
+                .log()
+                .expect("linked log should read")
+                .into_iter()
+                .map(|record| record.summary)
+                .collect::<Vec<_>>(),
+            vec!["linked worktree operation"]
+        );
+
+        remove_dir_all(&root);
+    }
+
     fn append_raw_log_line(repository: &Repository, line: &str) {
         let path = log_path(repository);
         if let Some(parent) = path.parent() {

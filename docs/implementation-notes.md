@@ -719,6 +719,9 @@
   sidecar when the pre-operation index exists. `rit undo` and
   `rit op restore <id>` can use that sidecar to restore index-only operations
   without rewriting the working tree.
+- Linked worktree operation journal coverage now asserts that worktrees share
+  the same common Git directory but append records to distinct per-worktree
+  `.git/rit/ops.log` files under each worktree gitdir.
 - Still unsupported: command-aware undo modes, reversible patches for
   worktree-only operations and complete object creation inventories.
 

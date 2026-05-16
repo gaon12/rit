@@ -763,7 +763,7 @@ Completion criteria:
 - [ ] Make undo semantics command-aware, such as commit undo that can preserve
   changes when requested.
 - [x] Add corruption handling for malformed operation journal lines.
-- [ ] Add linked-worktree journal isolation tests.
+- [x] Add linked-worktree journal isolation tests.
 - [x] Add JSON output for operation records.
 
 Completion criteria:
