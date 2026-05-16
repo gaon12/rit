@@ -2362,7 +2362,7 @@ fn cherry_pick_command(
     let mut continue_pick = false;
     let mut skip = false;
     let mut mainline = None;
-    let mut target = None;
+    let mut targets = Vec::new();
     let mut index = 0;
     while index < args.len() {
         let arg = &args[index];
@@ -2396,14 +2396,8 @@ fn cherry_pick_command(
         } else if arg.starts_with('-') {
             writeln!(stderr, "rit: unsupported cherry-pick option '{arg}'")?;
             return Ok(ExitCode::from(129));
-        } else if target.is_some() {
-            writeln!(
-                stderr,
-                "rit: cherry-pick currently supports only one target revision, unexpected '{arg}'"
-            )?;
-            return Ok(ExitCode::from(129));
         } else {
-            target = Some(arg.as_str());
+            targets.push(arg.as_str());
         }
         index += 1;
     }
@@ -2418,7 +2412,7 @@ fn cherry_pick_command(
         )?;
         return Ok(ExitCode::from(129));
     }
-    let Some(target) = target else {
+    if targets.is_empty() {
         if abort || quit || continue_pick || skip {
             let repository = match discover_repository(stderr)? {
                 Some(repository) => repository,
@@ -2497,7 +2491,7 @@ fn cherry_pick_command(
             writeln!(stderr, "rit: cherry-pick requires a target revision")?;
             return Ok(ExitCode::from(129));
         }
-    };
+    }
     if abort || quit || continue_pick || skip {
         let option = if abort {
             "--abort"
@@ -2514,62 +2508,68 @@ fn cherry_pick_command(
         )?;
         return Ok(ExitCode::from(129));
     }
+    if targets.len() > 1 && !commit {
+        writeln!(
+            stderr,
+            "rit: cherry-pick --no-commit currently supports only one target revision"
+        )?;
+        return Ok(ExitCode::from(129));
+    }
     let repository = match discover_repository(stderr)? {
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
     let before = capture_operation_snapshot(&repository, stderr)?;
-    match repository
-        .cherry_pick_with_options(target, &rit_core::CherryPickOptions { commit, mainline })
-    {
-        Ok(result) => {
-            let created_objects = result.commit_id.into_iter().collect::<Vec<_>>();
-            if result.conflict_paths.is_empty() {
-                record_operation(
-                    &repository,
-                    "cherry-pick",
-                    &format!("cherry-pick {target}"),
-                    before,
-                    created_objects,
-                    stderr,
-                )?;
-            } else {
-                record_operation_with_changed_paths(
-                    &repository,
-                    "cherry-pick",
-                    &format!("conflicted cherry-pick {target}"),
-                    before,
-                    result.conflict_paths.clone(),
-                    created_objects,
-                    stderr,
-                )?;
-            }
-            if let Some(commit_id) = result.commit_id {
-                writeln!(stdout, "[{}] {}", &commit_id.to_hex()[..7], target)?;
-            } else if !result.conflict_reports.is_empty() {
-                for report in &result.conflict_reports {
-                    write_merge_conflict_report(stdout, report, target)?;
+    let options = rit_core::CherryPickOptions { commit, mainline };
+    let mut created_objects = Vec::new();
+    for target in &targets {
+        match repository.cherry_pick_with_options(target, &options) {
+            Ok(result) => {
+                if let Some(commit_id) = result.commit_id {
+                    writeln!(stdout, "[{}] {}", &commit_id.to_hex()[..7], target)?;
+                    created_objects.push(commit_id);
+                } else if !result.conflict_reports.is_empty() {
+                    record_operation_with_changed_paths(
+                        &repository,
+                        "cherry-pick",
+                        &format!("conflicted cherry-pick {target}"),
+                        before,
+                        result.conflict_paths.clone(),
+                        created_objects,
+                        stderr,
+                    )?;
+                    for report in &result.conflict_reports {
+                        write_merge_conflict_report(stdout, report, target)?;
+                    }
+                    writeln!(
+                        stderr,
+                        "error: could not apply {}... {}",
+                        &result.picked_id.to_hex()[..7],
+                        target
+                    )?;
+                    writeln!(
+                        stderr,
+                        "hint: After resolving the conflicts, mark them with \"rit add <path>\", then run \"rit cherry-pick --continue\"."
+                    )?;
+                    writeln!(
+                        stderr,
+                        "hint: To abort and get back to the state before \"rit cherry-pick\", run \"rit cherry-pick --abort\"."
+                    )?;
+                    return Ok(ExitCode::from(1));
                 }
-                writeln!(
-                    stderr,
-                    "error: could not apply {}... {}",
-                    &result.picked_id.to_hex()[..7],
-                    target
-                )?;
-                writeln!(
-                    stderr,
-                    "hint: After resolving the conflicts, mark them with \"rit add <path>\", then run \"rit cherry-pick --continue\"."
-                )?;
-                writeln!(
-                    stderr,
-                    "hint: To abort and get back to the state before \"rit cherry-pick\", run \"rit cherry-pick --abort\"."
-                )?;
-                return Ok(ExitCode::from(1));
             }
-            Ok(ExitCode::SUCCESS)
+            Err(error) => return write_command_error(stderr, error),
         }
-        Err(error) => write_command_error(stderr, error),
     }
+    record_operation(
+        &repository,
+        "cherry-pick",
+        &format!("cherry-pick {}", targets.join(" ")),
+        before,
+        created_objects,
+        stderr,
+    )?;
+    Ok(ExitCode::SUCCESS)
 }
 
 fn parse_cherry_pick_mainline(value: &str, stderr: &mut dyn Write) -> io::Result<Option<usize>> {

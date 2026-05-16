@@ -495,8 +495,11 @@ Completion criteria:
     selection.
   - [x] `cherry-pick --skip` restores `ORIG_HEAD` for the first conflicted
     cherry-pick slice and clears state.
-  - [ ] Multi-commit sequencer operations, strategy options, conflict
-    continuation for merge commits, and editor/hook parity.
+  - [x] Clean multi-target cherry-pick applies commits in order and records
+    the created commit ids.
+  - [ ] Full multi-commit sequencer state across conflicts, multi-target
+    `--no-commit`, strategy options, conflict continuation for merge commits,
+    and editor/hook parity.
 - [ ] `rit rebase`
 - [ ] `rit stash`
 - [~] Conflict index stages.
