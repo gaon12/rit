@@ -514,9 +514,11 @@ Completion criteria:
     metadata.
   - [x] `rit rebase --show-current-patch` prints the stopped rebase commit
     header and patch from `REBASE_HEAD`.
+  - [x] `rit rebase --skip` completes a single-step stopped rebase by dropping
+    the current commit and updating the original branch to the current `HEAD`.
   - [x] `rit rebase --quit` removes Git-compatible `rebase-apply` and
     `rebase-merge` state while preserving HEAD, index, and worktree.
-  - [ ] Rebase start, continue, skip, todo editing, autostash, hooks,
+  - [ ] Rebase start, continue, multi-step skip, todo editing, autostash, hooks,
     apply/merge backends, and strategy options.
 - [~] `rit stash`
   - [x] `rit stash list` reads the Git-compatible `refs/stash` reflog and

@@ -466,6 +466,15 @@ pub struct RebaseCurrentPatch {
     pub patch: crate::diff::DiffPatch,
 }
 
+/// Result of skipping the stopped commit in an in-progress rebase.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RebaseSkipResult {
+    /// Commit that becomes the restored branch or detached `HEAD`.
+    pub head_id: ObjectId,
+    /// Rebase `head-name`, such as `refs/heads/main`, when Git recorded one.
+    pub head_name: Option<String>,
+}
+
 impl Repository {
     /// Adds files matching ordinary literal pathspecs to the index.
     pub fn add_paths(&self, paths: &[String]) -> Result<usize> {
@@ -1535,6 +1544,39 @@ impl Repository {
             commit_id,
             commit,
             patch,
+        })
+    }
+
+    /// Skips the currently stopped rebase commit when it is the final todo entry.
+    pub fn skip_rebase(&self) -> Result<RebaseSkipResult> {
+        let state = self.merge_state()?;
+        let rebase = state
+            .rebase_merge
+            .as_ref()
+            .or(state.rebase_apply.as_ref())
+            .ok_or_else(|| RitError::invalid_input("no rebase in progress"))?;
+        if let (Some(current_step), Some(total_steps)) = (rebase.current_step, rebase.total_steps)
+            && current_step < total_steps
+        {
+            return Err(RitError::invalid_input(
+                "rebase skip with remaining commits is not implemented",
+            ));
+        }
+        let head_id = self.resolve_head()?.ok_or_else(|| {
+            RitError::invalid_input("rebase skip requires HEAD to point at a commit")
+        })?;
+
+        self.checkout_commit_tree(head_id)?;
+        self.restore_rebase_head(head_id, rebase.head_name.as_deref())?;
+        remove_dir_if_exists(&self.git_dir().join("rebase-apply"))?;
+        remove_dir_if_exists(&self.git_dir().join("rebase-merge"))?;
+        remove_file_if_exists(&self.git_dir().join("REBASE_HEAD"))?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))?;
+        remove_file_if_exists(&self.git_dir().join("AUTO_MERGE"))?;
+        self.refresh_indexdb_after_git_write();
+        Ok(RebaseSkipResult {
+            head_id,
+            head_name: rebase.head_name.clone(),
         })
     }
 

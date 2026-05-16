@@ -165,6 +165,70 @@ fn rebase_show_current_patch_without_state_matches_git() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn rebase_skip_final_stopped_commit_matches_git() {
+    let root = temp_path("skip-final");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    create_conflicting_rebase_state(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_skip = run_capture("git", ["rebase", "--skip"], &git_repo);
+    let rit_skip = run_capture(rit_binary(), ["rebase", "--skip"], &rit_repo);
+
+    assert_eq!(git_skip.exit_code, 0, "git stderr: {}", git_skip.stderr);
+    assert_eq!(rit_skip.exit_code, 0, "rit stderr: {}", rit_skip.stderr);
+    assert_eq!(git_skip.stdout, rit_skip.stdout);
+    assert_eq!(git_skip.stderr, rit_skip.stderr);
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &git_repo).stdout,
+        run_capture(rit_binary(), ["rev-parse", "HEAD"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture(
+            "git",
+            ["symbolic-ref", "--quiet", "--short", "HEAD"],
+            &git_repo
+        )
+        .stdout,
+        run_capture(
+            "git",
+            ["symbolic-ref", "--quiet", "--short", "HEAD"],
+            &rit_repo
+        )
+        .stdout
+    );
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        fs::read_to_string(git_repo.join("tracked.txt")).expect("git file should read"),
+        fs::read_to_string(rit_repo.join("tracked.txt")).expect("rit file should read")
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn rebase_skip_without_state_matches_git() {
+    let root = temp_path("skip-empty");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_skip = run_capture("git", ["rebase", "--skip"], &git_repo);
+    let rit_skip = run_capture(rit_binary(), ["rebase", "--skip"], &rit_repo);
+
+    assert_eq!(git_skip.exit_code, rit_skip.exit_code);
+    assert_eq!(git_skip.stdout, rit_skip.stdout);
+    assert_eq!(git_skip.stderr, rit_skip.stderr);
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct CapturedCommand {
     exit_code: i32,
     stdout: String,

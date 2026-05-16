@@ -2658,11 +2658,12 @@ fn rebase_command(
     let action = match args {
         [flag] if flag == "--abort" => RebaseAction::Abort,
         [flag] if flag == "--quit" => RebaseAction::Quit,
+        [flag] if flag == "--skip" => RebaseAction::Skip,
         [flag] if flag == "--show-current-patch" => RebaseAction::ShowCurrentPatch,
         [] => {
             writeln!(
                 stderr,
-                "rit: rebase currently supports only --abort, --quit, and --show-current-patch"
+                "rit: rebase currently supports only --abort, --quit, --skip, and --show-current-patch"
             )?;
             return Ok(ExitCode::from(129));
         }
@@ -2685,6 +2686,14 @@ fn rebase_command(
             Ok(()) => Ok(ExitCode::SUCCESS),
             Err(error) => write_rebase_error(stderr, error),
         },
+        RebaseAction::Skip => match repository.skip_rebase() {
+            Ok(result) => {
+                let updated = result.head_name.as_deref().unwrap_or("HEAD");
+                writeln!(stderr, "Successfully rebased and updated {updated}.")?;
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_rebase_error(stderr, error),
+        },
         RebaseAction::ShowCurrentPatch => match repository.current_rebase_patch() {
             Ok(current_patch) => {
                 print_commit_no_patch(current_patch.commit_id, &current_patch.commit, stdout)?;
@@ -2703,6 +2712,7 @@ fn rebase_command(
 enum RebaseAction {
     Abort,
     Quit,
+    Skip,
     ShowCurrentPatch,
 }
 
@@ -4029,6 +4039,7 @@ mod tests {
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit rebase --abort"));
         assert!(stdout.contains("rit rebase --show-current-patch"));
+        assert!(stdout.contains("rit rebase --skip"));
         assert!(stdout.contains("rit rebase --quit"));
         assert_eq!(stderr, "");
     }

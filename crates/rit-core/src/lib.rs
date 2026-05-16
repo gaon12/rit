@@ -145,7 +145,7 @@ pub use write::{
     AddOptions, AddPlan, CherryPickOptions, CherryPickResult, CommitHookMode, CommitOptions,
     CommitPlan, CommitResult, FileModeOverride, MergeConflictKind, MergeConflictReport,
     MergeConflictSide, MergeConflictStageEntry, MergeConflictStagePlan, MergeOptions, MergePlan,
-    MergeResult, RebaseCurrentPatch, ResetPlan, SignatureIdentity, SignatureTime,
+    MergeResult, RebaseCurrentPatch, RebaseSkipResult, ResetPlan, SignatureIdentity, SignatureTime,
 };
 
 /// Returns the crate version used by the CLI and tests.
