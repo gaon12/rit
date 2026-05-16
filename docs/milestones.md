@@ -521,6 +521,9 @@ Completion criteria:
     Git-compatible conflict output, `rebase-merge` metadata, `REBASE_HEAD`,
     `MERGE_MSG`, detached `HEAD`, unmerged index stages, and worktree conflict
     markers, including cases where earlier commits replayed cleanly first.
+  - [x] `rit rebase <upstream>` stops on a replay conflict with remaining todo
+    entries and records Git-compatible `git-rebase-todo`, `done`, `msgnum`,
+    and `end` state.
   - [x] `rit rebase --abort` restores the original branch, index, and
     worktree from Git-compatible rebase state and removes rebase conflict
     metadata.
@@ -529,13 +532,16 @@ Completion criteria:
   - [x] `rit rebase --continue` commits a resolved final stopped rebase commit
     with the original author/message, updates the original branch, and clears
     rebase state.
+  - [x] `rit rebase --continue` commits a resolved stopped commit, replays
+    remaining clean linear todo entries, updates the original branch, and
+    clears rebase state.
   - [x] `rit rebase --skip` completes a single-step stopped rebase by dropping
     the current commit and updating the original branch to the current `HEAD`.
   - [x] `rit rebase --quit` removes Git-compatible `rebase-apply` and
     `rebase-merge` state while preserving HEAD, index, and worktree.
-  - [ ] Replay conflicts with remaining todo entries, multi-step
-    continue/skip after conflicts, todo editing, autostash, hooks, apply/merge
-    backends, and strategy options.
+  - [ ] Later conflicts while continuing remaining todo entries, multi-step
+    skip after conflicts, todo editing, autostash, hooks, apply/merge backends,
+    and strategy options.
 - [~] `rit stash`
   - [x] `rit stash list` reads the Git-compatible `refs/stash` reflog and
     prints entries in newest-first order.

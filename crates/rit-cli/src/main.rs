@@ -2722,6 +2722,11 @@ fn rebase_command(
             match repository.continue_rebase(&rit_core::CommitOptions::default()) {
                 Ok(result) => {
                     print_rebase_continue_summary(&result, stdout)?;
+                    for step in result.first_remaining_step
+                        ..result.first_remaining_step + result.replayed_remaining_count
+                    {
+                        write!(stderr, "Rebasing ({step}/{})\r", result.total_steps)?;
+                    }
                     let updated = result.head_name.as_deref().unwrap_or("HEAD");
                     writeln!(stderr, "Successfully rebased and updated {updated}.")?;
                     Ok(ExitCode::SUCCESS)
@@ -2760,7 +2765,7 @@ fn write_rebase_conflict_advice(
     stderr: &mut dyn Write,
     result: &rit_core::RebaseStartResult,
 ) -> io::Result<()> {
-    let total_steps = result.replayed_count + 1;
+    let total_steps = result.total_steps.max(result.replayed_count + 1);
     if result.replayed_count > 0 {
         for step in 1..=result.replayed_count {
             write!(stderr, "Rebasing ({step}/{total_steps})\r")?;

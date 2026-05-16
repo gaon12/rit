@@ -330,6 +330,7 @@ struct ConflictedRebaseStart<'a> {
     message: &'a str,
     commit: &'a Commit,
     done_todo_entries: &'a [(ObjectId, String)],
+    remaining_todo_entries: &'a [(ObjectId, String)],
     base_entries: &'a [IndexEntry],
     head_entries: &'a [IndexEntry],
     picked_entries: &'a [IndexEntry],
@@ -349,6 +350,7 @@ struct RebaseReplayConflict {
     picked_entries: Vec<IndexEntry>,
     conflict_stages: Vec<MergeConflictStagePlan>,
     conflict_reports: Vec<MergeConflictReport>,
+    remaining_todo_entries: Vec<(ObjectId, String)>,
     current_step: usize,
     total_steps: usize,
 }
@@ -522,6 +524,12 @@ pub struct RebaseContinueResult {
     pub head_name: Option<String>,
     /// Summary of the new commit relative to its parent.
     pub diff: crate::diff::DiffSummary,
+    /// Number of remaining todo commits replayed after the resolved commit.
+    pub replayed_remaining_count: usize,
+    /// First remaining step number, when remaining commits were replayed.
+    pub first_remaining_step: usize,
+    /// Total number of commits in the rebase todo list.
+    pub total_steps: usize,
 }
 
 /// Result of starting a rebase that is already up to date.
@@ -539,6 +547,8 @@ pub struct RebaseStartResult {
     pub fast_forwarded: bool,
     /// Number of commits replayed onto the upstream.
     pub replayed_count: usize,
+    /// Total number of commits in this rebase todo list.
+    pub total_steps: usize,
     /// Commit currently stopped by conflicts, when rebase could not finish.
     pub stopped_commit_id: Option<ObjectId>,
     /// First line of the stopped commit message, when rebase stopped.
@@ -1467,12 +1477,16 @@ impl Repository {
             &format!("{}\n", input.picked_id),
         )?;
         write_text_atomically(&rebase_dir.join("message"), &message)?;
-        write_text_atomically(&rebase_dir.join("git-rebase-todo"), "")?;
         let mut done_text = String::new();
         for (commit_id, subject) in input.done_todo_entries {
             done_text.push_str(&format!("pick {commit_id} {subject}\n"));
         }
         write_text_atomically(&rebase_dir.join("done"), &done_text)?;
+        let mut todo_text = String::new();
+        for (commit_id, subject) in input.remaining_todo_entries {
+            todo_text.push_str(&format!("pick {commit_id} {subject}\n"));
+        }
+        write_text_atomically(&rebase_dir.join("git-rebase-todo"), &todo_text)?;
         write_text_atomically(
             &rebase_dir.join("author-script"),
             &rebase_author_script(input.commit),
@@ -1678,6 +1692,7 @@ impl Repository {
                 branch_name,
                 fast_forwarded: false,
                 replayed_count: 0,
+                total_steps: 0,
                 stopped_commit_id: None,
                 stopped_message_summary: None,
                 conflict_reports: Vec::new(),
@@ -1696,6 +1711,7 @@ impl Repository {
                 branch_name,
                 fast_forwarded: true,
                 replayed_count: 0,
+                total_steps: 0,
                 stopped_commit_id: None,
                 stopped_message_summary: None,
                 conflict_reports: Vec::new(),
@@ -1713,7 +1729,7 @@ impl Repository {
         let mut replay_conflict = None;
         let mut expected_parent = merge_base;
         let mut current_entries = self.commit_index_entries(upstream_id)?;
-        for (step_index, picked_id) in replay_commit_ids.into_iter().enumerate() {
+        for (step_index, picked_id) in replay_commit_ids.iter().copied().enumerate() {
             let picked_object = self.read_object(picked_id)?;
             if picked_object.kind != ObjectKind::Commit {
                 return Err(RitError::invalid_input(format!(
@@ -1740,12 +1756,20 @@ impl Repository {
                 &picked_entries,
             );
             if !plan.conflict_stages.is_empty() {
-                if step_index + 1 < total_steps {
-                    return Err(RitError::invalid_input(
-                        "rebase conflict with remaining commits is not implemented",
-                    ));
-                }
                 let conflict_reports = self.merge_conflict_reports(&plan.conflict_stages)?;
+                let mut remaining_todo_entries = Vec::new();
+                for remaining_id in replay_commit_ids.iter().copied().skip(step_index + 1) {
+                    let remaining_object = self.read_object(remaining_id)?;
+                    if remaining_object.kind != ObjectKind::Commit {
+                        return Err(RitError::invalid_input(format!(
+                            "rebase todo target {remaining_id} is {}, not commit",
+                            remaining_object.kind
+                        )));
+                    }
+                    let remaining_commit = parse_commit(&remaining_object.data)?;
+                    remaining_todo_entries
+                        .push((remaining_id, rebase_todo_subject(&remaining_commit.message)));
+                }
                 replay_conflict = Some(RebaseReplayConflict {
                     commit_id: picked_id,
                     commit: picked_commit,
@@ -1753,6 +1777,7 @@ impl Repository {
                     picked_entries,
                     conflict_stages: plan.conflict_stages,
                     conflict_reports,
+                    remaining_todo_entries,
                     current_step: step_index + 1,
                     total_steps,
                 });
@@ -1847,6 +1872,7 @@ impl Repository {
                 message: &conflict.commit.message,
                 commit: &conflict.commit,
                 done_todo_entries: &done_todo_entries,
+                remaining_todo_entries: &conflict.remaining_todo_entries,
                 base_entries: &conflict.base_entries,
                 head_entries: &previous_entries,
                 picked_entries: &conflict.picked_entries,
@@ -1860,6 +1886,7 @@ impl Repository {
                 branch_name,
                 fast_forwarded: false,
                 replayed_count,
+                total_steps: conflict.total_steps,
                 stopped_commit_id: Some(conflict.commit_id),
                 stopped_message_summary: Some(
                     conflict
@@ -1883,6 +1910,7 @@ impl Repository {
             branch_name,
             fast_forwarded: false,
             replayed_count,
+            total_steps: replayed_count,
             stopped_commit_id: None,
             stopped_message_summary: None,
             conflict_reports: Vec::new(),
@@ -1984,17 +2012,29 @@ impl Repository {
             .as_ref()
             .or(state.rebase_apply.as_ref())
             .ok_or_else(|| RitError::invalid_input("no rebase in progress"))?;
-        if let (Some(current_step), Some(total_steps)) = (rebase.current_step, rebase.total_steps)
-            && current_step < total_steps
-        {
-            return Err(RitError::invalid_input(
-                "rebase continue with remaining commits is not implemented",
-            ));
-        }
+        let current_step = rebase.current_step.unwrap_or(1) as usize;
+        let total_steps = rebase.total_steps.unwrap_or(current_step as u32) as usize;
         let parent_id = self.resolve_head()?.ok_or_else(|| {
             RitError::invalid_input("rebase continue requires HEAD to point at a commit")
         })?;
         let current_patch = self.current_rebase_patch()?;
+        let index_before_continue = Index::read(&self.git_dir().join("index"))?;
+        if index_before_continue
+            .entries
+            .iter()
+            .any(|entry| entry.stage != 0)
+        {
+            return Err(RitError::invalid_input(
+                "rebase continue requires all conflicts to be resolved",
+            ));
+        }
+        let remaining_todo_ids =
+            read_rebase_todo_commit_ids(&rebase.directory.join("git-rebase-todo"))?;
+        let remaining_steps = self.plan_clean_rebase_replay_steps(
+            &index_before_continue.entries,
+            &remaining_todo_ids,
+            current_patch.commit_id,
+        )?;
         let message_text = if let Some(message) = state.merge_message.as_ref() {
             message.clone()
         } else {
@@ -2025,7 +2065,53 @@ impl Repository {
             &[parent_id],
             false,
         )?;
-        self.restore_rebase_head(commit.commit_id, rebase.head_name.as_deref())?;
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "rebase continue requires a working tree",
+            ));
+        };
+        let symlinks_enabled = self.core_symlinks_enabled()?;
+        let conflict_paths = BTreeSet::new();
+        let mut replay_parent_id = commit.commit_id;
+        let mut previous_entries = index_before_continue.entries;
+        let replayed_remaining_count = remaining_steps.len();
+        let mut final_head_id = commit.commit_id;
+        for step in remaining_steps {
+            write_non_conflicting_merge_worktree_changes(
+                self,
+                worktree,
+                &previous_entries,
+                &step.merged_entries,
+                &conflict_paths,
+                symlinks_enabled,
+            )?;
+            Index {
+                entries: step.merged_entries.clone(),
+                extensions: Vec::new(),
+            }
+            .write(&self.git_dir().join("index"))?;
+            let replayed = self.commit_index_with_parents(
+                &step.commit.message,
+                &CommitOptions {
+                    author: Some(SignatureIdentity {
+                        name: step.commit.author.name,
+                        email: step.commit.author.email,
+                    }),
+                    author_date: Some(SignatureTime {
+                        timestamp: step.commit.author.timestamp,
+                        offset: step.commit.author.offset,
+                    }),
+                    verify: false,
+                    ..CommitOptions::default()
+                },
+                &[replay_parent_id],
+                false,
+            )?;
+            replay_parent_id = replayed.commit_id;
+            final_head_id = replayed.commit_id;
+            previous_entries = step.merged_entries;
+        }
+        self.restore_rebase_head(final_head_id, rebase.head_name.as_deref())?;
         remove_dir_if_exists(&self.git_dir().join("rebase-apply"))?;
         remove_dir_if_exists(&self.git_dir().join("rebase-merge"))?;
         remove_file_if_exists(&self.git_dir().join("REBASE_HEAD"))?;
@@ -2040,7 +2126,68 @@ impl Repository {
             message_summary,
             head_name: rebase.head_name.clone(),
             diff,
+            replayed_remaining_count,
+            first_remaining_step: current_step + 1,
+            total_steps,
         })
+    }
+
+    fn plan_clean_rebase_replay_steps(
+        &self,
+        resolved_entries: &[IndexEntry],
+        remaining_todo_ids: &[ObjectId],
+        stopped_commit_id: ObjectId,
+    ) -> Result<Vec<RebaseReplayStep>> {
+        let mut expected_parent = stopped_commit_id;
+        let mut current_entries = resolved_entries.to_vec();
+        let mut replay_steps = Vec::new();
+        for picked_id in remaining_todo_ids {
+            let picked_object = self.read_object(*picked_id)?;
+            if picked_object.kind != ObjectKind::Commit {
+                return Err(RitError::invalid_input(format!(
+                    "rebase todo target {picked_id} is {}, not commit",
+                    picked_object.kind
+                )));
+            }
+            let picked_commit = parse_commit(&picked_object.data)?;
+            let Some(parent_id) = picked_commit.parents.first().copied() else {
+                return Err(RitError::invalid_input(
+                    "rebase replay of root commits is not implemented",
+                ));
+            };
+            if picked_commit.parents.len() != 1 || parent_id != expected_parent {
+                return Err(RitError::invalid_input(
+                    "rebase replay currently supports a linear first-parent chain",
+                ));
+            }
+            let base_entries = self.commit_index_entries(parent_id)?;
+            let picked_entries = self.commit_index_entries(*picked_id)?;
+            let plan = non_fast_forward_merge_workflow_plan(
+                &base_entries,
+                &current_entries,
+                &picked_entries,
+            );
+            if !plan.conflict_stages.is_empty() {
+                return Err(RitError::invalid_input(
+                    "rebase continue with later conflicts is not implemented",
+                ));
+            }
+            let merged_entries = self.non_fast_forward_merge_index_entries(
+                &base_entries,
+                &current_entries,
+                &picked_entries,
+                &[],
+                &picked_id.to_hex(),
+            )?;
+            current_entries = merged_entries.clone();
+            expected_parent = *picked_id;
+            replay_steps.push(RebaseReplayStep {
+                commit_id: *picked_id,
+                commit: picked_commit,
+                merged_entries,
+            });
+        }
+        Ok(replay_steps)
     }
 
     /// Commits a resolved in-progress merge.
@@ -2968,6 +3115,29 @@ fn rebase_todo_subject(message: &str) -> String {
     } else {
         format!("# {subject}")
     }
+}
+
+fn read_rebase_todo_commit_ids(path: &Path) -> Result<Vec<ObjectId>> {
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(source) => return Err(RitError::io(path, source)),
+    };
+    let mut commit_ids = Vec::new();
+    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        let Some(rest) = line.strip_prefix("pick ") else {
+            return Err(RitError::invalid_input(format!(
+                "unsupported rebase todo command in {}: {line}",
+                path.display()
+            )));
+        };
+        let object_id = rest
+            .split_whitespace()
+            .next()
+            .ok_or_else(|| RitError::invalid_input("rebase todo pick is missing an object id"))?;
+        commit_ids.push(ObjectId::from_hex(object_id)?);
+    }
+    Ok(commit_ids)
 }
 
 fn rebase_author_script(commit: &Commit) -> String {
