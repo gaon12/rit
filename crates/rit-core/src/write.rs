@@ -1243,6 +1243,55 @@ impl Repository {
         Ok(original_head)
     }
 
+    /// Clears cherry-pick state without changing the index or working tree.
+    pub fn quit_cherry_pick(&self) -> Result<()> {
+        remove_file_if_exists(&self.git_dir().join("CHERRY_PICK_HEAD"))?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))
+    }
+
+    /// Commits a resolved in-progress cherry-pick.
+    pub fn continue_cherry_pick(&self, options: &CommitOptions) -> Result<CommitResult> {
+        let state = self.merge_state()?;
+        let Some(picked_id) = state.cherry_pick_head else {
+            return Err(RitError::invalid_input("no cherry-pick to continue"));
+        };
+        let head_id = self.resolve_head()?.ok_or_else(|| {
+            RitError::invalid_input("cherry-pick continue requires an existing HEAD")
+        })?;
+        let Some(message) = state.merge_message.as_deref() else {
+            return Err(RitError::invalid_input("cherry-pick message is missing"));
+        };
+        let picked_object = self.read_object(picked_id)?;
+        if picked_object.kind != ObjectKind::Commit {
+            return Err(RitError::invalid_input(format!(
+                "CHERRY_PICK_HEAD points to {}, not commit",
+                picked_object.kind
+            )));
+        }
+        let picked_commit = parse_commit(&picked_object.data)?;
+        let cleaned_message = cleanup_commented_commit_message(message);
+        let result = self.commit_index_with_parents(
+            &cleaned_message,
+            &CommitOptions {
+                author: Some(SignatureIdentity {
+                    name: picked_commit.author.name,
+                    email: picked_commit.author.email,
+                }),
+                author_date: Some(SignatureTime {
+                    timestamp: picked_commit.author.timestamp,
+                    offset: picked_commit.author.offset,
+                }),
+                ..options.clone()
+            },
+            &[head_id],
+            false,
+        )?;
+        remove_file_if_exists(&self.git_dir().join("CHERRY_PICK_HEAD"))?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))?;
+        self.refresh_indexdb_after_git_write();
+        Ok(result)
+    }
+
     fn start_conflicted_merge(&self, input: ConflictedMergeStart<'_>) -> Result<()> {
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
@@ -2194,6 +2243,18 @@ fn cherry_pick_message_with_conflicts(message: &str, conflict_paths: &BTreeSet<&
         output.push_str("#\t");
         output.push_str(path);
         output.push('\n');
+    }
+    output
+}
+
+fn cleanup_commented_commit_message(message: &str) -> String {
+    let mut output = message
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .collect::<Vec<_>>()
+        .join("\n");
+    while output.ends_with('\n') || output.ends_with(' ') {
+        output.pop();
     }
     output
 }

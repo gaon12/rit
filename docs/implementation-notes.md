@@ -658,6 +658,11 @@
   `CHERRY_PICK_HEAD`, `MERGE_MSG`, unmerged index stages, and conflict markers
   for the first supported conflict slice. `rit cherry-pick --abort` restores
   `ORIG_HEAD` and clears the cherry-pick state.
+- `rit cherry-pick --continue` commits the resolved index for that
+  single-commit conflict slice, preserves the picked commit's author and
+  message, and clears `CHERRY_PICK_HEAD`/`MERGE_MSG`. `rit cherry-pick --quit`
+  clears the state files while leaving the conflicted index and working tree
+  untouched.
 - Still unsupported: remaining full conflict result message parity, strategies,
   full merge hook/editor parity, full `cherry-pick`, `rebase`, and `stash`.
 
@@ -1310,18 +1315,20 @@
 ### `rit cherry-pick`
 
 - Baseline command checked: `git cherry-pick -h`
-- Supported options: one target commit, plus `-n`/`--no-commit` and
-  `--commit` toggles.
-- Unsupported options: multiple commits, `--continue`, `--skip`, `--quit`,
-  `--mainline`, `--ff`, signing, signoff, strategy options, empty-commit
-  handling, and conflict continuation.
+- Supported options: one target commit, `-n`/`--no-commit`, `--commit`,
+  `--abort`, `--continue`, and `--quit` for the supported single-commit
+  conflict state.
+- Unsupported options: multiple commits, `--skip`, `--mainline`, `--ff`,
+  signing, signoff, strategy options, empty-commit handling, and full
+  sequencer/editor/hook parity.
 - Git-compatible behavior: clean single-parent picks apply the picked commit's
   parent-to-commit tree change onto `HEAD`, create a new one-parent commit, and
   preserve the picked author and commit message. With `-n`/`--no-commit`, the
   change is staged and materialized without advancing `HEAD` or writing
   `CHERRY_PICK_HEAD`. Conflicting picks write `CHERRY_PICK_HEAD`, `MERGE_MSG`,
   unmerged index stages, and worktree conflict markers; `--abort` restores
-  `ORIG_HEAD`.
+  `ORIG_HEAD`; `--continue` commits the resolved index with the picked author
+  and message; `--quit` clears state without changing the index or worktree.
 - Intentional differences: output and hints are simplified, and sequencer
   state for multiple commits is not implemented.
 - Repository mutation: yes, for clean picks it updates the worktree, index,

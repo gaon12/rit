@@ -2358,6 +2358,8 @@ fn cherry_pick_command(
 ) -> io::Result<ExitCode> {
     let mut commit = true;
     let mut abort = false;
+    let mut quit = false;
+    let mut continue_pick = false;
     let mut target = None;
     for arg in args {
         if arg == "-n" || arg == "--no-commit" {
@@ -2366,6 +2368,10 @@ fn cherry_pick_command(
             commit = true;
         } else if arg == "--abort" {
             abort = true;
+        } else if arg == "--quit" {
+            quit = true;
+        } else if arg == "--continue" {
+            continue_pick = true;
         } else if arg.starts_with('-') {
             writeln!(stderr, "rit: unsupported cherry-pick option '{arg}'")?;
             return Ok(ExitCode::from(129));
@@ -2379,28 +2385,72 @@ fn cherry_pick_command(
             target = Some(arg.as_str());
         }
     }
+    let state_option_count = [abort, quit, continue_pick]
+        .into_iter()
+        .filter(|selected| *selected)
+        .count();
+    if state_option_count > 1 {
+        writeln!(
+            stderr,
+            "rit: cherry-pick can use only one of --abort, --quit, and --continue"
+        )?;
+        return Ok(ExitCode::from(129));
+    }
     let Some(target) = target else {
-        if abort {
+        if abort || quit || continue_pick {
             let repository = match discover_repository(stderr)? {
                 Some(repository) => repository,
                 None => return Ok(ExitCode::from(128)),
             };
             let before = capture_operation_snapshot(&repository, stderr)?;
-            return match repository.abort_cherry_pick() {
-                Ok(restored_head) => {
+            if abort {
+                return match repository.abort_cherry_pick() {
+                    Ok(restored_head) => {
+                        record_operation(
+                            &repository,
+                            "cherry-pick",
+                            "abort cherry-pick",
+                            before,
+                            Vec::new(),
+                            stderr,
+                        )?;
+                        writeln!(
+                            stdout,
+                            "Aborted cherry-pick; restored {}",
+                            &restored_head.to_hex()[..7]
+                        )?;
+                        Ok(ExitCode::SUCCESS)
+                    }
+                    Err(error) => write_command_error(stderr, error),
+                };
+            }
+            if quit {
+                return match repository.quit_cherry_pick() {
+                    Ok(()) => {
+                        record_operation(
+                            &repository,
+                            "cherry-pick",
+                            "quit cherry-pick",
+                            before,
+                            Vec::new(),
+                            stderr,
+                        )?;
+                        Ok(ExitCode::SUCCESS)
+                    }
+                    Err(error) => write_command_error(stderr, error),
+                };
+            }
+            return match repository.continue_cherry_pick(&rit_core::CommitOptions::default()) {
+                Ok(result) => {
                     record_operation(
                         &repository,
                         "cherry-pick",
-                        "abort cherry-pick",
+                        "continue cherry-pick",
                         before,
-                        Vec::new(),
+                        vec![result.commit_id],
                         stderr,
                     )?;
-                    writeln!(
-                        stdout,
-                        "Aborted cherry-pick; restored {}",
-                        &restored_head.to_hex()[..7]
-                    )?;
+                    writeln!(stdout, "[{}] cherry-pick", &result.commit_id.to_hex()[..7])?;
                     Ok(ExitCode::SUCCESS)
                 }
                 Err(error) => write_command_error(stderr, error),
@@ -2410,10 +2460,17 @@ fn cherry_pick_command(
             return Ok(ExitCode::from(129));
         }
     };
-    if abort {
+    if abort || quit || continue_pick {
+        let option = if abort {
+            "--abort"
+        } else if quit {
+            "--quit"
+        } else {
+            "--continue"
+        };
         writeln!(
             stderr,
-            "rit: cherry-pick --abort does not take a target revision"
+            "rit: cherry-pick {option} does not take a target revision"
         )?;
         return Ok(ExitCode::from(129));
     }

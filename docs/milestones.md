@@ -487,8 +487,12 @@ Completion criteria:
     `MERGE_MSG`, unmerged index stages, and conflict markers.
   - [x] `cherry-pick --abort` restores `ORIG_HEAD` for the first conflicted
     cherry-pick slice.
-  - [ ] Sequencer operations, merge commits with `--mainline`, `--continue`,
-    `--quit`, and `--skip`.
+  - [x] `cherry-pick --continue` commits a resolved single-commit conflict
+    using the picked commit's author/message and clears cherry-pick state.
+  - [x] `cherry-pick --quit` clears cherry-pick state while preserving the
+    conflicted index and worktree.
+  - [ ] Multi-commit sequencer operations, merge commits with `--mainline`,
+    `--skip`, strategy options, and editor/hook parity.
 - [ ] `rit rebase`
 - [ ] `rit stash`
 - [~] Conflict index stages.
