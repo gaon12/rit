@@ -105,6 +105,11 @@ fn stash_command(
     match args {
         [subcommand] if subcommand == "list" => {}
         [subcommand] if subcommand == "clear" => {}
+        [subcommand, rest @ ..] if subcommand == "drop" => {
+            if parse_stash_drop_args(rest, stderr)?.is_none() {
+                return Ok(ExitCode::from(129));
+            }
+        }
         [] => {
             writeln!(stderr, "rit: stash requires a supported subcommand")?;
             return Ok(ExitCode::from(129));
@@ -125,6 +130,22 @@ fn stash_command(
             Err(error) => write_command_error(stderr, error),
         };
     }
+    if let [subcommand, rest @ ..] = args
+        && subcommand == "drop"
+    {
+        let Some(drop_args) = parse_stash_drop_args(rest, stderr)? else {
+            return Ok(ExitCode::from(129));
+        };
+        return match repository.stash_drop(drop_args.index, drop_args.name.clone()) {
+            Ok(result) => {
+                if !drop_args.quiet {
+                    writeln!(stdout, "Dropped {} ({})", result.name, result.object_id)?;
+                }
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_stash_error(stderr, error),
+        };
+    }
 
     match repository.stash_list() {
         Ok(entries) => {
@@ -135,6 +156,85 @@ fn stash_command(
         }
         Err(error) => write_command_error(stderr, error),
     }
+}
+
+struct StashDropArgs {
+    index: usize,
+    name: String,
+    quiet: bool,
+}
+
+fn parse_stash_drop_args(
+    args: &[String],
+    stderr: &mut dyn Write,
+) -> io::Result<Option<StashDropArgs>> {
+    let mut quiet = false;
+    let mut stash = None;
+    for arg in args {
+        match arg.as_str() {
+            "-q" | "--quiet" => quiet = true,
+            _ if arg.starts_with('-') => {
+                writeln!(stderr, "rit: unsupported stash drop option '{arg}'")?;
+                return Ok(None);
+            }
+            _ if stash.is_none() => stash = Some(arg.as_str()),
+            _ => {
+                writeln!(stderr, "rit: stash drop accepts at most one stash")?;
+                return Ok(None);
+            }
+        }
+    }
+
+    let (index, name) = parse_stash_name(stash.unwrap_or("refs/stash@{0}"))?;
+    Ok(Some(StashDropArgs { index, name, quiet }))
+}
+
+fn parse_stash_name(input: &str) -> io::Result<(usize, String)> {
+    if input.chars().all(|character| character.is_ascii_digit()) {
+        let index = parse_stash_index(input)?;
+        return Ok((index, format!("refs/stash@{{{index}}}")));
+    }
+    if let Some(index_text) = input
+        .strip_prefix("refs/stash@{")
+        .and_then(|rest| rest.strip_suffix('}'))
+    {
+        let index = parse_stash_index(index_text)?;
+        return Ok((index, input.to_owned()));
+    }
+    if let Some(index_text) = input
+        .strip_prefix("stash@{")
+        .and_then(|rest| rest.strip_suffix('}'))
+    {
+        let index = parse_stash_index(index_text)?;
+        return Ok((index, input.to_owned()));
+    }
+    Err(io::Error::new(
+        io::ErrorKind::InvalidInput,
+        format!("unsupported stash name: {input}"),
+    ))
+}
+
+fn parse_stash_index(input: &str) -> io::Result<usize> {
+    input.parse::<usize>().map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid stash index: {input}"),
+        )
+    })
+}
+
+fn write_stash_error(stderr: &mut dyn Write, error: rit_core::RitError) -> io::Result<ExitCode> {
+    if let rit_core::RitError::InvalidInput { message } = &error {
+        if message == "No stash entries found." {
+            writeln!(stderr, "{message}")?;
+            return Ok(ExitCode::from(1));
+        }
+        if let Some(count) = message.strip_prefix("log for 'stash' only has ") {
+            writeln!(stderr, "fatal: log for 'stash' only has {count}")?;
+            return Ok(ExitCode::from(128));
+        }
+    }
+    write_command_error(stderr, error)
 }
 
 fn workspace_command(

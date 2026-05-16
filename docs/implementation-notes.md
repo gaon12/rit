@@ -1370,19 +1370,26 @@
 ### `rit stash`
 
 - Baseline command checked: `git stash -h`
-- Supported options: `rit stash list` and `rit stash clear` for loose stash
-  refs.
-- Unsupported options: default `stash push`, `push`, `save`, `show`, `drop`,
-  `pop`, `apply`, `branch`, `create`, `store`, `export`, `import`,
-  pathspecs, staged/keep-index/untracked modes, packed stash ref cleanup, and
-  stash apply conflict handling.
+- Supported options: `rit stash list`, `rit stash drop [-q|--quiet] [<stash>]`,
+  and `rit stash clear` for loose stash refs.
+- Unsupported options: default `stash push`, `push`, `save`, `show`, `pop`,
+  `apply`, `branch`, `create`, `store`, `export`, `import`, pathspecs,
+  staged/keep-index/untracked modes, packed stash ref cleanup, and stash apply
+  conflict handling.
 - Git-compatible behavior: `rit stash list` reads `.git/logs/refs/stash`
   directly, prints newest entries first as `stash@{n}: <reflog message>`, and
   prints nothing when no stash reflog exists.
+- Git-compatible behavior: `rit stash drop` removes the selected loose reflog
+  entry, rewrites remaining old/new reflog links, updates loose
+  `.git/refs/stash` to the newest remaining entry, and removes loose stash
+  state when the last entry is dropped.
 - Repository mutation: no for `stash list`.
 - Repository mutation: yes for `stash clear`; it removes loose `.git/refs/stash`
   and `.git/logs/refs/stash`.
-- Risk: low; clear is intentionally limited to loose stash state.
+- Repository mutation: yes for `stash drop`; it rewrites loose
+  `.git/logs/refs/stash` and loose `.git/refs/stash`.
+- Risk: low to moderate; mutations are intentionally limited to loose stash
+  state and do not yet edit packed stash refs.
 
 ### `rit op` and `rit undo`
 

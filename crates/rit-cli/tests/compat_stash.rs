@@ -62,6 +62,70 @@ fn stash_clear_removes_stash_list_like_git() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn stash_drop_default_matches_git() {
+    let root = temp_path("drop-default");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_stashes(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_drop = run_capture("git", ["stash", "drop"], &git_repo);
+    let rit_drop = run_capture(rit_binary(), ["stash", "drop"], &rit_repo);
+
+    assert_eq!(git_drop.exit_code, 0, "git stderr: {}", git_drop.stderr);
+    assert_eq!(rit_drop.exit_code, 0, "rit stderr: {}", rit_drop.stderr);
+    assert_eq!(git_drop.stdout, rit_drop.stdout);
+    assert_eq!(
+        run_capture("git", ["stash", "list"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+    );
+    assert_eq!(
+        read_optional_file(&git_repo.join(".git").join("refs").join("stash")),
+        read_optional_file(&rit_repo.join(".git").join("refs").join("stash"))
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn stash_drop_older_entry_relinks_reflog_like_git() {
+    let root = temp_path("drop-older");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_stashes(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_drop = run_capture("git", ["stash", "drop", "stash@{1}"], &git_repo);
+    let rit_drop = run_capture(rit_binary(), ["stash", "drop", "stash@{1}"], &rit_repo);
+
+    assert_eq!(git_drop.exit_code, 0, "git stderr: {}", git_drop.stderr);
+    assert_eq!(rit_drop.exit_code, 0, "rit stderr: {}", rit_drop.stderr);
+    assert_eq!(git_drop.stdout, rit_drop.stdout);
+    assert_eq!(
+        read_optional_file(&git_repo.join(".git").join("refs").join("stash")),
+        read_optional_file(&rit_repo.join(".git").join("refs").join("stash"))
+    );
+    assert_eq!(
+        read_optional_file(
+            &git_repo
+                .join(".git")
+                .join("logs")
+                .join("refs")
+                .join("stash")
+        ),
+        read_optional_file(
+            &rit_repo
+                .join(".git")
+                .join("logs")
+                .join("refs")
+                .join("stash")
+        )
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct CapturedCommand {
     exit_code: i32,
     stdout: String,
@@ -135,6 +199,10 @@ fn copy_directory(from: &Path, to: &Path) {
             fs::copy(&source_path, &target_path).expect("file should be copied");
         }
     }
+}
+
+fn read_optional_file(path: &Path) -> Option<String> {
+    fs::read_to_string(path).ok()
 }
 
 fn rit_binary() -> OsString {

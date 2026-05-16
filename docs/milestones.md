@@ -513,9 +513,11 @@ Completion criteria:
   - [x] `rit stash list` reads the Git-compatible `refs/stash` reflog and
     prints entries in newest-first order.
   - [x] `rit stash clear` removes loose `refs/stash` state and its reflog.
-  - [ ] `stash push`, `apply`, `pop`, `drop`, `show`, branch/export/import,
-    pathspecs, staged/keep-index/untracked modes, packed stash ref cleanup,
-    and conflict apply handling.
+  - [x] `rit stash drop` removes a loose reflog entry, relinks remaining
+    reflog entries, and updates loose `refs/stash`.
+  - [ ] `stash push`, `apply`, `pop`, `show`, branch/export/import, pathspecs,
+    staged/keep-index/untracked modes, packed stash ref cleanup, quiet/error
+    parity, and conflict apply handling.
 - [~] Conflict index stages.
   - [x] Preserve stage 0/1/2/3 in index read, write, sorting, and
     `ls-files --stage` output.

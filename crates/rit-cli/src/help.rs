@@ -198,9 +198,10 @@ Apply one non-merge commit onto the current HEAD, or manage an in-progress confl
 
 const STASH_HELP: &str = "\
 rit stash list
+rit stash drop [-q|--quiet] [<stash>]
 rit stash clear
 
-List entries from the Git-compatible refs/stash reflog, or clear loose stash state.
+List, drop, or clear entries from the Git-compatible refs/stash reflog.
 ";
 
 const AUTH_HELP: &str = "\
