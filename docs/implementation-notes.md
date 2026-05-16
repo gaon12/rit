@@ -244,6 +244,9 @@
   `rit add --plan`, `rit commit --plan`, `rit reset --plan`, and
   `rit merge --plan` as rit-specific dry-run views over the same selection
   logic used by the applying commands.
+- 2026-05-16 added the common `WritePlan` wrapper and `WritePlanEffects`
+  model so existing add, commit, reset, and merge dry-run plans can be handled
+  through one structured Rust API without flattening them into CLI text.
 - 2026-05-13 explainable pathspec slice used the existing Git-compatible
   pathspec parser; `rit pathspec explain <pathspec>` is rit-specific and
   prints normalized patterns, matching mode, exclusions, wildcard use,

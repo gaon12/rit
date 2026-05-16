@@ -53,6 +53,9 @@ mod vfs_prefetch_tests;
 mod vfs_tests;
 pub mod workspace_profile;
 pub mod write;
+pub mod write_plan;
+#[cfg(test)]
+mod write_plan_tests;
 
 pub use error::{Result, RitError};
 pub use history::LogEntry;
@@ -147,6 +150,10 @@ pub use write::{
     MergeConflictSide, MergeConflictStageEntry, MergeConflictStagePlan, MergeOptions, MergePlan,
     MergeResult, RebaseContinueResult, RebaseCurrentPatch, RebaseSkipResult, RebaseStartResult,
     ResetPlan, SignatureIdentity, SignatureTime,
+};
+pub use write_plan::{
+    PlannedHook, PlannedObjectWrite, PlannedPathAction, PlannedPathChange, PlannedPolicyCheck,
+    PlannedRefAction, PlannedRefChange, WritePlan, WritePlanEffects, WritePlanKind,
 };
 
 /// Returns the crate version used by the CLI and tests.
