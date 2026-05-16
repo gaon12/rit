@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::Path;
 
 use crate::{Repository, Result, RitError};
 
@@ -32,5 +33,19 @@ impl Repository {
             .enumerate()
             .map(|(index, message)| StashListEntry { index, message })
             .collect())
+    }
+
+    /// Clears the loose `refs/stash` ref and its reflog.
+    pub fn stash_clear(&self) -> Result<()> {
+        remove_file_if_exists(&self.common_dir().join("refs").join("stash"))?;
+        remove_file_if_exists(&self.common_dir().join("logs").join("refs").join("stash"))
+    }
+}
+
+fn remove_file_if_exists(path: &Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(source) => Err(RitError::io(path, source)),
     }
 }

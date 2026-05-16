@@ -1370,16 +1370,19 @@
 ### `rit stash`
 
 - Baseline command checked: `git stash -h`
-- Supported options: `rit stash list`.
+- Supported options: `rit stash list` and `rit stash clear` for loose stash
+  refs.
 - Unsupported options: default `stash push`, `push`, `save`, `show`, `drop`,
-  `pop`, `apply`, `branch`, `clear`, `create`, `store`, `export`, `import`,
-  pathspecs, staged/keep-index/untracked modes, and stash apply conflict
-  handling.
+  `pop`, `apply`, `branch`, `create`, `store`, `export`, `import`,
+  pathspecs, staged/keep-index/untracked modes, packed stash ref cleanup, and
+  stash apply conflict handling.
 - Git-compatible behavior: `rit stash list` reads `.git/logs/refs/stash`
   directly, prints newest entries first as `stash@{n}: <reflog message>`, and
   prints nothing when no stash reflog exists.
 - Repository mutation: no for `stash list`.
-- Risk: low; the first slice is read-only.
+- Repository mutation: yes for `stash clear`; it removes loose `.git/refs/stash`
+  and `.git/logs/refs/stash`.
+- Risk: low; clear is intentionally limited to loose stash state.
 
 ### `rit op` and `rit undo`
 

@@ -104,6 +104,7 @@ fn stash_command(
 ) -> io::Result<ExitCode> {
     match args {
         [subcommand] if subcommand == "list" => {}
+        [subcommand] if subcommand == "clear" => {}
         [] => {
             writeln!(stderr, "rit: stash requires a supported subcommand")?;
             return Ok(ExitCode::from(129));
@@ -118,6 +119,13 @@ fn stash_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
+    if matches!(args, [subcommand] if subcommand == "clear") {
+        return match repository.stash_clear() {
+            Ok(()) => Ok(ExitCode::SUCCESS),
+            Err(error) => write_command_error(stderr, error),
+        };
+    }
+
     match repository.stash_list() {
         Ok(entries) => {
             for entry in entries {

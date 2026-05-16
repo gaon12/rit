@@ -40,6 +40,28 @@ fn stash_list_matches_git_reflog_order() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn stash_clear_removes_stash_list_like_git() {
+    let root = temp_path("clear");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_stashes(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_clear = run_capture("git", ["stash", "clear"], &git_repo);
+    let rit_clear = run_capture(rit_binary(), ["stash", "clear"], &rit_repo);
+
+    assert_eq!(git_clear.exit_code, 0, "git stderr: {}", git_clear.stderr);
+    assert_eq!(rit_clear.exit_code, 0, "rit stderr: {}", rit_clear.stderr);
+    assert_eq!(git_clear.stdout, rit_clear.stdout);
+    assert_eq!(
+        run_capture("git", ["stash", "list"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct CapturedCommand {
     exit_code: i32,
     stdout: String,
