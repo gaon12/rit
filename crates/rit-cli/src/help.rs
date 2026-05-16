@@ -224,6 +224,7 @@ Abort an in-progress rebase by restoring the original branch, index, and working
 const STASH_HELP: &str = "\
 rit stash list
 rit stash [push [(-m|--message) <message>] [-q|--quiet]]
+rit stash save [-q|--quiet] [<message>]
 rit stash show [-p|--patch|--stat|--name-only|--name-status|--numstat] [<stash>]
 rit stash drop [-q|--quiet] [<stash>]
 rit stash apply [-q|--quiet] [<stash>]

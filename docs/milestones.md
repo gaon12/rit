@@ -563,6 +563,8 @@ Completion criteria:
     stash state.
   - [x] Basic `stash push` saves tracked index and working-tree changes into a
     two-parent stash commit, updates loose `refs/stash`, and restores `HEAD`.
+  - [x] Basic legacy `stash save [-q] [<message>]` uses the same tracked-change
+    stash shape as push and matches Git's saved/no-change output.
   - [x] `rit stash create [<message>]` creates the same tracked-change stash
     commit shape without updating `refs/stash` or cleaning the worktree.
   - [x] Basic `stash apply -q [<stash>]` restores tracked worktree changes from

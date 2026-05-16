@@ -125,6 +125,11 @@ fn stash_command(
         [subcommand] if subcommand == "list" => {}
         [subcommand] if subcommand == "clear" => {}
         [subcommand, ..] if subcommand == "create" => {}
+        [subcommand, rest @ ..] if subcommand == "save" => {
+            if parse_stash_save_args(rest, stderr)?.is_none() {
+                return Ok(ExitCode::from(129));
+            }
+        }
         [subcommand, rest @ ..] if subcommand == "apply" => {
             if parse_stash_apply_args(rest, stderr)?.is_none() {
                 return Ok(ExitCode::from(129));
@@ -180,6 +185,28 @@ fn stash_command(
         return match repository.stash_apply(apply_args.index) {
             Ok(_result) => Ok(ExitCode::SUCCESS),
             Err(error) => write_stash_error(stderr, error),
+        };
+    }
+    if let [subcommand, rest @ ..] = args
+        && subcommand == "save"
+    {
+        let Some(save_args) = parse_stash_save_args(rest, stderr)? else {
+            return Ok(ExitCode::from(129));
+        };
+        return match repository.stash_push(save_args.message.as_deref()) {
+            Ok(rit_core::StashPushResult::NoLocalChanges) => {
+                if !save_args.quiet {
+                    writeln!(stdout, "No local changes to save")?;
+                }
+                Ok(ExitCode::SUCCESS)
+            }
+            Ok(rit_core::StashPushResult::Saved { message, .. }) => {
+                if !save_args.quiet {
+                    writeln!(stdout, "Saved working directory and index state {message}")?;
+                }
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_command_error(stderr, error),
         };
     }
     if let [subcommand, rest @ ..] = args
@@ -384,6 +411,11 @@ struct StashApplyArgs {
     index: usize,
 }
 
+struct StashSaveArgs {
+    message: Option<String>,
+    quiet: bool,
+}
+
 struct StashStoreArgs {
     commit: String,
     message: Option<String>,
@@ -434,6 +466,28 @@ fn parse_stash_push_args(
         index += 1;
     }
     Ok(Some(parsed))
+}
+
+fn parse_stash_save_args(
+    args: &[String],
+    stderr: &mut dyn Write,
+) -> io::Result<Option<StashSaveArgs>> {
+    let mut quiet = false;
+    let mut message_parts = Vec::new();
+    for arg in args {
+        match arg.as_str() {
+            "-q" | "--quiet" if message_parts.is_empty() => quiet = true,
+            "--" if message_parts.is_empty() => {}
+            _ if arg.starts_with('-') && message_parts.is_empty() => {
+                writeln!(stderr, "rit: unsupported stash save option '{arg}'")?;
+                return Ok(None);
+            }
+            _ => message_parts.push(arg.to_owned()),
+        }
+    }
+
+    let message = (!message_parts.is_empty()).then(|| message_parts.join(" "));
+    Ok(Some(StashSaveArgs { message, quiet }))
 }
 
 fn parse_stash_apply_args(
