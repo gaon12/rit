@@ -5,6 +5,7 @@ use std::process::ExitCode;
 mod auth;
 mod doctor;
 mod file_history;
+mod graph;
 mod help;
 mod indexdb;
 mod op;
@@ -71,6 +72,7 @@ fn run(
         [command, rest @ ..] if command == "file-history" => {
             file_history::file_history_command(rest, stdout, stderr)
         }
+        [command, rest @ ..] if command == "graph" => graph::graph_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "show" => show_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ls-files" => ls_files_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ignore" => ignore_command(rest, stdout, stderr),
@@ -4244,6 +4246,24 @@ mod tests {
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit file-history <path>"));
         assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn graph_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "graph"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit graph [--json]"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn graph_rejects_unknown_options() {
+        let (code, stdout, stderr) = run_with(&["graph", "--bogus"]);
+
+        assert_eq!(code, ExitCode::from(129));
+        assert_eq!(stdout, "");
+        assert!(stderr.contains("unsupported graph option '--bogus'"));
     }
 
     #[cfg(not(feature = "indexdb"))]

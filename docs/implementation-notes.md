@@ -273,6 +273,9 @@
 - 2026-05-17 local graph model slice added read-only `Repository::local_graph`
   with HEAD, local branches, configured upstreams, stash entries, known
   worktrees, ahead/behind counts, and unpushed/diverged branch flags.
+- 2026-05-17 graph CLI slice checked Git 2.52.0.windows.1 with `git help -a`
+  and `git help log`; `rit graph` is rit-specific and does not wrap Git. It
+  prints text or stable JSON from the typed local graph model.
 - 2026-05-13 IndexDB slice checked `git --version` and `git help -a`; IndexDB
   is rit-specific and has no Git command baseline. Added feature-gated SQLite
   support with `rit indexdb`, `status`, `build`, `update`, `repair`, `rebuild`,
