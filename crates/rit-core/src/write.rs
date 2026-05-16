@@ -2742,7 +2742,7 @@ impl Repository {
         .write(&self.git_dir().join("index"))
     }
 
-    fn commit_index_entries(&self, commit_id: ObjectId) -> Result<Vec<IndexEntry>> {
+    pub(crate) fn commit_index_entries(&self, commit_id: ObjectId) -> Result<Vec<IndexEntry>> {
         let object = self.read_object(commit_id)?;
         if object.kind != ObjectKind::Commit {
             return Err(RitError::invalid_input(format!(

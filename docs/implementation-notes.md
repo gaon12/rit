@@ -1472,13 +1472,15 @@
   index and working-tree changes,
   `rit stash show [-p|--patch|--stat|--name-only|--name-status|--numstat] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
+  `rit stash apply [-q|--quiet] [<stash>]` for clean tracked worktree
+  restoration when `HEAD` matches the stash base,
   `rit stash create [<message>]`,
   `rit stash store [(-m|--message) <message>] [-q|--quiet] <commit>`, and
   `rit stash clear` for loose stash refs.
-- Unsupported options: `save`, `pop`, `apply`, `branch`, `export`, `import`,
-  stash show untracked display options, push pathspecs,
-  staged/keep-index/untracked modes, packed stash ref cleanup, and stash apply
-  conflict handling.
+- Unsupported options: `save`, `pop`, `branch`, `export`, `import`, stash show
+  untracked display options, push pathspecs, staged/keep-index/untracked modes,
+  packed stash ref cleanup, default apply human status output, `--index`, and
+  stash apply conflict/cross-branch handling.
 - Git-compatible behavior: `rit stash push` without untracked/pathspec options
   writes the usual two-parent stash shape for tracked changes, stores it in
   loose `refs/stash`, prints Git's saved/no-change messages, and restores the
@@ -1486,6 +1488,9 @@
 - Git-compatible behavior: `rit stash create` writes the same tracked-change
   stash commit shape and prints its object ID without updating `refs/stash` or
   cleaning the index and working tree. Clean repositories print nothing.
+- Git-compatible behavior: `rit stash apply -q [<stash>]` restores tracked
+  worktree changes from a loose stash without dropping it when the current
+  tracked state is clean and `HEAD` matches the stash base.
 - Git-compatible behavior: `rit stash list` reads `.git/logs/refs/stash`
   directly, prints newest entries first as `stash@{n}: <reflog message>`, and
   prints nothing when no stash reflog exists.

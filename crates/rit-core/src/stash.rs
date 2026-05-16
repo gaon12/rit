@@ -3,7 +3,10 @@ use std::io::Write;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use crate::index::{Index, IndexEntry, IndexEntryStat, join_slash_path};
+use crate::write::write_worktree_entry_atomically;
 use crate::{
     DiffPatch, DiffSummary, GitConfig, ObjectId, ObjectKind, PathspecSet, Repository, Result,
     RitError, Signature, parse_commit,
@@ -27,6 +30,15 @@ pub struct StashDropResult {
     pub name: String,
     /// Commit ID that was stored by the dropped reflog entry.
     pub object_id: ObjectId,
+}
+
+/// Result of applying one stash entry.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StashApplyResult {
+    /// Stash commit that was applied.
+    pub object_id: ObjectId,
+    /// Repository-relative paths written or removed in the working tree.
+    pub paths: Vec<String>,
 }
 
 /// Result of saving the current tracked changes with `stash push`.
@@ -85,6 +97,75 @@ impl Repository {
         Ok(StashPushResult::Saved {
             object_id: created.object_id,
             message: created.message,
+        })
+    }
+
+    /// Applies tracked working-tree changes from one loose stash entry.
+    ///
+    /// This first apply slice requires a clean tracked index/worktree and a
+    /// current `HEAD` that still matches the stash base. It restores worktree
+    /// files only; `--index`, conflict handling, and cross-branch applies are
+    /// later milestone work.
+    pub fn stash_apply(&self, display_index: usize) -> Result<StashApplyResult> {
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "stash apply must be run in a repository with a working tree",
+            ));
+        };
+        ensure_clean_tracked_state_for_stash_apply(self)?;
+
+        let stash_id = self.stash_id_at(display_index)?;
+        let stash_object = self.read_object(stash_id)?;
+        if stash_object.kind != ObjectKind::Commit {
+            return Err(RitError::invalid_input(format!(
+                "stash entry {stash_id} is {}, not commit",
+                stash_object.kind
+            )));
+        }
+        let stash_commit = parse_commit(&stash_object.data)?;
+        let base_id = stash_commit
+            .parents
+            .first()
+            .copied()
+            .ok_or_else(|| RitError::invalid_input("stash commit has no parent"))?;
+        let head_id = self
+            .resolve_head()?
+            .ok_or_else(|| RitError::invalid_input("stash apply requires an existing HEAD"))?;
+        if head_id != base_id {
+            return Err(RitError::invalid_input(
+                "stash apply currently requires HEAD to match the stash base",
+            ));
+        }
+
+        let base_entries = index_entries_by_path(self.commit_index_entries(base_id)?);
+        let stash_entries = index_entries_by_path(self.commit_index_entries(stash_id)?);
+        let changed_paths = changed_stash_paths(&base_entries, &stash_entries);
+        let symlinks_enabled = self.core_symlinks_enabled()?;
+        for path in &changed_paths {
+            let full_path = join_slash_path(worktree, path);
+            match stash_entries.get(path) {
+                Some(entry) => {
+                    let object = self.read_object(entry.object_id)?;
+                    if object.kind != ObjectKind::Blob {
+                        return Err(RitError::invalid_input(format!(
+                            "object {} is {}, not blob",
+                            entry.object_id, object.kind
+                        )));
+                    }
+                    write_worktree_entry_atomically(
+                        &full_path,
+                        &object.data,
+                        entry.mode,
+                        symlinks_enabled,
+                    )?;
+                }
+                None => remove_file_if_exists(&full_path)?,
+            }
+        }
+
+        Ok(StashApplyResult {
+            object_id: stash_id,
+            paths: changed_paths.into_iter().collect(),
         })
     }
 
@@ -482,6 +563,51 @@ fn ensure_stashable_index(index: &Index) -> Result<()> {
         )));
     }
     Ok(())
+}
+
+fn ensure_clean_tracked_state_for_stash_apply(repository: &Repository) -> Result<()> {
+    if repository
+        .status_porcelain_v1()?
+        .entries
+        .iter()
+        .any(|entry| entry.index_status != '?')
+    {
+        return Err(RitError::invalid_input(
+            "stash apply requires a clean tracked index and working tree",
+        ));
+    }
+    Ok(())
+}
+
+fn index_entries_by_path(entries: Vec<IndexEntry>) -> BTreeMap<String, IndexEntry> {
+    entries
+        .into_iter()
+        .map(|entry| (entry.path.clone(), entry))
+        .collect()
+}
+
+fn changed_stash_paths(
+    base_entries: &BTreeMap<String, IndexEntry>,
+    stash_entries: &BTreeMap<String, IndexEntry>,
+) -> BTreeSet<String> {
+    base_entries
+        .keys()
+        .chain(stash_entries.keys())
+        .filter(|path| {
+            let base = base_entries.get(*path);
+            let stash = stash_entries.get(*path);
+            !same_stash_tree_entry(base, stash)
+        })
+        .cloned()
+        .collect()
+}
+
+fn same_stash_tree_entry(left: Option<&IndexEntry>, right: Option<&IndexEntry>) -> bool {
+    match (left, right) {
+        (Some(left), Some(right)) => left.object_id == right.object_id && left.mode == right.mode,
+        (None, None) => true,
+        _ => false,
+    }
 }
 
 fn index_commit_message(stash_message: &str) -> String {

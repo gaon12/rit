@@ -125,6 +125,11 @@ fn stash_command(
         [subcommand] if subcommand == "list" => {}
         [subcommand] if subcommand == "clear" => {}
         [subcommand, ..] if subcommand == "create" => {}
+        [subcommand, rest @ ..] if subcommand == "apply" => {
+            if parse_stash_apply_args(rest, stderr)?.is_none() {
+                return Ok(ExitCode::from(129));
+            }
+        }
         [subcommand, rest @ ..] if subcommand == "push" => {
             if parse_stash_push_args(rest, stderr)?.is_none() {
                 return Ok(ExitCode::from(129));
@@ -159,6 +164,17 @@ fn stash_command(
         return match repository.stash_clear() {
             Ok(()) => Ok(ExitCode::SUCCESS),
             Err(error) => write_command_error(stderr, error),
+        };
+    }
+    if let [subcommand, rest @ ..] = args
+        && subcommand == "apply"
+    {
+        let Some(apply_args) = parse_stash_apply_args(rest, stderr)? else {
+            return Ok(ExitCode::from(129));
+        };
+        return match repository.stash_apply(apply_args.index) {
+            Ok(_result) => Ok(ExitCode::SUCCESS),
+            Err(error) => write_stash_error(stderr, error),
         };
     }
     if let [subcommand, rest @ ..] = args
@@ -337,6 +353,10 @@ struct StashDropArgs {
     quiet: bool,
 }
 
+struct StashApplyArgs {
+    index: usize,
+}
+
 struct StashStoreArgs {
     commit: String,
     message: Option<String>,
@@ -387,6 +407,30 @@ fn parse_stash_push_args(
         index += 1;
     }
     Ok(Some(parsed))
+}
+
+fn parse_stash_apply_args(
+    args: &[String],
+    stderr: &mut dyn Write,
+) -> io::Result<Option<StashApplyArgs>> {
+    let mut stash = None;
+    for arg in args {
+        match arg.as_str() {
+            "-q" | "--quiet" => {}
+            _ if arg.starts_with('-') => {
+                writeln!(stderr, "rit: unsupported stash apply option '{arg}'")?;
+                return Ok(None);
+            }
+            _ if stash.is_none() => stash = Some(arg.as_str()),
+            _ => {
+                writeln!(stderr, "rit: stash apply accepts at most one stash")?;
+                return Ok(None);
+            }
+        }
+    }
+
+    let (index, _) = parse_stash_name(stash.unwrap_or("refs/stash@{0}"))?;
+    Ok(Some(StashApplyArgs { index }))
 }
 
 fn parse_stash_store_args(

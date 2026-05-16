@@ -565,10 +565,12 @@ Completion criteria:
     two-parent stash commit, updates loose `refs/stash`, and restores `HEAD`.
   - [x] `rit stash create [<message>]` creates the same tracked-change stash
     commit shape without updating `refs/stash` or cleaning the worktree.
-  - [ ] `stash apply`, `pop`, branch/export/import, push pathspecs,
+  - [x] Basic `stash apply -q [<stash>]` restores tracked worktree changes from
+    a loose stash without dropping it when `HEAD` matches the stash base.
+  - [ ] `stash pop`, branch/export/import, push pathspecs,
     staged/keep-index/untracked modes, untracked/all modes, packed stash ref
-    cleanup, broader show options, broader error parity, and conflict apply
-    handling.
+    cleanup, default apply human status output, `--index`, broader show
+    options, broader error parity, and conflict/cross-branch apply handling.
 - [~] Conflict index stages.
   - [x] Preserve stage 0/1/2/3 in index read, write, sorting, and
     `ls-files --stage` output.
