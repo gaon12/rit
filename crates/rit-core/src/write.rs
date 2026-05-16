@@ -319,6 +319,11 @@ struct ConflictedCherryPickStart<'a> {
     conflict_stages: &'a [MergeConflictStagePlan],
 }
 
+struct RebaseReplayStep {
+    commit: Commit,
+    merged_entries: Vec<IndexEntry>,
+}
+
 /// Options that affect commit metadata without changing the committed tree.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommitOptions {
@@ -1563,41 +1568,54 @@ impl Repository {
                 "rebase start without a merge base is not implemented",
             ));
         };
-        let commits_to_replay = self.first_parent_commits_since(head_id, merge_base)?;
-        if commits_to_replay.len() != 1 {
-            return Err(RitError::invalid_input(
-                "rebase start currently supports replaying exactly one commit",
-            ));
-        }
-        ensure_clean_for_checkout(self)?;
-        let picked_id = commits_to_replay[0];
-        let picked_object = self.read_object(picked_id)?;
-        if picked_object.kind != ObjectKind::Commit {
-            return Err(RitError::invalid_input(format!(
-                "rebase target {picked_id} is {}, not commit",
-                picked_object.kind
-            )));
-        }
-        let picked_commit = parse_commit(&picked_object.data)?;
-        let Some(parent_id) = picked_commit.parents.first().copied() else {
-            return Err(RitError::invalid_input(
-                "rebase replay of root commits is not implemented",
-            ));
-        };
-        if picked_commit.parents.len() != 1 || parent_id != merge_base {
-            return Err(RitError::invalid_input(
-                "rebase replay currently supports one linear commit",
-            ));
-        }
-        let base_entries = self.commit_index_entries(parent_id)?;
-        let upstream_entries = self.commit_index_entries(upstream_id)?;
-        let picked_entries = self.commit_index_entries(picked_id)?;
-        let plan =
-            non_fast_forward_merge_workflow_plan(&base_entries, &upstream_entries, &picked_entries);
-        if !plan.conflict_stages.is_empty() {
-            return Err(RitError::invalid_input(
-                "rebase start with conflicts is not implemented",
-            ));
+        let replay_commit_ids = self.first_parent_commits_since(head_id, merge_base)?;
+        let mut replay_steps = Vec::new();
+        let mut expected_parent = merge_base;
+        let mut current_entries = self.commit_index_entries(upstream_id)?;
+        for picked_id in replay_commit_ids {
+            let picked_object = self.read_object(picked_id)?;
+            if picked_object.kind != ObjectKind::Commit {
+                return Err(RitError::invalid_input(format!(
+                    "rebase target {picked_id} is {}, not commit",
+                    picked_object.kind
+                )));
+            }
+            let picked_commit = parse_commit(&picked_object.data)?;
+            let Some(parent_id) = picked_commit.parents.first().copied() else {
+                return Err(RitError::invalid_input(
+                    "rebase replay of root commits is not implemented",
+                ));
+            };
+            if picked_commit.parents.len() != 1 || parent_id != expected_parent {
+                return Err(RitError::invalid_input(
+                    "rebase replay currently supports a linear first-parent chain",
+                ));
+            }
+            let base_entries = self.commit_index_entries(parent_id)?;
+            let picked_entries = self.commit_index_entries(picked_id)?;
+            let plan = non_fast_forward_merge_workflow_plan(
+                &base_entries,
+                &current_entries,
+                &picked_entries,
+            );
+            if !plan.conflict_stages.is_empty() {
+                return Err(RitError::invalid_input(
+                    "rebase start with conflicts is not implemented",
+                ));
+            }
+            let merged_entries = self.non_fast_forward_merge_index_entries(
+                &base_entries,
+                &current_entries,
+                &picked_entries,
+                &[],
+                upstream,
+            )?;
+            current_entries = merged_entries.clone();
+            expected_parent = picked_id;
+            replay_steps.push(RebaseReplayStep {
+                commit: picked_commit,
+                merged_entries,
+            });
         }
 
         let Some(worktree) = self.worktree() else {
@@ -1605,56 +1623,59 @@ impl Repository {
                 "rebase must be run in a repository with a working tree",
             ));
         };
+        ensure_clean_for_checkout(self)?;
         write_text_atomically(&self.git_dir().join("ORIG_HEAD"), &format!("{head_id}\n"))?;
         self.checkout_commit_tree(upstream_id)?;
         self.update_head(upstream_id)?;
         let symlinks_enabled = self.core_symlinks_enabled()?;
-        let merged_entries = self.non_fast_forward_merge_index_entries(
-            &base_entries,
-            &upstream_entries,
-            &picked_entries,
-            &[],
-            upstream,
-        )?;
         let conflict_paths = BTreeSet::new();
-        write_non_conflicting_merge_worktree_changes(
-            self,
-            worktree,
-            &upstream_entries,
-            &merged_entries,
-            &conflict_paths,
-            symlinks_enabled,
-        )?;
-        Index {
-            entries: merged_entries,
-            extensions: Vec::new(),
+        let mut parent_id = upstream_id;
+        let mut previous_entries = self.commit_index_entries(upstream_id)?;
+        let replayed_count = replay_steps.len();
+        let mut new_head_id = upstream_id;
+        for step in replay_steps {
+            write_non_conflicting_merge_worktree_changes(
+                self,
+                worktree,
+                &previous_entries,
+                &step.merged_entries,
+                &conflict_paths,
+                symlinks_enabled,
+            )?;
+            Index {
+                entries: step.merged_entries.clone(),
+                extensions: Vec::new(),
+            }
+            .write(&self.git_dir().join("index"))?;
+            let result = self.commit_index_with_parents(
+                &step.commit.message,
+                &CommitOptions {
+                    author: Some(SignatureIdentity {
+                        name: step.commit.author.name,
+                        email: step.commit.author.email,
+                    }),
+                    author_date: Some(SignatureTime {
+                        timestamp: step.commit.author.timestamp,
+                        offset: step.commit.author.offset,
+                    }),
+                    verify: false,
+                    ..CommitOptions::default()
+                },
+                &[parent_id],
+                false,
+            )?;
+            parent_id = result.commit_id;
+            new_head_id = result.commit_id;
+            previous_entries = step.merged_entries;
         }
-        .write(&self.git_dir().join("index"))?;
-        let result = self.commit_index_with_parents(
-            &picked_commit.message,
-            &CommitOptions {
-                author: Some(SignatureIdentity {
-                    name: picked_commit.author.name,
-                    email: picked_commit.author.email,
-                }),
-                author_date: Some(SignatureTime {
-                    timestamp: picked_commit.author.timestamp,
-                    offset: picked_commit.author.offset,
-                }),
-                verify: false,
-                ..CommitOptions::default()
-            },
-            &[upstream_id],
-            false,
-        )?;
         self.refresh_indexdb_after_git_write();
         Ok(RebaseStartResult {
             old_head_id: head_id,
-            new_head_id: result.commit_id,
+            new_head_id,
             upstream_id,
             branch_name,
             fast_forwarded: false,
-            replayed_count: 1,
+            replayed_count,
         })
     }
 
