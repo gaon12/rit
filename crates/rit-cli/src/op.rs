@@ -106,7 +106,7 @@ fn json_optional_string(value: Option<&str>) -> String {
         .unwrap_or_else(|| "null".to_owned())
 }
 
-fn json_escape(input: &str) -> String {
+pub(crate) fn json_escape(input: &str) -> String {
     let mut output = String::new();
     for character in input.chars() {
         match character {

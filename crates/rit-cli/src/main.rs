@@ -4268,17 +4268,17 @@ mod tests {
         let (code, stdout, stderr) = run_with(&["help", "doctor"]);
 
         assert_eq!(code, ExitCode::SUCCESS);
-        assert!(stdout.contains("rit doctor"));
+        assert!(stdout.contains("rit doctor [--json]"));
         assert_eq!(stderr, "");
     }
 
     #[test]
-    fn doctor_rejects_options_for_now() {
-        let (code, stdout, stderr) = run_with(&["doctor", "--json"]);
+    fn doctor_rejects_unknown_options() {
+        let (code, stdout, stderr) = run_with(&["doctor", "--bogus"]);
 
         assert_eq!(code, ExitCode::from(129));
         assert_eq!(stdout, "");
-        assert!(stderr.contains("does not accept options yet"));
+        assert!(stderr.contains("unsupported doctor option '--bogus'"));
     }
 
     #[test]

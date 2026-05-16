@@ -807,7 +807,7 @@ Completion criteria:
 ## M20: Doctor Fix Plans
 
 - [ ] Add `rit doctor --explain`.
-- [ ] Add `rit doctor --json`.
+- [x] Add `rit doctor --json`.
 - [ ] Add `rit doctor --fix-plan`.
 - [ ] Explain performance and maintenance findings such as loose objects,
   pack/index state, commit graph, and stale rit metadata.

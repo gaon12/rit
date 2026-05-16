@@ -839,6 +839,8 @@
 - Added read-only `Repository::doctor` and `rit doctor` to check repository
   directories, Git config readability, rit config readability, HEAD parsing,
   and HEAD object presence without invoking external Git.
+- Added `rit doctor --json` as a dependency-free JSON formatter over the same
+  structured `DoctorReport` used by the text output.
 - Added conservative `Repository::repair_plan`, `Repository::apply_repair_plan`,
   and `rit repair [--dry-run|--apply]`; the first repair action set only creates
   missing standard Git directories and refuses paths outside the repository.
@@ -852,8 +854,8 @@
 - Baseline command checked: `git version 2.52.0.windows.1`; `git help -a`
   does not list `doctor`, while related Git maintenance commands include
   `git fsck` and `git maintenance`.
-- Supported options: `rit doctor`.
-- Unsupported options: JSON output, repair actions, full object graph fsck.
+- Supported options: `rit doctor`, `rit doctor --json`.
+- Unsupported options: explain output, repair actions, full object graph fsck.
 - Intentional differences: `doctor` is a rit-specific read-only health summary,
   not a Git porcelain command.
 - Repository mutation: no.

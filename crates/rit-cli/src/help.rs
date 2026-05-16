@@ -280,9 +280,9 @@ Print the prefetch plan for a named workspace profile. Network prefetch executio
 ";
 
 const DOCTOR_HELP: &str = "\
-rit doctor
+rit doctor [--json]
 
-Run read-only repository health checks and print structured check results.
+Run read-only repository health checks and print text or JSON check results.
 ";
 
 const REPAIR_HELP: &str = "\
