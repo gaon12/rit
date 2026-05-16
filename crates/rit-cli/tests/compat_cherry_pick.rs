@@ -362,6 +362,42 @@ fn conflicting_cherry_pick_quit_leaves_index_and_worktree() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn conflicting_cherry_pick_skip_restores_head_index_and_worktree() {
+    let root = temp_path("skip");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_conflicting_cherry_pick(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let original_head = run_capture("git", ["rev-parse", "HEAD"], &git_repo).stdout;
+    run_capture("git", ["cherry-pick", "topic"], &git_repo);
+    run_capture(rit_binary(), ["cherry-pick", "topic"], &rit_repo);
+
+    let git_skip = run_capture("git", ["cherry-pick", "--skip"], &git_repo);
+    let rit_skip = run_capture(rit_binary(), ["cherry-pick", "--skip"], &rit_repo);
+
+    assert_eq!(git_skip.exit_code, 0, "git stderr: {}", git_skip.stderr);
+    assert_eq!(rit_skip.exit_code, 0, "rit stderr: {}", rit_skip.stderr);
+    assert_eq!(git_skip.stdout, rit_skip.stdout);
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &git_repo).stdout,
+        original_head
+    );
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &rit_repo).stdout,
+        original_head
+    );
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert!(!git_repo.join(".git").join("CHERRY_PICK_HEAD").exists());
+    assert!(!rit_repo.join(".git").join("CHERRY_PICK_HEAD").exists());
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct CapturedCommand {
     exit_code: i32,
     stdout: String,

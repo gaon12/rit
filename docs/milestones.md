@@ -493,8 +493,10 @@ Completion criteria:
     conflicted index and worktree.
   - [x] Clean merge commit cherry-pick supports `-m`/`--mainline` parent
     selection.
-  - [ ] Multi-commit sequencer operations, `--skip`, strategy options,
-    conflict continuation for merge commits, and editor/hook parity.
+  - [x] `cherry-pick --skip` restores `ORIG_HEAD` for the first conflicted
+    cherry-pick slice and clears state.
+  - [ ] Multi-commit sequencer operations, strategy options, conflict
+    continuation for merge commits, and editor/hook parity.
 - [ ] `rit rebase`
 - [ ] `rit stash`
 - [~] Conflict index stages.

@@ -1226,9 +1226,20 @@ impl Repository {
 
     /// Aborts an in-progress cherry-pick and restores the tree saved in `ORIG_HEAD`.
     pub fn abort_cherry_pick(&self) -> Result<ObjectId> {
+        self.restore_cherry_pick_original_head("abort")
+    }
+
+    /// Skips the current in-progress cherry-pick.
+    pub fn skip_cherry_pick(&self) -> Result<ObjectId> {
+        self.restore_cherry_pick_original_head("skip")
+    }
+
+    fn restore_cherry_pick_original_head(&self, action: &str) -> Result<ObjectId> {
         let cherry_pick_head_path = self.git_dir().join("CHERRY_PICK_HEAD");
         if !cherry_pick_head_path.exists() {
-            return Err(RitError::invalid_input("no cherry-pick to abort"));
+            return Err(RitError::invalid_input(format!(
+                "no cherry-pick to {action}"
+            )));
         }
         let original_head_path = self.git_dir().join("ORIG_HEAD");
         let original_head_text = fs::read_to_string(&original_head_path)

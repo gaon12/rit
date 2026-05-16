@@ -2360,6 +2360,7 @@ fn cherry_pick_command(
     let mut abort = false;
     let mut quit = false;
     let mut continue_pick = false;
+    let mut skip = false;
     let mut mainline = None;
     let mut target = None;
     let mut index = 0;
@@ -2390,6 +2391,8 @@ fn cherry_pick_command(
             quit = true;
         } else if arg == "--continue" {
             continue_pick = true;
+        } else if arg == "--skip" {
+            skip = true;
         } else if arg.starts_with('-') {
             writeln!(stderr, "rit: unsupported cherry-pick option '{arg}'")?;
             return Ok(ExitCode::from(129));
@@ -2404,19 +2407,19 @@ fn cherry_pick_command(
         }
         index += 1;
     }
-    let state_option_count = [abort, quit, continue_pick]
+    let state_option_count = [abort, quit, continue_pick, skip]
         .into_iter()
         .filter(|selected| *selected)
         .count();
     if state_option_count > 1 {
         writeln!(
             stderr,
-            "rit: cherry-pick can use only one of --abort, --quit, and --continue"
+            "rit: cherry-pick can use only one of --abort, --quit, --continue, and --skip"
         )?;
         return Ok(ExitCode::from(129));
     }
     let Some(target) = target else {
-        if abort || quit || continue_pick {
+        if abort || quit || continue_pick || skip {
             let repository = match discover_repository(stderr)? {
                 Some(repository) => repository,
                 None => return Ok(ExitCode::from(128)),
@@ -2437,6 +2440,22 @@ fn cherry_pick_command(
                             stdout,
                             "Aborted cherry-pick; restored {}",
                             &restored_head.to_hex()[..7]
+                        )?;
+                        Ok(ExitCode::SUCCESS)
+                    }
+                    Err(error) => write_command_error(stderr, error),
+                };
+            }
+            if skip {
+                return match repository.skip_cherry_pick() {
+                    Ok(_restored_head) => {
+                        record_operation(
+                            &repository,
+                            "cherry-pick",
+                            "skip cherry-pick",
+                            before,
+                            Vec::new(),
+                            stderr,
                         )?;
                         Ok(ExitCode::SUCCESS)
                     }
@@ -2479,11 +2498,13 @@ fn cherry_pick_command(
             return Ok(ExitCode::from(129));
         }
     };
-    if abort || quit || continue_pick {
+    if abort || quit || continue_pick || skip {
         let option = if abort {
             "--abort"
         } else if quit {
             "--quit"
+        } else if skip {
+            "--skip"
         } else {
             "--continue"
         };

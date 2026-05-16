@@ -189,6 +189,7 @@ const CHERRY_PICK_HELP: &str = "\
 rit cherry-pick [-n|--no-commit] [-m <parent-number>] <commit>
 rit cherry-pick --abort
 rit cherry-pick --continue
+rit cherry-pick --skip
 rit cherry-pick --quit
 
 Apply one non-merge commit onto the current HEAD, or manage an in-progress conflicted cherry-pick.

@@ -666,6 +666,9 @@
 - Clean merge commit cherry-picks now support `-m <parent-number>` and
   `--mainline <parent-number>` by using the selected parent as the diff base
   before applying the merge commit's tree to `HEAD`.
+- `rit cherry-pick --skip` now handles the first single conflicted
+  cherry-pick slice by restoring `ORIG_HEAD`, refreshing the index/worktree,
+  and clearing `CHERRY_PICK_HEAD`/`MERGE_MSG`.
 - Still unsupported: remaining full conflict result message parity, strategies,
   full merge hook/editor parity, full `cherry-pick`, `rebase`, and `stash`.
 
@@ -1320,10 +1323,10 @@
 - Baseline command checked: `git cherry-pick -h`
 - Supported options: one target commit, `-n`/`--no-commit`, `--commit`,
   `-m`/`--mainline` for clean merge commits, `--abort`, `--continue`, and
-  `--quit` for the supported single-commit conflict state.
-- Unsupported options: multiple commits, `--skip`, `--ff`, signing, signoff,
-  strategy options, empty-commit handling, conflict continuation for merge
-  commits, and full sequencer/editor/hook parity.
+  `--quit`/`--skip` for the supported single-commit conflict state.
+- Unsupported options: multiple commits, `--ff`, signing, signoff, strategy
+  options, empty-commit handling, conflict continuation for merge commits, and
+  full sequencer/editor/hook parity.
 - Git-compatible behavior: clean single-parent picks apply the picked commit's
   parent-to-commit tree change onto `HEAD`, create a new one-parent commit, and
   preserve the picked author and commit message. With `-n`/`--no-commit`, the
@@ -1331,7 +1334,8 @@
   `CHERRY_PICK_HEAD`. Conflicting picks write `CHERRY_PICK_HEAD`, `MERGE_MSG`,
   unmerged index stages, and worktree conflict markers; `--abort` restores
   `ORIG_HEAD`; `--continue` commits the resolved index with the picked author
-  and message; `--quit` clears state without changing the index or worktree.
+  and message; `--quit` clears state without changing the index or worktree;
+  `--skip` restores `ORIG_HEAD` for the current single conflicted pick.
   Clean merge-commit picks with `--mainline` use the selected parent tree as
   the base and still create a one-parent commit on top of the current `HEAD`.
 - Intentional differences: output and hints are simplified, and sequencer
