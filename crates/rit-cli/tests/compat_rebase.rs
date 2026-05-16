@@ -229,6 +229,85 @@ fn rebase_skip_without_state_matches_git() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn rebase_continue_final_resolved_commit_matches_git() {
+    let root = temp_path("continue-final");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    create_conflicting_rebase_state(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    fs::write(git_repo.join("tracked.txt"), "resolved\n").expect("git resolution should write");
+    fs::write(rit_repo.join("tracked.txt"), "resolved\n").expect("rit resolution should write");
+    run_git(&git_repo, ["add", "tracked.txt"]);
+    run_git(&rit_repo, ["add", "tracked.txt"]);
+    let envs = [
+        ("GIT_EDITOR", "true"),
+        ("GIT_COMMITTER_DATE", "1700000000 +0900"),
+    ];
+
+    let git_continue = run_capture_with_env("git", ["rebase", "--continue"], &git_repo, &envs);
+    let rit_continue =
+        run_capture_with_env(rit_binary(), ["rebase", "--continue"], &rit_repo, &envs);
+
+    assert_eq!(
+        git_continue.exit_code, 0,
+        "git stderr: {}",
+        git_continue.stderr
+    );
+    assert_eq!(
+        rit_continue.exit_code, 0,
+        "rit stderr: {}",
+        rit_continue.stderr
+    );
+    assert_eq!(git_continue.stdout, rit_continue.stdout);
+    assert_eq!(git_continue.stderr, rit_continue.stderr);
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &git_repo).stdout,
+        run_capture(rit_binary(), ["rev-parse", "HEAD"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture(
+            "git",
+            ["symbolic-ref", "--quiet", "--short", "HEAD"],
+            &git_repo
+        )
+        .stdout,
+        run_capture(
+            "git",
+            ["symbolic-ref", "--quiet", "--short", "HEAD"],
+            &rit_repo
+        )
+        .stdout
+    );
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert!(!git_repo.join(".git").join("rebase-merge").exists());
+    assert!(!rit_repo.join(".git").join("rebase-merge").exists());
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn rebase_continue_without_state_matches_git() {
+    let root = temp_path("continue-empty");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_continue = run_capture("git", ["rebase", "--continue"], &git_repo);
+    let rit_continue = run_capture(rit_binary(), ["rebase", "--continue"], &rit_repo);
+
+    assert_eq!(git_continue.exit_code, rit_continue.exit_code);
+    assert_eq!(git_continue.stdout, rit_continue.stdout);
+    assert_eq!(git_continue.stderr, rit_continue.stderr);
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct CapturedCommand {
     exit_code: i32,
     stdout: String,
@@ -301,6 +380,29 @@ where
 {
     let output = Command::new(program)
         .args(args)
+        .current_dir(cwd)
+        .output()
+        .expect("command should start");
+    CapturedCommand {
+        exit_code: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    }
+}
+
+fn run_capture_with_env<I, S>(
+    program: impl AsRef<OsStr>,
+    args: I,
+    cwd: &Path,
+    envs: &[(&str, &str)],
+) -> CapturedCommand
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let output = Command::new(program)
+        .args(args)
+        .envs(envs.iter().copied())
         .current_dir(cwd)
         .output()
         .expect("command should start");

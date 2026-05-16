@@ -2657,13 +2657,14 @@ fn rebase_command(
 ) -> io::Result<ExitCode> {
     let action = match args {
         [flag] if flag == "--abort" => RebaseAction::Abort,
+        [flag] if flag == "--continue" => RebaseAction::Continue,
         [flag] if flag == "--quit" => RebaseAction::Quit,
         [flag] if flag == "--skip" => RebaseAction::Skip,
         [flag] if flag == "--show-current-patch" => RebaseAction::ShowCurrentPatch,
         [] => {
             writeln!(
                 stderr,
-                "rit: rebase currently supports only --abort, --quit, --skip, and --show-current-patch"
+                "rit: rebase currently supports only --abort, --continue, --quit, --skip, and --show-current-patch"
             )?;
             return Ok(ExitCode::from(129));
         }
@@ -2682,6 +2683,17 @@ fn rebase_command(
             Ok(_) => Ok(ExitCode::SUCCESS),
             Err(error) => write_rebase_error(stderr, error),
         },
+        RebaseAction::Continue => {
+            match repository.continue_rebase(&rit_core::CommitOptions::default()) {
+                Ok(result) => {
+                    print_rebase_continue_summary(&result, stdout)?;
+                    let updated = result.head_name.as_deref().unwrap_or("HEAD");
+                    writeln!(stderr, "Successfully rebased and updated {updated}.")?;
+                    Ok(ExitCode::SUCCESS)
+                }
+                Err(error) => write_rebase_error(stderr, error),
+            }
+        }
         RebaseAction::Quit => match repository.quit_rebase() {
             Ok(()) => Ok(ExitCode::SUCCESS),
             Err(error) => write_rebase_error(stderr, error),
@@ -2711,9 +2723,46 @@ fn rebase_command(
 
 enum RebaseAction {
     Abort,
+    Continue,
     Quit,
     Skip,
     ShowCurrentPatch,
+}
+
+fn print_rebase_continue_summary(
+    result: &rit_core::RebaseContinueResult,
+    stdout: &mut dyn Write,
+) -> io::Result<()> {
+    writeln!(
+        stdout,
+        "[detached HEAD {}] {}",
+        &result.commit.commit_id.to_hex()[..7],
+        result.message_summary
+    )?;
+    let files_changed = result.diff.files.len();
+    let insertions = result
+        .diff
+        .files
+        .iter()
+        .map(|file| file.insertions)
+        .sum::<usize>();
+    let deletions = result
+        .diff
+        .files
+        .iter()
+        .map(|file| file.deletions)
+        .sum::<usize>();
+    writeln!(
+        stdout,
+        " {files_changed} {}, {insertions} {}, {deletions} {}",
+        plural_word(files_changed, "file changed", "files changed"),
+        plural_word(insertions, "insertion(+)", "insertions(+)"),
+        plural_word(deletions, "deletion(-)", "deletions(-)")
+    )
+}
+
+fn plural_word(count: usize, singular: &'static str, plural: &'static str) -> &'static str {
+    if count == 1 { singular } else { plural }
 }
 
 fn write_rebase_error(stderr: &mut dyn Write, error: rit_core::RitError) -> io::Result<ExitCode> {
@@ -4038,6 +4087,7 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit rebase --abort"));
+        assert!(stdout.contains("rit rebase --continue"));
         assert!(stdout.contains("rit rebase --show-current-patch"));
         assert!(stdout.contains("rit rebase --skip"));
         assert!(stdout.contains("rit rebase --quit"));

@@ -475,6 +475,21 @@ pub struct RebaseSkipResult {
     pub head_name: Option<String>,
 }
 
+/// Result of continuing a resolved in-progress rebase.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RebaseContinueResult {
+    /// Commit created from the resolved index.
+    pub commit: CommitResult,
+    /// Commit that was `HEAD` before the continued commit was created.
+    pub parent_id: ObjectId,
+    /// First line of the commit message.
+    pub message_summary: String,
+    /// Rebase `head-name`, such as `refs/heads/main`, when Git recorded one.
+    pub head_name: Option<String>,
+    /// Summary of the new commit relative to its parent.
+    pub diff: crate::diff::DiffSummary,
+}
+
 impl Repository {
     /// Adds files matching ordinary literal pathspecs to the index.
     pub fn add_paths(&self, paths: &[String]) -> Result<usize> {
@@ -1577,6 +1592,73 @@ impl Repository {
         Ok(RebaseSkipResult {
             head_id,
             head_name: rebase.head_name.clone(),
+        })
+    }
+
+    /// Commits the resolved index for a stopped final rebase commit.
+    pub fn continue_rebase(&self, options: &CommitOptions) -> Result<RebaseContinueResult> {
+        let state = self.merge_state()?;
+        let rebase = state
+            .rebase_merge
+            .as_ref()
+            .or(state.rebase_apply.as_ref())
+            .ok_or_else(|| RitError::invalid_input("no rebase in progress"))?;
+        if let (Some(current_step), Some(total_steps)) = (rebase.current_step, rebase.total_steps)
+            && current_step < total_steps
+        {
+            return Err(RitError::invalid_input(
+                "rebase continue with remaining commits is not implemented",
+            ));
+        }
+        let parent_id = self.resolve_head()?.ok_or_else(|| {
+            RitError::invalid_input("rebase continue requires HEAD to point at a commit")
+        })?;
+        let current_patch = self.current_rebase_patch()?;
+        let message_text = if let Some(message) = state.merge_message.as_ref() {
+            message.clone()
+        } else {
+            let message_path = rebase.directory.join("message");
+            match fs::read_to_string(&message_path) {
+                Ok(text) => text,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    current_patch.commit.message.clone()
+                }
+                Err(source) => return Err(RitError::io(&message_path, source)),
+            }
+        };
+        let message = cleanup_commented_commit_message(&message_text);
+        let message_summary = message.lines().next().unwrap_or("").to_owned();
+        let commit = self.commit_index_with_parents(
+            &message,
+            &CommitOptions {
+                author: Some(SignatureIdentity {
+                    name: current_patch.commit.author.name,
+                    email: current_patch.commit.author.email,
+                }),
+                author_date: Some(SignatureTime {
+                    timestamp: current_patch.commit.author.timestamp,
+                    offset: current_patch.commit.author.offset,
+                }),
+                ..options.clone()
+            },
+            &[parent_id],
+            false,
+        )?;
+        self.restore_rebase_head(commit.commit_id, rebase.head_name.as_deref())?;
+        remove_dir_if_exists(&self.git_dir().join("rebase-apply"))?;
+        remove_dir_if_exists(&self.git_dir().join("rebase-merge"))?;
+        remove_file_if_exists(&self.git_dir().join("REBASE_HEAD"))?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))?;
+        remove_file_if_exists(&self.git_dir().join("AUTO_MERGE"))?;
+        let diff =
+            self.diff_commits_with_pathspecs(parent_id, commit.commit_id, &PathspecSet::all())?;
+        self.refresh_indexdb_after_git_write();
+        Ok(RebaseContinueResult {
+            commit,
+            parent_id,
+            message_summary,
+            head_name: rebase.head_name.clone(),
+            diff,
         })
     }
 

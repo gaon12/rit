@@ -1370,9 +1370,9 @@
 ### `rit rebase`
 
 - Baseline command checked: `git rebase -h`
-- Supported options: `rit rebase --abort`, `rit rebase --show-current-patch`,
-  `rit rebase --skip`, `rit rebase --quit`
-- Unsupported options: rebase start, `--continue`, multi-step `--skip`,
+- Supported options: `rit rebase --abort`, `rit rebase --continue`,
+  `rit rebase --show-current-patch`, `rit rebase --skip`, `rit rebase --quit`
+- Unsupported options: rebase start, multi-step `--continue`/`--skip`,
   `--edit-todo`, interactive mode, autostash, apply/merge backend selection,
   hooks, strategy options, and todo editing.
 - Git-compatible behavior: `rit rebase --abort` reads `orig-head` and
@@ -1380,17 +1380,20 @@
   removes `.git/rebase-apply`, `.git/rebase-merge`, `REBASE_HEAD`,
   `MERGE_MSG`, and `AUTO_MERGE`. `rit rebase --show-current-patch` reads
   `REBASE_HEAD` and prints the stopped commit header plus the first-parent
-  patch. `rit rebase --skip` supports the final stopped todo entry by
+  patch. `rit rebase --continue` supports a resolved final stopped todo entry
+  by committing the current index with the original author/message, updating
+  `head-name`, removing rebase state, and printing Git-shaped commit and
+  success output. `rit rebase --skip` supports the final stopped todo entry by
   restoring the current `HEAD` tree, updating `head-name`, removing rebase
   state, and printing Git's success message to stderr. `rit rebase --quit`
   removes `.git/rebase-apply` and
   `.git/rebase-merge` without changing `HEAD`, the index, or the working tree.
   When no rebase state exists these commands print `fatal: no rebase in
   progress` and exit 128.
-- Repository mutation: yes for `--abort`, `--skip`, and `--quit`; no for
-  `--show-current-patch`. `--abort` restores branch/index/worktree state,
-  `--skip` drops the stopped final commit, and `--quit` only removes rebase
-  state directories.
+- Repository mutation: yes for `--abort`, `--continue`, `--skip`, and
+  `--quit`; no for `--show-current-patch`. `--abort` restores
+  branch/index/worktree state, `--continue` writes a commit, `--skip` drops the
+  stopped final commit, and `--quit` only removes rebase state directories.
 - Risk: moderate for `--abort` because it rewrites HEAD, the index, and the
   worktree to the recorded original commit; low for `--quit`.
 
