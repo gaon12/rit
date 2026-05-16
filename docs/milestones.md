@@ -393,16 +393,16 @@ Completion criteria:
   - [x] `fetch <local-repository>` copies objects into an existing repository
     and writes `FETCH_HEAD` without updating refs.
 - [x] Protocol model for local, HTTP(S), and SSH location classification.
-- [~] HTTP transport.
+- [x] HTTP transport.
   - [x] Smart HTTP `info/refs?service=...` request model.
   - [x] Smart HTTP advertised refs response parser.
-  - [~] HTTP client I/O.
+  - [x] HTTP client I/O.
     - [x] Blocking plain HTTP GET discovery and POST upload-pack requests.
     - [x] Chunked response decoding.
     - [x] Smart HTTP status, content-type, and advertisement prefix
       validation.
     - [x] HTTPS/TLS via platform certificate verification.
-- [~] SSH transport.
+- [x] SSH transport.
   - [x] SSH/scp-like upload-pack and receive-pack command model.
   - [x] Process-based SSH upload-pack session I/O model.
   - [x] SSH fetch workflow wiring for a single advertised ref, including
@@ -412,7 +412,7 @@ Completion criteria:
   - [x] `ssh://host:port/path` URL port parsing and `ssh -p` process
     argument wiring.
   - [x] `GIT_SSH_COMMAND` and `GIT_SSH` process selection for SSH transport.
-  - [~] SSH auth option parity and broader advanced SSH transport
+  - [x] SSH auth option parity and broader advanced SSH transport
     configuration.
     - [x] Read `core.sshCommand` from `.git/config` for process-based SSH
       fetch and push, with Git-shaped precedence behind `GIT_SSH_COMMAND`.
