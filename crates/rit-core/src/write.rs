@@ -922,6 +922,7 @@ impl Repository {
         }
         let pathspecs = PathspecSet::from_args(paths)?;
         let attributes = self.root_attributes()?;
+        let ignore_case = self.core_ignorecase_enabled()?;
         let index = Index::read(&self.git_dir().join("index"))?;
         let index_entries = index
             .entries
@@ -936,6 +937,17 @@ impl Repository {
             .cloned()
             .collect::<BTreeSet<_>>();
         if target_paths.is_empty() {
+            if ignore_case
+                && reset_pathspec_has_case_insensitive_known_path(
+                    &pathspecs,
+                    index_entries.keys().chain(head_entries.keys()),
+                )
+            {
+                return Ok(ResetPathSelection {
+                    head_entries,
+                    target_paths,
+                });
+            }
             return Err(RitError::invalid_input(format!(
                 "pathspec did not match any file known to git: {}",
                 paths.join(" ")
@@ -2853,6 +2865,21 @@ struct AddPathSelection {
 struct ResetPathSelection {
     head_entries: BTreeMap<String, HeadBlobEntry>,
     target_paths: BTreeSet<String>,
+}
+
+fn reset_pathspec_has_case_insensitive_known_path<'a>(
+    pathspecs: &PathspecSet,
+    known_paths: impl Iterator<Item = &'a String>,
+) -> bool {
+    let known_paths = known_paths.collect::<Vec<_>>();
+    pathspecs.patterns().iter().any(|pattern| {
+        !pattern.is_exclude()
+            && !pattern.has_wildcard()
+            && !pattern.ignore_case()
+            && known_paths
+                .iter()
+                .any(|path| path.eq_ignore_ascii_case(pattern.pattern()))
+    })
 }
 
 fn staged_paths_different_from_head(

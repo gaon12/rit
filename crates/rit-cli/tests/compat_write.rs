@@ -1443,6 +1443,33 @@ fn add_honors_core_ignorecase_for_mismatched_case_pathspec() {
 }
 
 #[test]
+fn reset_honors_core_ignorecase_for_mismatched_case_pathspec() {
+    let fixture = temp_path("reset-core-ignorecase-fixture");
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    run_git(&fixture, ["config", "core.ignorecase", "true"]);
+    fs::write(fixture.join("Camel.txt"), "base\n").expect("case file should be written");
+    run_git(&fixture, ["add", "Camel.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    fs::write(fixture.join("Camel.txt"), "changed\n").expect("case file should be changed");
+    run_git(&fixture, ["add", "Camel.txt"]);
+
+    let outcome = compare_after_command(
+        &fixture,
+        command_words("git", ["reset", "camel.txt"]),
+        command_words(rit_binary(), ["reset", "camel.txt"]),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
+    let _ = fs::remove_dir_all(fixture);
+}
+
+#[test]
 fn add_chmod_executable_matches_git_status_and_tree_mode() {
     let fixture = LocalWriteFixture::new("add-chmod", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");
