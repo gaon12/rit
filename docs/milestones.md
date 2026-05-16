@@ -503,9 +503,11 @@ Completion criteria:
     commit's parent.
   - [x] Clean `-s`/`--signoff` cherry-pick appends a committer signoff
     trailer.
+  - [x] Clean multi-target `--no-commit` cherry-pick applies all picked
+    changes to the index/worktree without advancing `HEAD`.
   - [ ] Full multi-commit sequencer state across conflicts, multi-target
-    `--no-commit`, strategy options, conflict continuation for merge commits,
-    and editor/hook parity.
+    conflict continuation, strategy options, conflict continuation for merge
+    commits, and editor/hook parity.
 - [ ] `rit rebase`
 - [ ] `rit stash`
 - [~] Conflict index stages.

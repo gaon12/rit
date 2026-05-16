@@ -2521,13 +2521,6 @@ fn cherry_pick_command(
         )?;
         return Ok(ExitCode::from(129));
     }
-    if targets.len() > 1 && !commit {
-        writeln!(
-            stderr,
-            "rit: cherry-pick --no-commit currently supports only one target revision"
-        )?;
-        return Ok(ExitCode::from(129));
-    }
     let repository = match discover_repository(stderr)? {
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
@@ -2540,6 +2533,46 @@ fn cherry_pick_command(
         fast_forward,
         signoff,
     };
+    if !commit && targets.len() > 1 {
+        return match repository.cherry_pick_no_commit_many(&targets, &options) {
+            Ok(results) => {
+                if let Some(result) = results
+                    .iter()
+                    .find(|result| !result.conflict_reports.is_empty())
+                {
+                    record_operation_with_changed_paths(
+                        &repository,
+                        "cherry-pick",
+                        &format!("conflicted cherry-pick {}", targets.join(" ")),
+                        before,
+                        result.conflict_paths.clone(),
+                        Vec::new(),
+                        stderr,
+                    )?;
+                    for report in &result.conflict_reports {
+                        write_merge_conflict_report(stdout, report, &result.picked_id.to_hex())?;
+                    }
+                    writeln!(
+                        stderr,
+                        "error: could not apply {}... {}",
+                        &result.picked_id.to_hex()[..7],
+                        targets.join(" ")
+                    )?;
+                    return Ok(ExitCode::from(1));
+                }
+                record_operation(
+                    &repository,
+                    "cherry-pick",
+                    &format!("cherry-pick --no-commit {}", targets.join(" ")),
+                    before,
+                    Vec::new(),
+                    stderr,
+                )?;
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_command_error(stderr, error),
+        };
+    }
     let mut created_objects = Vec::new();
     for target in &targets {
         match repository.cherry_pick_with_options(target, &options) {

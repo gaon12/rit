@@ -1075,7 +1075,41 @@ impl Repository {
         target: &str,
         options: &CherryPickOptions,
     ) -> Result<CherryPickResult> {
+        self.cherry_pick_with_options_internal(target, options, true, false)
+    }
+
+    /// Applies several commits to the index and working tree without committing.
+    pub fn cherry_pick_no_commit_many(
+        &self,
+        targets: &[&str],
+        options: &CherryPickOptions,
+    ) -> Result<Vec<CherryPickResult>> {
         ensure_clean_for_checkout(self)?;
+        let mut no_commit_options = options.clone();
+        no_commit_options.commit = false;
+        let mut results = Vec::new();
+        for target in targets {
+            let result =
+                self.cherry_pick_with_options_internal(target, &no_commit_options, false, true)?;
+            let conflicted = !result.conflict_paths.is_empty();
+            results.push(result);
+            if conflicted {
+                break;
+            }
+        }
+        Ok(results)
+    }
+
+    fn cherry_pick_with_options_internal(
+        &self,
+        target: &str,
+        options: &CherryPickOptions,
+        require_clean: bool,
+        use_index_as_head: bool,
+    ) -> Result<CherryPickResult> {
+        if require_clean {
+            ensure_clean_for_checkout(self)?;
+        }
         let head_id = self
             .resolve_head()?
             .ok_or_else(|| RitError::invalid_input("cherry-pick requires an existing HEAD"))?;
@@ -1108,7 +1142,11 @@ impl Repository {
             Some(parent_id) => self.commit_index_entries(parent_id)?,
             None => Vec::new(),
         };
-        let head_entries = self.commit_index_entries(head_id)?;
+        let head_entries = if use_index_as_head {
+            Index::read(&self.git_dir().join("index"))?.entries
+        } else {
+            self.commit_index_entries(head_id)?
+        };
         let picked_entries = self.commit_index_entries(picked_id)?;
         let plan =
             non_fast_forward_merge_workflow_plan(&base_entries, &head_entries, &picked_entries);
