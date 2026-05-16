@@ -63,6 +63,33 @@ fn stash_clear_removes_stash_list_like_git() {
 }
 
 #[test]
+fn stash_show_summary_formats_match_git() {
+    let root = temp_path("show");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_stashes(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    for args in [
+        vec!["stash", "show"],
+        vec!["stash", "show", "--stat", "stash@{1}"],
+        vec!["stash", "show", "--name-only"],
+        vec!["stash", "show", "--name-status"],
+        vec!["stash", "show", "--numstat", "1"],
+    ] {
+        let git_show = run_capture("git", args.iter().copied(), &git_repo);
+        let rit_show = run_capture(rit_binary(), args.iter().copied(), &rit_repo);
+
+        assert_eq!(git_show.exit_code, 0, "git stderr: {}", git_show.stderr);
+        assert_eq!(rit_show.exit_code, 0, "rit stderr: {}", rit_show.stderr);
+        assert_eq!(git_show.stdout, rit_show.stdout, "args: {args:?}");
+        assert_eq!(git_show.stderr, rit_show.stderr, "args: {args:?}");
+    }
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn stash_drop_default_matches_git() {
     let root = temp_path("drop-default");
     let git_repo = root.join("git");

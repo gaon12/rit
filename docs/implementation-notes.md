@@ -1370,12 +1370,14 @@
 ### `rit stash`
 
 - Baseline command checked: `git stash -h`
-- Supported options: `rit stash list`, `rit stash drop [-q|--quiet] [<stash>]`,
-  and `rit stash clear` for loose stash refs.
-- Unsupported options: default `stash push`, `push`, `save`, `show`, `pop`,
-  `apply`, `branch`, `create`, `store`, `export`, `import`, pathspecs,
-  staged/keep-index/untracked modes, packed stash ref cleanup, and stash apply
-  conflict handling.
+- Supported options: `rit stash list`,
+  `rit stash show [--stat|--name-only|--name-status|--numstat] [<stash>]`,
+  `rit stash drop [-q|--quiet] [<stash>]`, and `rit stash clear` for loose
+  stash refs.
+- Unsupported options: default `stash push`, `push`, `save`, `pop`, `apply`,
+  `branch`, `create`, `store`, `export`, `import`, stash show patch and
+  untracked display options, pathspecs, staged/keep-index/untracked modes,
+  packed stash ref cleanup, and stash apply conflict handling.
 - Git-compatible behavior: `rit stash list` reads `.git/logs/refs/stash`
   directly, prints newest entries first as `stash@{n}: <reflog message>`, and
   prints nothing when no stash reflog exists.
@@ -1385,7 +1387,11 @@
   state when the last entry is dropped. `-q` suppresses the dropped-entry
   message; empty and out-of-range loose reflog errors match the checked Git
   shape.
+- Git-compatible behavior: `rit stash show` diffs the selected stash commit
+  against its first parent and renders stat/name-only/name-status/numstat
+  summary output through the shared diff formatter.
 - Repository mutation: no for `stash list`.
+- Repository mutation: no for `stash show`.
 - Repository mutation: yes for `stash clear`; it removes loose `.git/refs/stash`
   and `.git/logs/refs/stash`.
 - Repository mutation: yes for `stash drop`; it rewrites loose

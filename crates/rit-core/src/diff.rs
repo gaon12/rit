@@ -672,6 +672,115 @@ impl Repository {
         Ok(DiffSummary { files, warnings })
     }
 
+    /// Computes a summary diff between two commit trees.
+    pub fn diff_commits_with_pathspecs(
+        &self,
+        old_commit_id: ObjectId,
+        new_commit_id: ObjectId,
+        pathspecs: &PathspecSet,
+    ) -> Result<DiffSummary> {
+        self.diff_commits_with_options(
+            old_commit_id,
+            new_commit_id,
+            pathspecs,
+            &DiffOptions::default(),
+        )
+    }
+
+    /// Computes a summary diff between two commit trees with explicit options.
+    pub fn diff_commits_with_options(
+        &self,
+        old_commit_id: ObjectId,
+        new_commit_id: ObjectId,
+        pathspecs: &PathspecSet,
+        options: &DiffOptions,
+    ) -> Result<DiffSummary> {
+        let old_entries = self.commit_diff_entries(old_commit_id)?;
+        let new_entries = self.commit_diff_entries(new_commit_id)?;
+        let attributes = self.root_attributes()?;
+        let options = self.diff_options_with_config(options)?;
+        let paths = old_entries
+            .keys()
+            .chain(new_entries.keys())
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let mut files = Vec::new();
+
+        for path in paths {
+            if !pathspecs.matches_with_attributes(&path, Some(&attributes)) {
+                continue;
+            }
+            match (old_entries.get(&path), new_entries.get(&path)) {
+                (None, Some(new_entry)) => {
+                    let new_object = self.read_blob(new_entry.object_id)?;
+                    files.push(DiffFileStat {
+                        status: 'A',
+                        old_path: None,
+                        path,
+                        similarity_score: None,
+                        insertions: count_lines(&new_object.data),
+                        deletions: 0,
+                        binary: is_binary_data(&new_object.data),
+                        old_size: 0,
+                        new_size: new_object.data.len(),
+                    });
+                }
+                (Some(old_entry), None) => {
+                    let old_object = self.read_blob(old_entry.object_id)?;
+                    files.push(DiffFileStat {
+                        status: 'D',
+                        old_path: None,
+                        path,
+                        similarity_score: None,
+                        insertions: 0,
+                        deletions: count_lines(&old_object.data),
+                        binary: is_binary_data(&old_object.data),
+                        old_size: old_object.data.len(),
+                        new_size: 0,
+                    });
+                }
+                (Some(old_entry), Some(new_entry)) if old_entry != new_entry => {
+                    let old_object = self.read_blob(old_entry.object_id)?;
+                    let new_object = self.read_blob(new_entry.object_id)?;
+                    let (insertions, deletions, binary) =
+                        file_delta(&old_object.data, &new_object.data)?;
+                    files.push(DiffFileStat {
+                        status: 'M',
+                        old_path: None,
+                        path,
+                        similarity_score: None,
+                        insertions,
+                        deletions,
+                        binary,
+                        old_size: old_object.data.len(),
+                        new_size: new_object.data.len(),
+                    });
+                }
+                _ => {}
+            }
+        }
+
+        let mut warnings = Vec::new();
+        if options.find_renames {
+            warnings.extend(self.detect_summary_renames(
+                &mut files,
+                &old_entries,
+                &new_entries,
+                &options,
+            )?);
+        }
+        if options.find_copies {
+            warnings.extend(self.detect_summary_copies(
+                &mut files,
+                &old_entries,
+                &new_entries,
+                &options,
+            )?);
+        }
+
+        Ok(DiffSummary { files, warnings })
+    }
+
     /// Computes `git diff --cached` patch output.
     pub fn diff_index_to_head_patch_with_pathspecs(
         &self,
@@ -822,6 +931,20 @@ impl Repository {
         if commit.kind != ObjectKind::Commit {
             return Err(RitError::invalid_input(format!(
                 "HEAD points to {}, not commit",
+                commit.kind
+            )));
+        }
+        let tree_id = parse_commit(&commit.data)?.tree;
+        let mut entries = BTreeMap::new();
+        self.collect_diff_tree_entries("", tree_id, &mut entries)?;
+        Ok(entries)
+    }
+
+    fn commit_diff_entries(&self, commit_id: ObjectId) -> Result<BTreeMap<String, DiffTreeEntry>> {
+        let commit = self.read_object(commit_id)?;
+        if commit.kind != ObjectKind::Commit {
+            return Err(RitError::invalid_input(format!(
+                "object {commit_id} is {}, not commit",
                 commit.kind
             )));
         }

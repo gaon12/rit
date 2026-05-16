@@ -517,9 +517,11 @@ Completion criteria:
     reflog entries, and updates loose `refs/stash`.
   - [x] `rit stash drop -q` and basic empty/out-of-range drop errors match
     Git.
-  - [ ] `stash push`, `apply`, `pop`, `show`, branch/export/import, pathspecs,
-    staged/keep-index/untracked modes, packed stash ref cleanup, broader error
-    parity, and conflict apply handling.
+  - [x] `rit stash show` supports default stat output plus `--stat`,
+    `--name-only`, `--name-status`, and `--numstat` for loose stash entries.
+  - [ ] `stash push`, `apply`, `pop`, branch/export/import, pathspecs,
+    staged/keep-index/untracked modes, packed stash ref cleanup, broader show
+    options, broader error parity, and conflict apply handling.
 - [~] Conflict index stages.
   - [x] Preserve stage 0/1/2/3 in index read, write, sorting, and
     `ls-files --stage` output.

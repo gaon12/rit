@@ -2,7 +2,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-use crate::{ObjectId, Repository, Result, RitError};
+use crate::{DiffSummary, ObjectId, ObjectKind, PathspecSet, Repository, Result, RitError};
 
 const ZERO_OBJECT_ID: &str = "0000000000000000000000000000000000000000";
 
@@ -88,6 +88,25 @@ impl Repository {
         })
     }
 
+    /// Shows the changes recorded by one stash against its first parent.
+    pub fn stash_show(&self, display_index: usize, pathspecs: &PathspecSet) -> Result<DiffSummary> {
+        let stash_id = self.stash_id_at(display_index)?;
+        let stash_object = self.read_object(stash_id)?;
+        if stash_object.kind != ObjectKind::Commit {
+            return Err(RitError::invalid_input(format!(
+                "stash entry {stash_id} is {}, not commit",
+                stash_object.kind
+            )));
+        }
+        let stash_commit = crate::parse_commit(&stash_object.data)?;
+        let base_id = stash_commit
+            .parents
+            .first()
+            .copied()
+            .ok_or_else(|| RitError::invalid_input("stash commit has no parent"))?;
+        self.diff_commits_with_pathspecs(base_id, stash_id, pathspecs)
+    }
+
     fn read_stash_reflog(&self) -> Result<Vec<StashReflogEntry>> {
         let path = self.common_dir().join("logs").join("refs").join("stash");
         let text = match fs::read_to_string(&path) {
@@ -97,6 +116,20 @@ impl Repository {
         };
 
         text.lines().map(parse_stash_reflog_entry).collect()
+    }
+
+    fn stash_id_at(&self, display_index: usize) -> Result<ObjectId> {
+        let entries = self.read_stash_reflog()?;
+        if entries.is_empty() {
+            return Err(RitError::invalid_input("No stash entries found."));
+        }
+        if display_index >= entries.len() {
+            return Err(RitError::invalid_input(format!(
+                "log for 'stash' only has {} entries",
+                entries.len()
+            )));
+        }
+        Ok(entries[entries.len() - 1 - display_index].new_id)
     }
 
     fn write_stash_reflog(&self, entries: &[StashReflogEntry]) -> Result<()> {

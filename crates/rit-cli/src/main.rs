@@ -105,6 +105,11 @@ fn stash_command(
     match args {
         [subcommand] if subcommand == "list" => {}
         [subcommand] if subcommand == "clear" => {}
+        [subcommand, rest @ ..] if subcommand == "show" => {
+            if parse_stash_show_args(rest, stderr)?.is_none() {
+                return Ok(ExitCode::from(129));
+            }
+        }
         [subcommand, rest @ ..] if subcommand == "drop" => {
             if parse_stash_drop_args(rest, stderr)?.is_none() {
                 return Ok(ExitCode::from(129));
@@ -128,6 +133,33 @@ fn stash_command(
         return match repository.stash_clear() {
             Ok(()) => Ok(ExitCode::SUCCESS),
             Err(error) => write_command_error(stderr, error),
+        };
+    }
+    if let [subcommand, rest @ ..] = args
+        && subcommand == "show"
+    {
+        let Some(show_args) = parse_stash_show_args(rest, stderr)? else {
+            return Ok(ExitCode::from(129));
+        };
+        return match repository.stash_show(show_args.index, &rit_core::PathspecSet::all()) {
+            Ok(diff) => {
+                match show_args.format {
+                    StashShowFormat::Stat => stdout.write_all(diff.to_stat_text().as_bytes())?,
+                    StashShowFormat::NameOnly => {
+                        for path in diff.name_only() {
+                            writeln!(stdout, "{path}")?;
+                        }
+                    }
+                    StashShowFormat::NameStatus => {
+                        stdout.write_all(diff.to_name_status_text().as_bytes())?;
+                    }
+                    StashShowFormat::Numstat => {
+                        stdout.write_all(diff.to_numstat_text().as_bytes())?
+                    }
+                }
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_stash_error(stderr, error),
         };
     }
     if let [subcommand, rest @ ..] = args
@@ -156,6 +188,46 @@ fn stash_command(
         }
         Err(error) => write_command_error(stderr, error),
     }
+}
+
+enum StashShowFormat {
+    Stat,
+    NameOnly,
+    NameStatus,
+    Numstat,
+}
+
+struct StashShowArgs {
+    index: usize,
+    format: StashShowFormat,
+}
+
+fn parse_stash_show_args(
+    args: &[String],
+    stderr: &mut dyn Write,
+) -> io::Result<Option<StashShowArgs>> {
+    let mut format = StashShowFormat::Stat;
+    let mut stash = None;
+    for arg in args {
+        match arg.as_str() {
+            "--stat" => format = StashShowFormat::Stat,
+            "--name-only" => format = StashShowFormat::NameOnly,
+            "--name-status" => format = StashShowFormat::NameStatus,
+            "--numstat" => format = StashShowFormat::Numstat,
+            _ if arg.starts_with('-') => {
+                writeln!(stderr, "rit: unsupported stash show option '{arg}'")?;
+                return Ok(None);
+            }
+            _ if stash.is_none() => stash = Some(arg.as_str()),
+            _ => {
+                writeln!(stderr, "rit: stash show accepts at most one stash")?;
+                return Ok(None);
+            }
+        }
+    }
+
+    let (index, _) = parse_stash_name(stash.unwrap_or("refs/stash@{0}"))?;
+    Ok(Some(StashShowArgs { index, format }))
 }
 
 struct StashDropArgs {
