@@ -509,6 +509,12 @@ pub struct RebaseSkipResult {
     pub head_id: ObjectId,
     /// Rebase `head-name`, such as `refs/heads/main`, when Git recorded one.
     pub head_name: Option<String>,
+    /// Number of remaining todo commits replayed after the skipped commit.
+    pub replayed_remaining_count: usize,
+    /// First remaining step number, when remaining commits were replayed.
+    pub first_remaining_step: usize,
+    /// Total number of commits in the rebase todo list.
+    pub total_steps: usize,
 }
 
 /// Result of continuing a resolved in-progress rebase.
@@ -1979,19 +1985,69 @@ impl Repository {
             .as_ref()
             .or(state.rebase_apply.as_ref())
             .ok_or_else(|| RitError::invalid_input("no rebase in progress"))?;
-        if let (Some(current_step), Some(total_steps)) = (rebase.current_step, rebase.total_steps)
-            && current_step < total_steps
-        {
-            return Err(RitError::invalid_input(
-                "rebase skip with remaining commits is not implemented",
-            ));
-        }
+        let current_step = rebase.current_step.unwrap_or(1) as usize;
+        let total_steps = rebase.total_steps.unwrap_or(current_step as u32) as usize;
         let head_id = self.resolve_head()?.ok_or_else(|| {
             RitError::invalid_input("rebase skip requires HEAD to point at a commit")
         })?;
+        let current_patch = self.current_rebase_patch()?;
+        let remaining_todo_ids =
+            read_rebase_todo_commit_ids(&rebase.directory.join("git-rebase-todo"))?;
+        let head_entries = self.commit_index_entries(head_id)?;
+        let remaining_steps = self.plan_clean_rebase_replay_steps(
+            &head_entries,
+            &remaining_todo_ids,
+            current_patch.commit_id,
+        )?;
 
         self.checkout_commit_tree(head_id)?;
-        self.restore_rebase_head(head_id, rebase.head_name.as_deref())?;
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "rebase skip requires a working tree",
+            ));
+        };
+        let symlinks_enabled = self.core_symlinks_enabled()?;
+        let conflict_paths = BTreeSet::new();
+        let mut replay_parent_id = head_id;
+        let mut previous_entries = head_entries;
+        let replayed_remaining_count = remaining_steps.len();
+        let mut final_head_id = head_id;
+        for step in remaining_steps {
+            write_non_conflicting_merge_worktree_changes(
+                self,
+                worktree,
+                &previous_entries,
+                &step.merged_entries,
+                &conflict_paths,
+                symlinks_enabled,
+            )?;
+            Index {
+                entries: step.merged_entries.clone(),
+                extensions: Vec::new(),
+            }
+            .write(&self.git_dir().join("index"))?;
+            let replayed = self.commit_index_with_parents(
+                &step.commit.message,
+                &CommitOptions {
+                    author: Some(SignatureIdentity {
+                        name: step.commit.author.name,
+                        email: step.commit.author.email,
+                    }),
+                    author_date: Some(SignatureTime {
+                        timestamp: step.commit.author.timestamp,
+                        offset: step.commit.author.offset,
+                    }),
+                    verify: false,
+                    ..CommitOptions::default()
+                },
+                &[replay_parent_id],
+                false,
+            )?;
+            replay_parent_id = replayed.commit_id;
+            final_head_id = replayed.commit_id;
+            previous_entries = step.merged_entries;
+        }
+        self.restore_rebase_head(final_head_id, rebase.head_name.as_deref())?;
         remove_dir_if_exists(&self.git_dir().join("rebase-apply"))?;
         remove_dir_if_exists(&self.git_dir().join("rebase-merge"))?;
         remove_file_if_exists(&self.git_dir().join("REBASE_HEAD"))?;
@@ -1999,8 +2055,11 @@ impl Repository {
         remove_file_if_exists(&self.git_dir().join("AUTO_MERGE"))?;
         self.refresh_indexdb_after_git_write();
         Ok(RebaseSkipResult {
-            head_id,
+            head_id: final_head_id,
             head_name: rebase.head_name.clone(),
+            replayed_remaining_count,
+            first_remaining_step: current_step + 1,
+            total_steps,
         })
     }
 

@@ -772,6 +772,63 @@ fn rebase_continue_replays_remaining_clean_todo_like_git() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn rebase_skip_replays_remaining_clean_todo_like_git() {
+    let root = temp_path("skip-remaining-clean-todo");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    run_git(&git_repo, ["checkout", "-b", "topic"]);
+    fs::write(git_repo.join("tracked.txt"), "topic\n").expect("topic file should write");
+    run_git(&git_repo, ["commit", "--quiet", "-am", "topic"]);
+    run_git(&git_repo, ["checkout", "master"]);
+    fs::write(git_repo.join("tracked.txt"), "master\n").expect("master file should write");
+    run_git(&git_repo, ["commit", "--quiet", "-am", "conflict"]);
+    fs::write(git_repo.join("after.txt"), "after\n").expect("after file should write");
+    run_git(&git_repo, ["add", "after.txt"]);
+    run_git(&git_repo, ["commit", "--quiet", "-m", "after"]);
+    copy_directory(&git_repo, &rit_repo);
+    assert_eq!(
+        run_capture("git", ["rebase", "topic"], &git_repo).exit_code,
+        1
+    );
+    assert_eq!(
+        run_capture(rit_binary(), ["rebase", "topic"], &rit_repo).exit_code,
+        1
+    );
+    let envs = [("GIT_COMMITTER_DATE", "1700000000 +0900")];
+
+    let git_skip = run_capture_with_env("git", ["rebase", "--skip"], &git_repo, &envs);
+    let rit_skip = run_capture_with_env(rit_binary(), ["rebase", "--skip"], &rit_repo, &envs);
+
+    assert_eq!(git_skip.exit_code, 0, "git stderr: {}", git_skip.stderr);
+    assert_eq!(rit_skip.exit_code, 0, "rit stderr: {}", rit_skip.stderr);
+    assert_eq!(git_skip.stdout, rit_skip.stdout);
+    assert_eq!(git_skip.stderr, rit_skip.stderr);
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &git_repo).stdout,
+        run_capture(rit_binary(), ["rev-parse", "HEAD"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["rev-parse", "refs/heads/master"], &git_repo).stdout,
+        run_capture(rit_binary(), ["rev-parse", "refs/heads/master"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["log", "--format=%P%n%B", "-2"], &git_repo).stdout,
+        run_capture("git", ["log", "--format=%P%n%B", "-2"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["ls-files"], &git_repo).stdout,
+        run_capture(rit_binary(), ["ls-files"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct CapturedCommand {
     exit_code: i32,
     stdout: String,

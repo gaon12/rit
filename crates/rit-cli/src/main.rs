@@ -2740,6 +2740,11 @@ fn rebase_command(
         },
         RebaseAction::Skip => match repository.skip_rebase() {
             Ok(result) => {
+                for step in result.first_remaining_step
+                    ..result.first_remaining_step + result.replayed_remaining_count
+                {
+                    write!(stderr, "Rebasing ({step}/{})\r", result.total_steps)?;
+                }
                 let updated = result.head_name.as_deref().unwrap_or("HEAD");
                 writeln!(stderr, "Successfully rebased and updated {updated}.")?;
                 Ok(ExitCode::SUCCESS)

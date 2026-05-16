@@ -537,11 +537,12 @@ Completion criteria:
     clears rebase state.
   - [x] `rit rebase --skip` completes a single-step stopped rebase by dropping
     the current commit and updating the original branch to the current `HEAD`.
+  - [x] `rit rebase --skip` drops a stopped commit, replays remaining clean
+    linear todo entries, updates the original branch, and clears rebase state.
   - [x] `rit rebase --quit` removes Git-compatible `rebase-apply` and
     `rebase-merge` state while preserving HEAD, index, and worktree.
-  - [ ] Later conflicts while continuing remaining todo entries, multi-step
-    skip after conflicts, todo editing, autostash, hooks, apply/merge backends,
-    and strategy options.
+  - [ ] Later conflicts while continuing or skipping remaining todo entries,
+    todo editing, autostash, hooks, apply/merge backends, and strategy options.
 - [~] `rit stash`
   - [x] `rit stash list` reads the Git-compatible `refs/stash` reflog and
     prints entries in newest-first order.

@@ -1375,10 +1375,9 @@
   remaining todo entries, and final replay conflicts,
   `rit rebase --abort`, `rit rebase --continue`,
   `rit rebase --show-current-patch`, `rit rebase --skip`, `rit rebase --quit`
-- Unsupported options: later conflicts while continuing remaining todo entries,
-  multi-step `--skip` after conflicts, `--edit-todo`, interactive mode,
-  autostash, apply/merge backend selection, hooks, strategy options, and todo
-  editing.
+- Unsupported options: later conflicts while continuing or skipping remaining
+  todo entries, `--edit-todo`, interactive mode, autostash, apply/merge backend
+  selection, hooks, strategy options, and todo editing.
 - Git-compatible behavior: `rit rebase <upstream>` resolves a local branch or
   revision. When that upstream is already an ancestor of `HEAD`, it prints
   Git's up-to-date message without mutating the repository. When `HEAD` is an
@@ -1402,10 +1401,11 @@
   resolved stopped todo entry by committing the current index with the original
   author/message, replaying remaining clean linear todo entries, updating
   `head-name`, removing rebase state, and printing Git-shaped commit, progress,
-  and success output. `rit rebase --skip` supports the final stopped todo entry
-  by restoring the current `HEAD` tree, updating `head-name`, removing rebase
-  state, and printing Git's success message to stderr. `rit rebase --quit`
-  removes `.git/rebase-apply` and
+  and success output. `rit rebase --skip` supports a stopped todo entry by
+  restoring the current `HEAD` tree, replaying remaining clean linear todo
+  entries, updating `head-name`, removing rebase state, and printing Git's
+  progress and success messages to stderr. `rit rebase --quit` removes
+  `.git/rebase-apply` and
   `.git/rebase-merge` without changing `HEAD`, the index, or the working tree.
   When no rebase state exists state-management commands print `fatal: no rebase
   in progress` and exit 128.
