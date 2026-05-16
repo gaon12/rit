@@ -4,7 +4,7 @@ This file summarizes third-party Rust crates that may be included in `rit-full`
 builds according to `cargo metadata --locked --features
 rit-core/large-files,rit-core/semantic-json,rit-core/semantic-rust,rit-core/semantic-typescript,rit-core/semantic-python,rit-core/vfs`.
 
-`rit` itself is licensed under `MIT OR Apache-2.0`.
+`rit` itself is licensed under `MIT`.
 
 | Crate | Version | License |
 | --- | --- | --- |
