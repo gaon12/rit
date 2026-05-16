@@ -152,6 +152,65 @@ fn stash_push_options_without_push_word_match_git() {
 }
 
 #[test]
+fn stash_push_pathspec_stashes_only_selected_tracked_change() {
+    let root = temp_path("push-pathspec");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    fs::write(repo_file(&git_repo, "other.txt"), "other base\n")
+        .expect("second tracked file should write");
+    run_git(&git_repo, ["add", "other.txt"]);
+    run_git(&git_repo, ["commit", "--quiet", "-m", "other"]);
+    copy_directory(&git_repo, &rit_repo);
+    fs::write(repo_file(&git_repo, "tracked.txt"), "selected\n")
+        .expect("git selected change should write");
+    fs::write(repo_file(&rit_repo, "tracked.txt"), "selected\n")
+        .expect("rit selected change should write");
+    fs::write(repo_file(&git_repo, "other.txt"), "other change\n")
+        .expect("git unselected change should write");
+    fs::write(repo_file(&rit_repo, "other.txt"), "other change\n")
+        .expect("rit unselected change should write");
+
+    let git_push = run_capture(
+        "git",
+        ["stash", "push", "-m", "selected only", "--", "tracked.txt"],
+        &git_repo,
+    );
+    let rit_push = run_capture(
+        rit_binary(),
+        ["stash", "push", "-m", "selected only", "--", "tracked.txt"],
+        &rit_repo,
+    );
+
+    assert_eq!(git_push.exit_code, 0, "git stderr: {}", git_push.stderr);
+    assert_eq!(rit_push.exit_code, 0, "rit stderr: {}", rit_push.stderr);
+    assert_eq!(git_push.stdout, rit_push.stdout);
+    assert_eq!(git_push.stderr, rit_push.stderr);
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        fs::read_to_string(repo_file(&git_repo, "tracked.txt")).ok(),
+        fs::read_to_string(repo_file(&rit_repo, "tracked.txt")).ok()
+    );
+    assert_eq!(
+        fs::read_to_string(repo_file(&git_repo, "other.txt")).ok(),
+        fs::read_to_string(repo_file(&rit_repo, "other.txt")).ok()
+    );
+    assert_eq!(
+        run_capture("git", ["stash", "show", "--name-only"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "show", "--name-only"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["stash", "list"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn stash_save_legacy_message_matches_git() {
     let root = temp_path("save-message");
     let git_repo = root.join("git");

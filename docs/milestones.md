@@ -563,6 +563,9 @@ Completion criteria:
     stash state.
   - [x] Basic `stash push` saves tracked index and working-tree changes into a
     two-parent stash commit, updates loose `refs/stash`, and restores `HEAD`.
+  - [x] Basic `stash push -- <pathspec>` limits tracked stash snapshots and
+    cleanup to selected tracked paths while leaving unselected tracked
+    worktree changes in place.
   - [x] Basic legacy `stash save [-q] [<message>]` uses the same tracked-change
     stash shape as push and matches Git's saved/no-change output.
   - [x] `rit stash create [<message>]` creates the same tracked-change stash
@@ -576,10 +579,11 @@ Completion criteria:
   - [x] Basic `stash branch <branchname> [<stash>]` creates a branch at the
     stash base, checks it out, applies the clean tracked stash, and drops the
     selected loose stash entry on success.
-  - [ ] `stash export/import`, push pathspecs,
+  - [ ] `stash export/import`,
     staged/keep-index/untracked modes, untracked/all modes, packed stash ref
-    cleanup, `--index`, broader show options, broader error parity, and
-    conflict handling for apply/pop/branch.
+    cleanup, push `--pathspec-from-file`/`--pathspec-file-nul`, `--index`,
+    broader show options, broader error parity, and conflict handling for
+    apply/pop/branch.
 - [~] Conflict index stages.
   - [x] Preserve stage 0/1/2/3 in index read, write, sorting, and
     `ls-files --stage` output.

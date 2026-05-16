@@ -1468,8 +1468,8 @@
 
 - Baseline command checked: `git stash -h`
 - Supported options: `rit stash list`,
-  `rit stash [push [(-m|--message) <message>] [-q|--quiet]]` for tracked
-  index and working-tree changes,
+  `rit stash [push [(-m|--message) <message>] [-q|--quiet] [--] [<pathspec>...]]`
+  for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [<message>]` as the legacy tracked-change save
   form,
   `rit stash show [-p|--patch|--stat|--name-only|--name-status|--numstat] [<stash>]`,
@@ -1484,13 +1484,17 @@
   `rit stash store [(-m|--message) <message>] [-q|--quiet] <commit>`, and
   `rit stash clear` for loose stash refs.
 - Unsupported options: `export`, `import`, stash show untracked display
-  options, save `--patch`/`--staged`/untracked modes, push pathspecs,
-  staged/keep-index/untracked modes, packed stash ref cleanup, `--index`, and
-  stash apply/pop/branch conflict handling.
+  options, save `--patch`/`--staged`/untracked modes, push
+  `--pathspec-from-file`/`--pathspec-file-nul`, staged/keep-index/untracked
+  modes, packed stash ref cleanup, `--index`, and stash apply/pop/branch
+  conflict handling.
 - Git-compatible behavior: `rit stash push` without untracked/pathspec options
   writes the usual two-parent stash shape for tracked changes, stores it in
   loose `refs/stash`, prints Git's saved/no-change messages, and restores the
   index and working tree to `HEAD`.
+- Git-compatible behavior: `rit stash push -- <pathspec>` limits the tracked
+  stash snapshot and cleanup to matching tracked paths, leaving unselected
+  tracked worktree changes in place for the checked ordinary pathspec scope.
 - Git-compatible behavior: `rit stash save [-q] [<message>]` follows the same
   tracked-change implementation as push, accepts a legacy positional message,
   and matches Git's saved/no-change output for the checked scope.

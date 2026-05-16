@@ -66,6 +66,7 @@ struct StashReflogEntry {
 struct CreatedStashCommit {
     object_id: ObjectId,
     message: String,
+    paths: Vec<String>,
 }
 
 impl Repository {
@@ -75,17 +76,26 @@ impl Repository {
     /// and clean repositories return `None`.
     pub fn stash_create(&self, message: Option<&str>) -> Result<Option<ObjectId>> {
         Ok(self
-            .create_tracked_stash_commit(message)?
+            .create_tracked_stash_commit(message, &PathspecSet::all())?
             .map(|created| created.object_id))
     }
 
     /// Saves tracked index and working-tree changes as a loose `refs/stash` entry.
     ///
     /// This implements the default `git stash push` shape for tracked paths.
-    /// Untracked files, pathspec filtering, `--keep-index`, and apply/pop are
+    /// Untracked files, `--keep-index`, and pathspec file expansion are
     /// intentionally left to later milestone slices.
     pub fn stash_push(&self, message: Option<&str>) -> Result<StashPushResult> {
-        let Some(created) = self.create_tracked_stash_commit(message)? else {
+        self.stash_push_with_pathspecs(message, &PathspecSet::all())
+    }
+
+    /// Saves tracked index and working-tree changes matching `pathspecs`.
+    pub fn stash_push_with_pathspecs(
+        &self,
+        message: Option<&str>,
+        pathspecs: &PathspecSet,
+    ) -> Result<StashPushResult> {
+        let Some(created) = self.create_tracked_stash_commit(message, pathspecs)? else {
             return Ok(StashPushResult::NoLocalChanges);
         };
         let head_id = self
@@ -93,7 +103,7 @@ impl Repository {
             .ok_or_else(|| RitError::invalid_input("stash push requires an existing HEAD"))?;
 
         self.stash_store(created.object_id, Some(&created.message))?;
-        self.checkout_commit_tree(head_id)?;
+        self.restore_stash_paths_to_head(head_id, &created.paths)?;
         Ok(StashPushResult::Saved {
             object_id: created.object_id,
             message: created.message,
@@ -358,24 +368,27 @@ impl Repository {
     fn create_tracked_stash_commit(
         &self,
         message: Option<&str>,
+        pathspecs: &PathspecSet,
     ) -> Result<Option<CreatedStashCommit>> {
         let head_id = self
             .resolve_head()?
             .ok_or_else(|| RitError::invalid_input("stash create requires an existing HEAD"))?;
-        if !self.has_tracked_stash_changes()? {
+        let target_paths = self.tracked_stash_target_paths(pathspecs)?;
+        if target_paths.is_empty() {
             return Ok(None);
         }
 
         let index = Index::read(&self.git_dir().join("index"))?;
         ensure_stashable_index(&index)?;
-        let index_tree_id = self.write_tree_from_index(&index)?;
+        let index_snapshot = self.selected_index_stash_index(head_id, &index, &target_paths)?;
+        let index_tree_id = self.write_tree_from_index(&index_snapshot)?;
         let stash_message = self.stash_push_message(head_id, message)?;
         let index_commit_id = self.write_stash_commit(
             index_tree_id,
             &[head_id],
             &index_commit_message(&stash_message),
         )?;
-        let worktree_index = self.worktree_stash_index(&index)?;
+        let worktree_index = self.worktree_stash_index(head_id, &index, &target_paths)?;
         let worktree_tree_id = self.write_tree_from_index(&worktree_index)?;
         let stash_id = self.write_stash_commit(
             worktree_tree_id,
@@ -385,28 +398,85 @@ impl Repository {
         Ok(Some(CreatedStashCommit {
             object_id: stash_id,
             message: stash_message,
+            paths: target_paths,
         }))
     }
 
-    fn has_tracked_stash_changes(&self) -> Result<bool> {
-        Ok(self.status_porcelain_v1()?.entries.iter().any(|entry| {
-            entry.index_status != '?' && (entry.index_status != ' ' || entry.worktree_status != ' ')
-        }))
+    fn tracked_stash_target_paths(&self, pathspecs: &PathspecSet) -> Result<Vec<String>> {
+        let status = self.status_porcelain_v1_with_pathspecs(pathspecs)?;
+        Ok(status
+            .entries
+            .into_iter()
+            .filter(|entry| {
+                entry.index_status != '?'
+                    && (entry.index_status != ' ' || entry.worktree_status != ' ')
+            })
+            .map(|entry| entry.path)
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect())
     }
 
-    fn worktree_stash_index(&self, index: &Index) -> Result<Index> {
+    fn selected_index_stash_index(
+        &self,
+        head_id: ObjectId,
+        index: &Index,
+        target_paths: &[String],
+    ) -> Result<Index> {
+        let mut entries = index_entries_by_path(self.commit_index_entries(head_id)?);
+        let current_entries = index_entries_by_path(
+            index
+                .entries
+                .iter()
+                .filter(|entry| entry.stage == 0)
+                .cloned()
+                .collect(),
+        );
+        for path in target_paths {
+            match current_entries.get(path) {
+                Some(entry) => {
+                    entries.insert(path.clone(), entry.clone());
+                }
+                None => {
+                    entries.remove(path);
+                }
+            }
+        }
+        Ok(Index {
+            entries: entries.into_values().collect(),
+            extensions: Vec::new(),
+        })
+    }
+
+    fn worktree_stash_index(
+        &self,
+        head_id: ObjectId,
+        index: &Index,
+        target_paths: &[String],
+    ) -> Result<Index> {
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
                 "stash push must be run in a repository with a working tree",
             ));
         };
         let symlinks_enabled = self.core_symlinks_enabled()?;
-        let mut entries = Vec::new();
-        for entry in index.entries.iter().filter(|entry| entry.stage == 0) {
-            let full_path = join_slash_path(worktree, &entry.path);
+        let mut entries = index_entries_by_path(self.commit_index_entries(head_id)?);
+        let current_entries = index_entries_by_path(
+            index
+                .entries
+                .iter()
+                .filter(|entry| entry.stage == 0)
+                .cloned()
+                .collect(),
+        );
+        for path in target_paths {
+            let full_path = join_slash_path(worktree, path);
             let metadata = match fs::symlink_metadata(&full_path) {
                 Ok(metadata) => metadata,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    entries.remove(path);
+                    continue;
+                }
                 Err(source) => return Err(RitError::io(&full_path, source)),
             };
             let is_symlink = metadata.file_type().is_symlink();
@@ -416,22 +486,81 @@ impl Repository {
             } else {
                 fs::read(&full_path).map_err(|source| RitError::io(&full_path, source))?
             };
-            let mode = if store_symlink { 0o120000 } else { entry.mode };
+            let mode = if store_symlink {
+                0o120000
+            } else {
+                current_entries
+                    .get(path)
+                    .or_else(|| entries.get(path))
+                    .map(|entry| entry.mode)
+                    .unwrap_or(0o100644)
+            };
             let object_id = self.loose_objects().write_object(ObjectKind::Blob, &data)?;
-            entries.push(IndexEntry {
-                stat: IndexEntryStat::from_metadata(&metadata),
-                mode,
-                object_id,
-                stage: 0,
-                extended_flags: 0,
-                file_size: data.len().min(u32::MAX as usize) as u32,
-                path: entry.path.clone(),
-            });
+            entries.insert(
+                path.clone(),
+                IndexEntry {
+                    stat: IndexEntryStat::from_metadata(&metadata),
+                    mode,
+                    object_id,
+                    stage: 0,
+                    extended_flags: 0,
+                    file_size: data.len().min(u32::MAX as usize) as u32,
+                    path: path.clone(),
+                },
+            );
         }
         Ok(Index {
-            entries,
+            entries: entries.into_values().collect(),
             extensions: Vec::new(),
         })
+    }
+
+    fn restore_stash_paths_to_head(
+        &self,
+        head_id: ObjectId,
+        target_paths: &[String],
+    ) -> Result<()> {
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "stash push must be run in a repository with a working tree",
+            ));
+        };
+        let head_entries = index_entries_by_path(self.commit_index_entries(head_id)?);
+        let index_path = self.git_dir().join("index");
+        let index = Index::read(&index_path)?;
+        let mut index_entries = index_entries_by_path(index.entries);
+        let symlinks_enabled = self.core_symlinks_enabled()?;
+
+        for path in target_paths {
+            let full_path = join_slash_path(worktree, path);
+            match head_entries.get(path) {
+                Some(entry) => {
+                    index_entries.insert(path.clone(), entry.clone());
+                    let object = self.read_object(entry.object_id)?;
+                    if object.kind != ObjectKind::Blob {
+                        return Err(RitError::invalid_input(format!(
+                            "object {} is {}, not blob",
+                            entry.object_id, object.kind
+                        )));
+                    }
+                    write_worktree_entry_atomically(
+                        &full_path,
+                        &object.data,
+                        entry.mode,
+                        symlinks_enabled,
+                    )?;
+                }
+                None => {
+                    index_entries.remove(path);
+                    remove_file_if_exists(&full_path)?;
+                }
+            }
+        }
+        Index {
+            entries: index_entries.into_values().collect(),
+            extensions: Vec::new(),
+        }
+        .write(&index_path)
     }
 
     fn stash_push_message(&self, head_id: ObjectId, message: Option<&str>) -> Result<String> {

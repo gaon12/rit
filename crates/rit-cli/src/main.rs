@@ -284,7 +284,12 @@ fn stash_command(
         } else {
             StashPushArgs::default()
         };
-        return match repository.stash_push(push_args.message.as_deref()) {
+        let pathspecs = match rit_core::PathspecSet::from_args(&push_args.pathspecs) {
+            Ok(pathspecs) => pathspecs,
+            Err(error) => return write_command_error(stderr, error),
+        };
+        return match repository.stash_push_with_pathspecs(push_args.message.as_deref(), &pathspecs)
+        {
             Ok(rit_core::StashPushResult::NoLocalChanges) => {
                 if !push_args.quiet {
                     writeln!(stdout, "No local changes to save")?;
@@ -465,6 +470,7 @@ struct StashStoreArgs {
 struct StashPushArgs {
     message: Option<String>,
     quiet: bool,
+    pathspecs: Vec<String>,
 }
 
 fn parse_stash_push_args(
@@ -489,18 +495,15 @@ fn parse_stash_push_args(
                 parsed.message = Some(arg.trim_start_matches("--message=").to_owned());
             }
             "--" => {
-                if index + 1 < args.len() {
-                    writeln!(stderr, "rit: stash push pathspecs are not implemented")?;
-                    return Ok(None);
-                }
+                parsed.pathspecs.extend(args[index + 1..].iter().cloned());
+                break;
             }
             _ if arg.starts_with('-') => {
                 writeln!(stderr, "rit: unsupported stash push option '{arg}'")?;
                 return Ok(None);
             }
             _ => {
-                writeln!(stderr, "rit: stash push pathspecs are not implemented")?;
-                return Ok(None);
+                parsed.pathspecs.push(arg.to_owned());
             }
         }
         index += 1;
