@@ -659,12 +659,12 @@ Completion criteria:
 - [x] Environment token provider.
   - [x] Read default token environment variables into redacted credential
     providers without mutating process environment in tests.
-- [~] Git credential helper compatibility.
+- [x] Git credential helper compatibility.
   - [x] Encode and parse Git credential helper line-protocol messages.
   - [x] Read `credential.helper` command shape from Git config.
   - [x] Read ordered helper chains and honor empty helper reset entries.
   - [x] Helper subprocess execution for `get`, `store`, and `erase`.
-- [~] SSH agent integration.
+- [x] SSH agent integration.
   - [x] Model `SSH_AUTH_SOCK` based agent availability.
   - [x] Agent protocol identity lookup and signing.
 - [~] OS keychain adapters.
