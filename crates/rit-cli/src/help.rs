@@ -281,10 +281,13 @@ Explain how rit parses pathspec magic, matching mode, exclusions, wildcards, cas
 ";
 
 const WORKSPACE_HELP: &str = "\
+rit workspace suggest
+rit workspace from-change
+rit workspace from-package <path>
 rit workspace prefetch <profile>
 rit workspace explain <profile>
 
-Print the prefetch plan or explain workspace, partial-clone, LFS, and Xet decisions for a named profile. Network prefetch execution is not implemented yet.
+Suggest workspace profiles from current changes, infer a workspace from one package path, print the prefetch plan, or explain workspace, partial-clone, LFS, and Xet decisions for a named profile. Network prefetch execution is not implemented yet.
 ";
 
 const DOCTOR_HELP: &str = "\

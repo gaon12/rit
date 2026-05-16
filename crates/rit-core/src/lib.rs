@@ -52,7 +52,9 @@ pub mod vfs;
 mod vfs_prefetch_tests;
 #[cfg(test)]
 mod vfs_tests;
+mod workspace_hints;
 pub mod workspace_profile;
+pub mod workspace_recommendation;
 pub mod write;
 pub mod write_plan;
 #[cfg(test)]
@@ -151,6 +153,10 @@ pub use vfs::{
 pub use workspace_profile::{
     LazyMaterializationPolicy, RitConfig, WorkspaceDecision, WorkspaceDecisionExplanation,
     WorkspacePrefetchPlan, WorkspaceProfile,
+};
+pub use workspace_recommendation::{
+    WorkspaceRecommendation, WorkspaceRecommendationHint, WorkspaceRecommendationMode,
+    WorkspaceRecommendationReport,
 };
 pub use write::{
     AddOptions, AddPlan, CherryPickOptions, CherryPickResult, CommitHookMode, CommitOptions,

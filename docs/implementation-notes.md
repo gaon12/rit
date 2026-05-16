@@ -276,6 +276,11 @@
 - 2026-05-17 graph CLI slice checked Git 2.52.0.windows.1 with `git help -a`
   and `git help log`; `rit graph` is rit-specific and does not wrap Git. It
   prints text or stable JSON from the typed local graph model.
+- 2026-05-17 workspace recommendation slice added typed reports for
+  `workspace suggest`, `workspace from-change`, and
+  `workspace from-package <path>`. Recommendations score configured workspace
+  profiles from changed paths and package paths, and include package manifest,
+  CODEOWNERS, and local import/build hints where available.
 - 2026-05-13 IndexDB slice checked `git --version` and `git help -a`; IndexDB
   is rit-specific and has no Git command baseline. Added feature-gated SQLite
   support with `rit indexdb`, `status`, `build`, `update`, `repair`, `rebuild`,

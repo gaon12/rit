@@ -814,10 +814,10 @@ Completion criteria:
 
 ## M21: Workspace Recommendation
 
-- [ ] Add `rit workspace suggest`.
-- [ ] Add `rit workspace from-change`.
-- [ ] Add `rit workspace from-package <path>`.
-- [ ] Use changed files, package manifests, CODEOWNERS, and import/build graph
+- [x] Add `rit workspace suggest`.
+- [x] Add `rit workspace from-change`.
+- [x] Add `rit workspace from-package <path>`.
+- [x] Use changed files, package manifests, CODEOWNERS, and import/build graph
   hints where available.
 
 ## M22: Impact Analysis And CI Helper
