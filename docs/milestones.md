@@ -799,7 +799,7 @@ Completion criteria:
 
 ## M19: Smartlog And Local Work Graph
 
-- [ ] Add local graph model for HEAD, local branches, upstreams, stashes,
+- [x] Add local graph model for HEAD, local branches, upstreams, stashes,
   worktrees, unpushed commits, and diverged branches.
 - [ ] Add `rit smartlog` or `rit graph`.
 - [ ] Add JSON output for local graph consumers.

@@ -270,6 +270,9 @@
   <profile>` prints the derived prefetch plan plus reasons for workspace
   profile selection, partial clone, lazy files, and LFS/Xet backend
   availability without changing tracking rules or fetching objects.
+- 2026-05-17 local graph model slice added read-only `Repository::local_graph`
+  with HEAD, local branches, configured upstreams, stash entries, known
+  worktrees, ahead/behind counts, and unpushed/diverged branch flags.
 - 2026-05-13 IndexDB slice checked `git --version` and `git help -a`; IndexDB
   is rit-specific and has no Git command baseline. Added feature-gated SQLite
   support with `rit indexdb`, `status`, `build`, `update`, `repair`, `rebuild`,

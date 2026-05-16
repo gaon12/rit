@@ -11,6 +11,7 @@ pub mod config;
 pub mod diff;
 pub mod doctor;
 pub mod error;
+pub mod graph;
 pub mod history;
 pub mod index;
 #[cfg(feature = "indexdb")]
@@ -58,6 +59,10 @@ pub mod write_plan;
 mod write_plan_tests;
 
 pub use error::{Result, RitError};
+pub use graph::{
+    LocalGraph, LocalGraphBranch, LocalGraphHead, LocalGraphStash, LocalGraphUpstream,
+    LocalGraphWorktree,
+};
 pub use history::LogEntry;
 pub use index::{
     CacheTree, CacheTreeNode, EndOfIndexEntry, EwahBitmap, FsMonitor, FsMonitorToken, Index,
