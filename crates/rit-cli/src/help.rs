@@ -198,9 +198,10 @@ Apply one non-merge commit onto the current HEAD, or manage an in-progress confl
 ";
 
 const REBASE_HELP: &str = "\
+rit rebase --abort
 rit rebase --quit
 
-Clear Git-compatible rebase state while leaving HEAD, the index, and working tree unchanged.
+Abort an in-progress rebase by restoring the original branch, index, and working tree, or clear Git-compatible rebase state while leaving HEAD, the index, and working tree unchanged.
 ";
 
 const STASH_HELP: &str = "\

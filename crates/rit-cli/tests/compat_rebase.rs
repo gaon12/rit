@@ -23,6 +23,24 @@ fn rebase_quit_without_state_matches_git() {
 }
 
 #[test]
+fn rebase_abort_without_state_matches_git() {
+    let root = temp_path("abort-empty");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_abort = run_capture("git", ["rebase", "--abort"], &git_repo);
+    let rit_abort = run_capture(rit_binary(), ["rebase", "--abort"], &rit_repo);
+
+    assert_eq!(git_abort.exit_code, rit_abort.exit_code);
+    assert_eq!(git_abort.stdout, rit_abort.stdout);
+    assert_eq!(git_abort.stderr, rit_abort.stderr);
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn rebase_quit_clears_rebase_merge_state_like_git() {
     let root = temp_path("quit-state");
     let git_repo = root.join("git");
@@ -50,6 +68,65 @@ fn rebase_quit_clears_rebase_merge_state_like_git() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn rebase_abort_restores_original_branch_like_git() {
+    let root = temp_path("abort-conflict");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    create_conflicting_rebase_state(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_abort = run_capture("git", ["rebase", "--abort"], &git_repo);
+    let rit_abort = run_capture(rit_binary(), ["rebase", "--abort"], &rit_repo);
+
+    assert_eq!(git_abort.exit_code, 0, "git stderr: {}", git_abort.stderr);
+    assert_eq!(rit_abort.exit_code, 0, "rit stderr: {}", rit_abort.stderr);
+    assert_eq!(git_abort.stdout, rit_abort.stdout);
+    assert_eq!(git_abort.stderr, rit_abort.stderr);
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &git_repo).stdout,
+        run_capture(rit_binary(), ["rev-parse", "HEAD"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture(
+            "git",
+            ["symbolic-ref", "--quiet", "--short", "HEAD"],
+            &git_repo
+        )
+        .stdout,
+        run_capture(
+            "git",
+            ["symbolic-ref", "--quiet", "--short", "HEAD"],
+            &rit_repo
+        )
+        .stdout
+    );
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        fs::read_to_string(git_repo.join("tracked.txt")).expect("git file should read"),
+        fs::read_to_string(rit_repo.join("tracked.txt")).expect("rit file should read")
+    );
+    for state_path in [
+        "rebase-merge",
+        "rebase-apply",
+        "REBASE_HEAD",
+        "MERGE_MSG",
+        "AUTO_MERGE",
+    ] {
+        assert_eq!(
+            git_repo.join(".git").join(state_path).exists(),
+            rit_repo.join(".git").join(state_path).exists(),
+            "{state_path}"
+        );
+    }
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct CapturedCommand {
     exit_code: i32,
     stdout: String,
@@ -65,6 +142,22 @@ fn init_repo(repo: &Path) {
     fs::write(repo.join("tracked.txt"), "base\n").expect("tracked file should write");
     run_git(repo, ["add", "tracked.txt"]);
     run_git(repo, ["commit", "--quiet", "-m", "base"]);
+}
+
+fn create_conflicting_rebase_state(repo: &Path) {
+    run_git(repo, ["checkout", "-b", "topic"]);
+    fs::write(repo.join("tracked.txt"), "topic\n").expect("topic file should write");
+    run_git(repo, ["commit", "--quiet", "-am", "topic"]);
+    run_git(repo, ["checkout", "master"]);
+    fs::write(repo.join("tracked.txt"), "master\n").expect("master file should write");
+    run_git(repo, ["commit", "--quiet", "-am", "master"]);
+
+    let rebase = run_capture("git", ["rebase", "topic"], repo);
+    assert_eq!(rebase.exit_code, 1, "rebase should stop on conflict");
+    assert!(
+        repo.join(".git").join("rebase-merge").is_dir(),
+        "rebase should record merge backend state"
+    );
 }
 
 fn write_rebase_merge_state(repo: &Path) {

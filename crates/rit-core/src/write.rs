@@ -1473,6 +1473,29 @@ impl Repository {
         Ok(())
     }
 
+    /// Aborts an in-progress rebase and restores the original branch, index, and worktree.
+    pub fn abort_rebase(&self) -> Result<ObjectId> {
+        let state = self.merge_state()?;
+        let rebase = state
+            .rebase_merge
+            .as_ref()
+            .or(state.rebase_apply.as_ref())
+            .ok_or_else(|| RitError::invalid_input("no rebase in progress"))?;
+        let original_head = rebase
+            .original_head
+            .ok_or_else(|| RitError::invalid_input("rebase state is missing orig-head"))?;
+
+        self.checkout_commit_tree(original_head)?;
+        self.restore_rebase_head(original_head, rebase.head_name.as_deref())?;
+        remove_dir_if_exists(&self.git_dir().join("rebase-apply"))?;
+        remove_dir_if_exists(&self.git_dir().join("rebase-merge"))?;
+        remove_file_if_exists(&self.git_dir().join("REBASE_HEAD"))?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))?;
+        remove_file_if_exists(&self.git_dir().join("AUTO_MERGE"))?;
+        self.refresh_indexdb_after_git_write();
+        Ok(original_head)
+    }
+
     /// Commits a resolved in-progress merge.
     pub fn continue_merge(&self, options: &CommitOptions) -> Result<CommitResult> {
         let state = self.merge_state()?;
@@ -1795,6 +1818,22 @@ impl Repository {
         } else {
             write_text_atomically(&head_path, &format!("{commit_id}\n"))
         }
+    }
+
+    fn restore_rebase_head(&self, commit_id: ObjectId, head_name: Option<&str>) -> Result<()> {
+        let Some(reference_name) = head_name else {
+            return self.update_head(commit_id);
+        };
+        let Some(branch_name) = reference_name.strip_prefix("refs/heads/") else {
+            return self.update_head(commit_id);
+        };
+        validate_ref_short_name(branch_name)?;
+        let reference_path = self.common_dir().join(reference_name);
+        write_text_atomically(&reference_path, &format!("{commit_id}\n"))?;
+        write_text_atomically(
+            &self.git_dir().join("HEAD"),
+            &format!("ref: {reference_name}\n"),
+        )
     }
 
     fn head_blob_entries(&self) -> Result<BTreeMap<String, HeadBlobEntry>> {

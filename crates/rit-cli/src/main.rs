@@ -2655,23 +2655,32 @@ fn rebase_command(
     _stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    match args {
-        [flag] if flag == "--quit" => {}
+    let abort = match args {
+        [flag] if flag == "--abort" => true,
+        [flag] if flag == "--quit" => false,
         [] => {
-            writeln!(stderr, "rit: rebase currently supports only --quit")?;
+            writeln!(
+                stderr,
+                "rit: rebase currently supports only --abort and --quit"
+            )?;
             return Ok(ExitCode::from(129));
         }
         [unsupported, ..] => {
             writeln!(stderr, "rit: unsupported rebase option '{unsupported}'")?;
             return Ok(ExitCode::from(129));
         }
-    }
+    };
 
     let repository = match discover_repository(stderr)? {
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    match repository.quit_rebase() {
+    let result = if abort {
+        repository.abort_rebase().map(|_| ())
+    } else {
+        repository.quit_rebase()
+    };
+    match result {
         Ok(()) => Ok(ExitCode::SUCCESS),
         Err(error) => write_rebase_error(stderr, error),
     }
@@ -3998,6 +4007,7 @@ mod tests {
         let (code, stdout, stderr) = run_with(&["help", "rebase"]);
 
         assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit rebase --abort"));
         assert!(stdout.contains("rit rebase --quit"));
         assert_eq!(stderr, "");
     }
