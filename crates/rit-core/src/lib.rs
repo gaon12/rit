@@ -35,6 +35,7 @@ mod policy_check_tests;
 pub mod refs;
 pub mod repair;
 pub mod repository;
+pub mod schema;
 pub mod semantic_diff;
 #[cfg(test)]
 mod semantic_diff_tests;
@@ -113,6 +114,7 @@ pub use repository::{
     InitOptions, LocalCloneOptions, LocalFetchOptions, LocalFetchResult, RemoteFetchOptions,
     RemoteFetchResult, RemotePushOptions, RemotePushResult, Repository,
 };
+pub use schema::{JsonSchemaDocument, RIT_SCHEMA_VERSION, json_schema, json_schemas};
 #[cfg(feature = "semantic-tree-sitter")]
 pub use semantic_diff::TreeSitterSemanticParser;
 pub use semantic_diff::{

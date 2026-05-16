@@ -1701,3 +1701,14 @@
 - Unsupported behavior: `--preserve-changes` for non-commit journal records
   intentionally returns a clear error instead of guessing a command-specific
   strategy.
+
+### Stable JSON schemas
+
+- 2026-05-17 M23: `rit-core` exposes `JsonSchemaDocument`,
+  `json_schema(name)`, and `json_schemas()` for stable machine-readable output
+  schemas.
+- `rit schema status`, `rit schema diff`, and `rit schema doctor` print the
+  same schema documents from the CLI. The schema registry also includes
+  `operations`, `impact`, and `indexdb`.
+- The schemas describe the existing typed Rust models and current JSON command
+  output where JSON output already exists.

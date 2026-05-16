@@ -37,6 +37,7 @@ Core commands:
   file-history  Show indexed first-parent path history
   graph         Show the local branch, stash, and worktree graph
   impact        Summarize package and CI impact for a commit range
+  schema        Print stable JSON schemas for machine-readable output
   op            Inspect or restore rit operation journal entries
   undo          Undo the last restorable rit operation
   show          Show one object
@@ -250,6 +251,12 @@ rit impact <range>
 Summarize changed packages, affected tests, public API path hints, docs-only status, large-file changes, reviewer hints, semantic path categories, and optional indexdb acceleration availability for `<old>..<new>`.
 ";
 
+const SCHEMA_HELP: &str = "\
+rit schema <status|diff|doctor|operations|impact|indexdb>
+
+Print a stable JSON Schema document for rit machine-readable output. The same schema documents are exposed by the rit-core JSON schema API.
+";
+
 const OP_HELP: &str = "\
 rit op log [--json]
 rit op restore <id>
@@ -345,6 +352,7 @@ pub fn print_command_help(
         "file-history" => stdout.write_all(FILE_HISTORY_HELP.as_bytes())?,
         "graph" => stdout.write_all(GRAPH_HELP.as_bytes())?,
         "impact" => stdout.write_all(IMPACT_HELP.as_bytes())?,
+        "schema" => stdout.write_all(SCHEMA_HELP.as_bytes())?,
         "op" => stdout.write_all(OP_HELP.as_bytes())?,
         "undo" => stdout.write_all(UNDO_HELP.as_bytes())?,
         "show" => stdout.write_all(SHOW_HELP.as_bytes())?,

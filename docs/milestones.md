@@ -829,12 +829,12 @@ Completion criteria:
 
 ## M23: Stable JSON Schema And Typed API
 
-- [ ] Define stable JSON schemas for status, diff, doctor, operations, impact,
+- [x] Define stable JSON schemas for status, diff, doctor, operations, impact,
   and indexdb.
-- [ ] Add `rit schema status`.
-- [ ] Add `rit schema diff`.
-- [ ] Add `rit schema doctor`.
-- [ ] Expose the same typed models from Rust APIs.
+- [x] Add `rit schema status`.
+- [x] Add `rit schema diff`.
+- [x] Add `rit schema doctor`.
+- [x] Expose the same typed models from Rust APIs.
 
 ## M24: Compatibility Oracle
 

@@ -13,6 +13,7 @@ mod op;
 mod pathspec_args;
 mod remote;
 mod repair;
+mod schema;
 
 fn main() -> ExitCode {
     match run(env::args().skip(1), &mut io::stdout(), &mut io::stderr()) {
@@ -75,6 +76,7 @@ fn run(
         }
         [command, rest @ ..] if command == "graph" => graph::graph_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "impact" => impact::impact_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "schema" => schema::schema_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "show" => show_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ls-files" => ls_files_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ignore" => ignore_command(rest, stdout, stderr),
@@ -4368,6 +4370,15 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit impact <range>"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn schema_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "schema"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit schema <status|diff|doctor|operations|impact|indexdb>"));
         assert_eq!(stderr, "");
     }
 
