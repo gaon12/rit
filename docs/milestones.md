@@ -566,6 +566,9 @@ Completion criteria:
   - [x] Basic `stash push -- <pathspec>` limits tracked stash snapshots and
     cleanup to selected tracked paths while leaving unselected tracked
     worktree changes in place.
+  - [x] Basic `stash push --pathspec-from-file=<file>` and
+    `--pathspec-file-nul` reuse the shared pathspec file parser for tracked
+    stash push path filtering.
   - [x] Basic `stash push --keep-index` records tracked changes while restoring
     selected paths to the pre-stash index state so staged changes remain
     staged.
@@ -586,8 +589,7 @@ Completion criteria:
     stash base, checks it out, applies the clean tracked stash, and drops the
     selected loose stash entry on success.
   - [ ] `stash export/import`,
-    untracked/all modes, packed stash ref cleanup, push
-    `--pathspec-from-file`/`--pathspec-file-nul`, same-path staged+unstaged
+    untracked/all modes, packed stash ref cleanup, same-path staged+unstaged
     `--staged` cleanup failure parity, `--index`, broader show options,
     broader error parity, and conflict handling for apply/pop/branch.
 - [~] Conflict index stages.

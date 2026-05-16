@@ -117,11 +117,7 @@ fn stash_command(
 ) -> io::Result<ExitCode> {
     match args {
         [] => {}
-        [flag, ..] if flag.starts_with('-') => {
-            if parse_stash_push_args(args, stderr)?.is_none() {
-                return Ok(ExitCode::from(129));
-            }
-        }
+        [flag, ..] if flag.starts_with('-') => {}
         [subcommand] if subcommand == "list" => {}
         [subcommand] if subcommand == "clear" => {}
         [subcommand, ..] if subcommand == "create" => {}
@@ -145,11 +141,7 @@ fn stash_command(
                 return Ok(ExitCode::from(129));
             }
         }
-        [subcommand, rest @ ..] if subcommand == "push" => {
-            if parse_stash_push_args(rest, stderr)?.is_none() {
-                return Ok(ExitCode::from(129));
-            }
-        }
+        [subcommand, ..] if subcommand == "push" => {}
         [subcommand, rest @ ..] if subcommand == "show" => {
             if parse_stash_show_args(rest, stderr)?.is_none() {
                 return Ok(ExitCode::from(129));
@@ -284,6 +276,9 @@ fn stash_command(
         } else {
             StashPushArgs::default()
         };
+        if let Some(exit_code) = push_args.exit_code {
+            return Ok(ExitCode::from(exit_code));
+        }
         let pathspecs = match rit_core::PathspecSet::from_args(&push_args.pathspecs) {
             Ok(pathspecs) => pathspecs,
             Err(error) => return write_command_error(stderr, error),
@@ -480,6 +475,16 @@ struct StashPushArgs {
     keep_index: bool,
     staged: bool,
     pathspecs: Vec<String>,
+    exit_code: Option<u8>,
+}
+
+impl StashPushArgs {
+    fn exit(exit_code: u8) -> Self {
+        Self {
+            exit_code: Some(exit_code),
+            ..Self::default()
+        }
+    }
 }
 
 fn parse_stash_push_args(
@@ -487,15 +492,33 @@ fn parse_stash_push_args(
     stderr: &mut dyn Write,
 ) -> io::Result<Option<StashPushArgs>> {
     let mut parsed = StashPushArgs::default();
+    let mut pathspec_file = None;
+    let mut pathspec_file_nul = false;
+    let after_separator = false;
     let mut index = 0;
     while index < args.len() {
         let arg = &args[index];
+        if pathspec_from_file_missing_value(args, index, after_separator) {
+            write_pathspec_from_file_requires_value(stderr)?;
+            return Ok(Some(StashPushArgs::exit(129)));
+        }
         match arg.as_str() {
-            "-q" | "--quiet" => parsed.quiet = true,
-            "-k" | "--keep-index" => parsed.keep_index = true,
-            "--no-keep-index" => parsed.keep_index = false,
-            "-S" | "--staged" => parsed.staged = true,
-            "-m" | "--message" => {
+            "--" if !after_separator => {
+                parsed.pathspecs.extend(args[index + 1..].iter().cloned());
+                break;
+            }
+            _ if pathspec_args::handle_pathspec_file_option(
+                args,
+                &mut index,
+                after_separator,
+                &mut pathspec_file,
+                &mut pathspec_file_nul,
+            )? => {}
+            "-q" | "--quiet" if !after_separator => parsed.quiet = true,
+            "-k" | "--keep-index" if !after_separator => parsed.keep_index = true,
+            "--no-keep-index" if !after_separator => parsed.keep_index = false,
+            "-S" | "--staged" if !after_separator => parsed.staged = true,
+            "-m" | "--message" if !after_separator => {
                 index += 1;
                 let Some(value) = args.get(index) else {
                     writeln!(stderr, "error: switch `m' requires a value")?;
@@ -503,14 +526,10 @@ fn parse_stash_push_args(
                 };
                 parsed.message = Some(value.to_owned());
             }
-            _ if arg.starts_with("--message=") => {
+            _ if arg.starts_with("--message=") && !after_separator => {
                 parsed.message = Some(arg.trim_start_matches("--message=").to_owned());
             }
-            "--" => {
-                parsed.pathspecs.extend(args[index + 1..].iter().cloned());
-                break;
-            }
-            _ if arg.starts_with('-') => {
+            _ if arg.starts_with('-') && !after_separator => {
                 writeln!(stderr, "rit: unsupported stash push option '{arg}'")?;
                 return Ok(None);
             }
@@ -520,6 +539,31 @@ fn parse_stash_push_args(
         }
         index += 1;
     }
+
+    if pathspec_file_nul && pathspec_file.is_none() {
+        write_pathspec_file_nul_requires_file(stderr)?;
+        return Ok(Some(StashPushArgs::exit(128)));
+    }
+    if pathspec_file.is_some() && !parsed.pathspecs.is_empty() {
+        write_pathspec_file_cannot_mix_with_args(stderr)?;
+        return Ok(Some(StashPushArgs::exit(128)));
+    }
+    if let Some(file_name) = pathspec_file {
+        match pathspec_args::read_pathspecs_from_file(
+            &file_name,
+            pathspec_file_nul,
+            "stash",
+            stderr,
+        )? {
+            pathspec_args::PathspecFileRead::Pathspecs(file_pathspecs) => {
+                parsed.pathspecs.extend(file_pathspecs);
+            }
+            pathspec_args::PathspecFileRead::Error { exit_code } => {
+                return Ok(Some(StashPushArgs::exit(exit_code)));
+            }
+        }
+    }
+
     Ok(Some(parsed))
 }
 

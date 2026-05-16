@@ -211,6 +211,130 @@ fn stash_push_pathspec_stashes_only_selected_tracked_change() {
 }
 
 #[test]
+fn stash_push_pathspec_from_file_matches_git() {
+    let root = temp_path("push-pathspec-file");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    fs::write(repo_file(&git_repo, "other.txt"), "other base\n")
+        .expect("second tracked file should write");
+    run_git(&git_repo, ["add", "other.txt"]);
+    run_git(&git_repo, ["commit", "--quiet", "-m", "other"]);
+    fs::write(repo_file(&git_repo, "paths.txt"), "tracked.txt\n")
+        .expect("git pathspec file should write");
+    copy_directory(&git_repo, &rit_repo);
+    fs::write(repo_file(&git_repo, "tracked.txt"), "selected\n")
+        .expect("git selected change should write");
+    fs::write(repo_file(&rit_repo, "tracked.txt"), "selected\n")
+        .expect("rit selected change should write");
+    fs::write(repo_file(&git_repo, "other.txt"), "other change\n")
+        .expect("git unselected change should write");
+    fs::write(repo_file(&rit_repo, "other.txt"), "other change\n")
+        .expect("rit unselected change should write");
+
+    let git_push = run_capture(
+        "git",
+        [
+            "stash",
+            "push",
+            "-m",
+            "file selected",
+            "--pathspec-from-file=paths.txt",
+        ],
+        &git_repo,
+    );
+    let rit_push = run_capture(
+        rit_binary(),
+        [
+            "stash",
+            "push",
+            "-m",
+            "file selected",
+            "--pathspec-from-file=paths.txt",
+        ],
+        &rit_repo,
+    );
+
+    assert_eq!(git_push.exit_code, 0, "git stderr: {}", git_push.stderr);
+    assert_eq!(rit_push.exit_code, 0, "rit stderr: {}", rit_push.stderr);
+    assert_eq!(git_push.stdout, rit_push.stdout);
+    assert_eq!(git_push.stderr, rit_push.stderr);
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["stash", "show", "--name-only"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "show", "--name-only"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn stash_push_nul_pathspec_from_file_matches_git() {
+    let root = temp_path("push-pathspec-nul");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    fs::write(repo_file(&git_repo, "other.txt"), "other base\n")
+        .expect("second tracked file should write");
+    run_git(&git_repo, ["add", "other.txt"]);
+    run_git(&git_repo, ["commit", "--quiet", "-m", "other"]);
+    fs::write(repo_file(&git_repo, "paths.nul"), b"tracked.txt\0")
+        .expect("git nul pathspec file should write");
+    copy_directory(&git_repo, &rit_repo);
+    fs::write(repo_file(&git_repo, "tracked.txt"), "selected\n")
+        .expect("git selected change should write");
+    fs::write(repo_file(&rit_repo, "tracked.txt"), "selected\n")
+        .expect("rit selected change should write");
+    fs::write(repo_file(&git_repo, "other.txt"), "other change\n")
+        .expect("git unselected change should write");
+    fs::write(repo_file(&rit_repo, "other.txt"), "other change\n")
+        .expect("rit unselected change should write");
+
+    let git_push = run_capture(
+        "git",
+        [
+            "stash",
+            "push",
+            "-m",
+            "nul selected",
+            "--pathspec-from-file=paths.nul",
+            "--pathspec-file-nul",
+        ],
+        &git_repo,
+    );
+    let rit_push = run_capture(
+        rit_binary(),
+        [
+            "stash",
+            "push",
+            "-m",
+            "nul selected",
+            "--pathspec-from-file=paths.nul",
+            "--pathspec-file-nul",
+        ],
+        &rit_repo,
+    );
+
+    assert_eq!(git_push.exit_code, 0, "git stderr: {}", git_push.stderr);
+    assert_eq!(rit_push.exit_code, 0, "rit stderr: {}", rit_push.stderr);
+    assert_eq!(git_push.stdout, rit_push.stdout);
+    assert_eq!(git_push.stderr, rit_push.stderr);
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["stash", "show", "--name-only"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "show", "--name-only"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn stash_push_keep_index_keeps_staged_state_like_git() {
     let root = temp_path("push-keep-index");
     let git_repo = root.join("git");

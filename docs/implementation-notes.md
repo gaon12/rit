@@ -1468,7 +1468,7 @@
 
 - Baseline command checked: `git stash -h`
 - Supported options: `rit stash list`,
-  `rit stash [push [(-m|--message) <message>] [-S|--staged] [-k|--keep-index] [-q|--quiet] [--] [<pathspec>...]]`
+  `rit stash [push [(-m|--message) <message>] [-S|--staged] [-k|--keep-index] [-q|--quiet] [--pathspec-from-file <file>] [--pathspec-file-nul] [--] [<pathspec>...]]`
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [<message>]` as the legacy tracked-change save
   form,
@@ -1485,8 +1485,8 @@
   `rit stash clear` for loose stash refs.
 - Unsupported options: `export`, `import`, stash show untracked display
   options, save `--patch`/`--staged`/`--keep-index`/untracked modes, push
-  `--pathspec-from-file`/`--pathspec-file-nul`, untracked modes, packed stash
-  ref cleanup, `--index`, and stash apply/pop/branch conflict handling.
+  untracked modes, packed stash ref cleanup, `--index`, and stash
+  apply/pop/branch conflict handling.
 - Git-compatible behavior: `rit stash push` without untracked/pathspec options
   writes the usual two-parent stash shape for tracked changes, stores it in
   loose `refs/stash`, prints Git's saved/no-change messages, and restores the
@@ -1494,6 +1494,10 @@
 - Git-compatible behavior: `rit stash push -- <pathspec>` limits the tracked
   stash snapshot and cleanup to matching tracked paths, leaving unselected
   tracked worktree changes in place for the checked ordinary pathspec scope.
+- Git-compatible behavior: `rit stash push --pathspec-from-file=<file>` and
+  `--pathspec-file-nul` reuse the shared Git-compatible pathspec file parser,
+  including text and NUL-delimited pathspec files for the checked tracked
+  change scope.
 - Git-compatible behavior: `rit stash push --keep-index` records the same
   tracked stash shape while restoring selected paths to the pre-stash index
   state, so staged changes remain staged and unstaged-only changes are cleaned.
