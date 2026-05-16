@@ -116,8 +116,19 @@ fn stash_command(
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
     match args {
+        [] => {}
+        [flag, ..] if flag.starts_with('-') => {
+            if parse_stash_push_args(args, stderr)?.is_none() {
+                return Ok(ExitCode::from(129));
+            }
+        }
         [subcommand] if subcommand == "list" => {}
         [subcommand] if subcommand == "clear" => {}
+        [subcommand, rest @ ..] if subcommand == "push" => {
+            if parse_stash_push_args(rest, stderr)?.is_none() {
+                return Ok(ExitCode::from(129));
+            }
+        }
         [subcommand, rest @ ..] if subcommand == "show" => {
             if parse_stash_show_args(rest, stderr)?.is_none() {
                 return Ok(ExitCode::from(129));
@@ -133,10 +144,6 @@ fn stash_command(
                 return Ok(ExitCode::from(129));
             }
         }
-        [] => {
-            writeln!(stderr, "rit: stash requires a supported subcommand")?;
-            return Ok(ExitCode::from(129));
-        }
         [subcommand, ..] => {
             writeln!(stderr, "rit: unsupported stash subcommand '{subcommand}'")?;
             return Ok(ExitCode::from(129));
@@ -150,6 +157,35 @@ fn stash_command(
     if matches!(args, [subcommand] if subcommand == "clear") {
         return match repository.stash_clear() {
             Ok(()) => Ok(ExitCode::SUCCESS),
+            Err(error) => write_command_error(stderr, error),
+        };
+    }
+    if args.is_empty()
+        || matches!(args, [subcommand, ..] if subcommand == "push")
+        || matches!(args, [flag, ..] if flag.starts_with('-'))
+    {
+        let push_args = if let [subcommand, rest @ ..] = args {
+            let push_args = if subcommand == "push" { rest } else { args };
+            let Some(parsed) = parse_stash_push_args(push_args, stderr)? else {
+                return Ok(ExitCode::from(129));
+            };
+            parsed
+        } else {
+            StashPushArgs::default()
+        };
+        return match repository.stash_push(push_args.message.as_deref()) {
+            Ok(rit_core::StashPushResult::NoLocalChanges) => {
+                if !push_args.quiet {
+                    writeln!(stdout, "No local changes to save")?;
+                }
+                Ok(ExitCode::SUCCESS)
+            }
+            Ok(rit_core::StashPushResult::Saved { message, .. }) => {
+                if !push_args.quiet {
+                    writeln!(stdout, "Saved working directory and index state {message}")?;
+                }
+                Ok(ExitCode::SUCCESS)
+            }
             Err(error) => write_command_error(stderr, error),
         };
     }
@@ -290,6 +326,53 @@ struct StashDropArgs {
 struct StashStoreArgs {
     commit: String,
     message: Option<String>,
+}
+
+#[derive(Default)]
+struct StashPushArgs {
+    message: Option<String>,
+    quiet: bool,
+}
+
+fn parse_stash_push_args(
+    args: &[String],
+    stderr: &mut dyn Write,
+) -> io::Result<Option<StashPushArgs>> {
+    let mut parsed = StashPushArgs::default();
+    let mut index = 0;
+    while index < args.len() {
+        let arg = &args[index];
+        match arg.as_str() {
+            "-q" | "--quiet" => parsed.quiet = true,
+            "-m" | "--message" => {
+                index += 1;
+                let Some(value) = args.get(index) else {
+                    writeln!(stderr, "error: switch `m' requires a value")?;
+                    return Ok(None);
+                };
+                parsed.message = Some(value.to_owned());
+            }
+            _ if arg.starts_with("--message=") => {
+                parsed.message = Some(arg.trim_start_matches("--message=").to_owned());
+            }
+            "--" => {
+                if index + 1 < args.len() {
+                    writeln!(stderr, "rit: stash push pathspecs are not implemented")?;
+                    return Ok(None);
+                }
+            }
+            _ if arg.starts_with('-') => {
+                writeln!(stderr, "rit: unsupported stash push option '{arg}'")?;
+                return Ok(None);
+            }
+            _ => {
+                writeln!(stderr, "rit: stash push pathspecs are not implemented")?;
+                return Ok(None);
+            }
+        }
+        index += 1;
+    }
+    Ok(Some(parsed))
 }
 
 fn parse_stash_store_args(

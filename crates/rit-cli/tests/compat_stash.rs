@@ -63,6 +63,95 @@ fn stash_clear_removes_stash_list_like_git() {
 }
 
 #[test]
+fn stash_push_tracked_change_matches_git_messages_and_cleans_tree() {
+    let root = temp_path("push-tracked");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    fs::write(repo_file(&git_repo, "tracked.txt"), "pushed\n")
+        .expect("git tracked change should write");
+    fs::write(repo_file(&rit_repo, "tracked.txt"), "pushed\n")
+        .expect("rit tracked change should write");
+
+    let git_push = run_capture("git", ["stash", "push", "-m", "pushed msg"], &git_repo);
+    let rit_push = run_capture(
+        rit_binary(),
+        ["stash", "push", "-m", "pushed msg"],
+        &rit_repo,
+    );
+
+    assert_eq!(git_push.exit_code, 0, "git stderr: {}", git_push.stderr);
+    assert_eq!(rit_push.exit_code, 0, "rit stderr: {}", rit_push.stderr);
+    assert_eq!(git_push.stdout, rit_push.stdout);
+    assert_eq!(git_push.stderr, rit_push.stderr);
+    assert_eq!(
+        run_capture("git", ["stash", "list"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["stash", "show", "--stat"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "show", "--stat"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn stash_default_no_local_changes_matches_git() {
+    let root = temp_path("push-clean");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_push = run_capture("git", ["stash"], &git_repo);
+    let rit_push = run_capture(rit_binary(), ["stash"], &rit_repo);
+
+    assert_eq!(git_push.exit_code, 0, "git stderr: {}", git_push.stderr);
+    assert_eq!(rit_push.exit_code, 0, "rit stderr: {}", rit_push.stderr);
+    assert_eq!(git_push.stdout, rit_push.stdout);
+    assert_eq!(git_push.stderr, rit_push.stderr);
+    assert_eq!(
+        run_capture("git", ["stash", "list"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn stash_push_options_without_push_word_match_git() {
+    let root = temp_path("push-implicit");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    fs::write(repo_file(&git_repo, "tracked.txt"), "implicit\n")
+        .expect("git tracked change should write");
+    fs::write(repo_file(&rit_repo, "tracked.txt"), "implicit\n")
+        .expect("rit tracked change should write");
+
+    let git_push = run_capture("git", ["stash", "-m", "implicit msg"], &git_repo);
+    let rit_push = run_capture(rit_binary(), ["stash", "-m", "implicit msg"], &rit_repo);
+
+    assert_eq!(git_push.exit_code, 0, "git stderr: {}", git_push.stderr);
+    assert_eq!(rit_push.exit_code, 0, "rit stderr: {}", rit_push.stderr);
+    assert_eq!(git_push.stdout, rit_push.stdout);
+    assert_eq!(git_push.stderr, rit_push.stderr);
+    assert_eq!(
+        run_capture("git", ["stash", "list"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn stash_show_summary_formats_match_git() {
     let root = temp_path("show");
     let git_repo = root.join("git");

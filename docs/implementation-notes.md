@@ -1468,14 +1468,20 @@
 
 - Baseline command checked: `git stash -h`
 - Supported options: `rit stash list`,
+  `rit stash [push [(-m|--message) <message>] [-q|--quiet]]` for tracked
+  index and working-tree changes,
   `rit stash show [-p|--patch|--stat|--name-only|--name-status|--numstat] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash store [(-m|--message) <message>] [-q|--quiet] <commit>`, and
   `rit stash clear` for loose stash refs.
-- Unsupported options: default `stash push`, `push`, `save`, `pop`, `apply`,
-  `branch`, `create`, `export`, `import`, stash show untracked display options,
-  pathspecs, staged/keep-index/untracked modes, packed stash ref cleanup, and
-  stash apply conflict handling.
+- Unsupported options: `save`, `pop`, `apply`, `branch`, `create`, `export`,
+  `import`, stash show untracked display options, push pathspecs,
+  staged/keep-index/untracked modes, packed stash ref cleanup, and stash apply
+  conflict handling.
+- Git-compatible behavior: `rit stash push` without untracked/pathspec options
+  writes the usual two-parent stash shape for tracked changes, stores it in
+  loose `refs/stash`, prints Git's saved/no-change messages, and restores the
+  index and working tree to `HEAD`.
 - Git-compatible behavior: `rit stash list` reads `.git/logs/refs/stash`
   directly, prints newest entries first as `stash@{n}: <reflog message>`, and
   prints nothing when no stash reflog exists.

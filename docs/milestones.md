@@ -561,9 +561,12 @@ Completion criteria:
     a Git-compatible reflog message.
   - [x] `rit stash store -q` and the default store message match Git for loose
     stash state.
-  - [ ] `stash push`, `apply`, `pop`, branch/export/import, push pathspecs,
-    staged/keep-index/untracked modes, packed stash ref cleanup, broader show
-    options, broader error parity, and conflict apply handling.
+  - [x] Basic `stash push` saves tracked index and working-tree changes into a
+    two-parent stash commit, updates loose `refs/stash`, and restores `HEAD`.
+  - [ ] `stash apply`, `pop`, branch/export/import, push pathspecs,
+    staged/keep-index/untracked modes, untracked/all modes, packed stash ref
+    cleanup, broader show options, broader error parity, and conflict apply
+    handling.
 - [~] Conflict index stages.
   - [x] Preserve stage 0/1/2/3 in index read, write, sorting, and
     `ls-files --stage` output.

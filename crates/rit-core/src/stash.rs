@@ -3,9 +3,10 @@ use std::io::Write;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::index::{Index, IndexEntry, IndexEntryStat, join_slash_path};
 use crate::{
     DiffPatch, DiffSummary, GitConfig, ObjectId, ObjectKind, PathspecSet, Repository, Result,
-    RitError, Signature,
+    RitError, Signature, parse_commit,
 };
 
 const ZERO_OBJECT_ID: &str = "0000000000000000000000000000000000000000";
@@ -28,6 +29,20 @@ pub struct StashDropResult {
     pub object_id: ObjectId,
 }
 
+/// Result of saving the current tracked changes with `stash push`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StashPushResult {
+    /// No tracked index or working-tree changes were present.
+    NoLocalChanges,
+    /// A new stash commit was written and `refs/stash` now points to it.
+    Saved {
+        /// Commit ID stored in `refs/stash`.
+        object_id: ObjectId,
+        /// Reflog and commit message shown by `stash list`.
+        message: String,
+    },
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct StashReflogEntry {
     old_id: ObjectId,
@@ -36,6 +51,44 @@ struct StashReflogEntry {
 }
 
 impl Repository {
+    /// Saves tracked index and working-tree changes as a loose `refs/stash` entry.
+    ///
+    /// This implements the default `git stash push` shape for tracked paths.
+    /// Untracked files, pathspec filtering, `--keep-index`, and apply/pop are
+    /// intentionally left to later milestone slices.
+    pub fn stash_push(&self, message: Option<&str>) -> Result<StashPushResult> {
+        let head_id = self
+            .resolve_head()?
+            .ok_or_else(|| RitError::invalid_input("stash push requires an existing HEAD"))?;
+        if !self.has_tracked_stash_changes()? {
+            return Ok(StashPushResult::NoLocalChanges);
+        }
+
+        let index = Index::read(&self.git_dir().join("index"))?;
+        ensure_stashable_index(&index)?;
+        let index_tree_id = self.write_tree_from_index(&index)?;
+        let stash_message = self.stash_push_message(head_id, message)?;
+        let index_commit_id = self.write_stash_commit(
+            index_tree_id,
+            &[head_id],
+            &index_commit_message(&stash_message),
+        )?;
+        let worktree_index = self.worktree_stash_index(&index)?;
+        let worktree_tree_id = self.write_tree_from_index(&worktree_index)?;
+        let stash_id = self.write_stash_commit(
+            worktree_tree_id,
+            &[head_id, index_commit_id],
+            &stash_message,
+        )?;
+
+        self.stash_store(stash_id, Some(&stash_message))?;
+        self.checkout_commit_tree(head_id)?;
+        Ok(StashPushResult::Saved {
+            object_id: stash_id,
+            message: stash_message,
+        })
+    }
+
     /// Lists stashes by reading the Git-compatible `refs/stash` reflog.
     pub fn stash_list(&self) -> Result<Vec<StashListEntry>> {
         let mut messages = self
@@ -194,6 +247,96 @@ impl Repository {
         write_file_atomically(&path, |file| writeln!(file, "{target}"))
     }
 
+    fn has_tracked_stash_changes(&self) -> Result<bool> {
+        Ok(self.status_porcelain_v1()?.entries.iter().any(|entry| {
+            entry.index_status != '?' && (entry.index_status != ' ' || entry.worktree_status != ' ')
+        }))
+    }
+
+    fn worktree_stash_index(&self, index: &Index) -> Result<Index> {
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "stash push must be run in a repository with a working tree",
+            ));
+        };
+        let symlinks_enabled = self.core_symlinks_enabled()?;
+        let mut entries = Vec::new();
+        for entry in index.entries.iter().filter(|entry| entry.stage == 0) {
+            let full_path = join_slash_path(worktree, &entry.path);
+            let metadata = match fs::symlink_metadata(&full_path) {
+                Ok(metadata) => metadata,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(source) => return Err(RitError::io(&full_path, source)),
+            };
+            let is_symlink = metadata.file_type().is_symlink();
+            let store_symlink = is_symlink && symlinks_enabled;
+            let data = if store_symlink {
+                read_symlink_target_bytes(&full_path)?
+            } else {
+                fs::read(&full_path).map_err(|source| RitError::io(&full_path, source))?
+            };
+            let mode = if store_symlink { 0o120000 } else { entry.mode };
+            let object_id = self.loose_objects().write_object(ObjectKind::Blob, &data)?;
+            entries.push(IndexEntry {
+                stat: IndexEntryStat::from_metadata(&metadata),
+                mode,
+                object_id,
+                stage: 0,
+                extended_flags: 0,
+                file_size: data.len().min(u32::MAX as usize) as u32,
+                path: entry.path.clone(),
+            });
+        }
+        Ok(Index {
+            entries,
+            extensions: Vec::new(),
+        })
+    }
+
+    fn stash_push_message(&self, head_id: ObjectId, message: Option<&str>) -> Result<String> {
+        let branch = self
+            .current_branch_name()?
+            .unwrap_or_else(|| "(no branch)".to_owned());
+        if let Some(message) = message {
+            return Ok(format!("On {branch}: {message}"));
+        }
+
+        let object = self.read_object(head_id)?;
+        if object.kind != ObjectKind::Commit {
+            return Err(RitError::invalid_input(format!(
+                "HEAD points to {}, not commit",
+                object.kind
+            )));
+        }
+        let commit = parse_commit(&object.data)?;
+        let subject = commit.message.lines().next().unwrap_or("");
+        Ok(format!("WIP on {branch}: {} {subject}", short_id(head_id)))
+    }
+
+    fn write_stash_commit(
+        &self,
+        tree_id: ObjectId,
+        parents: &[ObjectId],
+        message: &str,
+    ) -> Result<ObjectId> {
+        let signature = self.reflog_committer()?;
+        let mut commit = Vec::new();
+        commit.extend_from_slice(format!("tree {tree_id}\n").as_bytes());
+        for parent_id in parents {
+            commit.extend_from_slice(format!("parent {parent_id}\n").as_bytes());
+        }
+        commit.extend_from_slice(
+            format!("author {}\n", format_reflog_signature(&signature)).as_bytes(),
+        );
+        commit.extend_from_slice(
+            format!("committer {}\n\n", format_reflog_signature(&signature)).as_bytes(),
+        );
+        commit.extend_from_slice(message.trim_end_matches('\n').as_bytes());
+        commit.push(b'\n');
+        self.loose_objects()
+            .write_object(ObjectKind::Commit, &commit)
+    }
+
     fn reflog_committer(&self) -> Result<Signature> {
         let config_path = self.common_dir().join("config");
         let name = std::env::var("GIT_COMMITTER_NAME")
@@ -297,4 +440,37 @@ fn write_file_atomically(
             .map_err(|source| RitError::io(&lock_path, source))?;
     }
     fs::rename(&lock_path, path).map_err(|source| RitError::io(path, source))
+}
+
+fn ensure_stashable_index(index: &Index) -> Result<()> {
+    if let Some(entry) = index.entries.iter().find(|entry| entry.stage != 0) {
+        return Err(RitError::invalid_input(format!(
+            "cannot stash with unmerged index entry: {}",
+            entry.path
+        )));
+    }
+    Ok(())
+}
+
+fn index_commit_message(stash_message: &str) -> String {
+    match stash_message.strip_prefix("WIP on ") {
+        Some(rest) => format!("index on {rest}"),
+        None => format!("index {stash_message}"),
+    }
+}
+
+fn short_id(object_id: ObjectId) -> String {
+    object_id.to_hex().chars().take(7).collect()
+}
+
+#[cfg(unix)]
+fn read_symlink_target_bytes(path: &Path) -> Result<Vec<u8>> {
+    use std::os::unix::ffi::OsStrExt;
+    let target = fs::read_link(path).map_err(|source| RitError::io(path, source))?;
+    Ok(target.as_os_str().as_bytes().to_vec())
+}
+
+#[cfg(not(unix))]
+fn read_symlink_target_bytes(path: &Path) -> Result<Vec<u8>> {
+    fs::read(path).map_err(|source| RitError::io(path, source))
 }

@@ -2565,7 +2565,7 @@ impl Repository {
         Ok(ancestors)
     }
 
-    fn write_tree_from_index(&self, index: &Index) -> Result<ObjectId> {
+    pub(crate) fn write_tree_from_index(&self, index: &Index) -> Result<ObjectId> {
         let mut root = TreeNode::default();
         for entry in &index.entries {
             if entry.stage != 0 {

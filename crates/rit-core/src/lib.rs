@@ -137,7 +137,7 @@ pub use semantic_typescript::{
     TypeScriptFunctionChange, TypeScriptSemanticSummary, summarize_typescript_functions,
 };
 pub use sparse::{SparseCheckout, SparseCheckoutMode, SparseCheckoutPattern};
-pub use stash::StashListEntry;
+pub use stash::{StashListEntry, StashPushResult};
 pub use status::{
     IgnoreExplanation, IgnoreRuleExplanation, PorcelainStatus, StatusBranchHeader, StatusEntry,
     StatusExplanation, StatusOptions, UntrackedFilesMode,
