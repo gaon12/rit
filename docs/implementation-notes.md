@@ -1382,7 +1382,9 @@
 - Git-compatible behavior: `rit stash drop` removes the selected loose reflog
   entry, rewrites remaining old/new reflog links, updates loose
   `.git/refs/stash` to the newest remaining entry, and removes loose stash
-  state when the last entry is dropped.
+  state when the last entry is dropped. `-q` suppresses the dropped-entry
+  message; empty and out-of-range loose reflog errors match the checked Git
+  shape.
 - Repository mutation: no for `stash list`.
 - Repository mutation: yes for `stash clear`; it removes loose `.git/refs/stash`
   and `.git/logs/refs/stash`.

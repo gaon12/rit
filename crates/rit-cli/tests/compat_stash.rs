@@ -126,6 +126,59 @@ fn stash_drop_older_entry_relinks_reflog_like_git() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn stash_drop_quiet_matches_git() {
+    let root = temp_path("drop-quiet");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_stashes(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_drop = run_capture("git", ["stash", "drop", "-q", "1"], &git_repo);
+    let rit_drop = run_capture(rit_binary(), ["stash", "drop", "-q", "1"], &rit_repo);
+
+    assert_eq!(git_drop.exit_code, 0, "git stderr: {}", git_drop.stderr);
+    assert_eq!(rit_drop.exit_code, 0, "rit stderr: {}", rit_drop.stderr);
+    assert_eq!(git_drop.stdout, rit_drop.stdout);
+    assert_eq!(git_drop.stderr, rit_drop.stderr);
+    assert_eq!(
+        run_capture("git", ["stash", "list"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn stash_drop_errors_match_git() {
+    let root = temp_path("drop-errors");
+    let empty_git_repo = root.join("empty-git");
+    let empty_rit_repo = root.join("empty-rit");
+    init_repo(&empty_git_repo);
+    copy_directory(&empty_git_repo, &empty_rit_repo);
+
+    let git_empty = run_capture("git", ["stash", "drop"], &empty_git_repo);
+    let rit_empty = run_capture(rit_binary(), ["stash", "drop"], &empty_rit_repo);
+
+    assert_eq!(git_empty.exit_code, rit_empty.exit_code);
+    assert_eq!(git_empty.stdout, rit_empty.stdout);
+    assert_eq!(git_empty.stderr, rit_empty.stderr);
+
+    let git_repo = root.join("range-git");
+    let rit_repo = root.join("range-rit");
+    setup_stashes(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_range = run_capture("git", ["stash", "drop", "stash@{9}"], &git_repo);
+    let rit_range = run_capture(rit_binary(), ["stash", "drop", "stash@{9}"], &rit_repo);
+
+    assert_eq!(git_range.exit_code, rit_range.exit_code);
+    assert_eq!(git_range.stdout, rit_range.stdout);
+    assert_eq!(git_range.stderr, rit_range.stderr);
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct CapturedCommand {
     exit_code: i32,
     stdout: String,
