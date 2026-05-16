@@ -1483,9 +1483,8 @@
   `rit stash clear` for loose stash refs.
 - Unsupported options: `branch`, `export`, `import`, stash show untracked
   display options, save `--patch`/`--staged`/untracked modes, push pathspecs,
-  staged/keep-index/untracked modes, packed stash ref cleanup, default apply
-  human status output, default pop human status output, `--index`, and stash
-  apply/pop conflict/cross-branch handling.
+  staged/keep-index/untracked modes, packed stash ref cleanup, `--index`, and
+  stash apply/pop conflict/cross-branch handling.
 - Git-compatible behavior: `rit stash push` without untracked/pathspec options
   writes the usual two-parent stash shape for tracked changes, stores it in
   loose `refs/stash`, prints Git's saved/no-change messages, and restores the
@@ -1499,9 +1498,14 @@
 - Git-compatible behavior: `rit stash apply -q [<stash>]` restores tracked
   worktree changes from a loose stash without dropping it when the current
   tracked state is clean and `HEAD` matches the stash base.
+- Git-compatible behavior: default `rit stash apply [<stash>]` prints the
+  checked Git human status summary for the same clean tracked apply scope.
 - Git-compatible behavior: `rit stash pop -q [<stash>]` uses the same tracked
   clean apply path, then removes the selected loose stash reflog entry and
   updates loose `.git/refs/stash`.
+- Git-compatible behavior: default `rit stash pop [<stash>]` prints the checked
+  Git human status summary before the dropped-entry message for the same clean
+  tracked apply scope.
 - Git-compatible behavior: `rit stash list` reads `.git/logs/refs/stash`
   directly, prints newest entries first as `stash@{n}: <reflog message>`, and
   prints nothing when no stash reflog exists.

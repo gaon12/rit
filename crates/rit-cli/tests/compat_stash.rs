@@ -379,6 +379,29 @@ fn stash_apply_quiet_older_entry_matches_git_state() {
 }
 
 #[test]
+fn stash_apply_default_prints_human_status_like_git() {
+    let root = temp_path("apply-human");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_stashes(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_apply = run_capture("git", ["stash", "apply"], &git_repo);
+    let rit_apply = run_capture(rit_binary(), ["stash", "apply"], &rit_repo);
+
+    assert_eq!(git_apply.exit_code, 0, "git stderr: {}", git_apply.stderr);
+    assert_eq!(rit_apply.exit_code, 0, "rit stderr: {}", rit_apply.stderr);
+    assert_eq!(git_apply.stdout, rit_apply.stdout);
+    assert_eq!(git_apply.stderr, rit_apply.stderr);
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn stash_pop_quiet_restores_tracked_change_and_drops_entry() {
     let root = temp_path("pop-default");
     let git_repo = root.join("git");
@@ -408,6 +431,33 @@ fn stash_pop_quiet_restores_tracked_change_and_drops_entry() {
     assert_eq!(
         read_optional_file(&git_repo.join(".git").join("refs").join("stash")),
         read_optional_file(&rit_repo.join(".git").join("refs").join("stash"))
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn stash_pop_default_prints_human_status_and_drop_like_git() {
+    let root = temp_path("pop-human");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_stashes(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_pop = run_capture("git", ["stash", "pop"], &git_repo);
+    let rit_pop = run_capture(rit_binary(), ["stash", "pop"], &rit_repo);
+
+    assert_eq!(git_pop.exit_code, 0, "git stderr: {}", git_pop.stderr);
+    assert_eq!(rit_pop.exit_code, 0, "rit stderr: {}", rit_pop.stderr);
+    assert_eq!(git_pop.stdout, rit_pop.stdout);
+    assert_eq!(git_pop.stderr, rit_pop.stderr);
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["stash", "list"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
     );
 
     let _ = fs::remove_dir_all(root);

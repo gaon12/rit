@@ -183,7 +183,12 @@ fn stash_command(
             return Ok(ExitCode::from(129));
         };
         return match repository.stash_apply(apply_args.index) {
-            Ok(_result) => Ok(ExitCode::SUCCESS),
+            Ok(_result) => {
+                if !apply_args.quiet {
+                    write_stash_human_status(&repository, stdout)?;
+                }
+                Ok(ExitCode::SUCCESS)
+            }
             Err(error) => write_stash_error(stderr, error),
         };
     }
@@ -217,6 +222,9 @@ fn stash_command(
         };
         return match repository.stash_pop(pop_args.index, pop_args.name.clone()) {
             Ok(result) => {
+                if !pop_args.quiet {
+                    write_stash_human_status(&repository, stdout)?;
+                }
                 if !pop_args.quiet {
                     writeln!(stdout, "Dropped {} ({})", result.name, result.object_id)?;
                 }
@@ -409,6 +417,7 @@ struct StashPopArgs {
 
 struct StashApplyArgs {
     index: usize,
+    quiet: bool,
 }
 
 struct StashSaveArgs {
@@ -494,10 +503,11 @@ fn parse_stash_apply_args(
     args: &[String],
     stderr: &mut dyn Write,
 ) -> io::Result<Option<StashApplyArgs>> {
+    let mut quiet = false;
     let mut stash = None;
     for arg in args {
         match arg.as_str() {
-            "-q" | "--quiet" => {}
+            "-q" | "--quiet" => quiet = true,
             _ if arg.starts_with('-') => {
                 writeln!(stderr, "rit: unsupported stash apply option '{arg}'")?;
                 return Ok(None);
@@ -511,7 +521,7 @@ fn parse_stash_apply_args(
     }
 
     let (index, _) = parse_stash_name(stash.unwrap_or("refs/stash@{0}"))?;
-    Ok(Some(StashApplyArgs { index }))
+    Ok(Some(StashApplyArgs { index, quiet }))
 }
 
 fn parse_stash_pop_args(
@@ -652,6 +662,83 @@ fn write_stash_error(stderr: &mut dyn Write, error: rit_core::RitError) -> io::R
         }
     }
     write_command_error(stderr, error)
+}
+
+fn write_stash_human_status(
+    repository: &rit_core::Repository,
+    stdout: &mut dyn Write,
+) -> io::Result<()> {
+    let branch_name = repository
+        .current_branch_name()
+        .map_err(io::Error::other)?
+        .unwrap_or_else(|| "HEAD detached".to_owned());
+    let status = repository.status_porcelain_v1().map_err(io::Error::other)?;
+
+    writeln!(stdout, "On branch {branch_name}")?;
+
+    let mut wrote_section = false;
+    let unstaged = status
+        .entries
+        .iter()
+        .filter(|entry| entry.index_status != '?' && entry.worktree_status != ' ')
+        .collect::<Vec<_>>();
+    if !unstaged.is_empty() {
+        wrote_section = true;
+        writeln!(stdout, "Changes not staged for commit:")?;
+        writeln!(
+            stdout,
+            "  (use \"git add <file>...\" to update what will be committed)"
+        )?;
+        writeln!(
+            stdout,
+            "  (use \"git restore <file>...\" to discard changes in working directory)"
+        )?;
+        for entry in unstaged {
+            writeln!(
+                stdout,
+                "\t{:<12}{}",
+                human_status_label(entry.worktree_status),
+                entry.path
+            )?;
+        }
+    }
+
+    let untracked = status
+        .entries
+        .iter()
+        .filter(|entry| entry.index_status == '?')
+        .collect::<Vec<_>>();
+    if !untracked.is_empty() {
+        if wrote_section {
+            writeln!(stdout)?;
+        }
+        writeln!(stdout, "Untracked files:")?;
+        writeln!(
+            stdout,
+            "  (use \"git add <file>...\" to include in what will be committed)"
+        )?;
+        for entry in untracked {
+            writeln!(stdout, "\t{}", entry.path)?;
+        }
+    }
+
+    if !status.entries.is_empty() {
+        writeln!(stdout)?;
+        writeln!(
+            stdout,
+            "no changes added to commit (use \"git add\" and/or \"git commit -a\")"
+        )?;
+    }
+    Ok(())
+}
+
+fn human_status_label(status: char) -> &'static str {
+    match status {
+        'A' => "new file:",
+        'D' => "deleted:",
+        'M' | 'T' => "modified:",
+        _ => "modified:",
+    }
 }
 
 fn workspace_command(
