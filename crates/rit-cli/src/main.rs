@@ -2661,10 +2661,13 @@ fn rebase_command(
         [flag] if flag == "--quit" => RebaseAction::Quit,
         [flag] if flag == "--skip" => RebaseAction::Skip,
         [flag] if flag == "--show-current-patch" => RebaseAction::ShowCurrentPatch,
+        [upstream] if !upstream.starts_with('-') => RebaseAction::Start {
+            upstream: upstream.clone(),
+        },
         [] => {
             writeln!(
                 stderr,
-                "rit: rebase currently supports only --abort, --continue, --quit, --skip, and --show-current-patch"
+                "rit: rebase currently supports only <upstream>, --abort, --continue, --quit, --skip, and --show-current-patch"
             )?;
             return Ok(ExitCode::from(129));
         }
@@ -2681,6 +2684,17 @@ fn rebase_command(
     match action {
         RebaseAction::Abort => match repository.abort_rebase() {
             Ok(_) => Ok(ExitCode::SUCCESS),
+            Err(error) => write_rebase_error(stderr, error),
+        },
+        RebaseAction::Start { upstream } => match repository.rebase_up_to_date(&upstream) {
+            Ok(result) => {
+                if let Some(branch_name) = result.branch_name {
+                    writeln!(stdout, "Current branch {branch_name} is up to date.")?;
+                } else {
+                    writeln!(stdout, "HEAD is up to date.")?;
+                }
+                Ok(ExitCode::SUCCESS)
+            }
             Err(error) => write_rebase_error(stderr, error),
         },
         RebaseAction::Continue => {
@@ -2723,6 +2737,7 @@ fn rebase_command(
 
 enum RebaseAction {
     Abort,
+    Start { upstream: String },
     Continue,
     Quit,
     Skip,
@@ -4091,6 +4106,7 @@ mod tests {
         assert!(stdout.contains("rit rebase --show-current-patch"));
         assert!(stdout.contains("rit rebase --skip"));
         assert!(stdout.contains("rit rebase --quit"));
+        assert!(stdout.contains("rit rebase <upstream>"));
         assert_eq!(stderr, "");
     }
 

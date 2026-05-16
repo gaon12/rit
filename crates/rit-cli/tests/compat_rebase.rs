@@ -308,6 +308,62 @@ fn rebase_continue_without_state_matches_git() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn rebase_up_to_date_branch_matches_git() {
+    let root = temp_path("start-up-to-date");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    run_git(&git_repo, ["branch", "topic"]);
+    fs::write(git_repo.join("tracked.txt"), "master\n").expect("tracked file should write");
+    run_git(&git_repo, ["commit", "--quiet", "-am", "master"]);
+    fs::write(git_repo.join("untracked.txt"), "u\n").expect("untracked file should write");
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_rebase = run_capture("git", ["rebase", "topic"], &git_repo);
+    let rit_rebase = run_capture(rit_binary(), ["rebase", "topic"], &rit_repo);
+
+    assert_eq!(git_rebase.exit_code, 0, "git stderr: {}", git_rebase.stderr);
+    assert_eq!(rit_rebase.exit_code, 0, "rit stderr: {}", rit_rebase.stderr);
+    assert_eq!(git_rebase.stdout, rit_rebase.stdout);
+    assert_eq!(git_rebase.stderr, rit_rebase.stderr);
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &git_repo).stdout,
+        run_capture(rit_binary(), ["rev-parse", "HEAD"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn rebase_up_to_date_detached_head_matches_git() {
+    let root = temp_path("start-detached-up-to-date");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    run_git(&git_repo, ["branch", "topic"]);
+    run_git(&git_repo, ["checkout", "--detach", "HEAD"]);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_rebase = run_capture("git", ["rebase", "topic"], &git_repo);
+    let rit_rebase = run_capture(rit_binary(), ["rebase", "topic"], &rit_repo);
+
+    assert_eq!(git_rebase.exit_code, 0, "git stderr: {}", git_rebase.stderr);
+    assert_eq!(rit_rebase.exit_code, 0, "rit stderr: {}", rit_rebase.stderr);
+    assert_eq!(git_rebase.stdout, rit_rebase.stdout);
+    assert_eq!(git_rebase.stderr, rit_rebase.stderr);
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &git_repo).stdout,
+        run_capture(rit_binary(), ["rev-parse", "HEAD"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct CapturedCommand {
     exit_code: i32,
     stdout: String,

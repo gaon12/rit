@@ -509,6 +509,8 @@ Completion criteria:
     conflict continuation, strategy options, conflict continuation for merge
     commits, and editor/hook parity.
 - [~] `rit rebase`
+  - [x] `rit rebase <upstream>` reports Git-compatible up-to-date status when
+    the upstream is already an ancestor of `HEAD`.
   - [x] `rit rebase --abort` restores the original branch, index, and
     worktree from Git-compatible rebase state and removes rebase conflict
     metadata.
@@ -521,8 +523,8 @@ Completion criteria:
     the current commit and updating the original branch to the current `HEAD`.
   - [x] `rit rebase --quit` removes Git-compatible `rebase-apply` and
     `rebase-merge` state while preserving HEAD, index, and worktree.
-  - [ ] Rebase start, multi-step continue/skip, todo editing, autostash, hooks,
-    apply/merge backends, and strategy options.
+  - [ ] Rebase start that replays commits, multi-step continue/skip, todo
+    editing, autostash, hooks, apply/merge backends, and strategy options.
 - [~] `rit stash`
   - [x] `rit stash list` reads the Git-compatible `refs/stash` reflog and
     prints entries in newest-first order.

@@ -490,6 +490,17 @@ pub struct RebaseContinueResult {
     pub diff: crate::diff::DiffSummary,
 }
 
+/// Result of starting a rebase that is already up to date.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RebaseStartResult {
+    /// Current `HEAD` commit.
+    pub head_id: ObjectId,
+    /// Resolved upstream commit.
+    pub upstream_id: ObjectId,
+    /// Current branch name, when `HEAD` is symbolic.
+    pub branch_name: Option<String>,
+}
+
 impl Repository {
     /// Adds files matching ordinary literal pathspecs to the index.
     pub fn add_paths(&self, paths: &[String]) -> Result<usize> {
@@ -1506,6 +1517,24 @@ impl Repository {
         remove_dir_if_exists(&self.git_dir().join("rebase-merge"))?;
         self.refresh_indexdb_after_git_write();
         Ok(())
+    }
+
+    /// Starts a rebase when the current branch is already based on `upstream`.
+    pub fn rebase_up_to_date(&self, upstream: &str) -> Result<RebaseStartResult> {
+        let head_id = self
+            .resolve_head()?
+            .ok_or_else(|| RitError::invalid_input("rebase requires an existing HEAD"))?;
+        let upstream_id = self.resolve_merge_target(upstream)?;
+        if !self.commit_is_ancestor(upstream_id, head_id)? {
+            return Err(RitError::invalid_input(
+                "rebase start currently supports only up-to-date branches",
+            ));
+        }
+        Ok(RebaseStartResult {
+            head_id,
+            upstream_id,
+            branch_name: self.current_branch_name()?,
+        })
     }
 
     /// Aborts an in-progress rebase and restores the original branch, index, and worktree.
