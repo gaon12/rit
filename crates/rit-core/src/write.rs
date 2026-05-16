@@ -263,6 +263,8 @@ pub struct CherryPickOptions {
     pub mainline: Option<usize>,
     /// Whether to append the original commit id to the created commit message.
     pub append_origin: bool,
+    /// Whether to fast-forward when `HEAD` is the picked commit's parent.
+    pub fast_forward: bool,
 }
 
 impl CherryPickOptions {
@@ -278,6 +280,7 @@ impl Default for CherryPickOptions {
             commit: true,
             mainline: None,
             append_origin: false,
+            fast_forward: false,
         }
     }
 }
@@ -1082,6 +1085,21 @@ impl Repository {
             )));
         }
         let picked_commit = parse_commit(&picked_object.data)?;
+        if options.commit
+            && options.fast_forward
+            && picked_commit.parents.len() == 1
+            && picked_commit.parents[0] == head_id
+        {
+            self.checkout_commit_tree(picked_id)?;
+            self.update_head(picked_id)?;
+            self.refresh_indexdb_after_git_write();
+            return Ok(CherryPickResult {
+                picked_id,
+                commit_id: None,
+                conflict_paths: Vec::new(),
+                conflict_reports: Vec::new(),
+            });
+        }
         let base_id = cherry_pick_base_parent(&picked_commit.parents, options.mainline)?;
         let base_entries = match base_id {
             Some(parent_id) => self.commit_index_entries(parent_id)?,

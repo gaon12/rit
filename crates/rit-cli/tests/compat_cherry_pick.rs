@@ -117,6 +117,37 @@ fn clean_cherry_pick_x_appends_origin_like_git() {
 }
 
 #[test]
+fn clean_cherry_pick_ff_fast_forwards_like_git() {
+    let root = temp_path("ff");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_fast_forward_cherry_pick(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let topic_id = run_capture("git", ["rev-parse", "topic"], &git_repo).stdout;
+    let git_pick = run_capture("git", ["cherry-pick", "--ff", "topic"], &git_repo);
+    let rit_pick = run_capture(rit_binary(), ["cherry-pick", "--ff", "topic"], &rit_repo);
+
+    assert_eq!(git_pick.exit_code, 0, "git stderr: {}", git_pick.stderr);
+    assert_eq!(rit_pick.exit_code, 0, "rit stderr: {}", rit_pick.stderr);
+    assert_eq!(git_pick.stdout, rit_pick.stdout);
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &git_repo).stdout,
+        topic_id
+    );
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &rit_repo).stdout,
+        topic_id
+    );
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn clean_no_commit_cherry_pick_matches_git_state() {
     let root = temp_path("no-commit");
     let git_repo = root.join("git");
@@ -485,6 +516,14 @@ fn setup_clean_cherry_pick(repo: &Path) {
     commit_text(repo, "picked.txt", "picked\n", "pick me");
     run_git(repo, ["checkout", "--quiet", "master"]);
     commit_text(repo, "head.txt", "head\n", "head");
+}
+
+fn setup_fast_forward_cherry_pick(repo: &Path) {
+    init_repo(repo);
+    commit_text(repo, "base.txt", "base\n", "base");
+    run_git(repo, ["checkout", "--quiet", "-b", "topic"]);
+    commit_text(repo, "picked.txt", "picked\n", "picked");
+    run_git(repo, ["checkout", "--quiet", "master"]);
 }
 
 fn setup_conflicting_cherry_pick(repo: &Path) {

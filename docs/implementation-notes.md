@@ -675,6 +675,8 @@
   already-created commits plus the conflicted paths.
 - Clean `rit cherry-pick -x <commit>` now appends Git's original-commit trailer
   to the created commit message.
+- Clean `rit cherry-pick --ff <commit>` now fast-forwards without creating a
+  new commit when the current `HEAD` is the picked commit's parent.
 - Still unsupported: remaining full conflict result message parity, strategies,
   full merge hook/editor parity, full `cherry-pick`, `rebase`, and `stash`.
 
@@ -1329,12 +1331,13 @@
 - Baseline command checked: `git cherry-pick -h`
 - Supported options: one or more target commits for clean committing picks,
   single-target `-n`/`--no-commit`, `--commit`, `-m`/`--mainline` for clean
-  merge commits, `-x` for clean committing picks, `--abort`, `--continue`, and
-  `--quit`/`--skip` for the supported single-commit conflict state.
+  merge commits, `-x` for clean committing picks, `--ff` for direct-parent
+  fast-forwards, `--abort`, `--continue`, and `--quit`/`--skip` for the
+  supported single-commit conflict state.
 - Unsupported options: multi-target `--no-commit`, full sequencer state across
-  conflicts, `--ff`, signing, signoff, strategy options, empty-commit
-  handling, conflict continuation for merge commits, and full
-  sequencer/editor/hook parity.
+  conflicts, signing, signoff, strategy options, empty-commit handling,
+  conflict continuation for merge commits, and full sequencer/editor/hook
+  parity.
 - Git-compatible behavior: clean single-parent picks apply the picked commit's
   parent-to-commit tree change onto `HEAD`, create a new one-parent commit, and
   preserve the picked author and commit message. With `-n`/`--no-commit`, the
@@ -1348,7 +1351,9 @@
   the base and still create a one-parent commit on top of the current `HEAD`.
   Clean multi-target picks are applied one at a time, so each created commit
   becomes the `HEAD` base for the next target. Clean `-x` picks append
-  `(cherry picked from commit <object-id>)` to the commit message.
+  `(cherry picked from commit <object-id>)` to the commit message. Clean
+  `--ff` picks update `HEAD` directly when the picked commit is a direct child
+  of `HEAD`.
 - Intentional differences: output and hints are simplified, and sequencer
   state for multiple commits is not implemented.
 - Repository mutation: yes, for clean picks it updates the worktree, index,
