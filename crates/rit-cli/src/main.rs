@@ -141,10 +141,26 @@ fn stash_command(
         let Some(show_args) = parse_stash_show_args(rest, stderr)? else {
             return Ok(ExitCode::from(129));
         };
+        if matches!(show_args.format, StashShowFormat::Patch) {
+            return match repository.stash_show_patch(show_args.index, &rit_core::PathspecSet::all())
+            {
+                Ok(patch) => match patch.to_patch_text() {
+                    Ok(text) => {
+                        stdout.write_all(text.as_bytes())?;
+                        Ok(ExitCode::SUCCESS)
+                    }
+                    Err(error) => write_command_error(stderr, error),
+                },
+                Err(error) => write_stash_error(stderr, error),
+            };
+        }
         return match repository.stash_show(show_args.index, &rit_core::PathspecSet::all()) {
             Ok(diff) => {
                 match show_args.format {
                     StashShowFormat::Stat => stdout.write_all(diff.to_stat_text().as_bytes())?,
+                    StashShowFormat::Patch => {
+                        unreachable!("patch is handled before summary output")
+                    }
                     StashShowFormat::NameOnly => {
                         for path in diff.name_only() {
                             writeln!(stdout, "{path}")?;
@@ -192,6 +208,7 @@ fn stash_command(
 
 enum StashShowFormat {
     Stat,
+    Patch,
     NameOnly,
     NameStatus,
     Numstat,
@@ -211,6 +228,7 @@ fn parse_stash_show_args(
     for arg in args {
         match arg.as_str() {
             "--stat" => format = StashShowFormat::Stat,
+            "-p" | "--patch" => format = StashShowFormat::Patch,
             "--name-only" => format = StashShowFormat::NameOnly,
             "--name-status" => format = StashShowFormat::NameStatus,
             "--numstat" => format = StashShowFormat::Numstat,

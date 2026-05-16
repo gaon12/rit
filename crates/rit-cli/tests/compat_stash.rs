@@ -72,6 +72,8 @@ fn stash_show_summary_formats_match_git() {
 
     for args in [
         vec!["stash", "show"],
+        vec!["stash", "show", "-p"],
+        vec!["stash", "show", "--patch", "stash@{1}"],
         vec!["stash", "show", "--stat", "stash@{1}"],
         vec!["stash", "show", "--name-only"],
         vec!["stash", "show", "--name-status"],

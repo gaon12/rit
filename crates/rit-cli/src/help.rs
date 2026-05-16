@@ -198,7 +198,7 @@ Apply one non-merge commit onto the current HEAD, or manage an in-progress confl
 
 const STASH_HELP: &str = "\
 rit stash list
-rit stash show [--stat|--name-only|--name-status|--numstat] [<stash>]
+rit stash show [-p|--patch|--stat|--name-only|--name-status|--numstat] [<stash>]
 rit stash drop [-q|--quiet] [<stash>]
 rit stash clear
 

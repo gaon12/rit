@@ -781,6 +781,108 @@ impl Repository {
         Ok(DiffSummary { files, warnings })
     }
 
+    /// Computes patch output between two commit trees.
+    pub fn diff_commits_patch_with_pathspecs(
+        &self,
+        old_commit_id: ObjectId,
+        new_commit_id: ObjectId,
+        pathspecs: &PathspecSet,
+    ) -> Result<DiffPatch> {
+        self.diff_commits_patch_with_options(
+            old_commit_id,
+            new_commit_id,
+            pathspecs,
+            &DiffOptions::default(),
+        )
+    }
+
+    /// Computes patch output between two commit trees with explicit options.
+    pub fn diff_commits_patch_with_options(
+        &self,
+        old_commit_id: ObjectId,
+        new_commit_id: ObjectId,
+        pathspecs: &PathspecSet,
+        options: &DiffOptions,
+    ) -> Result<DiffPatch> {
+        let old_entries = self.commit_diff_entries(old_commit_id)?;
+        let new_entries = self.commit_diff_entries(new_commit_id)?;
+        let attributes = self.root_attributes()?;
+        let options = self.diff_options_with_config(options)?;
+        let paths = old_entries
+            .keys()
+            .chain(new_entries.keys())
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let mut files = Vec::new();
+
+        for path in paths {
+            if !pathspecs.matches_with_attributes(&path, Some(&attributes)) {
+                continue;
+            }
+            match (old_entries.get(&path), new_entries.get(&path)) {
+                (None, Some(new_entry)) => {
+                    let new_object = self.read_blob(new_entry.object_id)?;
+                    files.push(DiffPatchFile {
+                        status: 'A',
+                        old_path: None,
+                        path,
+                        similarity_score: None,
+                        old_object_id: None,
+                        new_object_id: Some(new_entry.object_id),
+                        mode: new_entry.mode,
+                        old_data: Vec::new(),
+                        new_data: new_object.data,
+                    });
+                }
+                (Some(old_entry), None) => {
+                    let old_object = self.read_blob(old_entry.object_id)?;
+                    files.push(DiffPatchFile {
+                        status: 'D',
+                        old_path: None,
+                        path,
+                        similarity_score: None,
+                        old_object_id: Some(old_entry.object_id),
+                        new_object_id: None,
+                        mode: old_entry.mode,
+                        old_data: old_object.data,
+                        new_data: Vec::new(),
+                    });
+                }
+                (Some(old_entry), Some(new_entry)) if old_entry != new_entry => {
+                    let old_object = self.read_blob(old_entry.object_id)?;
+                    let new_object = self.read_blob(new_entry.object_id)?;
+                    files.push(DiffPatchFile {
+                        status: 'M',
+                        old_path: None,
+                        path,
+                        similarity_score: None,
+                        old_object_id: Some(old_entry.object_id),
+                        new_object_id: Some(new_entry.object_id),
+                        mode: new_entry.mode,
+                        old_data: old_object.data,
+                        new_data: new_object.data,
+                    });
+                }
+                _ => {}
+            }
+        }
+
+        let mut warnings = Vec::new();
+        if options.find_renames {
+            warnings.extend(detect_patch_renames(&mut files, &options)?);
+        }
+        if options.find_copies {
+            warnings.extend(self.detect_patch_copies(
+                &mut files,
+                &old_entries,
+                &new_entries,
+                &options,
+            )?);
+        }
+
+        Ok(DiffPatch { files, warnings })
+    }
+
     /// Computes `git diff --cached` patch output.
     pub fn diff_index_to_head_patch_with_pathspecs(
         &self,

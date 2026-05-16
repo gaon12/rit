@@ -519,6 +519,8 @@ Completion criteria:
     Git.
   - [x] `rit stash show` supports default stat output plus `--stat`,
     `--name-only`, `--name-status`, and `--numstat` for loose stash entries.
+  - [x] `rit stash show -p/--patch` renders Git-compatible patch output for
+    loose stash entries.
   - [ ] `stash push`, `apply`, `pop`, branch/export/import, push pathspecs,
     staged/keep-index/untracked modes, packed stash ref cleanup, broader show
     options, broader error parity, and conflict apply handling.

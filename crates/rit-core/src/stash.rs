@@ -2,7 +2,9 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
-use crate::{DiffSummary, ObjectId, ObjectKind, PathspecSet, Repository, Result, RitError};
+use crate::{
+    DiffPatch, DiffSummary, ObjectId, ObjectKind, PathspecSet, Repository, Result, RitError,
+};
 
 const ZERO_OBJECT_ID: &str = "0000000000000000000000000000000000000000";
 
@@ -90,6 +92,21 @@ impl Repository {
 
     /// Shows the changes recorded by one stash against its first parent.
     pub fn stash_show(&self, display_index: usize, pathspecs: &PathspecSet) -> Result<DiffSummary> {
+        let (base_id, stash_id) = self.stash_diff_pair(display_index)?;
+        self.diff_commits_with_pathspecs(base_id, stash_id, pathspecs)
+    }
+
+    /// Shows patch output for the changes recorded by one stash.
+    pub fn stash_show_patch(
+        &self,
+        display_index: usize,
+        pathspecs: &PathspecSet,
+    ) -> Result<DiffPatch> {
+        let (base_id, stash_id) = self.stash_diff_pair(display_index)?;
+        self.diff_commits_patch_with_pathspecs(base_id, stash_id, pathspecs)
+    }
+
+    fn stash_diff_pair(&self, display_index: usize) -> Result<(ObjectId, ObjectId)> {
         let stash_id = self.stash_id_at(display_index)?;
         let stash_object = self.read_object(stash_id)?;
         if stash_object.kind != ObjectKind::Commit {
@@ -104,7 +121,7 @@ impl Repository {
             .first()
             .copied()
             .ok_or_else(|| RitError::invalid_input("stash commit has no parent"))?;
-        self.diff_commits_with_pathspecs(base_id, stash_id, pathspecs)
+        Ok((base_id, stash_id))
     }
 
     fn read_stash_reflog(&self) -> Result<Vec<StashReflogEntry>> {
