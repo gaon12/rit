@@ -36,6 +36,7 @@ Core commands:
   indexdb       Manage optional SQLite auxiliary index metadata
   file-history  Show indexed first-parent path history
   graph         Show the local branch, stash, and worktree graph
+  impact        Summarize package and CI impact for a commit range
   op            Inspect or restore rit operation journal entries
   undo          Undo the last restorable rit operation
   show          Show one object
@@ -243,6 +244,12 @@ rit graph [--json]
 Show a read-only local graph for HEAD, local branches, upstreams, stashes, and worktrees. JSON output uses the same typed graph model exposed by rit-core.
 ";
 
+const IMPACT_HELP: &str = "\
+rit impact <range>
+
+Summarize changed packages, affected tests, public API path hints, docs-only status, large-file changes, reviewer hints, semantic path categories, and optional indexdb acceleration availability for `<old>..<new>`.
+";
+
 const OP_HELP: &str = "\
 rit op log [--json]
 rit op restore <id>
@@ -336,6 +343,7 @@ pub fn print_command_help(
         "indexdb" => stdout.write_all(INDEXDB_HELP.as_bytes())?,
         "file-history" => stdout.write_all(FILE_HISTORY_HELP.as_bytes())?,
         "graph" => stdout.write_all(GRAPH_HELP.as_bytes())?,
+        "impact" => stdout.write_all(IMPACT_HELP.as_bytes())?,
         "op" => stdout.write_all(OP_HELP.as_bytes())?,
         "undo" => stdout.write_all(UNDO_HELP.as_bytes())?,
         "show" => stdout.write_all(SHOW_HELP.as_bytes())?,

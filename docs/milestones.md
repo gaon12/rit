@@ -822,10 +822,10 @@ Completion criteria:
 
 ## M22: Impact Analysis And CI Helper
 
-- [ ] Add `rit impact <range>`.
-- [ ] Return changed packages, affected tests, public API changes, docs-only
+- [x] Add `rit impact <range>`.
+- [x] Return changed packages, affected tests, public API changes, docs-only
   status, large-file changes, and reviewer hints.
-- [ ] Reuse semantic diff and optional indexdb acceleration.
+- [x] Reuse semantic diff and optional indexdb acceleration.
 
 ## M23: Stable JSON Schema And Typed API
 

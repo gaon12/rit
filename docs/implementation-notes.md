@@ -281,6 +281,10 @@
   `workspace from-package <path>`. Recommendations score configured workspace
   profiles from changed paths and package paths, and include package manifest,
   CODEOWNERS, and local import/build hints where available.
+- 2026-05-17 impact slice added `rit impact <range>` for `<old>..<new>` and
+  `<old>...<new>` inputs. It reuses commit diff summaries, semantic path
+  classification, package manifest discovery, CODEOWNERS reviewer hints, and
+  reports whether indexdb acceleration is available in the current build.
 - 2026-05-13 IndexDB slice checked `git --version` and `git help -a`; IndexDB
   is rit-specific and has no Git command baseline. Added feature-gated SQLite
   support with `rit indexdb`, `status`, `build`, `update`, `repair`, `rebuild`,

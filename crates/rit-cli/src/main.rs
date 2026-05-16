@@ -7,6 +7,7 @@ mod doctor;
 mod file_history;
 mod graph;
 mod help;
+mod impact;
 mod indexdb;
 mod op;
 mod pathspec_args;
@@ -73,6 +74,7 @@ fn run(
             file_history::file_history_command(rest, stdout, stderr)
         }
         [command, rest @ ..] if command == "graph" => graph::graph_command(rest, stdout, stderr),
+        [command, rest @ ..] if command == "impact" => impact::impact_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "show" => show_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ls-files" => ls_files_command(rest, stdout, stderr),
         [command, rest @ ..] if command == "ignore" => ignore_command(rest, stdout, stderr),
@@ -4344,6 +4346,15 @@ mod tests {
         assert_eq!(code, ExitCode::from(129));
         assert_eq!(stdout, "");
         assert!(stderr.contains("unsupported graph option '--bogus'"));
+    }
+
+    #[test]
+    fn impact_help_is_available() {
+        let (code, stdout, stderr) = run_with(&["help", "impact"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit impact <range>"));
+        assert_eq!(stderr, "");
     }
 
     #[cfg(not(feature = "indexdb"))]

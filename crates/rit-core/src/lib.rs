@@ -13,6 +13,7 @@ pub mod doctor;
 pub mod error;
 pub mod graph;
 pub mod history;
+pub mod impact;
 pub mod index;
 #[cfg(feature = "indexdb")]
 pub mod indexdb;
@@ -66,6 +67,7 @@ pub use graph::{
     LocalGraphWorktree,
 };
 pub use history::LogEntry;
+pub use impact::{ImpactLargeFileChange, ImpactReport};
 pub use index::{
     CacheTree, CacheTreeNode, EndOfIndexEntry, EwahBitmap, FsMonitor, FsMonitorToken, Index,
     IndexEntry, IndexEntryOffset, IndexEntryOffsetTable, IndexExtension, IndexExtensionKind,
