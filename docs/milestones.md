@@ -749,11 +749,13 @@ Completion criteria:
   content for the first supported slice.
 - [x] Record changed path lists.
 - [x] Record created object IDs.
-- [~] Store reversible patches for index-only and worktree-changing
+- [x] Store reversible patches for index-only and worktree-changing
   operations.
   - [x] Store before-index sidecars for index-only operations and let
     `undo`/`op restore` restore the index without rewriting the worktree.
-  - [ ] Store reversible worktree patches for worktree-changing operations.
+  - [x] Store reversible worktree sidecars for selected worktree-changing
+    operations and let `undo` restore pre-operation file contents or missing
+    paths.
 - [~] Add journal records for `add`, `restore`, `reset`, `branch`, `tag`,
   `fetch`, and `push` where applicable.
   - [x] Record successful `add`, `restore`, and `reset` operations.

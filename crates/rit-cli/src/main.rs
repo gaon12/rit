@@ -2031,7 +2031,6 @@ fn restore_command(args: &[String], stderr: &mut dyn Write) -> io::Result<ExitCo
         return Ok(ExitCode::from(128));
     }
 
-    let before = capture_operation_snapshot(&repository, stderr)?;
     let planned_paths = if staged {
         repository
             .plan_restore_staged_paths_from_head(&paths)
@@ -2040,6 +2039,11 @@ fn restore_command(args: &[String], stderr: &mut dyn Write) -> io::Result<ExitCo
             .unwrap_or_else(|| paths.clone())
     } else {
         paths.clone()
+    };
+    let before = if staged {
+        capture_operation_snapshot(&repository, stderr)?
+    } else {
+        capture_operation_snapshot_with_worktree_paths(&repository, &planned_paths, stderr)?
     };
     let result = if staged {
         repository
@@ -3518,6 +3522,23 @@ fn capture_operation_snapshot(
     stderr: &mut dyn Write,
 ) -> io::Result<Option<rit_core::OperationSnapshot>> {
     match repository.operations().snapshot() {
+        Ok(snapshot) => Ok(Some(snapshot)),
+        Err(error) => {
+            writeln!(
+                stderr,
+                "rit: warning: could not snapshot operation: {error}"
+            )?;
+            Ok(None)
+        }
+    }
+}
+
+fn capture_operation_snapshot_with_worktree_paths(
+    repository: &rit_core::Repository,
+    paths: &[String],
+    stderr: &mut dyn Write,
+) -> io::Result<Option<rit_core::OperationSnapshot>> {
+    match repository.operations().snapshot_with_worktree_paths(paths) {
         Ok(snapshot) => Ok(Some(snapshot)),
         Err(error) => {
             writeln!(

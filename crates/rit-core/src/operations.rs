@@ -5,7 +5,7 @@ use crate::{
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// A lightweight snapshot of repository state before or after one user action.
@@ -23,6 +23,24 @@ pub struct OperationSnapshot {
     /// recorded, rit stores the bytes in a per-operation sidecar file so
     /// index-only changes can be undone without touching the working tree.
     pub index_contents: Option<Vec<u8>>,
+    /// Worktree file contents captured before an operation.
+    ///
+    /// This is stored in a sidecar file when the operation is recorded. It is
+    /// intentionally opt-in because scanning a whole worktree would be costly
+    /// for large repositories.
+    pub worktree_contents: Option<BTreeMap<String, OperationWorktreeEntry>>,
+}
+
+/// Worktree state for one repository-relative path before an operation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum OperationWorktreeEntry {
+    /// The path did not exist before the operation.
+    Missing,
+    /// The path was a regular readable file before the operation.
+    File {
+        /// File bytes before the operation.
+        contents: Vec<u8>,
+    },
 }
 
 /// One operation journal record stored under `.git/rit/ops.log`.
@@ -111,16 +129,23 @@ impl Repository {
 impl RepositoryOperations<'_> {
     /// Captures the current HEAD, branch, and index checksum.
     pub fn snapshot(&self) -> Result<OperationSnapshot> {
+        self.snapshot_with_worktree_paths(&[])
+    }
+
+    /// Captures the current repository state plus selected worktree paths.
+    pub fn snapshot_with_worktree_paths(&self, paths: &[String]) -> Result<OperationSnapshot> {
         let index_contents =
             read_index_contents(self.repository.git_dir().join("index").as_path())?;
         let index_checksum = index_contents
             .as_ref()
             .map(|contents| hex(&sha1_bytes(contents)));
+        let worktree_contents = capture_worktree_contents(self.repository, paths)?;
         Ok(OperationSnapshot {
             head: self.repository.resolve_head()?,
             branch: self.repository.current_branch_name()?,
             index_checksum,
             index_contents,
+            worktree_contents,
         })
     }
 
@@ -148,6 +173,9 @@ impl RepositoryOperations<'_> {
         let id = next_operation_id();
         if before.index_checksum != after.index_checksum {
             save_before_index(self.repository, &id, &before)?;
+        }
+        if before.worktree_contents.is_some() {
+            save_before_worktree(self.repository, &id, &before)?;
         }
         let record = OperationRecord {
             id,
@@ -301,11 +329,29 @@ fn restore_record_with_options(
     }
     if record.before.index_checksum != record.after.index_checksum {
         restore_before_index(repository, record)?;
+        if before_worktree_exists(repository, record)? {
+            restore_before_worktree(repository, record)?;
+            return Ok(OperationRestoreResult {
+                id: record.id.clone(),
+                restored_head: record.before.head,
+                restored_index: true,
+                restored_worktree: true,
+            });
+        }
         return Ok(OperationRestoreResult {
             id: record.id.clone(),
             restored_head: record.before.head,
             restored_index: true,
             restored_worktree: false,
+        });
+    }
+    if before_worktree_exists(repository, record)? {
+        restore_before_worktree(repository, record)?;
+        return Ok(OperationRestoreResult {
+            id: record.id.clone(),
+            restored_head: record.before.head,
+            restored_index: false,
+            restored_worktree: true,
         });
     }
     Err(RitError::invalid_input(format!(
@@ -387,6 +433,46 @@ fn restore_before_index(repository: &Repository, record: &OperationRecord) -> Re
         )));
     }
     write_bytes_atomically(&index_path, &contents)
+}
+
+fn save_before_worktree(
+    repository: &Repository,
+    operation_id: &str,
+    snapshot: &OperationSnapshot,
+) -> Result<()> {
+    let Some(contents) = snapshot.worktree_contents.as_ref() else {
+        return Ok(());
+    };
+    let path = operation_artifact_dir(repository, operation_id)?.join("before.worktree");
+    write_bytes_atomically(&path, format_worktree_contents(contents).as_bytes())
+}
+
+fn before_worktree_exists(repository: &Repository, record: &OperationRecord) -> Result<bool> {
+    Ok(operation_artifact_dir(repository, &record.id)?
+        .join("before.worktree")
+        .exists())
+}
+
+fn restore_before_worktree(repository: &Repository, record: &OperationRecord) -> Result<()> {
+    let Some(worktree) = repository.worktree() else {
+        return Err(RitError::invalid_input(
+            "worktree backup requires a non-bare repository",
+        ));
+    };
+    let path = operation_artifact_dir(repository, &record.id)?.join("before.worktree");
+    let contents = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
+    for (relative_path, entry) in parse_worktree_contents(&contents)? {
+        let path = safe_worktree_path(worktree, &relative_path)?;
+        match entry {
+            OperationWorktreeEntry::Missing => {
+                if path.exists() {
+                    fs::remove_file(&path).map_err(|source| RitError::io(&path, source))?;
+                }
+            }
+            OperationWorktreeEntry::File { contents } => write_bytes_atomically(&path, &contents)?,
+        }
+    }
+    Ok(())
 }
 
 fn operation_artifact_dir(
@@ -527,7 +613,137 @@ fn parse_snapshot(input: &str) -> Result<OperationSnapshot> {
         branch,
         index_checksum,
         index_contents: None,
+        worktree_contents: None,
     })
+}
+
+fn capture_worktree_contents(
+    repository: &Repository,
+    paths: &[String],
+) -> Result<Option<BTreeMap<String, OperationWorktreeEntry>>> {
+    if paths.is_empty() {
+        return Ok(None);
+    }
+    let Some(worktree) = repository.worktree() else {
+        return Ok(None);
+    };
+    let mut contents = BTreeMap::new();
+    for path in paths {
+        let full_path = safe_worktree_path(worktree, path)?;
+        if full_path.is_dir() {
+            collect_worktree_directory_contents(worktree, &full_path, &mut contents)?;
+        } else if full_path.exists() {
+            contents.insert(
+                path.clone(),
+                OperationWorktreeEntry::File {
+                    contents: fs::read(&full_path)
+                        .map_err(|source| RitError::io(&full_path, source))?,
+                },
+            );
+        } else {
+            contents.insert(path.clone(), OperationWorktreeEntry::Missing);
+        }
+    }
+    Ok(Some(contents))
+}
+
+fn collect_worktree_directory_contents(
+    worktree: &Path,
+    directory: &Path,
+    output: &mut BTreeMap<String, OperationWorktreeEntry>,
+) -> Result<()> {
+    for entry in fs::read_dir(directory).map_err(|source| RitError::io(directory, source))? {
+        let entry = entry.map_err(|source| RitError::io(directory, source))?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_worktree_directory_contents(worktree, &path, output)?;
+        } else if path.is_file() {
+            let relative_path = relative_slash_path(worktree, &path)?;
+            output.insert(
+                relative_path,
+                OperationWorktreeEntry::File {
+                    contents: fs::read(&path).map_err(|source| RitError::io(&path, source))?,
+                },
+            );
+        }
+    }
+    Ok(())
+}
+
+fn relative_slash_path(root: &Path, path: &Path) -> Result<String> {
+    let relative = path
+        .strip_prefix(root)
+        .map_err(|_| RitError::invalid_input("operation path is outside the worktree"))?;
+    Ok(relative
+        .components()
+        .map(|component| component.as_os_str().to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join("/"))
+}
+
+fn safe_worktree_path(worktree: &Path, slash_path: &str) -> Result<PathBuf> {
+    let relative = Path::new(slash_path);
+    if relative.is_absolute()
+        || relative.components().any(|component| {
+            matches!(
+                component,
+                Component::ParentDir | Component::Prefix(_) | Component::RootDir
+            )
+        })
+    {
+        return Err(RitError::invalid_input(format!(
+            "operation worktree path escapes repository: {slash_path}"
+        )));
+    }
+    let mut path = worktree.to_path_buf();
+    for component in slash_path.split('/') {
+        if !component.is_empty() {
+            path.push(component);
+        }
+    }
+    Ok(path)
+}
+
+fn format_worktree_contents(contents: &BTreeMap<String, OperationWorktreeEntry>) -> String {
+    let mut output = String::new();
+    for (path, entry) in contents {
+        output.push_str(&hex(path.as_bytes()));
+        match entry {
+            OperationWorktreeEntry::Missing => output.push_str("\tmissing\t-\n"),
+            OperationWorktreeEntry::File { contents } => {
+                output.push_str("\tfile\t");
+                output.push_str(&hex(contents));
+                output.push('\n');
+            }
+        }
+    }
+    output
+}
+
+fn parse_worktree_contents(input: &str) -> Result<BTreeMap<String, OperationWorktreeEntry>> {
+    let mut contents = BTreeMap::new();
+    for line in input.lines() {
+        let fields = line.split('\t').collect::<Vec<_>>();
+        if fields.len() != 3 {
+            return Err(RitError::invalid_input(
+                "operation worktree backup line is malformed",
+            ));
+        }
+        let path = unhex_utf8(fields[0])?;
+        let entry = match fields[1] {
+            "missing" if fields[2] == "-" => OperationWorktreeEntry::Missing,
+            "file" => OperationWorktreeEntry::File {
+                contents: unhex_bytes(fields[2])?,
+            },
+            kind => {
+                return Err(RitError::invalid_input(format!(
+                    "unknown operation worktree backup entry kind: {kind}"
+                )));
+            }
+        };
+        contents.insert(path, entry);
+    }
+    Ok(contents)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -704,6 +920,11 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 fn unhex_utf8(input: &str) -> Result<String> {
+    String::from_utf8(unhex_bytes(input)?)
+        .map_err(|_| RitError::invalid_input("hex-encoded operation field is not UTF-8"))
+}
+
+fn unhex_bytes(input: &str) -> Result<Vec<u8>> {
     if !input.len().is_multiple_of(2) {
         return Err(RitError::invalid_input(
             "hex-encoded operation field has odd length",
@@ -715,8 +936,7 @@ fn unhex_utf8(input: &str) -> Result<String> {
         let low = decode_hex_digit(chunk[1])?;
         bytes.push((high << 4) | low);
     }
-    String::from_utf8(bytes)
-        .map_err(|_| RitError::invalid_input("hex-encoded operation field is not UTF-8"))
+    Ok(bytes)
 }
 
 fn decode_hex_digit(byte: u8) -> Result<u8> {
@@ -940,6 +1160,115 @@ mod tests {
             fs::read_to_string(root.join("tracked.txt")).expect("file should read"),
             "changed\n"
         );
+        remove_dir_all(&root);
+    }
+
+    #[test]
+    fn operation_journal_undo_restores_worktree_sidecar() {
+        let root = temp_path("operation-journal-worktree-undo");
+        let repository = Repository::init(&InitOptions::new(&root)).expect("repo should init");
+        write_identity(&repository);
+        fs::write(root.join("tracked.txt"), "base\n").expect("base file should be written");
+        repository
+            .add_paths(&["tracked.txt".to_owned()])
+            .expect("base file should be added");
+        let head = repository
+            .commit_index("base")
+            .expect("base commit should work")
+            .commit_id;
+
+        fs::write(root.join("tracked.txt"), "changed\n").expect("changed file should be written");
+        let paths = vec!["tracked.txt".to_owned()];
+        let before = repository
+            .operations()
+            .snapshot_with_worktree_paths(&paths)
+            .expect("snapshot should include worktree");
+        repository
+            .restore_worktree_paths(&paths)
+            .expect("restore should rewrite worktree file");
+        let after = repository
+            .operations()
+            .snapshot()
+            .expect("snapshot should work");
+        assert_eq!(before.index_checksum, after.index_checksum);
+        assert_eq!(
+            fs::read_to_string(root.join("tracked.txt")).expect("file should read"),
+            "base\n"
+        );
+
+        repository
+            .operations()
+            .record_with_details(
+                "restore",
+                "worktree paths",
+                before,
+                after,
+                paths,
+                Vec::new(),
+            )
+            .expect("record should append");
+
+        let result = repository
+            .operations()
+            .undo_last()
+            .expect("worktree undo should restore sidecar");
+
+        assert_eq!(result.restored_head, Some(head));
+        assert!(!result.restored_index);
+        assert!(result.restored_worktree);
+        assert_eq!(
+            fs::read_to_string(root.join("tracked.txt")).expect("file should read"),
+            "changed\n"
+        );
+        remove_dir_all(&root);
+    }
+
+    #[test]
+    fn operation_journal_undo_removes_worktree_path_that_was_missing() {
+        let root = temp_path("operation-journal-worktree-missing-undo");
+        let repository = Repository::init(&InitOptions::new(&root)).expect("repo should init");
+        write_identity(&repository);
+        fs::write(root.join("tracked.txt"), "base\n").expect("base file should be written");
+        repository
+            .add_paths(&["tracked.txt".to_owned()])
+            .expect("base file should be added");
+        repository
+            .commit_index("base")
+            .expect("base commit should work");
+
+        fs::remove_file(root.join("tracked.txt")).expect("tracked file should remove");
+        let paths = vec!["tracked.txt".to_owned()];
+        let before = repository
+            .operations()
+            .snapshot_with_worktree_paths(&paths)
+            .expect("snapshot should include missing path");
+        repository
+            .restore_worktree_paths(&paths)
+            .expect("restore should recreate worktree file");
+        let after = repository
+            .operations()
+            .snapshot()
+            .expect("snapshot should work");
+
+        repository
+            .operations()
+            .record_with_details(
+                "restore",
+                "worktree paths",
+                before,
+                after,
+                paths,
+                Vec::new(),
+            )
+            .expect("record should append");
+
+        let result = repository
+            .operations()
+            .undo_last()
+            .expect("worktree undo should remove restored path");
+
+        assert!(result.restored_worktree);
+        assert!(!root.join("tracked.txt").exists());
         remove_dir_all(&root);
     }
 

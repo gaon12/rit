@@ -1734,3 +1734,14 @@
   LFS/Xet tracking recommendations, and a safe migration plan.
 - Repository mutation: no. The audit does not rewrite history, edit
   `.gitattributes`, or add tracking rules.
+
+### Operation worktree sidecars
+
+- 2026-05-17 M16 follow-up: `RepositoryOperations::snapshot_with_worktree_paths`
+  captures selected pre-operation worktree file bytes or missing-path state.
+- Operation records store those snapshots in `.git/rit/ops/<id>/before.worktree`
+  sidecars. The main `.git` objects, refs, and index remain the source of
+  truth, and rit metadata can still be deleted without corrupting the
+  repository.
+- `undo`/`op restore` can now restore worktree-only changes for commands that
+  captured path sidecars, including `rit restore <path>`.
