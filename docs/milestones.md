@@ -512,6 +512,8 @@ Completion criteria:
   - [x] `rit rebase --abort` restores the original branch, index, and
     worktree from Git-compatible rebase state and removes rebase conflict
     metadata.
+  - [x] `rit rebase --show-current-patch` prints the stopped rebase commit
+    header and patch from `REBASE_HEAD`.
   - [x] `rit rebase --quit` removes Git-compatible `rebase-apply` and
     `rebase-merge` state while preserving HEAD, index, and worktree.
   - [ ] Rebase start, continue, skip, todo editing, autostash, hooks,

@@ -127,6 +127,44 @@ fn rebase_abort_restores_original_branch_like_git() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn rebase_show_current_patch_matches_git() {
+    let root = temp_path("show-current-patch");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    create_conflicting_rebase_state(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_show = run_capture("git", ["rebase", "--show-current-patch"], &git_repo);
+    let rit_show = run_capture(rit_binary(), ["rebase", "--show-current-patch"], &rit_repo);
+
+    assert_eq!(git_show.exit_code, 0, "git stderr: {}", git_show.stderr);
+    assert_eq!(rit_show.exit_code, 0, "rit stderr: {}", rit_show.stderr);
+    assert_eq!(git_show.stdout, rit_show.stdout);
+    assert_eq!(git_show.stderr, rit_show.stderr);
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn rebase_show_current_patch_without_state_matches_git() {
+    let root = temp_path("show-current-patch-empty");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_show = run_capture("git", ["rebase", "--show-current-patch"], &git_repo);
+    let rit_show = run_capture(rit_binary(), ["rebase", "--show-current-patch"], &rit_repo);
+
+    assert_eq!(git_show.exit_code, rit_show.exit_code);
+    assert_eq!(git_show.stdout, rit_show.stdout);
+    assert_eq!(git_show.stderr, rit_show.stderr);
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct CapturedCommand {
     exit_code: i32,
     stdout: String,

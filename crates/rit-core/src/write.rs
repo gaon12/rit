@@ -2,8 +2,8 @@ use crate::index::{Index, IndexEntry, IndexEntryStat, join_slash_path, relative_
 use crate::merge_conflict::write_conflict_markers;
 use crate::object::{hash_object, parse_tree_entries};
 use crate::{
-    GitAttributes, GitConfig, ObjectId, ObjectKind, PathspecSet, Repository, Result, RitError,
-    Signature, parse_commit, refs::validate_ref_short_name,
+    Commit, GitAttributes, GitConfig, ObjectId, ObjectKind, PathspecSet, Repository, Result,
+    RitError, Signature, parse_commit, refs::validate_ref_short_name,
 };
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
@@ -453,6 +453,17 @@ impl SignatureTime {
             offset: offset.to_owned(),
         })
     }
+}
+
+/// Commit and patch currently stopped by an in-progress rebase.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RebaseCurrentPatch {
+    /// Commit currently being replayed.
+    pub commit_id: ObjectId,
+    /// Parsed commit metadata for display.
+    pub commit: Commit,
+    /// Patch from the commit's first parent to the commit.
+    pub patch: crate::diff::DiffPatch,
 }
 
 impl Repository {
@@ -1494,6 +1505,37 @@ impl Repository {
         remove_file_if_exists(&self.git_dir().join("AUTO_MERGE"))?;
         self.refresh_indexdb_after_git_write();
         Ok(original_head)
+    }
+
+    /// Reads the patch for the commit currently stopped by an in-progress rebase.
+    pub fn current_rebase_patch(&self) -> Result<RebaseCurrentPatch> {
+        let state = self.merge_state()?;
+        if state.rebase_apply.is_none() && state.rebase_merge.is_none() {
+            return Err(RitError::invalid_input("no rebase in progress"));
+        }
+        let rebase_head_path = self.git_dir().join("REBASE_HEAD");
+        let rebase_head_text = fs::read_to_string(&rebase_head_path)
+            .map_err(|source| RitError::io(&rebase_head_path, source))?;
+        let commit_id = ObjectId::from_hex(rebase_head_text.trim())?;
+        let object = self.read_object(commit_id)?;
+        if object.kind != ObjectKind::Commit {
+            return Err(RitError::invalid_input(format!(
+                "REBASE_HEAD points to {}, not commit",
+                object.kind
+            )));
+        }
+        let commit = parse_commit(&object.data)?;
+        let parent_id = *commit
+            .parents
+            .first()
+            .ok_or_else(|| RitError::invalid_input("REBASE_HEAD commit has no parent"))?;
+        let patch =
+            self.diff_commits_patch_with_pathspecs(parent_id, commit_id, &PathspecSet::all())?;
+        Ok(RebaseCurrentPatch {
+            commit_id,
+            commit,
+            patch,
+        })
     }
 
     /// Commits a resolved in-progress merge.

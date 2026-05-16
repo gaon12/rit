@@ -2652,16 +2652,17 @@ fn merge_command(
 
 fn rebase_command(
     args: &[String],
-    _stdout: &mut dyn Write,
+    stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    let abort = match args {
-        [flag] if flag == "--abort" => true,
-        [flag] if flag == "--quit" => false,
+    let action = match args {
+        [flag] if flag == "--abort" => RebaseAction::Abort,
+        [flag] if flag == "--quit" => RebaseAction::Quit,
+        [flag] if flag == "--show-current-patch" => RebaseAction::ShowCurrentPatch,
         [] => {
             writeln!(
                 stderr,
-                "rit: rebase currently supports only --abort and --quit"
+                "rit: rebase currently supports only --abort, --quit, and --show-current-patch"
             )?;
             return Ok(ExitCode::from(129));
         }
@@ -2675,15 +2676,34 @@ fn rebase_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    let result = if abort {
-        repository.abort_rebase().map(|_| ())
-    } else {
-        repository.quit_rebase()
-    };
-    match result {
-        Ok(()) => Ok(ExitCode::SUCCESS),
-        Err(error) => write_rebase_error(stderr, error),
+    match action {
+        RebaseAction::Abort => match repository.abort_rebase() {
+            Ok(_) => Ok(ExitCode::SUCCESS),
+            Err(error) => write_rebase_error(stderr, error),
+        },
+        RebaseAction::Quit => match repository.quit_rebase() {
+            Ok(()) => Ok(ExitCode::SUCCESS),
+            Err(error) => write_rebase_error(stderr, error),
+        },
+        RebaseAction::ShowCurrentPatch => match repository.current_rebase_patch() {
+            Ok(current_patch) => {
+                print_commit_no_patch(current_patch.commit_id, &current_patch.commit, stdout)?;
+                writeln!(stdout)?;
+                match current_patch.patch.to_patch_text() {
+                    Ok(patch_text) => stdout.write_all(patch_text.as_bytes())?,
+                    Err(error) => return write_rebase_error(stderr, error),
+                }
+                Ok(ExitCode::SUCCESS)
+            }
+            Err(error) => write_rebase_error(stderr, error),
+        },
     }
+}
+
+enum RebaseAction {
+    Abort,
+    Quit,
+    ShowCurrentPatch,
 }
 
 fn write_rebase_error(stderr: &mut dyn Write, error: rit_core::RitError) -> io::Result<ExitCode> {
@@ -4008,6 +4028,7 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit rebase --abort"));
+        assert!(stdout.contains("rit rebase --show-current-patch"));
         assert!(stdout.contains("rit rebase --quit"));
         assert_eq!(stderr, "");
     }

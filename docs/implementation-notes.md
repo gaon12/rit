@@ -1370,20 +1370,23 @@
 ### `rit rebase`
 
 - Baseline command checked: `git rebase -h`
-- Supported options: `rit rebase --abort`, `rit rebase --quit`
+- Supported options: `rit rebase --abort`, `rit rebase --show-current-patch`,
+  `rit rebase --quit`
 - Unsupported options: rebase start, `--continue`, `--skip`, `--edit-todo`,
-  `--show-current-patch`, interactive mode, autostash, apply/merge backend
-  selection, hooks, strategy options, and todo editing.
+  interactive mode, autostash, apply/merge backend selection, hooks, strategy
+  options, and todo editing.
 - Git-compatible behavior: `rit rebase --abort` reads `orig-head` and
   `head-name`, restores the original branch, index, and working tree, then
   removes `.git/rebase-apply`, `.git/rebase-merge`, `REBASE_HEAD`,
-  `MERGE_MSG`, and `AUTO_MERGE`. `rit rebase --quit` removes
-  `.git/rebase-apply` and `.git/rebase-merge` without changing `HEAD`, the
-  index, or the working tree. When no rebase state exists either command
-  prints `fatal: no rebase in progress` and exits 128.
-- Repository mutation: yes for `--abort` and `--quit`; `--abort` restores
-  branch/index/worktree state, while `--quit` only removes rebase state
-  directories.
+  `MERGE_MSG`, and `AUTO_MERGE`. `rit rebase --show-current-patch` reads
+  `REBASE_HEAD` and prints the stopped commit header plus the first-parent
+  patch. `rit rebase --quit` removes `.git/rebase-apply` and
+  `.git/rebase-merge` without changing `HEAD`, the index, or the working tree.
+  When no rebase state exists these commands print `fatal: no rebase in
+  progress` and exit 128.
+- Repository mutation: yes for `--abort` and `--quit`; no for
+  `--show-current-patch`. `--abort` restores branch/index/worktree state,
+  while `--quit` only removes rebase state directories.
 - Risk: moderate for `--abort` because it rewrites HEAD, the index, and the
   worktree to the recorded original commit; low for `--quit`.
 
