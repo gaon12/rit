@@ -15,6 +15,9 @@ rit-core = { path = "../rit-core" }
 [features]
 default = []
 indexdb = ["rit-core/indexdb"]
+large-files = ["lfs", "xet"]
+lfs = ["rit-core/lfs"]
+xet = ["rit-core/xet"]
 
 [dev-dependencies]
 rit-testkit = { path = "../rit-testkit" }

@@ -51,6 +51,46 @@ impl WorkspaceProfile {
                 .and_then(|remote| remote.partial_clone_filter.clone()),
         }
     }
+
+    /// Explains workspace, partial-clone, lazy-file, and large-file decisions.
+    pub fn explain_decisions(
+        &self,
+        partial_clone: &PartialClonePolicy,
+    ) -> WorkspaceDecisionExplanation {
+        let plan = self.prefetch_plan(partial_clone);
+        let mut decisions = Vec::new();
+        decisions.push(WorkspaceDecision {
+            name: "workspace-profile".to_owned(),
+            selected: true,
+            reason: format!(
+                "profile '{}' includes {} path(s)",
+                self.name,
+                self.include.len()
+            ),
+        });
+        decisions.push(WorkspaceDecision {
+            name: "partial-clone".to_owned(),
+            selected: plan.partial_clone,
+            reason: partial_clone_reason(self, partial_clone),
+        });
+        decisions.push(WorkspaceDecision {
+            name: "lazy-files".to_owned(),
+            selected: self.lazy_files,
+            reason: lazy_files_reason(self, partial_clone),
+        });
+        decisions.push(WorkspaceDecision {
+            name: "lfs".to_owned(),
+            selected: cfg!(feature = "lfs"),
+            reason: large_file_feature_reason("LFS", cfg!(feature = "lfs")),
+        });
+        decisions.push(WorkspaceDecision {
+            name: "xet".to_owned(),
+            selected: cfg!(feature = "xet"),
+            reason: large_file_feature_reason("Xet", cfg!(feature = "xet")),
+        });
+
+        WorkspaceDecisionExplanation { plan, decisions }
+    }
 }
 
 /// User-facing lazy materialization policy derived from a workspace profile.
@@ -81,6 +121,26 @@ pub struct WorkspacePrefetchPlan {
     pub promisor_remote: Option<String>,
     /// Partial clone filter selected by the promisor remote, when known.
     pub partial_clone_filter: Option<String>,
+}
+
+/// Explanation for workspace-related decision surfaces.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkspaceDecisionExplanation {
+    /// The prefetch plan being explained.
+    pub plan: WorkspacePrefetchPlan,
+    /// Decision reasons in stable display order.
+    pub decisions: Vec<WorkspaceDecision>,
+}
+
+/// One explainable workspace decision.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WorkspaceDecision {
+    /// Stable decision name.
+    pub name: String,
+    /// Whether rit selected or supports this decision.
+    pub selected: bool,
+    /// Human-readable reason.
+    pub reason: String,
 }
 
 impl RitConfig {
@@ -199,6 +259,45 @@ fn parse_optional_bool(value: Option<&Value>, field_name: &str) -> Result<Option
         .ok_or_else(|| RitError::invalid_input(format!("`{field_name}` must be a boolean")))
 }
 
+fn partial_clone_reason(profile: &WorkspaceProfile, partial_clone: &PartialClonePolicy) -> String {
+    if profile.partial_clone {
+        "workspace profile requests partial clone object fetching".to_owned()
+    } else if let Some(remote) = partial_clone.promisor_remotes.first() {
+        format!(
+            "repository has promisor remote '{}', so partial clone is available",
+            remote.name
+        )
+    } else {
+        "workspace profile does not request partial clone and no promisor remote was detected"
+            .to_owned()
+    }
+}
+
+fn lazy_files_reason(profile: &WorkspaceProfile, partial_clone: &PartialClonePolicy) -> String {
+    if !profile.lazy_files {
+        return "workspace profile keeps files materialized by default".to_owned();
+    }
+    if profile.partial_clone || partial_clone.is_enabled() {
+        "workspace profile enables lazy files and missing blobs can use partial clone metadata"
+            .to_owned()
+    } else {
+        "workspace profile enables lazy files, but no partial clone source is currently detected"
+            .to_owned()
+    }
+}
+
+fn large_file_feature_reason(name: &str, enabled: bool) -> String {
+    if enabled {
+        format!(
+            "{name} support is compiled in; explain mode reports availability without changing tracking rules"
+        )
+    } else {
+        format!(
+            "{name} support is not compiled in; explain mode will not select this large-file backend"
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -252,6 +351,26 @@ mod tests {
                 promisor_remote: None,
                 partial_clone_filter: None,
             }
+        );
+        let explanation = config
+            .workspace_profile("mobile")
+            .expect("mobile should exist")
+            .explain_decisions(&PartialClonePolicy::default());
+        assert_eq!(explanation.plan.workspace, "mobile");
+        assert!(explanation.decisions.iter().any(|decision| {
+            decision.name == "workspace-profile"
+                && decision.selected
+                && decision.reason.contains("2 path")
+        }));
+        assert!(
+            explanation.decisions.iter().any(|decision| {
+                decision.name == "lfs" && decision.reason.contains("LFS support")
+            })
+        );
+        assert!(
+            explanation.decisions.iter().any(|decision| {
+                decision.name == "xet" && decision.reason.contains("Xet support")
+            })
         );
         assert_eq!(
             config

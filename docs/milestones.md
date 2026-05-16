@@ -795,7 +795,7 @@ Completion criteria:
 - [x] Add `rit pathspec explain <pathspec>`.
 - [x] Add `rit merge explain <target>`.
 - [x] Add `rit auth explain <url>`.
-- [ ] Add explain output for LFS/Xet/workspace decisions.
+- [x] Add explain output for LFS/Xet/workspace decisions.
 
 ## M19: Smartlog And Local Work Graph
 

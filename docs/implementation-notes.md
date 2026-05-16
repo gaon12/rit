@@ -266,6 +266,10 @@
 - 2026-05-13 status explain slice checked `git status -h`; `rit status
   --explain <path>` is a rit-specific read-only explanation layer over HEAD,
   index, worktree, and ignore-rule classification.
+- 2026-05-17 workspace explain slice is rit-specific; `rit workspace explain
+  <profile>` prints the derived prefetch plan plus reasons for workspace
+  profile selection, partial clone, lazy files, and LFS/Xet backend
+  availability without changing tracking rules or fetching objects.
 - 2026-05-13 IndexDB slice checked `git --version` and `git help -a`; IndexDB
   is rit-specific and has no Git command baseline. Added feature-gated SQLite
   support with `rit indexdb`, `status`, `build`, `update`, `repair`, `rebuild`,

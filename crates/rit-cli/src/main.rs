@@ -400,10 +400,19 @@ fn workspace_command(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    let profile_name = match args {
-        [subcommand, profile] if subcommand == "prefetch" && !profile.starts_with('-') => profile,
+    let (mode, profile_name) = match args {
+        [subcommand, profile]
+            if (subcommand == "prefetch" || subcommand == "explain")
+                && !profile.starts_with('-') =>
+        {
+            (subcommand.as_str(), profile)
+        }
         [subcommand] if subcommand == "prefetch" => {
             writeln!(stderr, "rit: workspace prefetch requires a profile name")?;
+            return Ok(ExitCode::from(129));
+        }
+        [subcommand] if subcommand == "explain" => {
+            writeln!(stderr, "rit: workspace explain requires a profile name")?;
             return Ok(ExitCode::from(129));
         }
         [subcommand, ..] => {
@@ -444,20 +453,39 @@ fn workspace_command(
     let plan = profile.prefetch_plan(&partial_clone);
 
     writeln!(stdout, "workspace: {}", plan.workspace)?;
+    if mode == "explain" {
+        let explanation = profile.explain_decisions(&partial_clone);
+        writeln!(stdout, "explain: decisions")?;
+        print_workspace_prefetch_plan(&explanation.plan, stdout)?;
+        for decision in explanation.decisions {
+            writeln!(stdout, "decision: {}", decision.name)?;
+            writeln!(stdout, "selected: {}", decision.selected)?;
+            writeln!(stdout, "reason: {}", decision.reason)?;
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    print_workspace_prefetch_plan(&plan, stdout)?;
+    Ok(ExitCode::SUCCESS)
+}
+
+fn print_workspace_prefetch_plan(
+    plan: &rit_core::WorkspacePrefetchPlan,
+    stdout: &mut dyn Write,
+) -> io::Result<()> {
     writeln!(stdout, "prefetch: planned")?;
     writeln!(stdout, "partial-clone: {}", plan.partial_clone)?;
     writeln!(stdout, "lazy-files: {}", plan.lazy_files)?;
-    if let Some(remote) = plan.promisor_remote {
+    if let Some(remote) = &plan.promisor_remote {
         writeln!(stdout, "promisor-remote: {remote}")?;
     }
-    if let Some(filter) = plan.partial_clone_filter {
+    if let Some(filter) = &plan.partial_clone_filter {
         writeln!(stdout, "partial-clone-filter: {filter}")?;
     }
-    for path in plan.include {
+    for path in &plan.include {
         writeln!(stdout, "include: {path}")?;
     }
-
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 fn pathspec_command(
@@ -4260,6 +4288,7 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit workspace prefetch"));
+        assert!(stdout.contains("rit workspace explain"));
         assert_eq!(stderr, "");
     }
 
@@ -4316,6 +4345,15 @@ mod tests {
         assert_eq!(code, ExitCode::from(129));
         assert_eq!(stdout, "");
         assert!(stderr.contains("requires a profile name"));
+    }
+
+    #[test]
+    fn workspace_explain_requires_profile_name() {
+        let (code, stdout, stderr) = run_with(&["workspace", "explain"]);
+
+        assert_eq!(code, ExitCode::from(129));
+        assert_eq!(stdout, "");
+        assert!(stderr.contains("workspace explain requires a profile name"));
     }
 
     #[test]

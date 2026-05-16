@@ -144,7 +144,8 @@ pub use vfs::{
     VfsPrefetchedObject,
 };
 pub use workspace_profile::{
-    LazyMaterializationPolicy, RitConfig, WorkspacePrefetchPlan, WorkspaceProfile,
+    LazyMaterializationPolicy, RitConfig, WorkspaceDecision, WorkspaceDecisionExplanation,
+    WorkspacePrefetchPlan, WorkspaceProfile,
 };
 pub use write::{
     AddOptions, AddPlan, CherryPickOptions, CherryPickResult, CommitHookMode, CommitOptions,
