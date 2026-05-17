@@ -129,9 +129,10 @@
   `stash show --numstat --line-prefix=<prefix>`.
 - 2026-05-18 stash show stat width/count passthrough slice checked
   Git 2.52.0.windows.1 with `git --version`, direct Git comparisons for
+  `stash show --stat-width=<n>`, `stash show --stat-name-width=<n>`,
   `stash show --stat-graph-width=<n>`, `stash show --stat-count=<n>`, and
-  `stash show --patch-with-stat --stat-graph-width=<n>` on simple stat output,
-  plus Git-compatible invalid numeric errors.
+  matching `stash show --patch-with-stat` forms on simple stat output, plus
+  Git-compatible invalid numeric errors.
 - 2026-05-17 stash show diff algorithm passthrough slice checked
   `git stash -h`, `git diff -h`, and direct Git comparisons for
   `stash show --patch --minimal`, `--patience`, and `--histogram` on simple
@@ -1632,7 +1633,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]`
   as the legacy save form,
-  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--no-compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [-z] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--inter-hunk-context=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--src-prefix=<prefix>|--dst-prefix=<prefix>|--line-prefix=<prefix>|--stat-graph-width=<n>|--stat-count=<n>|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--color-moved[=<mode>]|--no-color-moved|--color-moved-ws=<modes>|--no-color-moved-ws|--relative[=<path>]|--no-relative|--minimal|--patience|--histogram|--anchored=<text>|--output=<file>|-w|--ignore-all-space|-b|--ignore-space-change|--ignore-space-at-eol|--ignore-cr-at-eol|--ignore-blank-lines|--indent-heuristic|--no-indent-heuristic|--binary|--no-renames|--find-renames[=<n>]|-M[<n>]|--find-copies[=<n>]|-C[<n>]|--find-copies-harder|-l<n>|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]|--submodule[=<format>]|--ita-invisible-in-index|--ita-visible-in-index] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--no-compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [-z] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--inter-hunk-context=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--src-prefix=<prefix>|--dst-prefix=<prefix>|--line-prefix=<prefix>|--stat-width=<n>|--stat-name-width=<n>|--stat-graph-width=<n>|--stat-count=<n>|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--color-moved[=<mode>]|--no-color-moved|--color-moved-ws=<modes>|--no-color-moved-ws|--relative[=<path>]|--no-relative|--minimal|--patience|--histogram|--anchored=<text>|--output=<file>|-w|--ignore-all-space|-b|--ignore-space-change|--ignore-space-at-eol|--ignore-cr-at-eol|--ignore-blank-lines|--indent-heuristic|--no-indent-heuristic|--binary|--no-renames|--find-renames[=<n>]|-M[<n>]|--find-copies[=<n>]|-C[<n>]|--find-copies-harder|-l<n>|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]|--submodule[=<format>]|--ita-invisible-in-index|--ita-visible-in-index] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
   worktree/index restoration when `HEAD` matches the stash base,
@@ -1671,9 +1672,10 @@
   prefixes for single-prefix tracked patch captures.
 - Git-compatible behavior: `rit stash show --line-prefix=<prefix>` prefixes
   checked explicit stat, patch, name-only, and numstat text output.
-- Git-compatible behavior: `rit stash show --stat-graph-width=<n>` and
-  `--stat-count=<n>` are accepted for checked simple stat output and reject
-  non-numeric values with Git-compatible errors.
+- Git-compatible behavior: `rit stash show --stat-width=<n>`,
+  `--stat-name-width=<n>`, `--stat-graph-width=<n>`, and `--stat-count=<n>`
+  are accepted for checked simple stat output and reject non-numeric values
+  with Git-compatible errors.
 - Git-compatible behavior: `rit stash push --keep-index` records the same
   tracked stash shape while restoring selected paths to the pre-stash index
   state, so staged changes remain staged and unstaged-only changes are cleaned.

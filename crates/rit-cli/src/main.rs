@@ -1080,27 +1080,20 @@ fn parse_stash_show_args(
             _ if arg.starts_with("--anchored=") => {
                 diff_option = true;
             }
-            _ if arg.starts_with("--stat-graph-width=") => {
-                let value = arg.trim_start_matches("--stat-graph-width=");
+            _ if arg.starts_with("--stat-width=")
+                || arg.starts_with("--stat-name-width=")
+                || arg.starts_with("--stat-graph-width=")
+                || arg.starts_with("--stat-count=") =>
+            {
+                let (option, value) = arg.split_once('=').expect("stat option has '='");
                 diff_option = true;
                 format = Some(match format {
                     Some(StashShowFormat::Patch) => StashShowFormat::StatAndPatch,
                     other => other.unwrap_or(StashShowFormat::Stat),
                 });
                 if value.parse::<i64>().is_err() {
-                    writeln!(stderr, "error: stat-graph-width expects a numerical value")?;
-                    return Ok(None);
-                }
-            }
-            _ if arg.starts_with("--stat-count=") => {
-                let value = arg.trim_start_matches("--stat-count=");
-                diff_option = true;
-                format = Some(match format {
-                    Some(StashShowFormat::Patch) => StashShowFormat::StatAndPatch,
-                    other => other.unwrap_or(StashShowFormat::Stat),
-                });
-                if value.parse::<i64>().is_err() {
-                    writeln!(stderr, "error: stat-count expects a numerical value")?;
+                    let option = option.trim_start_matches("--");
+                    writeln!(stderr, "error: {option} expects a numerical value")?;
                     return Ok(None);
                 }
             }
