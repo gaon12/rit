@@ -606,6 +606,59 @@ fn stash_push_staged_stashes_only_staged_changes_like_git() {
 }
 
 #[test]
+fn stash_staged_same_path_cleanup_failure_still_stores_stash_like_git() {
+    for (name, args) in [
+        (
+            "push-staged-same-path",
+            vec!["stash", "push", "--staged", "-m", "staged same"],
+        ),
+        (
+            "save-staged-same-path",
+            vec!["stash", "save", "--staged", "staged same"],
+        ),
+    ] {
+        let root = temp_path(name);
+        let git_repo = root.join("git");
+        let rit_repo = root.join("rit");
+        init_repo(&git_repo);
+        copy_directory(&git_repo, &rit_repo);
+        fs::write(repo_file(&git_repo, "tracked.txt"), "staged\n")
+            .expect("git staged change should write");
+        fs::write(repo_file(&rit_repo, "tracked.txt"), "staged\n")
+            .expect("rit staged change should write");
+        run_git(&git_repo, ["add", "tracked.txt"]);
+        run_git(&rit_repo, ["add", "tracked.txt"]);
+        fs::write(repo_file(&git_repo, "tracked.txt"), "unstaged\n")
+            .expect("git unstaged change should write");
+        fs::write(repo_file(&rit_repo, "tracked.txt"), "unstaged\n")
+            .expect("rit unstaged change should write");
+
+        let git_push = run_capture("git", args.iter().copied(), &git_repo);
+        let rit_push = run_capture(rit_binary(), args.iter().copied(), &rit_repo);
+
+        assert_eq!(git_push.exit_code, 1, "git stderr: {}", git_push.stderr);
+        assert_eq!(rit_push.exit_code, 1, "rit stderr: {}", rit_push.stderr);
+        assert_eq!(git_push.stdout, rit_push.stdout, "args: {args:?}");
+        assert!(git_push.stderr.contains("Cannot remove worktree changes"));
+        assert!(rit_push.stderr.contains("Cannot remove worktree changes"));
+        assert_eq!(
+            run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+            run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+        );
+        assert_eq!(
+            fs::read_to_string(repo_file(&git_repo, "tracked.txt")).ok(),
+            fs::read_to_string(repo_file(&rit_repo, "tracked.txt")).ok()
+        );
+        assert_eq!(
+            run_capture("git", ["stash", "list"], &git_repo).stdout,
+            run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+}
+
+#[test]
 fn stash_save_legacy_message_matches_git() {
     let root = temp_path("save-message");
     let git_repo = root.join("git");

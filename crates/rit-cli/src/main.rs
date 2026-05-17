@@ -231,6 +231,17 @@ fn stash_command(
                 }
                 Ok(ExitCode::SUCCESS)
             }
+            Ok(rit_core::StashPushResult::SavedCleanupFailed {
+                message,
+                cleanup_error,
+                ..
+            }) => {
+                if !save_args.quiet {
+                    writeln!(stdout, "Saved working directory and index state {message}")?;
+                }
+                writeln!(stderr, "{cleanup_error}")?;
+                Ok(ExitCode::from(1))
+            }
             Err(error) => write_command_error(stderr, error),
         };
     }
@@ -337,6 +348,17 @@ fn stash_command(
                     writeln!(stdout, "Saved working directory and index state {message}")?;
                 }
                 Ok(ExitCode::SUCCESS)
+            }
+            Ok(rit_core::StashPushResult::SavedCleanupFailed {
+                message,
+                cleanup_error,
+                ..
+            }) => {
+                if !push_args.quiet {
+                    writeln!(stdout, "Saved working directory and index state {message}")?;
+                }
+                writeln!(stderr, "{cleanup_error}")?;
+                Ok(ExitCode::from(1))
             }
             Err(error) => write_command_error(stderr, error),
         };

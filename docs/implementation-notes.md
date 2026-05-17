@@ -1503,7 +1503,8 @@
 - Git-compatible behavior: `rit stash push --staged` records selected staged
   changes only and restores those paths to `HEAD`, leaving unrelated unstaged
   worktree changes in place for the checked non-overlapping path scope. Same
-  path staged+unstaged cleanup failure parity remains unsupported.
+  path staged+unstaged changes store the stash first, then report the checked
+  cleanup failure while leaving the index/worktree unchanged.
 - Git-compatible behavior: `rit stash push --include-untracked` records
   untracked files in the third stash parent, removes those files from the
   working tree, and leaves default `stash show` focused on tracked changes for

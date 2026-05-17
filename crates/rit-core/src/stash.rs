@@ -54,6 +54,15 @@ pub enum StashPushResult {
         /// Reflog and commit message shown by `stash list`.
         message: String,
     },
+    /// A new stash was stored, but cleaning the working tree failed.
+    SavedCleanupFailed {
+        /// Commit ID stored in `refs/stash`.
+        object_id: ObjectId,
+        /// Reflog and commit message shown by `stash list`.
+        message: String,
+        /// Cleanup failure message.
+        cleanup_error: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -133,7 +142,6 @@ impl Repository {
         message: Option<&str>,
         pathspecs: &PathspecSet,
     ) -> Result<StashPushResult> {
-        self.ensure_staged_stash_cleanup_supported(pathspecs)?;
         self.stash_push_with_mode(
             message,
             pathspecs,
@@ -224,6 +232,15 @@ impl Repository {
         if let Some(index) = cleanup_index {
             self.restore_stash_paths_to_index(&index, &created.paths)?;
         } else {
+            if change_mode == StashChangeMode::StagedOnly
+                && let Err(error) = self.ensure_staged_stash_cleanup_supported(pathspecs)
+            {
+                return Ok(StashPushResult::SavedCleanupFailed {
+                    object_id: created.object_id,
+                    message: created.message,
+                    cleanup_error: error.to_string(),
+                });
+            }
             self.restore_stash_paths_to_head(head_id, &created.paths)?;
         }
         self.remove_stashed_untracked_paths(&created.untracked_paths)?;
@@ -805,9 +822,7 @@ impl Repository {
         if status.entries.iter().any(|entry| {
             entry.index_status != '?' && entry.index_status != ' ' && entry.worktree_status != ' '
         }) {
-            return Err(RitError::invalid_input(
-                "stash push --staged currently requires selected staged paths to have no unstaged worktree changes",
-            ));
+            return Err(RitError::invalid_input("Cannot remove worktree changes"));
         }
         Ok(())
     }
