@@ -657,7 +657,7 @@ Completion criteria:
     patch output in checked captures.
   - [x] `stash show` accepts rename/copy/binary passthrough diff options
     (`--binary`, `--no-renames`, `--find-renames[=<n>]`, `-M[<n>]`,
-    `--find-copies[=<n>]`, `-C[<n>]`, `--find-copies-harder`) for
+    `--find-copies[=<n>]`, `-C[<n>]`, `--find-copies-harder`, `-l<n>`) for
     Git-compatible simple text patch output in checked captures.
   - [x] `stash show` accepts text and submodule/textconv passthrough diff
     options (`-a`, `--text`, `--textconv`, `--no-textconv`,

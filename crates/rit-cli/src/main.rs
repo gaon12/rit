@@ -968,6 +968,13 @@ fn parse_stash_show_args(
                     return Ok(None);
                 }
             }
+            option if option.starts_with("-l") => {
+                diff_option = true;
+                if let Err(error) = parse_rename_limit_option(option) {
+                    writeln!(stderr, "rit: {error}")?;
+                    return Ok(None);
+                }
+            }
             _ if arg.starts_with("--ignore-submodules=") => {
                 let value = arg.trim_start_matches("--ignore-submodules=");
                 diff_option = true;

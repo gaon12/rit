@@ -2131,6 +2131,8 @@ fn stash_show_diff_passthrough_options_match_git() {
         vec!["stash", "show", "--patch", "-C"],
         vec!["stash", "show", "--patch", "-C90%"],
         vec!["stash", "show", "--patch", "--find-copies-harder"],
+        vec!["stash", "show", "--patch", "-l0"],
+        vec!["stash", "show", "--patch", "-l1"],
         vec!["stash", "show", "--patch", "--minimal"],
         vec!["stash", "show", "--patch", "--patience"],
         vec!["stash", "show", "--patch", "--histogram"],
