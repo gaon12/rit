@@ -583,6 +583,8 @@ Completion criteria:
     parent without dropping the stash.
   - [x] Basic `stash pop -q` restores untracked files through the shared clean
     apply path and then drops the selected loose stash entry.
+  - [x] `stash show --include-untracked` summary formats include third-parent
+    untracked additions for name-only/name-status/numstat output.
   - [x] Basic legacy `stash save [-q] [<message>]` uses the same tracked-change
     stash shape as push and matches Git's saved/no-change output.
   - [x] `rit stash create [<message>]` creates the same tracked-change stash
@@ -598,9 +600,9 @@ Completion criteria:
     selected loose stash entry on success.
   - [ ] `stash export/import`,
     packed stash ref cleanup, same-path staged+unstaged `--staged` cleanup
-    failure parity, `--index`, broader untracked apply/pop restoration, broader
-    show options, broader error parity, and conflict handling for
-    apply/pop/branch.
+    failure parity, `--index`, broader untracked apply/pop restoration, patch
+    `--include-untracked`, broader show options, broader error parity, and
+    conflict handling for apply/pop/branch.
 - [~] Conflict index stages.
   - [x] Preserve stage 0/1/2/3 in index read, write, sorting, and
     `ls-files --stage` output.

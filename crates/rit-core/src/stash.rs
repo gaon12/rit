@@ -8,8 +8,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::index::{Index, IndexEntry, IndexEntryStat, join_slash_path};
 use crate::write::write_worktree_entry_atomically;
 use crate::{
-    DiffPatch, DiffSummary, GitConfig, ObjectId, ObjectKind, PathspecSet, Repository, Result,
-    RitError, Signature, StatusOptions, UntrackedFilesMode, parse_commit,
+    DiffFileStat, DiffPatch, DiffSummary, GitConfig, ObjectId, ObjectKind, PathspecSet, Repository,
+    Result, RitError, Signature, StatusOptions, UntrackedFilesMode, parse_commit,
 };
 
 const ZERO_OBJECT_ID: &str = "0000000000000000000000000000000000000000";
@@ -438,6 +438,47 @@ impl Repository {
         self.diff_commits_with_pathspecs(base_id, stash_id, pathspecs)
     }
 
+    /// Shows tracked changes and untracked third-parent entries from one stash.
+    pub fn stash_show_include_untracked(
+        &self,
+        display_index: usize,
+        pathspecs: &PathspecSet,
+    ) -> Result<DiffSummary> {
+        let mut diff = self.stash_show(display_index, pathspecs)?;
+        if let Some(untracked_id) = self.stash_untracked_parent(display_index)? {
+            let attributes = self.root_attributes()?;
+            for entry in self
+                .commit_index_entries(untracked_id)?
+                .into_iter()
+                .filter(|entry| entry.stage == 0)
+            {
+                if !pathspecs.matches_with_attributes(&entry.path, Some(&attributes)) {
+                    continue;
+                }
+                let object = self.read_object(entry.object_id)?;
+                if object.kind != ObjectKind::Blob {
+                    return Err(RitError::invalid_input(format!(
+                        "object {} is {}, not blob",
+                        entry.object_id, object.kind
+                    )));
+                }
+                diff.files.push(DiffFileStat {
+                    status: 'A',
+                    old_path: None,
+                    path: entry.path,
+                    similarity_score: None,
+                    insertions: count_text_lines(&object.data),
+                    deletions: 0,
+                    binary: object.data.contains(&0),
+                    old_size: 0,
+                    new_size: object.data.len(),
+                });
+            }
+            diff.files.sort_by(|left, right| left.path.cmp(&right.path));
+        }
+        Ok(diff)
+    }
+
     /// Shows patch output for the changes recorded by one stash.
     pub fn stash_show_patch(
         &self,
@@ -464,6 +505,19 @@ impl Repository {
             .copied()
             .ok_or_else(|| RitError::invalid_input("stash commit has no parent"))?;
         Ok((base_id, stash_id))
+    }
+
+    fn stash_untracked_parent(&self, display_index: usize) -> Result<Option<ObjectId>> {
+        let stash_id = self.stash_id_at(display_index)?;
+        let stash_object = self.read_object(stash_id)?;
+        if stash_object.kind != ObjectKind::Commit {
+            return Err(RitError::invalid_input(format!(
+                "stash entry {stash_id} is {}, not commit",
+                stash_object.kind
+            )));
+        }
+        let stash_commit = crate::parse_commit(&stash_object.data)?;
+        Ok(stash_commit.parents.get(2).copied())
     }
 
     fn read_stash_reflog(&self) -> Result<Vec<StashReflogEntry>> {
@@ -1065,6 +1119,14 @@ fn index_commit_message(stash_message: &str) -> String {
 
 fn short_id(object_id: ObjectId) -> String {
     object_id.to_hex().chars().take(7).collect()
+}
+
+fn count_text_lines(data: &[u8]) -> usize {
+    if data.is_empty() {
+        0
+    } else {
+        data.iter().filter(|byte| **byte == b'\n').count() + usize::from(!data.ends_with(b"\n"))
+    }
 }
 
 #[cfg(unix)]

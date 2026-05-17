@@ -321,6 +321,13 @@ fn stash_command(
             return Ok(ExitCode::from(129));
         };
         if matches!(show_args.format, StashShowFormat::Patch) {
+            if show_args.include_untracked {
+                writeln!(
+                    stderr,
+                    "rit: stash show --patch --include-untracked is not implemented"
+                )?;
+                return Ok(ExitCode::from(129));
+            }
             return match repository.stash_show_patch(show_args.index, &rit_core::PathspecSet::all())
             {
                 Ok(patch) => match patch.to_patch_text() {
@@ -333,7 +340,12 @@ fn stash_command(
                 Err(error) => write_stash_error(stderr, error),
             };
         }
-        return match repository.stash_show(show_args.index, &rit_core::PathspecSet::all()) {
+        let summary = if show_args.include_untracked {
+            repository.stash_show_include_untracked(show_args.index, &rit_core::PathspecSet::all())
+        } else {
+            repository.stash_show(show_args.index, &rit_core::PathspecSet::all())
+        };
+        return match summary {
             Ok(diff) => {
                 match show_args.format {
                     StashShowFormat::Stat => stdout.write_all(diff.to_stat_text().as_bytes())?,
@@ -411,6 +423,7 @@ enum StashShowFormat {
 struct StashShowArgs {
     index: usize,
     format: StashShowFormat,
+    include_untracked: bool,
 }
 
 fn parse_stash_show_args(
@@ -418,6 +431,7 @@ fn parse_stash_show_args(
     stderr: &mut dyn Write,
 ) -> io::Result<Option<StashShowArgs>> {
     let mut format = StashShowFormat::Stat;
+    let mut include_untracked = false;
     let mut stash = None;
     for arg in args {
         match arg.as_str() {
@@ -426,6 +440,7 @@ fn parse_stash_show_args(
             "--name-only" => format = StashShowFormat::NameOnly,
             "--name-status" => format = StashShowFormat::NameStatus,
             "--numstat" => format = StashShowFormat::Numstat,
+            "-u" | "--include-untracked" => include_untracked = true,
             _ if arg.starts_with('-') => {
                 writeln!(stderr, "rit: unsupported stash show option '{arg}'")?;
                 return Ok(None);
@@ -439,7 +454,11 @@ fn parse_stash_show_args(
     }
 
     let (index, _) = parse_stash_name(stash.unwrap_or("refs/stash@{0}"))?;
-    Ok(Some(StashShowArgs { index, format }))
+    Ok(Some(StashShowArgs {
+        index,
+        format,
+        include_untracked,
+    }))
 }
 
 struct StashDropArgs {

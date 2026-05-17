@@ -1549,7 +1549,9 @@
   shape.
 - Git-compatible behavior: `rit stash show` diffs the selected stash commit
   against its first parent and renders patch/stat/name-only/name-status/numstat
-  output through the shared diff formatter.
+  output through the shared diff formatter. `--include-untracked` extends
+  summary formats with third-parent untracked additions for the checked
+  name-only/name-status/numstat scope.
 - Git-compatible behavior: `rit stash store` resolves an existing commit,
   appends a loose stash reflog entry using the configured committer identity,
   and updates loose `.git/refs/stash`. `-q` is accepted and the default
