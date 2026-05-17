@@ -412,6 +412,8 @@ Completion criteria:
     state.
   - [x] `clone --local --no-checkout -o <name>` / `--origin=<name>` records
     the checked remote name in clone config and branch merge config.
+  - [x] `clone --local --no-checkout --no-tags` skips checked loose tag refs
+    and records `remote.<name>.tagOpt = --no-tags`.
   - [x] `fetch <local-repository>` copies objects into an existing repository
     and writes `FETCH_HEAD` without updating refs.
 - [x] Protocol model for local, HTTP(S), and SSH location classification.

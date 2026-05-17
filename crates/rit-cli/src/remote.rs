@@ -12,6 +12,7 @@ pub fn clone_command(
     let mut quiet = false;
     let mut local = false;
     let mut no_checkout = false;
+    let mut copy_tags = true;
     let mut origin_name = "origin".to_owned();
     let mut positional = Vec::new();
     let mut after_separator = false;
@@ -32,6 +33,7 @@ pub fn clone_command(
             "-l" | "--local" if !after_separator => local = true,
             "-n" | "--no-checkout" if !after_separator => no_checkout = true,
             "--no-hardlinks" if !after_separator => {}
+            "--no-tags" if !after_separator => copy_tags = false,
             "-o" | "--origin" if !after_separator => pending_option = Some("--origin"),
             option if option.starts_with("--origin=") && !after_separator => {
                 origin_name = option.trim_start_matches("--origin=").to_owned();
@@ -79,8 +81,9 @@ pub fn clone_command(
         .get(1)
         .map(PathBuf::from)
         .unwrap_or_else(|| default_clone_directory(&source));
-    let options =
-        rit_core::LocalCloneOptions::new(&source, &directory).with_origin_name(origin_name);
+    let options = rit_core::LocalCloneOptions::new(&source, &directory)
+        .with_origin_name(origin_name)
+        .with_copy_tags(copy_tags);
 
     match rit_core::Repository::clone_local_no_checkout(&options) {
         Ok(_) => {

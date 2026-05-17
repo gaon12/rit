@@ -3640,12 +3640,14 @@ fn clone_local_no_checkout_copies_head_objects_and_refs() {
     fs::write(source.join("a.txt"), "base\n").expect("source file should be written");
     run_git(&source, ["add", "a.txt"]);
     run_git(&source, ["commit", "--quiet", "-m", "base"]);
+    run_git(&source, ["tag", "v1"]);
 
-    for (name, extra_args, origin_name) in [
-        ("default", Vec::<&str>::new(), "origin"),
-        ("no-hardlinks", vec!["--no-hardlinks"], "origin"),
-        ("origin-short", vec!["-o", "upstream"], "upstream"),
-        ("origin-long", vec!["--origin=upstream"], "upstream"),
+    for (name, extra_args, origin_name, tags_expected) in [
+        ("default", Vec::<&str>::new(), "origin", true),
+        ("no-hardlinks", vec!["--no-hardlinks"], "origin", true),
+        ("no-tags", vec!["--no-tags"], "origin", false),
+        ("origin-short", vec!["-o", "upstream"], "upstream", true),
+        ("origin-long", vec!["--origin=upstream"], "upstream", true),
     ] {
         let git_target = workspace.join(format!("git-target-{name}"));
         let rit_target = workspace.join(format!("rit-target-{name}"));
@@ -3715,6 +3717,18 @@ fn clone_local_no_checkout_copies_head_objects_and_refs() {
         )
         .0;
         assert_eq!(branch_remote, rit_branch_remote);
+
+        let git_tags = run_capture("git", ["tag", "--list"], &git_target).0;
+        let rit_tags = run_capture("git", ["tag", "--list"], &rit_target).0;
+        assert_eq!(git_tags, rit_tags);
+        assert_eq!(git_tags.contains("v1"), tags_expected);
+
+        let tag_opt_section = format!("remote.{origin_name}.tagOpt");
+        let git_tag_opt =
+            run_optional_capture("git", ["config", "--get", &tag_opt_section], &git_target);
+        let rit_tag_opt =
+            run_optional_capture("git", ["config", "--get", &tag_opt_section], &rit_target);
+        assert_eq!(git_tag_opt, rit_tag_opt);
     }
 
     let _ = fs::remove_dir_all(workspace);
@@ -4114,6 +4128,24 @@ fn run_capture<const N: usize>(
         String::from_utf8_lossy(&output.stdout).into_owned(),
         String::from_utf8_lossy(&output.stderr).into_owned(),
     )
+}
+
+fn run_optional_capture<const N: usize>(
+    program: impl AsRef<OsStr>,
+    args: [&str; N],
+    cwd: &Path,
+) -> Option<String> {
+    let program = normalize_test_program(program.as_ref().to_os_string());
+    let output = Command::new(program)
+        .args(args)
+        .current_dir(cwd)
+        .output()
+        .expect("command should start");
+    if output.status.success() {
+        Some(String::from_utf8_lossy(&output.stdout).into_owned())
+    } else {
+        None
+    }
 }
 
 fn run_git<const N: usize>(cwd: &Path, args: [&str; N]) {

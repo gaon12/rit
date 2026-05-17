@@ -35,6 +35,8 @@ pub struct LocalCloneOptions {
     pub directory: PathBuf,
     /// Remote name recorded in the cloned repository config.
     pub origin_name: String,
+    /// Copy local tag refs into the cloned repository.
+    pub copy_tags: bool,
 }
 
 /// Options for fetching objects from a local repository.
@@ -143,12 +145,19 @@ impl LocalCloneOptions {
             source: source.into(),
             directory: directory.into(),
             origin_name: "origin".to_owned(),
+            copy_tags: true,
         }
     }
 
     /// Sets the remote name recorded in the cloned repository config.
     pub fn with_origin_name(mut self, origin_name: impl Into<String>) -> Self {
         self.origin_name = origin_name.into();
+        self
+    }
+
+    /// Controls whether local tag refs are copied into the cloned repository.
+    pub fn with_copy_tags(mut self, copy_tags: bool) -> Self {
+        self.copy_tags = copy_tags;
         self
     }
 }
@@ -291,7 +300,9 @@ impl Repository {
             &target.common_dir().join("objects"),
         )?;
         copy_ref_namespace(&source, &target, "heads")?;
-        copy_ref_namespace(&source, &target, "tags")?;
+        if options.copy_tags {
+            copy_ref_namespace(&source, &target, "tags")?;
+        }
         copy_file_if_exists(
             &source.common_dir().join("packed-refs"),
             &target.common_dir().join("packed-refs"),
@@ -300,7 +311,13 @@ impl Repository {
             &target.git_dir().join("HEAD"),
             format!("ref: refs/heads/{branch_name}\n").as_bytes(),
         )?;
-        append_clone_remote_config(&target, &options.source, &branch_name, &options.origin_name)?;
+        append_clone_remote_config(
+            &target,
+            &options.source,
+            &branch_name,
+            &options.origin_name,
+            options.copy_tags,
+        )?;
 
         Ok(target)
     }
@@ -1073,13 +1090,20 @@ fn append_clone_remote_config(
     source: &Path,
     branch_name: &str,
     origin_name: &str,
+    copy_tags: bool,
 ) -> Result<()> {
     let source_path = escape_git_config_value(&source.to_string_lossy());
     let config_path = target.common_dir().join("config");
     let mut config =
         fs::read_to_string(&config_path).map_err(|source| RitError::io(&config_path, source))?;
     config.push_str(&format!(
-        "[remote \"{origin_name}\"]\n\turl = {source_path}\n\tfetch = +refs/heads/*:refs/remotes/{origin_name}/*\n[branch \"{branch_name}\"]\n\tremote = {origin_name}\n\tmerge = refs/heads/{branch_name}\n"
+        "[remote \"{origin_name}\"]\n\turl = {source_path}\n"
+    ));
+    if !copy_tags {
+        config.push_str("\ttagOpt = --no-tags\n");
+    }
+    config.push_str(&format!(
+        "\tfetch = +refs/heads/*:refs/remotes/{origin_name}/*\n[branch \"{branch_name}\"]\n\tremote = {origin_name}\n\tmerge = refs/heads/{branch_name}\n"
     ));
     write_file(&config_path, config.as_bytes())
 }
