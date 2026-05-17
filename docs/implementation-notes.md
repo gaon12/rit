@@ -487,6 +487,10 @@
   `git --version`, `git init -h`, and direct Git comparisons for
   `init -q --bare --no-bare` and
   `init -q --initial-branch=topic --no-initial-branch`.
+- 2026-05-18 init default format options slice checked Git
+  2.52.0.windows.1 with `git --version`, `git init -h`, and direct Git
+  comparisons for default `--object-format=sha1` and `--ref-format=files`
+  forms plus their `--no-*format` resets.
 - 2026-05-18 local clone no-hardlinks slice checked Git 2.52.0.windows.1 with
   `git --version`, `git help -a`, `git clone -h`, and direct Git comparison
   for `clone --local --no-hardlinks --no-checkout`.
@@ -1142,8 +1146,12 @@
 - Baseline command checked: `git init -h`
 - Supported options: `-q`, `--quiet`, `--no-quiet`, `--bare`, `--no-bare`,
   `-b <branch>`, `--initial-branch <branch>`,
-  `--initial-branch=<branch>`, `--no-initial-branch`, optional directory.
-- Unsupported options: templates, separate git dir, object format, ref format, shared repositories.
+  `--initial-branch=<branch>`, `--no-initial-branch`,
+  `--object-format=sha1`, `--object-format sha1`, `--no-object-format`,
+  `--ref-format=files`, `--ref-format files`, `--no-ref-format`, optional
+  directory.
+- Unsupported options: templates, separate git dir, non-SHA-1 object formats,
+  non-files ref formats, shared repositories.
 - Git-compatible behavior: creates `HEAD`, `config`, `objects`, `refs`, `info`, `hooks`, `branches`.
 - Intentional differences: default branch is currently `master` unless explicitly set; template hooks are not copied.
 - Repository mutation: yes

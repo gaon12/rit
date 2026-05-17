@@ -125,6 +125,86 @@ fn init_no_option_forms_match_git_state() {
 }
 
 #[test]
+fn init_default_format_options_match_git_state() {
+    let workspace = temp_path("init-default-format-options");
+    fs::create_dir_all(&workspace).expect("workspace should be created");
+
+    for (name, args) in [
+        ("object-equals", vec!["--object-format=sha1"]),
+        ("object-value", vec!["--object-format", "sha1"]),
+        (
+            "object-reset",
+            vec!["--object-format=sha256", "--no-object-format"],
+        ),
+        ("ref-equals", vec!["--ref-format=files"]),
+        ("ref-value", vec!["--ref-format", "files"]),
+        (
+            "ref-reset",
+            vec!["--ref-format=reftable", "--no-ref-format"],
+        ),
+    ] {
+        let git_target = workspace.join(format!("git-{name}"));
+        let rit_target = workspace.join(format!("rit-{name}"));
+
+        let mut git_args = vec!["init", "-q"];
+        git_args.extend(args.iter().copied());
+        let git_output = Command::new(git_program())
+            .args(&git_args)
+            .arg(&git_target)
+            .output()
+            .expect("git init should start");
+        assert!(
+            git_output.status.success(),
+            "git init failed for {name}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&git_output.stdout),
+            String::from_utf8_lossy(&git_output.stderr)
+        );
+
+        let mut rit_args = vec!["init", "-q"];
+        rit_args.extend(args.iter().copied());
+        let rit_output = Command::new(rit_binary())
+            .args(&rit_args)
+            .arg(&rit_target)
+            .output()
+            .expect("rit init should start");
+        assert!(
+            rit_output.status.success(),
+            "rit init failed for {name}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&rit_output.stdout),
+            String::from_utf8_lossy(&rit_output.stderr)
+        );
+        assert_eq!(git_output.stdout, rit_output.stdout);
+        assert_eq!(git_output.stderr, rit_output.stderr);
+
+        let git_repository_format = run_capture(
+            "git",
+            ["config", "--get", "core.repositoryformatversion"],
+            &git_target,
+        )
+        .0;
+        let rit_repository_format = run_capture(
+            "git",
+            ["config", "--get", "core.repositoryformatversion"],
+            &rit_target,
+        )
+        .0;
+        assert_eq!(git_repository_format, "0\n");
+        assert_eq!(git_repository_format, rit_repository_format);
+
+        let git_config = fs::read_to_string(git_target.join(".git").join("config"))
+            .expect("git config should be readable");
+        let rit_config = fs::read_to_string(rit_target.join(".git").join("config"))
+            .expect("rit config should be readable");
+        assert!(!git_config.contains("objectformat"));
+        assert!(!git_config.contains("refstorage"));
+        assert!(!rit_config.contains("objectformat"));
+        assert!(!rit_config.contains("refstorage"));
+    }
+
+    let _ = fs::remove_dir_all(workspace);
+}
+
+#[test]
 fn add_directory_pathspec_matches_git_status() {
     let fixture = LocalWriteFixture::new("add-directory", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");

@@ -2335,6 +2335,8 @@ fn init_command(
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
     let mut options = rit_core::InitOptions::new(".");
+    let mut object_format = "sha1".to_owned();
+    let mut ref_format = "files".to_owned();
     let mut index = 0;
 
     while index < args.len() {
@@ -2361,6 +2363,42 @@ fn init_command(
             "--no-initial-branch" => {
                 options.initial_branch = "master".to_owned();
             }
+            "--object-format" => {
+                index += 1;
+                let Some(format) = args.get(index) else {
+                    writeln!(
+                        stderr,
+                        "rit: option requires an argument: {}",
+                        args[index - 1]
+                    )?;
+                    return Ok(ExitCode::from(129));
+                };
+                object_format = format.clone();
+            }
+            option if option.starts_with("--object-format=") => {
+                object_format = option.trim_start_matches("--object-format=").to_owned();
+            }
+            "--no-object-format" => {
+                object_format = "sha1".to_owned();
+            }
+            "--ref-format" => {
+                index += 1;
+                let Some(format) = args.get(index) else {
+                    writeln!(
+                        stderr,
+                        "rit: option requires an argument: {}",
+                        args[index - 1]
+                    )?;
+                    return Ok(ExitCode::from(129));
+                };
+                ref_format = format.clone();
+            }
+            option if option.starts_with("--ref-format=") => {
+                ref_format = option.trim_start_matches("--ref-format=").to_owned();
+            }
+            "--no-ref-format" => {
+                ref_format = "files".to_owned();
+            }
             unsupported if unsupported.starts_with('-') => {
                 writeln!(stderr, "rit: unsupported init option '{unsupported}'")?;
                 return Ok(ExitCode::from(129));
@@ -2375,6 +2413,21 @@ fn init_command(
         }
 
         index += 1;
+    }
+
+    if object_format != "sha1" {
+        writeln!(
+            stderr,
+            "rit: init currently supports only --object-format=sha1"
+        )?;
+        return Ok(ExitCode::from(129));
+    }
+    if ref_format != "files" {
+        writeln!(
+            stderr,
+            "rit: init currently supports only --ref-format=files"
+        )?;
+        return Ok(ExitCode::from(129));
     }
 
     match rit_core::Repository::init(&options) {

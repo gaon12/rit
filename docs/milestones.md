@@ -194,6 +194,10 @@ Completion criteria:
     initial `HEAD` target as Git for a checked local init.
   - [x] `--no-bare`, `--no-initial-branch`, and `--no-quiet` reverse earlier
     init flags for the checked local init cases.
+  - [x] Default repository format options `--object-format=sha1`,
+    `--ref-format=files`, `--no-object-format`, and `--no-ref-format` are
+    accepted for checked local init cases without claiming SHA-256/reftable
+    support.
 - [x] `rit add` explicit regular files.
 - [x] `rit commit -m`
 - [x] `rit branch` local list/create/delete basics.

@@ -66,7 +66,7 @@ Display general help or command-specific help.
 ";
 
 const INIT_HELP: &str = "\
-rit init [-q|--quiet|--no-quiet] [--bare|--no-bare] [-b <branch>|--initial-branch <branch>|--initial-branch=<branch>|--no-initial-branch] [<directory>]
+rit init [-q|--quiet|--no-quiet] [--bare|--no-bare] [--object-format=sha1|--no-object-format] [--ref-format=files|--no-ref-format] [-b <branch>|--initial-branch <branch>|--initial-branch=<branch>|--no-initial-branch] [<directory>]
 
 Create an empty Git-compatible repository.
 ";
