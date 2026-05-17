@@ -4615,18 +4615,24 @@ fn cherry_pick_command(
             Err(error) => write_command_error(stderr, error),
         };
     }
-    let mut created_objects = Vec::new();
-    for target in &targets {
-        match repository.cherry_pick_with_options(target, &options) {
-            Ok(result) => {
+    match repository.cherry_pick_many(&targets, &options) {
+        Ok(results) => {
+            let mut created_objects = Vec::new();
+            for (result_index, result) in results.iter().enumerate() {
                 if let Some(commit_id) = result.commit_id {
-                    writeln!(stdout, "[{}] {}", &commit_id.to_hex()[..7], target)?;
+                    writeln!(
+                        stdout,
+                        "[{}] {}",
+                        &commit_id.to_hex()[..7],
+                        targets[result_index]
+                    )?;
                     created_objects.push(commit_id);
                 } else if !result.conflict_reports.is_empty() {
+                    let target = targets[result_index];
                     record_operation_with_changed_paths(
                         &repository,
                         "cherry-pick",
-                        &format!("conflicted cherry-pick {target}"),
+                        &format!("conflicted cherry-pick {}", targets.join(" ")),
                         before,
                         result.conflict_paths.clone(),
                         created_objects,
@@ -4652,18 +4658,18 @@ fn cherry_pick_command(
                     return Ok(ExitCode::from(1));
                 }
             }
-            Err(error) => return write_command_error(stderr, error),
+            record_operation(
+                &repository,
+                "cherry-pick",
+                &format!("cherry-pick {}", targets.join(" ")),
+                before,
+                created_objects,
+                stderr,
+            )?;
+            Ok(ExitCode::SUCCESS)
         }
+        Err(error) => write_command_error(stderr, error),
     }
-    record_operation(
-        &repository,
-        "cherry-pick",
-        &format!("cherry-pick {}", targets.join(" ")),
-        before,
-        created_objects,
-        stderr,
-    )?;
-    Ok(ExitCode::SUCCESS)
 }
 
 fn parse_cherry_pick_mainline(value: &str, stderr: &mut dyn Write) -> io::Result<Option<usize>> {

@@ -380,6 +380,90 @@ fn clean_multi_commit_cherry_pick_matches_git_state() {
 }
 
 #[test]
+fn multi_commit_cherry_pick_conflict_writes_sequencer_like_git() {
+    let root = temp_path("multi-conflict-sequencer");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_multi_commit_cherry_pick_with_second_conflict(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let original_head = run_capture("git", ["rev-parse", "HEAD"], &git_repo).stdout;
+    let git_pick = run_capture("git", ["cherry-pick", "pick-one", "pick-two"], &git_repo);
+    let rit_pick = run_capture(
+        rit_binary(),
+        ["cherry-pick", "pick-one", "pick-two"],
+        &rit_repo,
+    );
+
+    assert_ne!(git_pick.exit_code, 0);
+    assert_ne!(rit_pick.exit_code, 0);
+    let git_current_head = run_capture("git", ["rev-parse", "HEAD"], &git_repo).stdout;
+    let rit_current_head = run_capture("git", ["rev-parse", "HEAD"], &rit_repo).stdout;
+    assert_eq!(
+        read_optional_file(&git_repo.join(".git").join("sequencer").join("head")),
+        Some(original_head.clone())
+    );
+    assert_eq!(
+        read_optional_file(&rit_repo.join(".git").join("sequencer").join("head")),
+        Some(original_head.clone())
+    );
+    assert_eq!(
+        read_optional_file(&git_repo.join(".git").join("sequencer").join("abort-safety")),
+        Some(git_current_head)
+    );
+    assert_eq!(
+        read_optional_file(&rit_repo.join(".git").join("sequencer").join("abort-safety")),
+        Some(rit_current_head)
+    );
+    assert_eq!(
+        read_optional_file(&git_repo.join(".git").join("sequencer").join("todo")),
+        read_optional_file(&rit_repo.join(".git").join("sequencer").join("todo"))
+    );
+    assert_eq!(
+        read_optional_file(&git_repo.join(".git").join("CHERRY_PICK_HEAD")),
+        read_optional_file(&rit_repo.join(".git").join("CHERRY_PICK_HEAD"))
+    );
+    assert_eq!(
+        read_optional_file(&git_repo.join(".git").join("MERGE_MSG")),
+        read_optional_file(&rit_repo.join(".git").join("MERGE_MSG"))
+    );
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["ls-files", "--stage"], &git_repo).stdout,
+        run_capture(rit_binary(), ["ls-files", "--stage"], &rit_repo).stdout
+    );
+    assert_eq!(
+        fs::read_to_string(git_repo.join("conflict.txt")).expect("git conflict file should read"),
+        fs::read_to_string(rit_repo.join("conflict.txt")).expect("rit conflict file should read")
+    );
+
+    let git_abort = run_capture("git", ["cherry-pick", "--abort"], &git_repo);
+    let rit_abort = run_capture(rit_binary(), ["cherry-pick", "--abort"], &rit_repo);
+
+    assert_eq!(git_abort.exit_code, 0, "git stderr: {}", git_abort.stderr);
+    assert_eq!(rit_abort.exit_code, 0, "rit stderr: {}", rit_abort.stderr);
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &git_repo).stdout,
+        original_head
+    );
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &rit_repo).stdout,
+        original_head
+    );
+    assert!(!git_repo.join(".git").join("sequencer").exists());
+    assert!(!rit_repo.join(".git").join("sequencer").exists());
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn conflicting_cherry_pick_writes_git_shaped_state_and_abort_restores_head() {
     let root = temp_path("conflict");
     let git_repo = root.join("git");
@@ -640,12 +724,29 @@ fn setup_multi_commit_cherry_pick(repo: &Path) {
     commit_text(repo, "head.txt", "head\n", "head");
 }
 
+fn setup_multi_commit_cherry_pick_with_second_conflict(repo: &Path) {
+    init_repo(repo);
+    commit_text(repo, "clean.txt", "base\n", "base clean");
+    commit_text(repo, "conflict.txt", "base\n", "base conflict");
+    run_git(repo, ["checkout", "--quiet", "-b", "topic"]);
+    commit_text(repo, "clean.txt", "picked clean\n", "pick one");
+    run_git(repo, ["branch", "pick-one"]);
+    commit_text(repo, "conflict.txt", "picked conflict\n", "pick two");
+    run_git(repo, ["branch", "pick-two"]);
+    run_git(repo, ["checkout", "--quiet", "master"]);
+    commit_text(repo, "conflict.txt", "head conflict\n", "head");
+}
+
 fn init_repo(repo: &Path) {
     fs::create_dir_all(repo).expect("fixture repository should be created");
     run_git(repo, ["init", "--quiet"]);
     run_git(repo, ["config", "user.name", "Rit Test"]);
     run_git(repo, ["config", "user.email", "rit@example.test"]);
     run_git(repo, ["config", "core.autocrlf", "false"]);
+}
+
+fn read_optional_file(path: &Path) -> Option<String> {
+    fs::read_to_string(path).ok()
 }
 
 fn commit_text(repo: &Path, path: &str, contents: &str, message: &str) {

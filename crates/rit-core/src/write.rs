@@ -269,6 +269,15 @@ pub struct CherryPickOptions {
     pub signoff: bool,
 }
 
+/// One item in a Git-compatible cherry-pick sequencer todo file.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CherryPickTodoItem {
+    /// Commit to pick.
+    pub commit_id: ObjectId,
+    /// First line of the commit message, used as the todo subject.
+    pub subject: String,
+}
+
 impl CherryPickOptions {
     /// Builds default cherry-pick options that create a commit.
     pub fn new() -> Self {
@@ -1245,6 +1254,44 @@ impl Repository {
         Ok(results)
     }
 
+    /// Applies several commits and records Git-shaped sequencer state if one conflicts.
+    pub fn cherry_pick_many(
+        &self,
+        targets: &[&str],
+        options: &CherryPickOptions,
+    ) -> Result<Vec<CherryPickResult>> {
+        ensure_clean_for_checkout(self)?;
+        let original_head = self
+            .resolve_head()?
+            .ok_or_else(|| RitError::invalid_input("cherry-pick requires an existing HEAD"))?;
+        remove_dir_if_exists(&self.git_dir().join("sequencer"))?;
+
+        let todo_items = self.cherry_pick_todo_items(targets)?;
+        let mut results = Vec::new();
+        for target_index in 0..targets.len() {
+            let result = self.cherry_pick_with_options_internal(
+                targets[target_index],
+                options,
+                false,
+                false,
+            )?;
+            let conflicted = !result.conflict_paths.is_empty();
+            results.push(result);
+            if conflicted {
+                let current_head = self.resolve_head()?.ok_or_else(|| {
+                    RitError::invalid_input("cherry-pick requires an existing HEAD")
+                })?;
+                self.write_cherry_pick_sequencer(
+                    original_head,
+                    current_head,
+                    &todo_items[target_index..],
+                )?;
+                break;
+            }
+        }
+        Ok(results)
+    }
+
     fn cherry_pick_with_options_internal(
         &self,
         target: &str,
@@ -1446,6 +1493,49 @@ impl Repository {
         )
     }
 
+    fn cherry_pick_todo_items(&self, targets: &[&str]) -> Result<Vec<CherryPickTodoItem>> {
+        let mut items = Vec::new();
+        for target in targets {
+            let commit_id = self.resolve_revision(target)?;
+            let object = self.read_object(commit_id)?;
+            if object.kind != ObjectKind::Commit {
+                return Err(RitError::invalid_input(format!(
+                    "cherry-pick target {commit_id} is {}, not commit",
+                    object.kind
+                )));
+            }
+            let commit = parse_commit(&object.data)?;
+            items.push(CherryPickTodoItem {
+                commit_id,
+                subject: rebase_commit_summary(&commit.message),
+            });
+        }
+        Ok(items)
+    }
+
+    fn write_cherry_pick_sequencer(
+        &self,
+        original_head: ObjectId,
+        abort_safety_head: ObjectId,
+        todo_items: &[CherryPickTodoItem],
+    ) -> Result<()> {
+        let sequencer_dir = self.git_dir().join("sequencer");
+        remove_dir_if_exists(&sequencer_dir)?;
+        fs::create_dir_all(&sequencer_dir)
+            .map_err(|source| RitError::io(&sequencer_dir, source))?;
+        write_text_atomically(&sequencer_dir.join("head"), &format!("{original_head}\n"))?;
+        write_text_atomically(
+            &sequencer_dir.join("abort-safety"),
+            &format!("{abort_safety_head}\n"),
+        )?;
+        let mut todo_text = String::new();
+        for item in todo_items {
+            let short_id = item.commit_id.to_hex();
+            todo_text.push_str(&format!("pick {} {}\n", &short_id[..7], item.subject));
+        }
+        write_text_atomically(&sequencer_dir.join("todo"), &todo_text)
+    }
+
     fn start_conflicted_rebase(&self, input: ConflictedRebaseStart<'_>) -> Result<()> {
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
@@ -1565,7 +1655,12 @@ impl Repository {
                 "no cherry-pick to {action}"
             )));
         }
-        let original_head_path = self.git_dir().join("ORIG_HEAD");
+        let sequencer_head_path = self.git_dir().join("sequencer").join("head");
+        let original_head_path = if action == "abort" && sequencer_head_path.exists() {
+            sequencer_head_path
+        } else {
+            self.git_dir().join("ORIG_HEAD")
+        };
         let original_head_text = fs::read_to_string(&original_head_path)
             .map_err(|source| RitError::io(&original_head_path, source))?;
         let original_head = ObjectId::from_hex(original_head_text.trim())?;
@@ -1574,6 +1669,7 @@ impl Repository {
         self.update_head(original_head)?;
         remove_file_if_exists(&cherry_pick_head_path)?;
         remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))?;
+        remove_dir_if_exists(&self.git_dir().join("sequencer"))?;
         self.refresh_indexdb_after_git_write();
         Ok(original_head)
     }
@@ -1581,7 +1677,8 @@ impl Repository {
     /// Clears cherry-pick state without changing the index or working tree.
     pub fn quit_cherry_pick(&self) -> Result<()> {
         remove_file_if_exists(&self.git_dir().join("CHERRY_PICK_HEAD"))?;
-        remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))
+        remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))?;
+        remove_dir_if_exists(&self.git_dir().join("sequencer"))
     }
 
     /// Commits a resolved in-progress cherry-pick.

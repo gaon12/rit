@@ -740,6 +740,11 @@
   argument order and records all created commit ids in one operation journal
   entry. If a target conflicts, rit stops at that conflict and records the
   already-created commits plus the conflicted paths.
+- Multi-target `rit cherry-pick <commit>...` now writes Git-shaped
+  `.git/sequencer/head`, `abort-safety`, and `todo` metadata when a later
+  target conflicts after earlier targets were committed. The todo file keeps
+  the stopped pick and remaining picks, and `--abort` uses the sequencer head
+  to restore the original branch tip.
 - Clean `rit cherry-pick -x <commit>` now appends Git's original-commit trailer
   to the created commit message.
 - Clean `rit cherry-pick --ff <commit>` now fast-forwards without creating a
@@ -1432,10 +1437,10 @@
 - Supported options: one or more target commits for clean committing picks,
   clean `-n`/`--no-commit` picks, `--commit`, `-m`/`--mainline` for clean
   merge commits, `-x` for clean committing picks, `--ff` for direct-parent
-  fast-forwards, `-s`/`--signoff` for clean committing picks, `--abort`,
-  `--continue`, and `--quit`/`--skip` for the supported single-commit conflict
-  state.
-- Unsupported options: full sequencer state across multi-target conflicts,
+  fast-forwards, `-s`/`--signoff` for clean committing picks, Git-shaped
+  sequencer metadata for multi-target picks that stop on a conflict, `--abort`,
+  `--continue`, and `--quit`/`--skip` for the supported conflict state.
+- Unsupported options: full multi-target sequencer continue/skip replay,
   signing, strategy options, empty-commit handling, conflict continuation for
   merge commits, and full sequencer/editor/hook parity.
 - Git-compatible behavior: clean single-parent picks apply the picked commit's
@@ -1455,9 +1460,11 @@
   `--ff` picks update `HEAD` directly when the picked commit is a direct child
   of `HEAD`. Clean signoff picks append `Signed-off-by: <committer>`.
   Multi-target no-commit picks use the index/worktree result from the previous
-  pick as the base for the next target.
+  pick as the base for the next target. Multi-target committing picks that
+  stop on a later conflict write `.git/sequencer` metadata matching Git's
+  checked `head`, `abort-safety`, and `todo` state for that conflict start.
 - Intentional differences: output and hints are simplified, and sequencer
-  state for multiple commits is not implemented.
+  continue/skip replay for multiple commits is not implemented.
 - Repository mutation: yes, for clean picks it updates the worktree, index,
   `ORIG_HEAD`, and current `HEAD`.
 - Risk: moderate; this first slice requires a clean worktree and writes only

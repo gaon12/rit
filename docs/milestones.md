@@ -514,9 +514,10 @@ Completion criteria:
     trailer.
   - [x] Clean multi-target `--no-commit` cherry-pick applies all picked
     changes to the index/worktree without advancing `HEAD`.
-  - [ ] Full multi-commit sequencer state across conflicts, multi-target
-    conflict continuation, strategy options, conflict continuation for merge
-    commits, and editor/hook parity.
+  - [x] Multi-target committing cherry-pick writes Git-shaped sequencer
+    `head`, `abort-safety`, and `todo` metadata when a later target conflicts.
+  - [ ] Multi-target sequencer continue/skip replay, strategy options,
+    conflict continuation for merge commits, and editor/hook parity.
 - [~] `rit rebase`
   - [x] `rit rebase <upstream>` reports Git-compatible up-to-date status when
     the upstream is already an ancestor of `HEAD`.
