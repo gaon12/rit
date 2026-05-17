@@ -271,7 +271,7 @@ impl Repository {
 
         let base_entries = index_entries_by_path(self.commit_index_entries(base_id)?);
         let stash_entries = index_entries_by_path(self.commit_index_entries(stash_id)?);
-        let changed_paths = changed_stash_paths(&base_entries, &stash_entries);
+        let mut changed_paths = changed_stash_paths(&base_entries, &stash_entries);
         let symlinks_enabled = self.core_symlinks_enabled()?;
         for path in &changed_paths {
             let full_path = join_slash_path(worktree, path);
@@ -292,6 +292,25 @@ impl Repository {
                     )?;
                 }
                 None => remove_file_if_exists(&full_path)?,
+            }
+        }
+        if let Some(untracked_id) = stash_commit.parents.get(2).copied() {
+            let untracked_entries = self.commit_index_entries(untracked_id)?;
+            for entry in untracked_entries.iter().filter(|entry| entry.stage == 0) {
+                let object = self.read_object(entry.object_id)?;
+                if object.kind != ObjectKind::Blob {
+                    return Err(RitError::invalid_input(format!(
+                        "object {} is {}, not blob",
+                        entry.object_id, object.kind
+                    )));
+                }
+                write_worktree_entry_atomically(
+                    &join_slash_path(worktree, &entry.path),
+                    &object.data,
+                    entry.mode,
+                    symlinks_enabled,
+                )?;
+                changed_paths.insert(entry.path.clone());
             }
         }
 

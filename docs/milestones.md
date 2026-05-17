@@ -579,6 +579,10 @@ Completion criteria:
     third stash parent and removes those files from the working tree.
   - [x] Basic `stash push --all` also records ignored files in the third stash
     parent and removes them from the working tree.
+  - [x] Basic `stash apply -q` restores untracked files from the stash's third
+    parent without dropping the stash.
+  - [x] Basic `stash pop -q` restores untracked files through the shared clean
+    apply path and then drops the selected loose stash entry.
   - [x] Basic legacy `stash save [-q] [<message>]` uses the same tracked-change
     stash shape as push and matches Git's saved/no-change output.
   - [x] `rit stash create [<message>]` creates the same tracked-change stash
@@ -594,8 +598,9 @@ Completion criteria:
     selected loose stash entry on success.
   - [ ] `stash export/import`,
     packed stash ref cleanup, same-path staged+unstaged `--staged` cleanup
-    failure parity, `--index`, untracked apply/pop restoration, broader show
-    options, broader error parity, and conflict handling for apply/pop/branch.
+    failure parity, `--index`, broader untracked apply/pop restoration, broader
+    show options, broader error parity, and conflict handling for
+    apply/pop/branch.
 - [~] Conflict index stages.
   - [x] Preserve stage 0/1/2/3 in index read, write, sorting, and
     `ls-files --stage` output.

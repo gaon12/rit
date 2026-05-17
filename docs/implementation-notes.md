@@ -1521,11 +1521,17 @@
 - Git-compatible behavior: `rit stash apply -q [<stash>]` restores tracked
   worktree changes from a loose stash without dropping it when the current
   tracked state is clean and `HEAD` matches the stash base.
+- Git-compatible behavior: `rit stash apply -q [<stash>]` also restores
+  untracked files recorded in the stash's third parent for the checked clean
+  apply scope.
 - Git-compatible behavior: default `rit stash apply [<stash>]` prints the
   checked Git human status summary for the same clean tracked apply scope.
 - Git-compatible behavior: `rit stash pop -q [<stash>]` uses the same tracked
   clean apply path, then removes the selected loose stash reflog entry and
   updates loose `.git/refs/stash`.
+- Git-compatible behavior: `rit stash pop -q [<stash>]` also restores
+  untracked files through the shared clean apply path before dropping the
+  selected loose stash entry.
 - Git-compatible behavior: default `rit stash pop [<stash>]` prints the checked
   Git human status summary before the dropped-entry message for the same clean
   tracked apply scope.

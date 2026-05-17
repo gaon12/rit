@@ -797,6 +797,70 @@ fn stash_apply_quiet_restores_tracked_change_without_dropping() {
 }
 
 #[test]
+fn stash_apply_quiet_restores_untracked_files_without_dropping() {
+    let root = temp_path("apply-untracked");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    fs::write(repo_file(&git_repo, "tracked.txt"), "tracked change\n")
+        .expect("git tracked change should write");
+    fs::write(repo_file(&rit_repo, "tracked.txt"), "tracked change\n")
+        .expect("rit tracked change should write");
+    fs::write(repo_file(&git_repo, "new.txt"), "new\n").expect("git untracked should write");
+    fs::write(repo_file(&rit_repo, "new.txt"), "new\n").expect("rit untracked should write");
+    run_git(
+        &git_repo,
+        [
+            "stash",
+            "push",
+            "--include-untracked",
+            "-m",
+            "with untracked",
+        ],
+    );
+    let rit_push = run_capture(
+        rit_binary(),
+        [
+            "stash",
+            "push",
+            "--include-untracked",
+            "-m",
+            "with untracked",
+        ],
+        &rit_repo,
+    );
+    assert_eq!(rit_push.exit_code, 0, "rit stderr: {}", rit_push.stderr);
+
+    let git_apply = run_capture("git", ["stash", "apply", "-q"], &git_repo);
+    let rit_apply = run_capture(rit_binary(), ["stash", "apply", "-q"], &rit_repo);
+
+    assert_eq!(git_apply.exit_code, 0, "git stderr: {}", git_apply.stderr);
+    assert_eq!(rit_apply.exit_code, 0, "rit stderr: {}", rit_apply.stderr);
+    assert_eq!(git_apply.stdout, rit_apply.stdout);
+    assert_eq!(git_apply.stderr, rit_apply.stderr);
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1", "-uall"], &git_repo).stdout,
+        run_capture(
+            rit_binary(),
+            ["status", "--porcelain=v1", "-uall"],
+            &rit_repo
+        )
+        .stdout
+    );
+    assert_eq!(
+        fs::read_to_string(repo_file(&git_repo, "new.txt")).ok(),
+        fs::read_to_string(repo_file(&rit_repo, "new.txt")).ok()
+    );
+    assert_eq!(
+        run_capture("git", ["stash", "list"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn stash_apply_quiet_older_entry_matches_git_state() {
     let root = temp_path("apply-older");
     let git_repo = root.join("git");
@@ -934,6 +998,70 @@ fn stash_branch_default_matches_git_state_and_output() {
     assert_eq!(
         run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
         run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["stash", "list"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn stash_pop_quiet_restores_untracked_files_and_drops_entry() {
+    let root = temp_path("pop-untracked");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    fs::write(repo_file(&git_repo, "tracked.txt"), "tracked change\n")
+        .expect("git tracked change should write");
+    fs::write(repo_file(&rit_repo, "tracked.txt"), "tracked change\n")
+        .expect("rit tracked change should write");
+    fs::write(repo_file(&git_repo, "new.txt"), "new\n").expect("git untracked should write");
+    fs::write(repo_file(&rit_repo, "new.txt"), "new\n").expect("rit untracked should write");
+    run_git(
+        &git_repo,
+        [
+            "stash",
+            "push",
+            "--include-untracked",
+            "-m",
+            "with untracked",
+        ],
+    );
+    let rit_push = run_capture(
+        rit_binary(),
+        [
+            "stash",
+            "push",
+            "--include-untracked",
+            "-m",
+            "with untracked",
+        ],
+        &rit_repo,
+    );
+    assert_eq!(rit_push.exit_code, 0, "rit stderr: {}", rit_push.stderr);
+
+    let git_pop = run_capture("git", ["stash", "pop", "-q"], &git_repo);
+    let rit_pop = run_capture(rit_binary(), ["stash", "pop", "-q"], &rit_repo);
+
+    assert_eq!(git_pop.exit_code, 0, "git stderr: {}", git_pop.stderr);
+    assert_eq!(rit_pop.exit_code, 0, "rit stderr: {}", rit_pop.stderr);
+    assert_eq!(git_pop.stdout, rit_pop.stdout);
+    assert_eq!(git_pop.stderr, rit_pop.stderr);
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1", "-uall"], &git_repo).stdout,
+        run_capture(
+            rit_binary(),
+            ["status", "--porcelain=v1", "-uall"],
+            &rit_repo
+        )
+        .stdout
+    );
+    assert_eq!(
+        fs::read_to_string(repo_file(&git_repo, "new.txt")).ok(),
+        fs::read_to_string(repo_file(&rit_repo, "new.txt")).ok()
     );
     assert_eq!(
         run_capture("git", ["stash", "list"], &git_repo).stdout,
