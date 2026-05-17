@@ -2316,6 +2316,11 @@ fn stash_show_diff_passthrough_options_match_git() {
         vec!["stash", "show", "--patch", "--minimal"],
         vec!["stash", "show", "--patch", "--patience"],
         vec!["stash", "show", "--patch", "--histogram"],
+        vec!["stash", "show", "--patch", "--diff-algorithm=myers"],
+        vec!["stash", "show", "--patch", "--diff-algorithm=minimal"],
+        vec!["stash", "show", "--patch", "--diff-algorithm=patience"],
+        vec!["stash", "show", "--patch", "--diff-algorithm=histogram"],
+        vec!["stash", "show", "--patch", "--diff-algorithm=default"],
         vec!["stash", "show", "--patch", "-w"],
         vec!["stash", "show", "--patch", "--ignore-all-space"],
         vec!["stash", "show", "--patch", "-b"],
@@ -2404,16 +2409,18 @@ fn stash_show_diff_passthrough_options_match_git() {
     assert_eq!(git_show.stderr, rit_show.stderr);
 
     for args in [
-        ["stash", "show", "--stat-graph-width=bad"],
-        ["stash", "show", "--stat-count=bad"],
-        ["stash", "show", "--stat-width=bad"],
-        ["stash", "show", "--stat-name-width=bad"],
-        ["stash", "show", "--stat=bad"],
-        ["stash", "show", "--stat=80,bad"],
-        ["stash", "show", "--stat=80,40,1,2"],
+        vec!["stash", "show", "--stat-graph-width=bad"],
+        vec!["stash", "show", "--stat-count=bad"],
+        vec!["stash", "show", "--stat-width=bad"],
+        vec!["stash", "show", "--stat-name-width=bad"],
+        vec!["stash", "show", "--stat=bad"],
+        vec!["stash", "show", "--stat=80,bad"],
+        vec!["stash", "show", "--stat=80,40,1,2"],
+        vec!["stash", "show", "--patch", "--diff-algorithm=bad"],
+        vec!["stash", "show", "--patch", "--diff-algorithm="],
     ] {
-        let git_show = run_capture("git", args, &git_repo);
-        let rit_show = run_capture(rit_binary(), args, &rit_repo);
+        let git_show = run_capture("git", args.iter().copied(), &git_repo);
+        let rit_show = run_capture(rit_binary(), args.iter().copied(), &rit_repo);
         assert_eq!(git_show.exit_code, rit_show.exit_code, "args: {args:?}");
         assert_eq!(git_show.stdout, rit_show.stdout, "args: {args:?}");
         assert_eq!(git_show.stderr, rit_show.stderr, "args: {args:?}");

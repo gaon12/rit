@@ -1077,6 +1077,20 @@ fn parse_stash_show_args(
                     }
                 }
             }
+            _ if arg.starts_with("--diff-algorithm=") => {
+                let value = arg.trim_start_matches("--diff-algorithm=");
+                diff_option = true;
+                if !matches!(
+                    value,
+                    "myers" | "minimal" | "patience" | "histogram" | "default"
+                ) {
+                    writeln!(
+                        stderr,
+                        "error: option diff-algorithm accepts \"myers\", \"minimal\", \"patience\" and \"histogram\""
+                    )?;
+                    return Ok(None);
+                }
+            }
             _ if arg.starts_with("--anchored=") => {
                 diff_option = true;
             }

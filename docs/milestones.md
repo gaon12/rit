@@ -704,8 +704,10 @@ Completion criteria:
     name-only, name-status, and numstat output to matching paths and strips
     the selected directory prefix like Git.
   - [x] `stash show` accepts diff algorithm passthrough options
-    (`--minimal`, `--patience`, `--histogram`, `--anchored=<text>`) for
-    Git-compatible simple text patch output in checked captures.
+    (`--minimal`, `--patience`, `--histogram`,
+    `--diff-algorithm=<algorithm>`, `--anchored=<text>`) for Git-compatible
+    simple text patch output in checked captures, including invalid
+    diff-algorithm errors.
   - [x] `stash show` accepts whitespace and indent heuristic passthrough diff
     options (`-w`, `--ignore-all-space`, `-b`, `--ignore-space-change`,
     `--ignore-space-at-eol`, `--ignore-cr-at-eol`, `--ignore-blank-lines`,
