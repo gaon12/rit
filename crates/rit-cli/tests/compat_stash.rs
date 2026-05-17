@@ -1534,6 +1534,9 @@ fn stash_show_summary_formats_match_git() {
     for args in [
         vec!["stash", "show"],
         vec!["stash", "show", "-p"],
+        vec!["stash", "show", "--patch-with-stat"],
+        vec!["stash", "show", "--stat", "--patch"],
+        vec!["stash", "show", "--patch", "--stat"],
         vec!["stash", "show", "--patch", "stash@{1}"],
         vec!["stash", "show", "--stat", "stash@{1}"],
         vec!["stash", "show", "--shortstat"],
@@ -1594,12 +1597,14 @@ fn stash_show_include_untracked_summary_formats_match_git() {
         vec!["stash", "show", "--include-untracked", "--name-status"],
         vec!["stash", "show", "--include-untracked", "--numstat"],
         vec!["stash", "show", "--include-untracked", "--shortstat"],
+        vec!["stash", "show", "--include-untracked", "--patch-with-stat"],
         vec!["stash", "show", "--include-untracked", "--patch"],
         vec!["stash", "show", "--only-untracked"],
         vec!["stash", "show", "--only-untracked", "--name-only"],
         vec!["stash", "show", "--only-untracked", "--name-status"],
         vec!["stash", "show", "--only-untracked", "--numstat"],
         vec!["stash", "show", "--only-untracked", "--shortstat"],
+        vec!["stash", "show", "--only-untracked", "--patch-with-stat"],
         vec!["stash", "show", "--only-untracked", "--patch"],
     ] {
         let git_show = run_capture("git", args.iter().copied(), &git_repo);
@@ -1850,6 +1855,7 @@ fn stash_show_exit_code_matches_git() {
         vec!["stash", "show", "--exit-code"],
         vec!["stash", "show", "--exit-code", "--stat"],
         vec!["stash", "show", "--exit-code", "--shortstat"],
+        vec!["stash", "show", "--exit-code", "--patch-with-stat"],
         vec!["stash", "show", "--exit-code", "--name-only"],
         vec!["stash", "show", "--exit-code", "--name-status"],
         vec!["stash", "show", "--exit-code", "--numstat"],

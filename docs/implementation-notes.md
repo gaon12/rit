@@ -1473,7 +1473,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]`
   as the legacy save form,
-  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--no-patch|--quiet|--exit-code|--stat|--shortstat|--name-only|--name-status|--numstat] [--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--no-patch|--quiet|--exit-code|--stat|--shortstat|--name-only|--name-status|--numstat] [--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
   worktree/index restoration when `HEAD` matches the stash base,
@@ -1572,8 +1572,9 @@
   untracked handling uses the same include-untracked mode unless an explicit
   show untracked option is provided. Default `stash show` output also honors
   `stash.showStat` and `stash.showPatch`, including Git's combined
-  stat-then-patch output when both are true, while explicit diff-format
-  options still take precedence. `--no-include-untracked` and `--no-patch`
+  stat-then-patch output when both are true. `--patch-with-stat`, `--stat
+  --patch`, and `--patch --stat` render the same combined output. Explicit
+  diff-format options still take precedence. `--no-include-untracked` and `--no-patch`
   explicitly disable config-provided untracked and patch output. `--quiet`
   suppresses output and returns Git-compatible diff-exists exit codes for the
   checked tracked and untracked show scopes. `--exit-code` returns the same

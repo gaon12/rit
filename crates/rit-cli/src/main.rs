@@ -627,14 +627,25 @@ fn parse_stash_show_args(
     let mut stash = None;
     for arg in args {
         match arg.as_str() {
-            "--stat" => format = Some(StashShowFormat::Stat),
+            "--stat" => {
+                format = Some(match format {
+                    Some(StashShowFormat::Patch) => StashShowFormat::StatAndPatch,
+                    _ => StashShowFormat::Stat,
+                });
+            }
             "--shortstat" => format = Some(StashShowFormat::ShortStat),
             "--quiet" => format = Some(StashShowFormat::Quiet),
             "--exit-code" => exit_code = true,
             "--no-ext-diff" | "--ext-diff" | "--no-color" | "--color=never" | "--color=auto" => {
                 diff_option = true;
             }
-            "-p" | "--patch" => format = Some(StashShowFormat::Patch),
+            "--patch-with-stat" => format = Some(StashShowFormat::StatAndPatch),
+            "-p" | "--patch" => {
+                format = Some(match format {
+                    Some(StashShowFormat::Stat) => StashShowFormat::StatAndPatch,
+                    _ => StashShowFormat::Patch,
+                });
+            }
             "--no-patch" => format = Some(StashShowFormat::None),
             "--name-only" => format = Some(StashShowFormat::NameOnly),
             "--name-status" => format = Some(StashShowFormat::NameStatus),

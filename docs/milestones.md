@@ -601,6 +601,8 @@ Completion criteria:
   - [x] `stash.showStat` and `stash.showPatch` config values control default
     `stash show` stat/patch output, including Git's combined stat-plus-patch
     mode, while explicit show format options take precedence.
+  - [x] `stash show --patch-with-stat`, `--stat --patch`, and
+    `--patch --stat` render Git-compatible combined stat-plus-patch output.
   - [x] `stash show --no-include-untracked` and `stash show --no-patch`
     disable config-provided untracked and patch output like Git.
   - [x] `stash show --quiet` suppresses output and returns Git-compatible
