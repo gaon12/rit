@@ -603,6 +603,8 @@ Completion criteria:
     mode, while explicit show format options take precedence.
   - [x] `stash show --no-include-untracked` and `stash show --no-patch`
     disable config-provided untracked and patch output like Git.
+  - [x] `stash show --quiet` suppresses output and returns Git-compatible
+    diff-exists exit codes for tracked and untracked show scopes.
   - [x] Basic legacy `stash save [-q] [<message>]` uses the same tracked-change
     stash shape as push and matches Git's saved/no-change output.
   - [x] Legacy `stash save -u/--include-untracked` and `-a/--all` reuse the

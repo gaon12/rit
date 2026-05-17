@@ -470,6 +470,13 @@ fn stash_command(
             Ok(diff) => {
                 match format {
                     StashShowFormat::None => {}
+                    StashShowFormat::Quiet => {
+                        return Ok(if diff.files.is_empty() {
+                            ExitCode::SUCCESS
+                        } else {
+                            ExitCode::from(1)
+                        });
+                    }
                     StashShowFormat::Stat => stdout.write_all(diff.to_stat_text().as_bytes())?,
                     StashShowFormat::Patch => {
                         unreachable!("patch is handled before summary output")
@@ -580,6 +587,7 @@ fn stash_command(
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum StashShowFormat {
     None,
+    Quiet,
     Stat,
     Patch,
     StatAndPatch,
@@ -613,6 +621,7 @@ fn parse_stash_show_args(
         match arg.as_str() {
             "--stat" => format = Some(StashShowFormat::Stat),
             "--shortstat" => format = Some(StashShowFormat::ShortStat),
+            "--quiet" => format = Some(StashShowFormat::Quiet),
             "-p" | "--patch" => format = Some(StashShowFormat::Patch),
             "--no-patch" => format = Some(StashShowFormat::None),
             "--name-only" => format = Some(StashShowFormat::NameOnly),
