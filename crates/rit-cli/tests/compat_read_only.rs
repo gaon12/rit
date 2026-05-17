@@ -117,6 +117,31 @@ fn diff_cached_exact_rename_outputs_match_git() {
 }
 
 #[test]
+fn diff_no_renames_option_order_matches_git() {
+    let fixture = ExactRenameFixture::new("cached-no-renames");
+
+    for args in [
+        vec!["diff", "--cached", "-M", "--no-renames", "--name-status"],
+        vec!["diff", "--cached", "--no-renames", "-M", "--name-status"],
+        vec!["diff", "--cached", "-C", "--no-renames", "--name-status"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "no-renames option order {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_worktree_intent_to_add_rename_outputs_match_git() {
     let fixture = WorktreeIntentRenameFixture::new("worktree-intent-rename");
 

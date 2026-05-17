@@ -173,6 +173,8 @@ Completion criteria:
     fractional notation, so `-M5`/`-C5` mean 50% while `-M05`/`-C05` mean 5%.
   - [x] Similarity thresholds above 100% are accepted like Git and simply
     cannot match ordinary rename/copy scores.
+  - [x] `--no-renames` disables prior `-M`/`-C` rename and copy detection,
+    while later `-M`/`-C` options re-enable detection like Git.
   - [ ] Broader worktree rename/copy detection, full rename limits, and
     advanced Git diffcore parity.
 - [x] Binary diff accounting for summary modes.

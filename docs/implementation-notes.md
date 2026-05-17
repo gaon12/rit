@@ -200,6 +200,9 @@
   direct Git comparisons for cached `-M5`, `-M05`, `--find-renames=5`,
   `--find-renames=05`, `-C5`, `-C05`, `--find-copies=5`,
   `--find-copies=05`, and thresholds above 100%.
+- 2026-05-17 no-renames option slice checked `git --version`,
+  `git help -a`, `git diff -h`, and direct Git comparisons for cached
+  `-M --no-renames`, `--no-renames -M`, and `-C --no-renames` option order.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
   `--pathspec-file-nul`, including a quoted pathspec entry.
@@ -1121,8 +1124,10 @@
   exact and non-exact rename detection in cached diff output. `-C[<n>]` and
   `--find-copies[=<n>]` support staged copy detection from modified source
   files. `--find-copies-harder` also considers unchanged HEAD files as staged
-  copy sources. Default worktree diff supports `-M[<n>]` and `-C[<n>]` when
-  the added worktree path is represented by Git's intent-to-add index state;
+  copy sources. `--no-renames` disables prior `-M`/`-C` detection and later
+  `-M`/`-C` options re-enable detection, matching Git's option-order behavior.
+  Default worktree diff supports `-M[<n>]` and `-C[<n>]` when the added
+  worktree path is represented by Git's intent-to-add index state;
   `--find-copies-harder` can also use unchanged index files as worktree copy
   sources for that intent-to-add slice.
 - Unsupported options: commit/tree/blob arguments, pathspec files,

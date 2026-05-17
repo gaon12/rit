@@ -2480,6 +2480,11 @@ fn diff_command(
             "-z" if !after_separator => nul_terminated = true,
             "-M" | "--find-renames" if !after_separator => find_renames = true,
             "-C" | "--find-copies" if !after_separator => find_copies = true,
+            "--no-renames" if !after_separator => {
+                find_renames = false;
+                find_copies = false;
+                find_copies_harder = false;
+            }
             "--find-copies-harder" if !after_separator => {
                 find_copies = true;
                 find_copies_harder = true;
