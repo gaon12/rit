@@ -205,6 +205,65 @@ fn init_default_format_options_match_git_state() {
 }
 
 #[test]
+fn init_no_template_resets_template_selection_like_git() {
+    let workspace = temp_path("init-no-template");
+    fs::create_dir_all(&workspace).expect("workspace should be created");
+
+    for (name, args) in [
+        ("no-template", vec!["--no-template"]),
+        (
+            "template-reset",
+            vec!["--template", "missing-template", "--no-template"],
+        ),
+        (
+            "template-equals-reset",
+            vec!["--template=missing-template", "--no-template"],
+        ),
+    ] {
+        let git_target = workspace.join(format!("git-{name}"));
+        let rit_target = workspace.join(format!("rit-{name}"));
+
+        let mut git_args = vec!["init", "-q"];
+        git_args.extend(args.iter().copied());
+        let git_output = Command::new(git_program())
+            .args(&git_args)
+            .arg(&git_target)
+            .output()
+            .expect("git init should start");
+        assert!(
+            git_output.status.success(),
+            "git init failed for {name}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&git_output.stdout),
+            String::from_utf8_lossy(&git_output.stderr)
+        );
+
+        let mut rit_args = vec!["init", "-q"];
+        rit_args.extend(args.iter().copied());
+        let rit_output = Command::new(rit_binary())
+            .args(&rit_args)
+            .arg(&rit_target)
+            .output()
+            .expect("rit init should start");
+        assert!(
+            rit_output.status.success(),
+            "rit init failed for {name}\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&rit_output.stdout),
+            String::from_utf8_lossy(&rit_output.stderr)
+        );
+        assert_eq!(git_output.stdout, rit_output.stdout);
+        assert_eq!(git_output.stderr, rit_output.stderr);
+        assert_eq!(
+            fs::read_to_string(git_target.join(".git").join("HEAD"))
+                .expect("git HEAD should be readable"),
+            fs::read_to_string(rit_target.join(".git").join("HEAD"))
+                .expect("rit HEAD should be readable")
+        );
+    }
+
+    let _ = fs::remove_dir_all(workspace);
+}
+
+#[test]
 fn add_directory_pathspec_matches_git_status() {
     let fixture = LocalWriteFixture::new("add-directory", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");

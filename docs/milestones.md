@@ -198,6 +198,8 @@ Completion criteria:
     `--ref-format=files`, `--no-object-format`, and `--no-ref-format` are
     accepted for checked local init cases without claiming SHA-256/reftable
     support.
+  - [x] `--no-template` resets prior template selection for checked local init
+    cases without claiming template copy support.
 - [x] `rit add` explicit regular files.
 - [x] `rit commit -m`
 - [x] `rit branch` local list/create/delete basics.

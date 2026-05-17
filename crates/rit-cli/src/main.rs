@@ -2337,6 +2337,7 @@ fn init_command(
     let mut options = rit_core::InitOptions::new(".");
     let mut object_format = "sha1".to_owned();
     let mut ref_format = "files".to_owned();
+    let mut template_directory: Option<String> = None;
     let mut index = 0;
 
     while index < args.len() {
@@ -2399,6 +2400,24 @@ fn init_command(
             "--no-ref-format" => {
                 ref_format = "files".to_owned();
             }
+            "--template" => {
+                index += 1;
+                let Some(template) = args.get(index) else {
+                    writeln!(
+                        stderr,
+                        "rit: option requires an argument: {}",
+                        args[index - 1]
+                    )?;
+                    return Ok(ExitCode::from(129));
+                };
+                template_directory = Some(template.clone());
+            }
+            option if option.starts_with("--template=") => {
+                template_directory = Some(option.trim_start_matches("--template=").to_owned());
+            }
+            "--no-template" => {
+                template_directory = None;
+            }
             unsupported if unsupported.starts_with('-') => {
                 writeln!(stderr, "rit: unsupported init option '{unsupported}'")?;
                 return Ok(ExitCode::from(129));
@@ -2427,6 +2446,10 @@ fn init_command(
             stderr,
             "rit: init currently supports only --ref-format=files"
         )?;
+        return Ok(ExitCode::from(129));
+    }
+    if template_directory.is_some() {
+        writeln!(stderr, "rit: init template directories are not implemented")?;
         return Ok(ExitCode::from(129));
     }
 
