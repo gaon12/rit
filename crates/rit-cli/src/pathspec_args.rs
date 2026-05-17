@@ -21,6 +21,10 @@ pub fn handle_pathspec_file_option(
         *pathspec_file_nul = true;
         return Ok(true);
     }
+    if arg == "--no-pathspec-file-nul" {
+        *pathspec_file_nul = false;
+        return Ok(true);
+    }
     let file_name = if arg == "--pathspec-from-file" {
         *index += 1;
         let Some(value) = args.get(*index) else {

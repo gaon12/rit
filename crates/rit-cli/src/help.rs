@@ -127,7 +127,7 @@ Show commits reachable from HEAD by following the first parent.
 ";
 
 const ADD_HELP: &str = "\
-rit add [--plan] [--chmod=(+|-)x] [--pathspec-from-file <file>] [--pathspec-file-nul] <file>...
+rit add [--plan] [--chmod=(+|-)x] [--pathspec-from-file <file>] [--pathspec-file-nul|--no-pathspec-file-nul] <file>...
 
 Add regular files to the index, or print the planned index changes without writing.
 ";
@@ -164,13 +164,13 @@ List, create, or delete lightweight tags.
 ";
 
 const RESTORE_HELP: &str = "\
-rit restore [--staged] [--pathspec-from-file <file>] [--pathspec-file-nul] <file>...
+rit restore [--staged] [--pathspec-from-file <file>] [--pathspec-file-nul|--no-pathspec-file-nul] <file>...
 
 Restore working tree files from the index, or staged files from HEAD.
 ";
 
 const RESET_HELP: &str = "\
-rit reset [--plan] [--pathspec-from-file <file>] [--pathspec-file-nul] [--stdin [-z]] <file>...
+rit reset [--plan] [--pathspec-from-file <file>] [--pathspec-file-nul|--no-pathspec-file-nul] [--stdin [-z]] <file>...
 
 Reset staged file entries from HEAD, or print the planned index changes without writing.
 ";

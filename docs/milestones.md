@@ -213,6 +213,8 @@ Completion criteria:
     - [x] Deprecated `git reset --stdin` and `git reset --stdin -z` aliases
       reuse the shared stdin pathspec parser with Git-compatible warning and
       status behavior.
+    - [x] `--no-pathspec-file-nul` turns a preceding NUL pathspec-file mode
+      back into text pathspec parsing for `add`, `restore`, and `reset`.
     - [x] C-style quoted pathspec-file entries for common escapes.
     - [x] Octal C-style quoted pathspec-file escapes decode as UTF-8 bytes
       for `add`, `restore`, and `reset`.

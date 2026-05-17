@@ -220,6 +220,9 @@
 - 2026-05-17 deprecated reset stdin pathspec slice checked `git reset -h`
   and direct Git comparisons for `git reset --stdin` and
   `git reset --stdin -z`.
+- 2026-05-17 no pathspec-file-nul slice checked `git add -h`,
+  `git restore -h`, `git reset -h`, and direct Git comparisons for
+  `--pathspec-file-nul --no-pathspec-file-nul`.
 - 2026-05-15 empty pathspec-file entry slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for leading
   empty line entries in `--pathspec-from-file`.
@@ -556,6 +559,8 @@
   as Git instead of attempting to open an empty file name.
 - Empty NUL-mode pathspec files now follow Git's empty-input behavior while
   still rejecting actual empty NUL-delimited pathspec entries.
+- `--no-pathspec-file-nul` now turns a preceding NUL pathspec-file mode back
+  into text pathspec-file parsing for `add`, `restore`, and `reset`.
 - Repeated `--pathspec-from-file` options use the last file, matching Git for
   `add`, `restore`, and `reset`.
 - `--pathspec-from-file` cannot be mixed with ordinary pathspec arguments,
@@ -1106,8 +1111,9 @@
 - Supported options: `--plan`, ordinary literal file, directory, `.`, simple `*`, `?`,
   and bracket-class wildcard pathspecs, positive `:(literal)`, `:(glob)`,
   `:(top)`, `:/`, and `:(icase)` pathspec magic, plus `--chmod=+x`, `--chmod=-x`,
-  `--chmod +x`, `--chmod -x`, `--pathspec-from-file`, `--pathspec-from-file=-`, and
-  `--pathspec-file-nul`.
+  `--chmod +x`, `--chmod -x`, `--pathspec-from-file`,
+  `--pathspec-from-file=-`, `--pathspec-file-nul`, and
+  `--no-pathspec-file-nul`.
 - Unsupported options: full Git pathspec-file edge cases, update/all modes,
   patch/interactive mode, sparse mode, ignored-file override.
 - Git-compatible behavior: writes blob loose objects and Git index v2 entries
@@ -1201,7 +1207,8 @@
   restore index from `HEAD`, with ordinary literal file, directory, `.`, simple
   `*`, `?`, and bracket-class wildcard pathspecs plus positive `:(literal)`,
   `:(glob)`, `:(top)`, `:/`, and `:(icase)` pathspec magic, plus
-  `--pathspec-from-file`, `--pathspec-from-file=-`, and `--pathspec-file-nul`.
+  `--pathspec-from-file`, `--pathspec-from-file=-`,
+  `--pathspec-file-nul`, and `--no-pathspec-file-nul`.
 - Unsupported options: source revisions, patch mode, merge conflict modes,
   sparse controls, full Git pathspec-file edge cases.
 - Git-compatible behavior: explicit tracked file restore for regular files,
@@ -1224,7 +1231,8 @@
   and bracket-class wildcard pathspecs plus positive `:(literal)`, `:(glob)`,
   `:(top)`, `:/`, and `:(icase)` pathspec magic, equivalent to unstaging matching paths
   from `HEAD`, plus `--pathspec-from-file`, `--pathspec-from-file=-`,
-  `--pathspec-file-nul`, deprecated `--stdin [-z]`, and `--plan`.
+  `--pathspec-file-nul`, `--no-pathspec-file-nul`, deprecated
+  `--stdin [-z]`, and `--plan`.
 - Unsupported options: commit-moving resets, soft/mixed/hard/merge/keep modes,
   patch mode, full Git pathspec-file edge cases.
 - Git-compatible behavior: unstages explicit paths and reports remaining unstaged modifications.
