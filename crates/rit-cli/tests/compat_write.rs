@@ -3641,13 +3641,43 @@ fn clone_local_no_checkout_copies_head_objects_and_refs() {
     run_git(&source, ["add", "a.txt"]);
     run_git(&source, ["commit", "--quiet", "-m", "base"]);
     run_git(&source, ["tag", "v1"]);
+    run_git(&source, ["switch", "--quiet", "-c", "topic"]);
+    fs::write(source.join("a.txt"), "topic\n").expect("topic file should be written");
+    run_git(&source, ["commit", "--quiet", "-am", "topic"]);
+    run_git(&source, ["switch", "--quiet", "master"]);
 
-    for (name, extra_args, origin_name, tags_expected) in [
-        ("default", Vec::<&str>::new(), "origin", true),
-        ("no-hardlinks", vec!["--no-hardlinks"], "origin", true),
-        ("no-tags", vec!["--no-tags"], "origin", false),
-        ("origin-short", vec!["-o", "upstream"], "upstream", true),
-        ("origin-long", vec!["--origin=upstream"], "upstream", true),
+    for (name, extra_args, origin_name, branch_name, tags_expected) in [
+        ("default", Vec::<&str>::new(), "origin", "master", true),
+        (
+            "no-hardlinks",
+            vec!["--no-hardlinks"],
+            "origin",
+            "master",
+            true,
+        ),
+        ("no-tags", vec!["--no-tags"], "origin", "master", false),
+        (
+            "origin-short",
+            vec!["-o", "upstream"],
+            "upstream",
+            "master",
+            true,
+        ),
+        (
+            "origin-long",
+            vec!["--origin=upstream"],
+            "upstream",
+            "master",
+            true,
+        ),
+        ("branch-short", vec!["-b", "topic"], "origin", "topic", true),
+        (
+            "branch-long",
+            vec!["--branch=topic"],
+            "origin",
+            "topic",
+            true,
+        ),
     ] {
         let git_target = workspace.join(format!("git-target-{name}"));
         let rit_target = workspace.join(format!("rit-target-{name}"));
@@ -3687,6 +3717,12 @@ fn clone_local_no_checkout_copies_head_objects_and_refs() {
         let rit_head = run_capture(rit_binary(), ["rev-parse", "HEAD"], &rit_target).0;
         assert_eq!(git_head, rit_head);
 
+        let expected_head_ref = format!("refs/heads/{branch_name}\n");
+        let git_head_ref = run_capture("git", ["symbolic-ref", "HEAD"], &git_target).0;
+        let rit_head_ref = run_capture("git", ["symbolic-ref", "HEAD"], &rit_target).0;
+        assert_eq!(git_head_ref, expected_head_ref);
+        assert_eq!(git_head_ref, rit_head_ref);
+
         let git_commit = run_capture("git", ["cat-file", "-p", "HEAD"], &git_target).0;
         let rit_commit = run_capture(rit_binary(), ["cat-file", "-p", "HEAD"], &rit_target).0;
         assert_eq!(git_commit, rit_commit);
@@ -3706,13 +3742,13 @@ fn clone_local_no_checkout_copies_head_objects_and_refs() {
 
         let branch_remote = run_capture(
             "git",
-            ["config", "--get", "branch.master.remote"],
+            ["config", "--get", &format!("branch.{branch_name}.remote")],
             &git_target,
         )
         .0;
         let rit_branch_remote = run_capture(
             "git",
-            ["config", "--get", "branch.master.remote"],
+            ["config", "--get", &format!("branch.{branch_name}.remote")],
             &rit_target,
         )
         .0;

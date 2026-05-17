@@ -490,6 +490,10 @@
 - 2026-05-18 local clone no-tags slice checked Git 2.52.0.windows.1 with
   `git --version`, `git clone -h`, and direct Git comparison for
   `clone --local --no-checkout --no-tags` with a loose tag.
+- 2026-05-18 local clone branch-name slice checked Git 2.52.0.windows.1 with
+  `git --version`, `git clone -h`, and direct Git comparisons for
+  `clone --local --no-checkout -b topic` and
+  `clone --local --no-checkout --branch=topic` with a local source branch.
 - 2026-05-11 local fetch object-transfer slice checked `git fetch -h` and a
   direct Git comparison for `fetch <local-repository>`.
 - 2026-05-11 transport protocol model slice checked `git clone -h` and
@@ -1436,8 +1440,8 @@
 
 - Baseline command checked: `git clone -h`
 - Supported options: `--local`/`-l`, `--no-checkout`/`-n`,
-  `--no-hardlinks`, `-o <name>`/`--origin=<name>`, `--no-tags`, and
-  `--quiet`/`-q`.
+  `--no-hardlinks`, `-o <name>`/`--origin=<name>`, `--no-tags`,
+  `-b <branch>`/`--branch=<branch>`, and `--quiet`/`-q`.
 - Unsupported options: checkout, bare/mirror clones, remote protocols,
   hardlink/shared/reference modes other than `--no-hardlinks`, branch
   selection, shallow/partial clone,
@@ -1453,6 +1457,9 @@
   branch's `remote` config.
 - Git-compatible behavior: `--no-tags` skips checked loose tag refs and records
   `remote.<name>.tagOpt = --no-tags` in the cloned repository config.
+- Git-compatible behavior: `-b <branch>` and `--branch=<branch>` select a
+  checked local source branch for the cloned repository `HEAD` and branch
+  merge config.
 - Intentional differences: checkout is rejected instead of silently producing a
   partial worktree; remote clone protocols are still pending.
 - Repository mutation: creates a new repository directory and copies local

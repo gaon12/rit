@@ -14,6 +14,7 @@ pub fn clone_command(
     let mut no_checkout = false;
     let mut copy_tags = true;
     let mut origin_name = "origin".to_owned();
+    let mut branch_name = None;
     let mut positional = Vec::new();
     let mut after_separator = false;
     let mut pending_option: Option<&'static str> = None;
@@ -22,6 +23,7 @@ pub fn clone_command(
         if let Some(option) = pending_option.take() {
             match option {
                 "--origin" => origin_name = arg.to_owned(),
+                "--branch" => branch_name = Some(arg.to_owned()),
                 _ => unreachable!("unknown pending clone option"),
             }
             continue;
@@ -35,8 +37,12 @@ pub fn clone_command(
             "--no-hardlinks" if !after_separator => {}
             "--no-tags" if !after_separator => copy_tags = false,
             "-o" | "--origin" if !after_separator => pending_option = Some("--origin"),
+            "-b" | "--branch" if !after_separator => pending_option = Some("--branch"),
             option if option.starts_with("--origin=") && !after_separator => {
                 origin_name = option.trim_start_matches("--origin=").to_owned();
+            }
+            option if option.starts_with("--branch=") && !after_separator => {
+                branch_name = Some(option.trim_start_matches("--branch=").to_owned());
             }
             unsupported if unsupported.starts_with('-') && !after_separator => {
                 writeln!(stderr, "rit: unsupported clone option '{unsupported}'")?;
@@ -81,9 +87,12 @@ pub fn clone_command(
         .get(1)
         .map(PathBuf::from)
         .unwrap_or_else(|| default_clone_directory(&source));
-    let options = rit_core::LocalCloneOptions::new(&source, &directory)
+    let mut options = rit_core::LocalCloneOptions::new(&source, &directory)
         .with_origin_name(origin_name)
         .with_copy_tags(copy_tags);
+    if let Some(branch_name) = branch_name {
+        options = options.with_branch_name(branch_name);
+    }
 
     match rit_core::Repository::clone_local_no_checkout(&options) {
         Ok(_) => {

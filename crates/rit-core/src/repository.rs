@@ -37,6 +37,8 @@ pub struct LocalCloneOptions {
     pub origin_name: String,
     /// Copy local tag refs into the cloned repository.
     pub copy_tags: bool,
+    /// Optional source branch to make current in the cloned repository.
+    pub branch_name: Option<String>,
 }
 
 /// Options for fetching objects from a local repository.
@@ -146,6 +148,7 @@ impl LocalCloneOptions {
             directory: directory.into(),
             origin_name: "origin".to_owned(),
             copy_tags: true,
+            branch_name: None,
         }
     }
 
@@ -158,6 +161,12 @@ impl LocalCloneOptions {
     /// Controls whether local tag refs are copied into the cloned repository.
     pub fn with_copy_tags(mut self, copy_tags: bool) -> Self {
         self.copy_tags = copy_tags;
+        self
+    }
+
+    /// Selects the source branch that should become current after clone.
+    pub fn with_branch_name(mut self, branch_name: impl Into<String>) -> Self {
+        self.branch_name = Some(branch_name.into());
         self
     }
 }
@@ -284,11 +293,16 @@ impl Repository {
     pub fn clone_local_no_checkout(options: &LocalCloneOptions) -> Result<Self> {
         ensure_clone_target_is_available(&options.directory)?;
         let source = Repository::open(&options.source)?;
-        let branch_name = source.current_branch_name()?.ok_or_else(|| {
+        let branch_name = options.branch_name.clone().map_or_else(
+            || source.current_branch_name(),
+            |branch_name| Ok(Some(branch_name)),
+        )?;
+        let branch_name = branch_name.ok_or_else(|| {
             RitError::invalid_input("local clone from detached HEAD is not implemented")
         })?;
-        source.resolve_head()?.ok_or_else(|| {
-            RitError::invalid_input("local clone from an unborn branch is not implemented")
+        let branch_ref = format!("refs/heads/{branch_name}");
+        source.resolve_full_ref(&branch_ref).map_err(|_| {
+            RitError::invalid_input(format!("source branch not found: {branch_name}"))
         })?;
 
         let mut init_options = InitOptions::new(&options.directory);
