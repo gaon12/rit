@@ -35,6 +35,7 @@ pub fn clone_command(
             "-l" | "--local" if !after_separator => local = true,
             "-n" | "--no-checkout" if !after_separator => no_checkout = true,
             "--no-hardlinks" if !after_separator => {}
+            "--tags" if !after_separator => copy_tags = true,
             "--no-tags" if !after_separator => copy_tags = false,
             "-o" | "--origin" if !after_separator => pending_option = Some("--origin"),
             "-b" | "--branch" if !after_separator => pending_option = Some("--branch"),

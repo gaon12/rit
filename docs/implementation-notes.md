@@ -490,6 +490,9 @@
 - 2026-05-18 local clone no-tags slice checked Git 2.52.0.windows.1 with
   `git --version`, `git clone -h`, and direct Git comparison for
   `clone --local --no-checkout --no-tags` with a loose tag.
+- 2026-05-18 local clone explicit-tags slice checked Git 2.52.0.windows.1
+  with `git --version`, `git help -a`, `git clone -h`, and direct Git
+  comparison for `clone --local --no-checkout --tags`.
 - 2026-05-18 local clone branch-name slice checked Git 2.52.0.windows.1 with
   `git --version`, `git clone -h`, and direct Git comparisons for
   `clone --local --no-checkout -b topic` and
@@ -1440,11 +1443,11 @@
 
 - Baseline command checked: `git clone -h`
 - Supported options: `--local`/`-l`, `--no-checkout`/`-n`,
-  `--no-hardlinks`, `-o <name>`/`--origin=<name>`, `--no-tags`,
+  `--no-hardlinks`, `-o <name>`/`--origin=<name>`, `--tags`/`--no-tags`,
   `-b <branch>`/`--branch=<branch>`, and `--quiet`/`-q`.
 - Unsupported options: checkout, bare/mirror clones, remote protocols,
-  hardlink/shared/reference modes other than `--no-hardlinks`, branch
-  selection, shallow/partial clone,
+  hardlink/shared/reference modes other than `--no-hardlinks`,
+  tag modes beyond checked loose refs and config, shallow/partial clone,
   submodules, sparse checkout, templates, and config overrides.
 - Git-compatible behavior: local no-checkout clone copies the source object
   store, local heads/tags, optional `packed-refs`, writes a symbolic `HEAD`,
@@ -1455,6 +1458,8 @@
 - Git-compatible behavior: `-o <name>` and `--origin=<name>` record the
   checked remote name in `remote.<name>`, its fetch refspec, and the current
   branch's `remote` config.
+- Git-compatible behavior: `--tags` is accepted as the checked explicit
+  default and preserves copied loose tag refs without adding `tagOpt`.
 - Git-compatible behavior: `--no-tags` skips checked loose tag refs and records
   `remote.<name>.tagOpt = --no-tags` in the cloned repository config.
 - Git-compatible behavior: `-b <branch>` and `--branch=<branch>` select a

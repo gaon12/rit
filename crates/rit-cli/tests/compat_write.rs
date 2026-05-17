@@ -3655,6 +3655,7 @@ fn clone_local_no_checkout_copies_head_objects_and_refs() {
             "master",
             true,
         ),
+        ("tags", vec!["--tags"], "origin", "master", true),
         ("no-tags", vec!["--no-tags"], "origin", "master", false),
         (
             "origin-short",

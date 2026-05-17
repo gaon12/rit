@@ -412,6 +412,8 @@ Completion criteria:
     state.
   - [x] `clone --local --no-checkout -o <name>` / `--origin=<name>` records
     the checked remote name in clone config and branch merge config.
+  - [x] `clone --local --no-checkout --tags` accepts the explicit default tag
+    copying mode and matches checked no-checkout tag/config state.
   - [x] `clone --local --no-checkout --no-tags` skips checked loose tag refs
     and records `remote.<name>.tagOpt = --no-tags`.
   - [x] `clone --local --no-checkout -b <branch>` / `--branch=<branch>`
