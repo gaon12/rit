@@ -555,7 +555,8 @@ Completion criteria:
   - [x] `rit stash drop -q` and basic empty/out-of-range drop errors match
     Git.
   - [x] `rit stash show` supports default stat output plus `--stat`,
-    `--name-only`, `--name-status`, and `--numstat` for loose stash entries.
+    `--shortstat`, `--name-only`, `--name-status`, and `--numstat` for loose
+    stash entries.
   - [x] `rit stash show -p/--patch` renders Git-compatible patch output for
     loose stash entries.
   - [x] `rit stash store` stores an existing commit in loose `refs/stash` with
@@ -589,11 +590,11 @@ Completion criteria:
   - [x] `stash apply/pop -q` refuse to overwrite existing untracked files from
     a stash third parent and leave the selected stash entry intact on failure.
   - [x] `stash show --include-untracked` summary formats include third-parent
-    untracked additions for name-only/name-status/numstat output.
+    untracked additions for shortstat/name-only/name-status/numstat output.
   - [x] `stash show --include-untracked --patch` includes third-parent
     untracked additions in Git-compatible patch output.
   - [x] `stash show --only-untracked` renders only third-parent untracked
-    additions for stat/name-only/name-status/numstat/patch output.
+    additions for stat/shortstat/name-only/name-status/numstat/patch output.
   - [x] `stash.showIncludeUntracked=true` makes default `stash show` include
     third-parent untracked entries unless an explicit untracked show option is
     provided.

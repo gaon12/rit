@@ -1536,6 +1536,7 @@ fn stash_show_summary_formats_match_git() {
         vec!["stash", "show", "-p"],
         vec!["stash", "show", "--patch", "stash@{1}"],
         vec!["stash", "show", "--stat", "stash@{1}"],
+        vec!["stash", "show", "--shortstat"],
         vec!["stash", "show", "--name-only"],
         vec!["stash", "show", "--name-status"],
         vec!["stash", "show", "--numstat", "1"],
@@ -1592,11 +1593,13 @@ fn stash_show_include_untracked_summary_formats_match_git() {
         vec!["stash", "show", "--include-untracked", "--name-only"],
         vec!["stash", "show", "--include-untracked", "--name-status"],
         vec!["stash", "show", "--include-untracked", "--numstat"],
+        vec!["stash", "show", "--include-untracked", "--shortstat"],
         vec!["stash", "show", "--include-untracked", "--patch"],
         vec!["stash", "show", "--only-untracked"],
         vec!["stash", "show", "--only-untracked", "--name-only"],
         vec!["stash", "show", "--only-untracked", "--name-status"],
         vec!["stash", "show", "--only-untracked", "--numstat"],
+        vec!["stash", "show", "--only-untracked", "--shortstat"],
         vec!["stash", "show", "--only-untracked", "--patch"],
     ] {
         let git_show = run_capture("git", args.iter().copied(), &git_repo);

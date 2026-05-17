@@ -1473,7 +1473,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]`
   as the legacy save form,
-  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--no-patch|--stat|--name-only|--name-status|--numstat] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--no-patch|--stat|--shortstat|--name-only|--name-status|--numstat] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
   worktree/index restoration when `HEAD` matches the stash base,
@@ -1566,7 +1566,7 @@
   against its first parent and renders patch/stat/name-only/name-status/numstat
   output through the shared diff formatter. `--include-untracked` extends
   summary formats and patch output with third-parent untracked additions for
-  the checked name-only/name-status/numstat/patch scope. `--only-untracked`
+  the checked name-only/name-status/numstat/shortstat/patch scope. `--only-untracked`
   renders only those third-parent additions across the same checked output
   formats. If `stash.showIncludeUntracked=true` is set, default `stash show`
   untracked handling uses the same include-untracked mode unless an explicit

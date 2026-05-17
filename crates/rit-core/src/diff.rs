@@ -121,6 +121,41 @@ impl DiffSummary {
         output
     }
 
+    /// Renders a Git-like `--shortstat` summary.
+    pub fn to_shortstat_text(&self) -> String {
+        if self.files.is_empty() {
+            return String::new();
+        }
+
+        let mut total_insertions = 0;
+        let mut total_deletions = 0;
+        let has_binary_file = self.files.iter().any(|file| file.binary);
+        let has_rename_or_copy = self
+            .files
+            .iter()
+            .any(|file| file.status == 'R' || file.status == 'C');
+        for file in &self.files {
+            total_insertions += file.insertions;
+            total_deletions += file.deletions;
+        }
+
+        let mut output = format!(" {} changed", plural(self.files.len(), "file", "files"));
+        if total_insertions > 0 || has_binary_file || has_rename_or_copy {
+            output.push_str(&format!(
+                ", {}",
+                plural(total_insertions, "insertion(+)", "insertions(+)")
+            ));
+        }
+        if total_deletions > 0 || has_binary_file || has_rename_or_copy {
+            output.push_str(&format!(
+                ", {}",
+                plural(total_deletions, "deletion(-)", "deletions(-)")
+            ));
+        }
+        output.push('\n');
+        output
+    }
+
     /// Renders a Git-like `--stat` summary.
     pub fn to_stat_text(&self) -> String {
         if self.files.is_empty() {

@@ -477,6 +477,9 @@ fn stash_command(
                     StashShowFormat::StatAndPatch => {
                         unreachable!("stat and patch are handled before summary output")
                     }
+                    StashShowFormat::ShortStat => {
+                        stdout.write_all(diff.to_shortstat_text().as_bytes())?
+                    }
                     StashShowFormat::NameOnly => {
                         for path in diff.name_only() {
                             writeln!(stdout, "{path}")?;
@@ -580,6 +583,7 @@ enum StashShowFormat {
     Stat,
     Patch,
     StatAndPatch,
+    ShortStat,
     NameOnly,
     NameStatus,
     Numstat,
@@ -608,6 +612,7 @@ fn parse_stash_show_args(
     for arg in args {
         match arg.as_str() {
             "--stat" => format = Some(StashShowFormat::Stat),
+            "--shortstat" => format = Some(StashShowFormat::ShortStat),
             "-p" | "--patch" => format = Some(StashShowFormat::Patch),
             "--no-patch" => format = Some(StashShowFormat::None),
             "--name-only" => format = Some(StashShowFormat::NameOnly),
