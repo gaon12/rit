@@ -752,6 +752,7 @@ struct StashShowArgs {
     full_index: bool,
     abbrev: usize,
     context_lines: usize,
+    inter_hunk_context: usize,
     default_prefixes: bool,
     new_line_indicator: Option<char>,
     old_line_indicator: Option<char>,
@@ -771,6 +772,7 @@ impl StashShowArgs {
             full_index: false,
             abbrev: 7,
             context_lines: 3,
+            inter_hunk_context: 0,
             default_prefixes: true,
             new_line_indicator: Some('+'),
             old_line_indicator: Some('-'),
@@ -798,6 +800,7 @@ fn parse_stash_show_args(
     let mut full_index = false;
     let mut abbrev = 7;
     let mut context_lines = 3;
+    let mut inter_hunk_context = 0;
     let mut default_prefixes = true;
     let mut new_line_indicator = Some('+');
     let mut old_line_indicator = Some('-');
@@ -905,6 +908,20 @@ fn parse_stash_show_args(
                     }
                 };
             }
+            _ if arg.starts_with("--inter-hunk-context=") => {
+                let value = arg.trim_start_matches("--inter-hunk-context=");
+                diff_option = true;
+                inter_hunk_context = match parse_diff_context_lines(value) {
+                    Some(inter_hunk_context) => inter_hunk_context,
+                    None => {
+                        writeln!(
+                            stderr,
+                            "error: option `inter-hunk-context' expects an integer value with an optional k/m/g suffix"
+                        )?;
+                        return Ok(None);
+                    }
+                };
+            }
             _ if arg.starts_with("-U") && arg.len() > 2 => {
                 let value = arg.trim_start_matches("-U");
                 diff_option = true;
@@ -1000,6 +1017,7 @@ fn parse_stash_show_args(
         full_index,
         abbrev,
         context_lines,
+        inter_hunk_context,
         default_prefixes,
         new_line_indicator,
         old_line_indicator,
@@ -1028,6 +1046,7 @@ fn stash_show_patch_options(show_args: &StashShowArgs) -> rit_core::PatchRenderO
         full_index: show_args.full_index,
         abbrev: show_args.abbrev,
         context_lines: show_args.context_lines,
+        inter_hunk_context: show_args.inter_hunk_context,
         default_prefixes: show_args.default_prefixes,
         new_line_indicator: show_args.new_line_indicator,
         old_line_indicator: show_args.old_line_indicator,

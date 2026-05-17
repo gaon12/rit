@@ -363,6 +363,8 @@ pub struct PatchRenderOptions {
     pub abbrev: usize,
     /// Number of unchanged context lines to include around each hunk.
     pub context_lines: usize,
+    /// Number of omitted context lines that may be shown to merge nearby hunks.
+    pub inter_hunk_context: usize,
     /// Whether patch paths use Git's default `a/` and `b/` prefixes.
     pub default_prefixes: bool,
     /// Prefix for inserted lines in unified hunks.
@@ -379,6 +381,7 @@ impl Default for PatchRenderOptions {
             full_index: false,
             abbrev: 7,
             context_lines: 3,
+            inter_hunk_context: 0,
             default_prefixes: true,
             new_line_indicator: Some('+'),
             old_line_indicator: Some('-'),
@@ -2082,7 +2085,11 @@ fn unified_hunk_with_context(
     }
 
     let mut output = String::new();
-    for hunk in split_hunks(&operations, options.context_lines) {
+    for hunk in split_hunks(
+        &operations,
+        options.context_lines,
+        options.inter_hunk_context,
+    ) {
         let old_before = count_old_lines(&operations[..hunk.start]);
         let new_before = count_new_lines(&operations[..hunk.start]);
         let old_count = count_old_lines(&operations[hunk.start..hunk.end]);
@@ -2116,7 +2123,11 @@ struct HunkRange {
     end: usize,
 }
 
-fn split_hunks(operations: &[LineOperation<'_>], context_lines: usize) -> Vec<HunkRange> {
+fn split_hunks(
+    operations: &[LineOperation<'_>],
+    context_lines: usize,
+    inter_hunk_context: usize,
+) -> Vec<HunkRange> {
     let mut hunks = Vec::new();
     let mut current: Option<HunkRange> = None;
 
@@ -2128,7 +2139,9 @@ fn split_hunks(operations: &[LineOperation<'_>], context_lines: usize) -> Vec<Hu
         let start = index.saturating_sub(context_lines);
         let end = (index + context_lines + 1).min(operations.len());
         match &mut current {
-            Some(range) if start <= range.end => range.end = range.end.max(end),
+            Some(range) if start <= range.end + inter_hunk_context => {
+                range.end = range.end.max(end)
+            }
             Some(range) => {
                 hunks.push(*range);
                 current = Some(HunkRange { start, end });
@@ -2754,6 +2767,35 @@ mod tests {
         assert!(text.contains("@@ -2 +2 @@ one\n-two\n+changed\n"));
         assert!(!text.contains("\n one\n"));
         assert!(!text.contains("\n three\n"));
+    }
+
+    #[test]
+    fn patch_render_options_merge_nearby_hunks_with_inter_hunk_context() {
+        let patch = DiffPatch {
+            files: vec![DiffPatchFile {
+                status: 'M',
+                old_path: None,
+                path: "file.txt".to_owned(),
+                similarity_score: None,
+                old_object_id: Some(crate::hash_object(crate::ObjectKind::Blob, b"old\n")),
+                new_object_id: Some(crate::hash_object(crate::ObjectKind::Blob, b"new\n")),
+                mode: 0o100644,
+                old_data: b"one\ntwo\nthree\n".to_vec(),
+                new_data: b"ONE\ntwo\nTHREE\n".to_vec(),
+            }],
+            warnings: Vec::new(),
+        };
+
+        let text = patch
+            .to_patch_text_with_options(&PatchRenderOptions {
+                context_lines: 0,
+                inter_hunk_context: 1,
+                ..PatchRenderOptions::default()
+            })
+            .expect("patch should render");
+
+        assert!(text.contains("@@ -1,3 +1,3 @@\n-one\n+ONE\n two\n-three\n+THREE\n"));
+        assert_eq!(text.matches("@@").count(), 2);
     }
 
     #[test]

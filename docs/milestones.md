@@ -640,6 +640,8 @@ Completion criteria:
     behavior for checked added/deleted/modified stash paths.
   - [x] `stash show -U<n>` and `--unified=<n>` render Git-compatible patch
     context widths for checked tracked patch and stat-plus-patch scopes.
+  - [x] `stash show --inter-hunk-context=<n>` merges nearby patch hunks for
+    checked tracked patch scopes.
   - [x] `stash show --no-prefix` and `--default-prefix` render
     Git-compatible patch path prefixes for checked tracked patch and
     stat-plus-patch scopes.
