@@ -203,6 +203,10 @@
 - 2026-05-17 no-renames option slice checked `git --version`,
   `git help -a`, `git diff -h`, and direct Git comparisons for cached
   `-M --no-renames`, `--no-renames -M`, and `-C --no-renames` option order.
+- 2026-05-17 diff.renames default/config slice checked Git 2.52.0.windows.1
+  with `git --version`, `git help -a`, `git diff -h`, and direct Git
+  comparisons for cached default rename detection plus `diff.renames=false`
+  and `diff.renames=copies`.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
   `--pathspec-file-nul`, including a quoted pathspec entry.
@@ -1121,7 +1125,9 @@
   file/directory plus simple `*`, `?`, and bracket-class wildcard pathspec
   filters and positive `:(literal)`, `:(glob)`, `:(top)`, `:/`, and
   `:(icase)` pathspec magic. `-M[<n>]`/`--find-renames[=<n>]` supports staged
-  exact and non-exact rename detection in cached diff output. `-C[<n>]` and
+  exact and non-exact rename detection in cached diff output, and cached diff
+  enables rename detection by default unless `diff.renames=false` disables it.
+  `diff.renames=copies` enables copy detection by default. `-C[<n>]` and
   `--find-copies[=<n>]` support staged copy detection from modified source
   files. `--find-copies-harder` also considers unchanged HEAD files as staged
   copy sources. `--no-renames` disables prior `-M`/`-C` detection and later

@@ -634,6 +634,8 @@ pub struct DiffOptions {
     pub find_copies: bool,
     /// Also consider unchanged HEAD paths as copy sources.
     pub find_copies_harder: bool,
+    /// Whether rename/copy behavior came from an explicit CLI option.
+    pub rename_detection_explicit: bool,
     /// Minimum similarity percentage for rename detection.
     pub rename_similarity_threshold: u32,
     /// Minimum similarity percentage for copy detection.
@@ -649,6 +651,7 @@ impl DiffOptions {
             find_renames: false,
             find_copies: false,
             find_copies_harder: false,
+            rename_detection_explicit: false,
             rename_similarity_threshold: 50,
             copy_similarity_threshold: 50,
             rename_limit: None,
@@ -1242,10 +1245,33 @@ impl Repository {
 
     fn diff_options_with_config(&self, options: &DiffOptions) -> Result<DiffOptions> {
         let mut effective_options = options.clone();
+        if !effective_options.rename_detection_explicit {
+            let (find_renames, find_copies) = self.configured_diff_renames()?;
+            effective_options.find_renames = find_renames;
+            effective_options.find_copies = find_copies;
+            effective_options.find_copies_harder = false;
+        }
         if effective_options.rename_limit.is_none() {
             effective_options.rename_limit = self.configured_diff_rename_limit()?;
         }
         Ok(effective_options)
+    }
+
+    fn configured_diff_renames(&self) -> Result<(bool, bool)> {
+        let config_path = self.common_dir().join("config");
+        if !config_path.exists() {
+            return Ok((true, false));
+        }
+        let config = GitConfig::read(&config_path)?;
+        let Some(value) = config.get("diff", "renames") else {
+            return Ok((true, false));
+        };
+        let normalized = value.trim().to_ascii_lowercase();
+        match normalized.as_str() {
+            "false" | "no" | "off" | "0" => Ok((false, false)),
+            "copies" | "copy" => Ok((true, true)),
+            _ => Ok((parse_git_bool_for_diff_renames(value)?, false)),
+        }
     }
 
     fn configured_diff_rename_limit(&self) -> Result<Option<usize>> {
@@ -1836,6 +1862,16 @@ fn rename_limit_warnings(candidate_count: usize) -> Vec<String> {
             "warning: you may want to set your diff.renameLimit variable to at least {candidate_count} and retry the command."
         ),
     ]
+}
+
+fn parse_git_bool_for_diff_renames(value: &str) -> Result<bool> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "true" | "yes" | "on" | "1" | "" => Ok(true),
+        "false" | "no" | "off" | "0" => Ok(false),
+        _ => Err(RitError::invalid_input(format!(
+            "bad boolean config value '{value}' for 'diff.renames'"
+        ))),
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

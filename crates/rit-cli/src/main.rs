@@ -2465,6 +2465,7 @@ fn diff_command(
     let mut find_renames = false;
     let mut find_copies = false;
     let mut find_copies_harder = false;
+    let mut rename_detection_explicit = false;
     let mut rename_similarity_threshold = 50;
     let mut copy_similarity_threshold = 50;
     let mut rename_limit = None;
@@ -2478,16 +2479,24 @@ fn diff_command(
             "--" if !after_separator => after_separator = true,
             "--cached" | "--staged" if !after_separator => cached = true,
             "-z" if !after_separator => nul_terminated = true,
-            "-M" | "--find-renames" if !after_separator => find_renames = true,
-            "-C" | "--find-copies" if !after_separator => find_copies = true,
+            "-M" | "--find-renames" if !after_separator => {
+                find_renames = true;
+                rename_detection_explicit = true;
+            }
+            "-C" | "--find-copies" if !after_separator => {
+                find_copies = true;
+                rename_detection_explicit = true;
+            }
             "--no-renames" if !after_separator => {
                 find_renames = false;
                 find_copies = false;
                 find_copies_harder = false;
+                rename_detection_explicit = true;
             }
             "--find-copies-harder" if !after_separator => {
                 find_copies = true;
                 find_copies_harder = true;
+                rename_detection_explicit = true;
             }
             option if option.starts_with("-l") && !after_separator => {
                 match parse_rename_limit_option(option) {
@@ -2506,6 +2515,7 @@ fn diff_command(
                     Ok(threshold) => {
                         find_renames = true;
                         rename_similarity_threshold = threshold;
+                        rename_detection_explicit = true;
                     }
                     Err(error) => {
                         writeln!(stderr, "rit: {error}")?;
@@ -2521,6 +2531,7 @@ fn diff_command(
                     Ok(threshold) => {
                         find_copies = true;
                         copy_similarity_threshold = threshold;
+                        rename_detection_explicit = true;
                     }
                     Err(error) => {
                         writeln!(stderr, "rit: {error}")?;
@@ -2565,6 +2576,7 @@ fn diff_command(
         find_renames,
         find_copies,
         find_copies_harder,
+        rename_detection_explicit,
         rename_similarity_threshold,
         copy_similarity_threshold,
         rename_limit,

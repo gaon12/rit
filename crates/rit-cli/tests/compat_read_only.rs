@@ -90,6 +90,11 @@ fn diff_cached_exact_rename_outputs_match_git() {
     let fixture = ExactRenameFixture::new("cached-exact-rename");
 
     for args in [
+        vec!["diff", "--cached", "--name-only"],
+        vec!["diff", "--cached", "--name-status"],
+        vec!["diff", "--cached", "--numstat"],
+        vec!["diff", "--cached", "--stat"],
+        vec!["diff", "--cached"],
         vec!["diff", "--cached", "-M", "--name-only"],
         vec!["diff", "--cached", "-M", "--name-status"],
         vec!["diff", "--cached", "-M", "--numstat"],
@@ -114,6 +119,37 @@ fn diff_cached_exact_rename_outputs_match_git() {
             outcome.report()
         );
     }
+}
+
+#[test]
+fn diff_renames_config_matches_git() {
+    let false_fixture = ExactRenameFixture::new("cached-renames-config-false");
+    run_git(false_fixture.path(), ["config", "diff.renames", "false"]);
+    let false_outcome = compare(&CompareOptions::new(
+        false_fixture.path(),
+        git_command(["diff", "--cached", "--name-status"]),
+        rit_command(["diff", "--cached", "--name-status"]),
+    ))
+    .expect("comparison should run");
+    assert!(
+        false_outcome.is_match(),
+        "diff.renames=false\n{}",
+        false_outcome.report()
+    );
+
+    let copies_fixture = ExactRenameFixture::new("cached-renames-config-copies");
+    run_git(copies_fixture.path(), ["config", "diff.renames", "copies"]);
+    let copies_outcome = compare(&CompareOptions::new(
+        copies_fixture.path(),
+        git_command(["diff", "--cached", "--name-status"]),
+        rit_command(["diff", "--cached", "--name-status"]),
+    ))
+    .expect("comparison should run");
+    assert!(
+        copies_outcome.is_match(),
+        "diff.renames=copies\n{}",
+        copies_outcome.report()
+    );
 }
 
 #[test]
