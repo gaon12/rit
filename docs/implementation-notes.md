@@ -120,9 +120,10 @@
   Git 2.52.0.windows.1 with `git --version`, `git stash show -h`,
   `git diff -h`, and direct Git comparisons for `stash show --patch` with
   `--color-moved`, `--color-moved=<mode>`, `--no-color-moved`,
-  `--color-moved-ws=<modes>`, and exact root-relative `--relative` on simple
-  text stash changes. `--relative=<path>` was intentionally left unsupported
-  because it rewrites patch paths and needs dedicated path rendering support.
+  `--color-moved-ws=<modes>`, `--no-color-moved-ws`, exact root-relative
+  `--relative`, and `--no-relative` on simple text stash changes.
+  `--relative=<path>` was intentionally left unsupported because it rewrites
+  patch paths and needs dedicated path rendering support.
 - 2026-05-18 stash show intent-to-add passthrough slice checked
   Git 2.52.0.windows.1 with `git --version`, `git stash show -h`,
   `git diff -h`, and direct Git comparisons for `stash show --patch` with
@@ -1602,7 +1603,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]`
   as the legacy save form,
-  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--no-compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [-z] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--inter-hunk-context=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--color-moved[=<mode>]|--no-color-moved|--color-moved-ws=<modes>|--relative|--minimal|--patience|--histogram|--anchored=<text>|-w|--ignore-all-space|-b|--ignore-space-change|--ignore-space-at-eol|--ignore-cr-at-eol|--ignore-blank-lines|--indent-heuristic|--no-indent-heuristic|--binary|--no-renames|--find-renames[=<n>]|-M[<n>]|--find-copies[=<n>]|-C[<n>]|--find-copies-harder|-l<n>|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]|--ita-invisible-in-index|--ita-visible-in-index] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--no-compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [-z] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--inter-hunk-context=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--color-moved[=<mode>]|--no-color-moved|--color-moved-ws=<modes>|--no-color-moved-ws|--relative|--no-relative|--minimal|--patience|--histogram|--anchored=<text>|-w|--ignore-all-space|-b|--ignore-space-change|--ignore-space-at-eol|--ignore-cr-at-eol|--ignore-blank-lines|--indent-heuristic|--no-indent-heuristic|--binary|--no-renames|--find-renames[=<n>]|-M[<n>]|--find-copies[=<n>]|-C[<n>]|--find-copies-harder|-l<n>|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]|--ita-invisible-in-index|--ita-visible-in-index] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
   worktree/index restoration when `HEAD` matches the stash base,
@@ -1749,11 +1750,12 @@
   `--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`, and
   `--color=auto` are accepted for Git-compatible no-external-diff/no-color
   output in the checked capture environment. `--color-moved[=<mode>]`,
-  `--no-color-moved`, and `--color-moved-ws=<modes>` are accepted as
-  color-moved passthrough options for checked no-color simple text patch
-  output, with Git-compatible invalid mode errors. Exact `--relative` is
-  accepted for checked repository-root relative patch output; path-valued
-  `--relative=<path>` remains unsupported because it changes rendered paths.
+  `--no-color-moved`, `--color-moved-ws=<modes>`, and
+  `--no-color-moved-ws` are accepted as color-moved passthrough options for
+  checked no-color simple text patch output, with Git-compatible invalid mode
+  errors. Exact `--relative` and `--no-relative` are accepted for checked
+  repository-root relative patch output; path-valued `--relative=<path>`
+  remains unsupported because it changes rendered paths.
   `--minimal`, `--patience`, `--histogram`, and `--anchored=<text>` are
   accepted as diff algorithm passthrough options for checked simple text
   stash patches where the current diff engine produces Git's same patch

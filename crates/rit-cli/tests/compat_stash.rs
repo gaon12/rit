@@ -2196,6 +2196,7 @@ fn stash_show_diff_passthrough_options_match_git() {
         vec!["stash", "show", "--patch", "--color-moved=plain"],
         vec!["stash", "show", "--patch", "--color-moved=blocks"],
         vec!["stash", "show", "--patch", "--no-color-moved"],
+        vec!["stash", "show", "--patch", "--no-color-moved-ws"],
         vec![
             "stash",
             "show",
@@ -2208,7 +2209,14 @@ fn stash_show_diff_passthrough_options_match_git() {
             "--patch",
             "--color-moved-ws=ignore-space-change,ignore-all-space",
         ],
+        vec![
+            "stash",
+            "show",
+            "--patch",
+            "--color-moved-ws=allow-indentation-change",
+        ],
         vec!["stash", "show", "--patch", "--relative"],
+        vec!["stash", "show", "--patch", "--no-relative"],
         vec!["stash", "show", "--patch", "--binary"],
         vec!["stash", "show", "--patch", "--no-renames"],
         vec!["stash", "show", "--patch", "--find-renames"],
