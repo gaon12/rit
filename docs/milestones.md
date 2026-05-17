@@ -550,8 +550,12 @@ Completion criteria:
     linear todo entries, updates the original branch, and clears rebase state.
   - [x] `rit rebase --quit` removes Git-compatible `rebase-apply` and
     `rebase-merge` state while preserving HEAD, index, and worktree.
-  - [ ] Later conflicts while continuing or skipping remaining todo entries,
-    todo editing, autostash, hooks, apply/merge backends, and strategy options.
+  - [x] `rit rebase --continue` stops with Git-compatible state/output when a
+    later remaining todo commit conflicts after the resolved commit is created.
+  - [x] `rit rebase --skip` stops with Git-compatible state/output when a
+    later remaining todo commit conflicts after the skipped commit is dropped.
+  - [ ] Todo editing, autostash, hooks, apply/merge backends, and strategy
+    options.
 - [~] `rit stash`
   - [x] `rit stash list` reads the Git-compatible `refs/stash` reflog and
     prints entries in newest-first order.

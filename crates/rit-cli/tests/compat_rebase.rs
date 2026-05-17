@@ -829,6 +829,86 @@ fn rebase_skip_replays_remaining_clean_todo_like_git() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn rebase_continue_stops_on_later_conflict_like_git() {
+    let root = temp_path("continue-later-conflict");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_two_conflict_rebase_repo(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    assert_eq!(
+        run_capture("git", ["rebase", "topic"], &git_repo).exit_code,
+        1
+    );
+    assert_eq!(
+        run_capture(rit_binary(), ["rebase", "topic"], &rit_repo).exit_code,
+        1
+    );
+    fs::write(git_repo.join("tracked.txt"), "resolved-one\n")
+        .expect("git resolved file should write");
+    fs::write(rit_repo.join("tracked.txt"), "resolved-one\n")
+        .expect("rit resolved file should write");
+    run_git(&git_repo, ["add", "tracked.txt"]);
+    run_git(&rit_repo, ["add", "tracked.txt"]);
+    let envs = [
+        ("GIT_COMMITTER_DATE", "1700000000 +0900"),
+        ("GIT_EDITOR", "true"),
+    ];
+
+    let git_continue = run_capture_with_env("git", ["rebase", "--continue"], &git_repo, &envs);
+    let rit_continue =
+        run_capture_with_env(rit_binary(), ["rebase", "--continue"], &rit_repo, &envs);
+
+    assert_eq!(
+        git_continue.exit_code, 1,
+        "git stderr: {}",
+        git_continue.stderr
+    );
+    assert_eq!(
+        rit_continue.exit_code, 1,
+        "rit stderr: {}",
+        rit_continue.stderr
+    );
+    assert_eq!(git_continue.stdout, rit_continue.stdout);
+    assert_eq!(git_continue.stderr, rit_continue.stderr);
+    assert_rebase_later_conflict_state_matches(&git_repo, &rit_repo);
+    assert_eq!(
+        run_capture("git", ["log", "--format=%P%n%B", "-2"], &git_repo).stdout,
+        run_capture("git", ["log", "--format=%P%n%B", "-2"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn rebase_skip_stops_on_later_conflict_like_git() {
+    let root = temp_path("skip-later-conflict");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_two_conflict_rebase_repo(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    assert_eq!(
+        run_capture("git", ["rebase", "topic"], &git_repo).exit_code,
+        1
+    );
+    assert_eq!(
+        run_capture(rit_binary(), ["rebase", "topic"], &rit_repo).exit_code,
+        1
+    );
+    let envs = [("GIT_COMMITTER_DATE", "1700000000 +0900")];
+
+    let git_skip = run_capture_with_env("git", ["rebase", "--skip"], &git_repo, &envs);
+    let rit_skip = run_capture_with_env(rit_binary(), ["rebase", "--skip"], &rit_repo, &envs);
+
+    assert_eq!(git_skip.exit_code, 1, "git stderr: {}", git_skip.stderr);
+    assert_eq!(rit_skip.exit_code, 1, "rit stderr: {}", rit_skip.stderr);
+    assert_eq!(git_skip.stdout, rit_skip.stdout);
+    assert_eq!(git_skip.stderr, rit_skip.stderr);
+    assert_rebase_later_conflict_state_matches(&git_repo, &rit_repo);
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct CapturedCommand {
     exit_code: i32,
     stdout: String,
@@ -859,6 +939,58 @@ fn create_conflicting_rebase_state(repo: &Path) {
     assert!(
         repo.join(".git").join("rebase-merge").is_dir(),
         "rebase should record merge backend state"
+    );
+}
+
+fn init_two_conflict_rebase_repo(repo: &Path) {
+    init_repo(repo);
+    fs::write(repo.join("second.txt"), "base\n").expect("second file should write");
+    run_git(repo, ["add", "second.txt"]);
+    run_git(repo, ["commit", "--quiet", "-m", "second base"]);
+    run_git(repo, ["checkout", "-b", "topic"]);
+    fs::write(repo.join("tracked.txt"), "topic\n").expect("topic tracked should write");
+    fs::write(repo.join("second.txt"), "topic\n").expect("topic second should write");
+    run_git(repo, ["commit", "--quiet", "-am", "topic"]);
+    run_git(repo, ["checkout", "master"]);
+    fs::write(repo.join("tracked.txt"), "master-one\n").expect("master tracked should write");
+    run_git(repo, ["commit", "--quiet", "-am", "one"]);
+    fs::write(repo.join("second.txt"), "master-two\n").expect("master second should write");
+    run_git(repo, ["commit", "--quiet", "-am", "two"]);
+}
+
+fn assert_rebase_later_conflict_state_matches(git_repo: &Path, rit_repo: &Path) {
+    for path in [
+        "HEAD",
+        "REBASE_HEAD",
+        "MERGE_MSG",
+        "refs/heads/master",
+        "rebase-merge/msgnum",
+        "rebase-merge/end",
+        "rebase-merge/stopped-sha",
+        "rebase-merge/git-rebase-todo",
+        "rebase-merge/done",
+        "rebase-merge/message",
+        "rebase-merge/author-script",
+    ] {
+        assert_eq!(
+            fs::read_to_string(git_repo.join(".git").join(path))
+                .unwrap_or_else(|error| panic!("git state {path} should read: {error}")),
+            fs::read_to_string(rit_repo.join(".git").join(path))
+                .unwrap_or_else(|error| panic!("rit state {path} should read: {error}")),
+            "state file {path} should match"
+        );
+    }
+    assert_eq!(
+        run_capture("git", ["ls-files", "-s"], git_repo).stdout,
+        run_capture(rit_binary(), ["ls-files", "-s"], rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], rit_repo).stdout
+    );
+    assert_eq!(
+        fs::read_to_string(git_repo.join("second.txt")).expect("git second file should read"),
+        fs::read_to_string(rit_repo.join("second.txt")).expect("rit second file should read")
     );
 }
 

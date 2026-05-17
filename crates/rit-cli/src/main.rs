@@ -4162,7 +4162,7 @@ fn rebase_command(
                     for report in &result.conflict_reports {
                         write_merge_conflict_report(stdout, report, &upstream)?;
                     }
-                    write_rebase_conflict_advice(stderr, &result)?;
+                    write_rebase_start_conflict_advice(stderr, &result)?;
                     return Ok(ExitCode::from(1));
                 } else if result.fast_forwarded {
                     let updated = result
@@ -4192,6 +4192,20 @@ fn rebase_command(
             match repository.continue_rebase(&rit_core::CommitOptions::default()) {
                 Ok(result) => {
                     print_rebase_continue_summary(&result, stdout)?;
+                    if !result.conflict_reports.is_empty() {
+                        let target = result.conflict_target_label.as_deref().unwrap_or("HEAD");
+                        for report in &result.conflict_reports {
+                            write_merge_conflict_report(stdout, report, target)?;
+                        }
+                        write_rebase_conflict_advice(
+                            stderr,
+                            result.stopped_current_step.unwrap_or(result.total_steps),
+                            result.total_steps,
+                            result.stopped_commit_id,
+                            result.stopped_message_summary.as_deref(),
+                        )?;
+                        return Ok(ExitCode::from(1));
+                    }
                     for step in result.first_remaining_step
                         ..result.first_remaining_step + result.replayed_remaining_count
                     {
@@ -4210,6 +4224,20 @@ fn rebase_command(
         },
         RebaseAction::Skip => match repository.skip_rebase() {
             Ok(result) => {
+                if !result.conflict_reports.is_empty() {
+                    let target = result.conflict_target_label.as_deref().unwrap_or("HEAD");
+                    for report in &result.conflict_reports {
+                        write_merge_conflict_report(stdout, report, target)?;
+                    }
+                    write_rebase_conflict_advice(
+                        stderr,
+                        result.stopped_current_step.unwrap_or(result.total_steps),
+                        result.total_steps,
+                        result.stopped_commit_id,
+                        result.stopped_message_summary.as_deref(),
+                    )?;
+                    return Ok(ExitCode::from(1));
+                }
                 for step in result.first_remaining_step
                     ..result.first_remaining_step + result.replayed_remaining_count
                 {
@@ -4236,23 +4264,36 @@ fn rebase_command(
     }
 }
 
-fn write_rebase_conflict_advice(
+fn write_rebase_start_conflict_advice(
     stderr: &mut dyn Write,
     result: &rit_core::RebaseStartResult,
 ) -> io::Result<()> {
     let total_steps = result.total_steps.max(result.replayed_count + 1);
-    if result.replayed_count > 0 {
-        for step in 1..=result.replayed_count {
-            write!(stderr, "Rebasing ({step}/{total_steps})\r")?;
-        }
+    for step in 1..=result.replayed_count {
+        write!(stderr, "Rebasing ({step}/{total_steps})\r")?;
     }
-    let Some(stopped_commit_id) = result.stopped_commit_id else {
+    write_rebase_conflict_advice(
+        stderr,
+        result.replayed_count + 1,
+        total_steps,
+        result.stopped_commit_id,
+        result.stopped_message_summary.as_deref(),
+    )
+}
+
+fn write_rebase_conflict_advice(
+    stderr: &mut dyn Write,
+    current_step: usize,
+    total_steps: usize,
+    stopped_commit_id: Option<rit_core::ObjectId>,
+    stopped_message_summary: Option<&str>,
+) -> io::Result<()> {
+    let Some(stopped_commit_id) = stopped_commit_id else {
         return Ok(());
     };
-    let current_step = result.replayed_count + 1;
     write!(stderr, "Rebasing ({current_step}/{total_steps})\r")?;
     let short_id = &stopped_commit_id.to_hex()[..7];
-    let summary = result.stopped_message_summary.as_deref().unwrap_or("");
+    let summary = stopped_message_summary.unwrap_or("");
     writeln!(stderr, "error: could not apply {short_id}... {summary}")?;
     writeln!(
         stderr,
