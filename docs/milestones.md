@@ -683,8 +683,13 @@ Completion criteria:
     (`--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`,
     `--color=auto`) for Git-compatible no-color output in checked captures.
   - [x] `stash show` accepts diff algorithm passthrough options
-    (`--minimal`, `--patience`, `--histogram`) for Git-compatible simple text
-    patch output in checked captures.
+    (`--minimal`, `--patience`, `--histogram`, `--anchored=<text>`) for
+    Git-compatible simple text patch output in checked captures.
+  - [x] `stash show` accepts whitespace and indent heuristic passthrough diff
+    options (`-w`, `--ignore-all-space`, `-b`, `--ignore-space-change`,
+    `--ignore-space-at-eol`, `--ignore-cr-at-eol`, `--ignore-blank-lines`,
+    `--indent-heuristic`, `--no-indent-heuristic`) for Git-compatible simple
+    text patch output in checked captures.
   - [x] `stash show` accepts rename/copy/binary passthrough diff options
     (`--binary`, `--no-renames`, `--find-renames[=<n>]`, `-M[<n>]`,
     `--find-copies[=<n>]`, `-C[<n>]`, `--find-copies-harder`, `-l<n>`) for

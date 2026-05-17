@@ -110,6 +110,12 @@
   `git stash -h`, `git diff -h`, and direct Git comparisons for
   `stash show --patch --minimal`, `--patience`, and `--histogram` on simple
   text stash changes.
+- 2026-05-18 stash show whitespace/heuristic passthrough slice checked
+  Git 2.52.0.windows.1 with `git --version`, `git stash -h`, `git diff -h`,
+  and direct Git comparisons for `stash show --patch` with `-w`, `-b`,
+  `--ignore-space-at-eol`, `--ignore-cr-at-eol`, `--ignore-blank-lines`,
+  `--indent-heuristic`, `--no-indent-heuristic`, and `--anchored=<text>` on
+  simple text stash changes.
 - 2026-05-17 stash show rename/copy passthrough slice checked `git stash -h`,
   `git diff -h`, and direct Git comparisons for `stash show --patch` with
   `--binary`, `--no-renames`, `--find-renames`, `-M`, `--find-copies`, `-C`,
@@ -1584,7 +1590,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]`
   as the legacy save form,
-  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--no-compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [-z] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--inter-hunk-context=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--minimal|--patience|--histogram|--binary|--no-renames|--find-renames[=<n>]|-M[<n>]|--find-copies[=<n>]|-C[<n>]|--find-copies-harder|-l<n>|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--no-compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [-z] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--inter-hunk-context=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--minimal|--patience|--histogram|--anchored=<text>|-w|--ignore-all-space|-b|--ignore-space-change|--ignore-space-at-eol|--ignore-cr-at-eol|--ignore-blank-lines|--indent-heuristic|--no-indent-heuristic|--binary|--no-renames|--find-renames[=<n>]|-M[<n>]|--find-copies[=<n>]|-C[<n>]|--find-copies-harder|-l<n>|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
   worktree/index restoration when `HEAD` matches the stash base,
@@ -1730,10 +1736,15 @@
   `--name-only`, `--name-status`, and `--numstat` formats.
   `--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`, and
   `--color=auto` are accepted for Git-compatible no-external-diff/no-color
-  output in the checked capture environment. `--minimal`, `--patience`, and
-  `--histogram` are accepted as diff algorithm passthrough options for checked
-  simple text stash patches where the current diff engine produces Git's same
-  patch shape. `--binary`, `--no-renames`, `--find-renames[=<n>]`,
+  output in the checked capture environment. `--minimal`, `--patience`,
+  `--histogram`, and `--anchored=<text>` are accepted as diff algorithm
+  passthrough options for checked simple text stash patches where the current
+  diff engine produces Git's same patch shape. `-w`, `--ignore-all-space`,
+  `-b`, `--ignore-space-change`, `--ignore-space-at-eol`,
+  `--ignore-cr-at-eol`, `--ignore-blank-lines`, `--indent-heuristic`, and
+  `--no-indent-heuristic` are accepted as whitespace/heuristic passthrough
+  options for the same checked simple text stash patch scope. `--binary`,
+  `--no-renames`, `--find-renames[=<n>]`,
   `-M[<n>]`, `--find-copies[=<n>]`, `-C[<n>]`, and `--find-copies-harder`
   are accepted as rename/copy/binary passthrough options for the same checked
   simple text stash patch scope. `-l<n>` is accepted as a rename-limit

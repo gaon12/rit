@@ -886,6 +886,15 @@ fn parse_stash_show_args(
             | "--minimal"
             | "--patience"
             | "--histogram"
+            | "-w"
+            | "--ignore-all-space"
+            | "-b"
+            | "--ignore-space-change"
+            | "--ignore-space-at-eol"
+            | "--ignore-cr-at-eol"
+            | "--ignore-blank-lines"
+            | "--indent-heuristic"
+            | "--no-indent-heuristic"
             | "-a"
             | "--text"
             | "--textconv"
@@ -985,6 +994,9 @@ fn parse_stash_show_args(
                         return Ok(None);
                     }
                 }
+            }
+            _ if arg.starts_with("--anchored=") => {
+                diff_option = true;
             }
             option if option.starts_with("--find-renames=") || option.starts_with("-M") => {
                 diff_option = true;
