@@ -1570,7 +1570,10 @@
   renders only those third-parent additions across the same checked output
   formats. If `stash.showIncludeUntracked=true` is set, default `stash show`
   untracked handling uses the same include-untracked mode unless an explicit
-  show untracked option is provided.
+  show untracked option is provided. Default `stash show` output also honors
+  `stash.showStat` and `stash.showPatch`, including Git's combined
+  stat-then-patch output when both are true, while explicit diff-format
+  options still take precedence.
 - Git-compatible behavior: `rit stash store` resolves an existing commit,
   appends a loose stash reflog entry using the configured committer identity,
   and updates loose `.git/refs/stash`. `-q` is accepted and the default

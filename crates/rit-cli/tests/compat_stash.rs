@@ -1784,6 +1784,70 @@ fn stash_show_include_untracked_config_matches_git() {
 }
 
 #[test]
+fn stash_show_stat_and_patch_configs_match_git() {
+    let root = temp_path("show-stat-patch-config");
+    let source_repo = root.join("source");
+    setup_stashes(&source_repo);
+
+    type StashShowConfigCase<'a> = (&'a str, &'a [(&'a str, &'a str)], &'a [&'a [&'a str]]);
+    let cases: &[StashShowConfigCase<'_>] = &[
+        (
+            "stat-false",
+            &[("stash.showStat", "false")],
+            &[&["stash", "show"]],
+        ),
+        (
+            "patch-true",
+            &[("stash.showPatch", "true")],
+            &[
+                &["stash", "show"],
+                &["stash", "show", "--stat"],
+                &["stash", "show", "--name-only"],
+            ],
+        ),
+        (
+            "stat-and-patch",
+            &[("stash.showStat", "true"), ("stash.showPatch", "true")],
+            &[&["stash", "show"]],
+        ),
+        (
+            "patch-only",
+            &[("stash.showStat", "false"), ("stash.showPatch", "true")],
+            &[&["stash", "show"]],
+        ),
+    ];
+
+    for (case_name, config_values, commands) in cases {
+        let git_repo = root.join(format!("{case_name}-git"));
+        let rit_repo = root.join(format!("{case_name}-rit"));
+        copy_directory(&source_repo, &git_repo);
+        copy_directory(&source_repo, &rit_repo);
+        for (key, value) in *config_values {
+            run_git(&git_repo, ["config", key, value]);
+            run_git(&rit_repo, ["config", key, value]);
+        }
+
+        for command in *commands {
+            let git_show = run_capture("git", command.iter().copied(), &git_repo);
+            let rit_show = run_capture(rit_binary(), command.iter().copied(), &rit_repo);
+
+            assert_eq!(git_show.exit_code, 0, "git stderr: {}", git_show.stderr);
+            assert_eq!(rit_show.exit_code, 0, "rit stderr: {}", rit_show.stderr);
+            assert_eq!(
+                git_show.stdout, rit_show.stdout,
+                "case: {case_name}, command: {command:?}"
+            );
+            assert_eq!(
+                git_show.stderr, rit_show.stderr,
+                "case: {case_name}, command: {command:?}"
+            );
+        }
+    }
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn stash_store_existing_commit_matches_git_list_and_ref() {
     let root = temp_path("store");
     let git_repo = root.join("git");

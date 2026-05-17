@@ -393,12 +393,19 @@ fn stash_command(
         let Some(show_args) = parse_stash_show_args(rest, stderr)? else {
             return Ok(ExitCode::from(129));
         };
+        let format = match stash_show_format(&repository, show_args.format) {
+            Ok(format) => format,
+            Err(error) => return write_command_error(stderr, error),
+        };
         let untracked_mode = match stash_show_untracked_mode(&repository, show_args.untracked_mode)
         {
             Ok(mode) => mode,
             Err(error) => return write_command_error(stderr, error),
         };
-        if matches!(show_args.format, StashShowFormat::Patch) {
+        if matches!(
+            format,
+            StashShowFormat::Patch | StashShowFormat::StatAndPatch
+        ) {
             let patch_result = match untracked_mode {
                 StashShowUntrackedMode::Tracked => {
                     repository.stash_show_patch(show_args.index, &rit_core::PathspecSet::all())
@@ -415,6 +422,32 @@ fn stash_command(
             return match patch_result {
                 Ok(patch) => match patch.to_patch_text() {
                     Ok(text) => {
+                        if matches!(format, StashShowFormat::StatAndPatch) {
+                            let summary = match untracked_mode {
+                                StashShowUntrackedMode::Tracked => repository
+                                    .stash_show(show_args.index, &rit_core::PathspecSet::all()),
+                                StashShowUntrackedMode::Include => repository
+                                    .stash_show_include_untracked(
+                                        show_args.index,
+                                        &rit_core::PathspecSet::all(),
+                                    ),
+                                StashShowUntrackedMode::Only => repository
+                                    .stash_show_only_untracked(
+                                        show_args.index,
+                                        &rit_core::PathspecSet::all(),
+                                    ),
+                            };
+                            match summary {
+                                Ok(diff) => {
+                                    let stat_text = diff.to_stat_text();
+                                    stdout.write_all(stat_text.as_bytes())?;
+                                    if !stat_text.is_empty() && !text.is_empty() {
+                                        writeln!(stdout)?;
+                                    }
+                                }
+                                Err(error) => return write_stash_error(stderr, error),
+                            }
+                        }
                         stdout.write_all(text.as_bytes())?;
                         Ok(ExitCode::SUCCESS)
                     }
@@ -435,10 +468,14 @@ fn stash_command(
         };
         return match summary {
             Ok(diff) => {
-                match show_args.format {
+                match format {
+                    StashShowFormat::None => {}
                     StashShowFormat::Stat => stdout.write_all(diff.to_stat_text().as_bytes())?,
                     StashShowFormat::Patch => {
                         unreachable!("patch is handled before summary output")
+                    }
+                    StashShowFormat::StatAndPatch => {
+                        unreachable!("stat and patch are handled before summary output")
                     }
                     StashShowFormat::NameOnly => {
                         for path in diff.name_only() {
@@ -537,9 +574,12 @@ fn stash_command(
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum StashShowFormat {
+    None,
     Stat,
     Patch,
+    StatAndPatch,
     NameOnly,
     NameStatus,
     Numstat,
@@ -547,7 +587,7 @@ enum StashShowFormat {
 
 struct StashShowArgs {
     index: usize,
-    format: StashShowFormat,
+    format: Option<StashShowFormat>,
     untracked_mode: Option<StashShowUntrackedMode>,
 }
 
@@ -562,16 +602,16 @@ fn parse_stash_show_args(
     args: &[String],
     stderr: &mut dyn Write,
 ) -> io::Result<Option<StashShowArgs>> {
-    let mut format = StashShowFormat::Stat;
+    let mut format = None;
     let mut untracked_mode = None;
     let mut stash = None;
     for arg in args {
         match arg.as_str() {
-            "--stat" => format = StashShowFormat::Stat,
-            "-p" | "--patch" => format = StashShowFormat::Patch,
-            "--name-only" => format = StashShowFormat::NameOnly,
-            "--name-status" => format = StashShowFormat::NameStatus,
-            "--numstat" => format = StashShowFormat::Numstat,
+            "--stat" => format = Some(StashShowFormat::Stat),
+            "-p" | "--patch" => format = Some(StashShowFormat::Patch),
+            "--name-only" => format = Some(StashShowFormat::NameOnly),
+            "--name-status" => format = Some(StashShowFormat::NameStatus),
+            "--numstat" => format = Some(StashShowFormat::Numstat),
             "-u" | "--include-untracked" => untracked_mode = Some(StashShowUntrackedMode::Include),
             "--only-untracked" => untracked_mode = Some(StashShowUntrackedMode::Only),
             _ if arg.starts_with('-') => {
@@ -592,6 +632,29 @@ fn parse_stash_show_args(
         format,
         untracked_mode,
     }))
+}
+
+fn stash_show_format(
+    repository: &rit_core::Repository,
+    explicit_format: Option<StashShowFormat>,
+) -> rit_core::Result<StashShowFormat> {
+    if let Some(format) = explicit_format {
+        return Ok(format);
+    }
+
+    let config_path = repository.common_dir().join("config");
+    if !config_path.exists() {
+        return Ok(StashShowFormat::Stat);
+    }
+    let config = rit_core::GitConfig::read(&config_path)?;
+    let show_stat = config.get_bool("stash", "showStat", true)?;
+    let show_patch = config.get_bool("stash", "showPatch", false)?;
+    match (show_stat, show_patch) {
+        (false, false) => Ok(StashShowFormat::None),
+        (true, false) => Ok(StashShowFormat::Stat),
+        (false, true) => Ok(StashShowFormat::Patch),
+        (true, true) => Ok(StashShowFormat::StatAndPatch),
+    }
 }
 
 fn stash_show_untracked_mode(

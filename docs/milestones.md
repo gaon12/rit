@@ -597,6 +597,9 @@ Completion criteria:
   - [x] `stash.showIncludeUntracked=true` makes default `stash show` include
     third-parent untracked entries unless an explicit untracked show option is
     provided.
+  - [x] `stash.showStat` and `stash.showPatch` config values control default
+    `stash show` stat/patch output, including Git's combined stat-plus-patch
+    mode, while explicit show format options take precedence.
   - [x] Basic legacy `stash save [-q] [<message>]` uses the same tracked-change
     stash shape as push and matches Git's saved/no-change output.
   - [x] Legacy `stash save -u/--include-untracked` and `-a/--all` reuse the
