@@ -695,6 +695,9 @@ Completion criteria:
     `--color-moved-ws=<modes>`, `--no-color-moved-ws`, `--relative`,
     `--no-relative`) for Git-compatible no-color simple text patch output in
     checked captures, including invalid color-moved mode errors.
+  - [x] `stash show --relative=<path>` filters checked explicit stat, patch,
+    name-only, name-status, and numstat output to matching paths and strips
+    the selected directory prefix like Git.
   - [x] `stash show` accepts diff algorithm passthrough options
     (`--minimal`, `--patience`, `--histogram`, `--anchored=<text>`) for
     Git-compatible simple text patch output in checked captures.

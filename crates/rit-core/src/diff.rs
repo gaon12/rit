@@ -26,6 +26,21 @@ impl DiffSummary {
         self
     }
 
+    /// Returns a copy containing paths below `relative_path`, with that
+    /// directory prefix removed from rendered paths.
+    pub fn into_relative_to_path(mut self, relative_path: &str) -> Self {
+        let relative_path = normalize_relative_path(relative_path);
+        if relative_path.is_empty() {
+            return self;
+        }
+        self.files = self
+            .files
+            .into_iter()
+            .filter_map(|file| file.into_relative_to_path(&relative_path))
+            .collect();
+        self
+    }
+
     /// Returns changed path names only.
     pub fn name_only(&self) -> Vec<&str> {
         self.files.iter().map(|file| file.path.as_str()).collect()
@@ -275,6 +290,21 @@ impl DiffPatch {
         self
     }
 
+    /// Returns a copy containing patch files below `relative_path`, with that
+    /// directory prefix removed from rendered paths.
+    pub fn into_relative_to_path(mut self, relative_path: &str) -> Self {
+        let relative_path = normalize_relative_path(relative_path);
+        if relative_path.is_empty() {
+            return self;
+        }
+        self.files = self
+            .files
+            .into_iter()
+            .filter_map(|file| file.into_relative_to_path(&relative_path))
+            .collect();
+        self
+    }
+
     /// Renders a small Git-like unified patch.
     pub fn to_patch_text(&self) -> Result<String> {
         self.to_patch_text_with_options(&PatchRenderOptions::default())
@@ -420,6 +450,24 @@ pub struct DiffPatchFile {
 }
 
 impl DiffPatchFile {
+    fn into_relative_to_path(mut self, relative_path: &str) -> Option<Self> {
+        let new_path = strip_relative_path(&self.path, relative_path);
+        let old_path = self
+            .old_path
+            .as_deref()
+            .and_then(|path| strip_relative_path(path, relative_path));
+        if new_path.is_none() && old_path.is_none() {
+            return None;
+        }
+        if let Some(new_path) = new_path {
+            self.path = new_path;
+        }
+        if self.old_path.is_some() {
+            self.old_path = old_path;
+        }
+        Some(self)
+    }
+
     fn to_summary_text(&self) -> String {
         match self.status {
             'A' => format!(" create mode {:06o} {}\n", self.mode, self.path),
@@ -552,6 +600,21 @@ fn rename_summary_path(old_path: &str, new_path: &str) -> String {
     format!("{old_path} => {new_path}")
 }
 
+fn normalize_relative_path(path: &str) -> String {
+    path.replace('\\', "/")
+        .trim_start_matches("./")
+        .trim_matches('/')
+        .to_owned()
+}
+
+fn strip_relative_path(path: &str, relative_path: &str) -> Option<String> {
+    if relative_path.is_empty() {
+        return Some(path.to_owned());
+    }
+    let relative_prefix = format!("{relative_path}/");
+    path.strip_prefix(&relative_prefix).map(ToOwned::to_owned)
+}
+
 fn prefixed_old_path(path: &str, options: &PatchRenderOptions) -> String {
     prefixed_path(&options.old_path_prefix, path, options)
 }
@@ -606,6 +669,24 @@ pub struct DiffFileStat {
 }
 
 impl DiffFileStat {
+    fn into_relative_to_path(mut self, relative_path: &str) -> Option<Self> {
+        let new_path = strip_relative_path(&self.path, relative_path);
+        let old_path = self
+            .old_path
+            .as_deref()
+            .and_then(|path| strip_relative_path(path, relative_path));
+        if new_path.is_none() && old_path.is_none() {
+            return None;
+        }
+        if let Some(new_path) = new_path {
+            self.path = new_path;
+        }
+        if self.old_path.is_some() {
+            self.old_path = old_path;
+        }
+        Some(self)
+    }
+
     fn changed_lines(&self) -> usize {
         self.insertions + self.deletions
     }
@@ -2592,6 +2673,45 @@ mod tests {
     }
 
     #[test]
+    fn diff_summary_can_render_relative_paths() {
+        let summary = DiffSummary {
+            files: vec![
+                DiffFileStat {
+                    status: 'M',
+                    old_path: None,
+                    path: "dir/a.txt".to_owned(),
+                    similarity_score: None,
+                    insertions: 1,
+                    deletions: 1,
+                    binary: false,
+                    old_size: 0,
+                    new_size: 0,
+                },
+                DiffFileStat {
+                    status: 'M',
+                    old_path: None,
+                    path: "other/b.txt".to_owned(),
+                    similarity_score: None,
+                    insertions: 1,
+                    deletions: 1,
+                    binary: false,
+                    old_size: 0,
+                    new_size: 0,
+                },
+            ],
+            warnings: Vec::new(),
+        };
+
+        let relative = summary.into_relative_to_path("dir/");
+
+        assert_eq!(relative.name_only(), vec!["a.txt"]);
+        assert_eq!(
+            relative.to_stat_text(),
+            " a.txt | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n"
+        );
+    }
+
+    #[test]
     fn name_status_text_lists_status_and_path() {
         let summary = DiffSummary {
             files: vec![DiffFileStat {
@@ -2896,6 +3016,45 @@ mod tests {
 
         assert!(text.contains("diff --git old/file.txt new/file.txt\n"));
         assert!(text.contains("--- old/file.txt\n+++ new/file.txt\n"));
+    }
+
+    #[test]
+    fn diff_patch_can_render_relative_paths() {
+        let patch = DiffPatch {
+            files: vec![
+                DiffPatchFile {
+                    status: 'M',
+                    old_path: None,
+                    path: "dir/file.txt".to_owned(),
+                    similarity_score: None,
+                    old_object_id: Some(crate::hash_object(crate::ObjectKind::Blob, b"old\n")),
+                    new_object_id: Some(crate::hash_object(crate::ObjectKind::Blob, b"new\n")),
+                    mode: 0o100644,
+                    old_data: b"old\n".to_vec(),
+                    new_data: b"new\n".to_vec(),
+                },
+                DiffPatchFile {
+                    status: 'M',
+                    old_path: None,
+                    path: "other/file.txt".to_owned(),
+                    similarity_score: None,
+                    old_object_id: Some(crate::hash_object(crate::ObjectKind::Blob, b"old\n")),
+                    new_object_id: Some(crate::hash_object(crate::ObjectKind::Blob, b"new\n")),
+                    mode: 0o100644,
+                    old_data: b"old\n".to_vec(),
+                    new_data: b"new\n".to_vec(),
+                },
+            ],
+            warnings: Vec::new(),
+        };
+
+        let text = patch
+            .into_relative_to_path("dir")
+            .to_patch_text()
+            .expect("patch should render");
+
+        assert!(text.contains("diff --git a/file.txt b/file.txt\n"));
+        assert!(!text.contains("other/file.txt"));
     }
 
     #[test]

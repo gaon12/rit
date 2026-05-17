@@ -452,6 +452,10 @@ fn stash_command(
                         Some(filter) => patch.into_filtered_by_status(filter),
                         None => patch,
                     };
+                    let patch = match &show_args.relative_path {
+                        Some(path) => patch.into_relative_to_path(path),
+                        None => patch,
+                    };
                     let patch_options = stash_show_patch_options(&show_args);
                     match patch.to_patch_text_with_options(&patch_options) {
                         Ok(text) => {
@@ -515,6 +519,10 @@ fn stash_command(
                                             Some(filter) => diff.into_filtered_by_status(filter),
                                             None => diff,
                                         };
+                                        let diff = match &show_args.relative_path {
+                                            Some(path) => diff.into_relative_to_path(path),
+                                            None => diff,
+                                        };
                                         let stat_text = if matches!(
                                             format,
                                             StashShowFormat::CompactStatAndSummary
@@ -566,6 +574,10 @@ fn stash_command(
                                             Some(filter) => diff.into_filtered_by_status(filter),
                                             None => diff,
                                         };
+                                        let diff = match &show_args.relative_path {
+                                            Some(path) => diff.into_relative_to_path(path),
+                                            None => diff,
+                                        };
                                         let stat_text = if matches!(
                                             format,
                                             StashShowFormat::CompactStatAndPatch
@@ -612,6 +624,10 @@ fn stash_command(
             Ok(diff) => {
                 let diff = match &show_args.diff_filter {
                     Some(filter) => diff.into_filtered_by_status(filter),
+                    None => diff,
+                };
+                let diff = match &show_args.relative_path {
+                    Some(path) => diff.into_relative_to_path(path),
                     None => diff,
                 };
                 match format {
@@ -813,6 +829,7 @@ struct StashShowArgs {
     old_path_prefix: String,
     new_path_prefix: String,
     line_prefix: String,
+    relative_path: Option<String>,
     new_line_indicator: Option<char>,
     old_line_indicator: Option<char>,
     context_line_indicator: Option<char>,
@@ -838,6 +855,7 @@ impl StashShowArgs {
             old_path_prefix: "a/".to_owned(),
             new_path_prefix: "b/".to_owned(),
             line_prefix: String::new(),
+            relative_path: None,
             new_line_indicator: Some('+'),
             old_line_indicator: Some('-'),
             context_line_indicator: Some(' '),
@@ -871,6 +889,7 @@ fn parse_stash_show_args(
     let mut old_path_prefix = "a/".to_owned();
     let mut new_path_prefix = "b/".to_owned();
     let mut line_prefix = String::new();
+    let mut relative_path = None;
     let mut new_line_indicator = Some('+');
     let mut old_line_indicator = Some('-');
     let mut context_line_indicator = Some(' ');
@@ -1073,6 +1092,10 @@ fn parse_stash_show_args(
                 diff_option = true;
                 line_prefix = arg.trim_start_matches("--line-prefix=").to_owned();
             }
+            _ if arg.starts_with("--relative=") => {
+                diff_option = true;
+                relative_path = Some(arg.trim_start_matches("--relative=").to_owned());
+            }
             _ if arg.starts_with("--output=") => {
                 diff_option = true;
                 output_path = Some(arg.trim_start_matches("--output=").to_owned());
@@ -1215,6 +1238,7 @@ fn parse_stash_show_args(
         old_path_prefix,
         new_path_prefix,
         line_prefix,
+        relative_path,
         new_line_indicator,
         old_line_indicator,
         context_line_indicator,

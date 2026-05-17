@@ -1898,6 +1898,47 @@ fn stash_show_extended_summary_matches_git() {
 }
 
 #[test]
+fn stash_show_relative_path_outputs_match_git() {
+    let root = temp_path("show-relative");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    fs::create_dir_all(repo_file(&git_repo, "dir")).expect("dir should create");
+    fs::create_dir_all(repo_file(&git_repo, "other")).expect("other dir should create");
+    fs::write(repo_file(&git_repo, "dir/a.txt"), "one\ntwo\n").expect("dir base should write");
+    fs::write(repo_file(&git_repo, "other/b.txt"), "alpha\nbeta\n")
+        .expect("other base should write");
+    run_git(&git_repo, ["add", "dir/a.txt", "other/b.txt"]);
+    run_git(&git_repo, ["commit", "-m", "base"]);
+    fs::write(repo_file(&git_repo, "dir/a.txt"), "one\nchanged\n")
+        .expect("dir change should write");
+    fs::write(repo_file(&git_repo, "other/b.txt"), "alpha\nchanged\n")
+        .expect("other change should write");
+    run_git(&git_repo, ["stash", "push", "-m", "relative"]);
+    copy_directory(&git_repo, &rit_repo);
+
+    for args in [
+        vec!["stash", "show", "--relative=dir"],
+        vec!["stash", "show", "--stat", "--relative=dir"],
+        vec!["stash", "show", "--patch", "--relative=dir"],
+        vec!["stash", "show", "--name-only", "--relative=dir"],
+        vec!["stash", "show", "--name-status", "--relative=dir"],
+        vec!["stash", "show", "--numstat", "--relative=dir"],
+        vec!["stash", "show", "--patch", "--relative=missing-dir"],
+    ] {
+        let git_show = run_capture("git", args.iter().copied(), &git_repo);
+        let rit_show = run_capture(rit_binary(), args.iter().copied(), &rit_repo);
+
+        assert_eq!(git_show.exit_code, 0, "git stderr: {}", git_show.stderr);
+        assert_eq!(rit_show.exit_code, 0, "rit stderr: {}", rit_show.stderr);
+        assert_eq!(git_show.stdout, rit_show.stdout, "args: {args:?}");
+        assert_eq!(git_show.stderr, rit_show.stderr, "args: {args:?}");
+    }
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn stash_drop_default_matches_git() {
     let root = temp_path("drop-default");
     let git_repo = root.join("git");
