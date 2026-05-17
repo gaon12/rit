@@ -195,7 +195,20 @@ fn stash_command(
         let Some(save_args) = parse_stash_save_args(rest, stderr)? else {
             return Ok(ExitCode::from(129));
         };
-        return match repository.stash_push(save_args.message.as_deref()) {
+        let result = if save_args.all {
+            repository.stash_push_all_with_pathspecs(
+                save_args.message.as_deref(),
+                &rit_core::PathspecSet::all(),
+            )
+        } else if save_args.include_untracked {
+            repository.stash_push_include_untracked_with_pathspecs(
+                save_args.message.as_deref(),
+                &rit_core::PathspecSet::all(),
+            )
+        } else {
+            repository.stash_push(save_args.message.as_deref())
+        };
+        return match result {
             Ok(rit_core::StashPushResult::NoLocalChanges) => {
                 if !save_args.quiet {
                     writeln!(stdout, "No local changes to save")?;
@@ -505,6 +518,8 @@ struct StashBranchArgs {
 struct StashSaveArgs {
     message: Option<String>,
     quiet: bool,
+    include_untracked: bool,
+    all: bool,
 }
 
 struct StashStoreArgs {
@@ -620,10 +635,14 @@ fn parse_stash_save_args(
     stderr: &mut dyn Write,
 ) -> io::Result<Option<StashSaveArgs>> {
     let mut quiet = false;
+    let mut include_untracked = false;
+    let mut all = false;
     let mut message_parts = Vec::new();
     for arg in args {
         match arg.as_str() {
             "-q" | "--quiet" if message_parts.is_empty() => quiet = true,
+            "-u" | "--include-untracked" if message_parts.is_empty() => include_untracked = true,
+            "-a" | "--all" if message_parts.is_empty() => all = true,
             "--" if message_parts.is_empty() => {}
             _ if arg.starts_with('-') && message_parts.is_empty() => {
                 writeln!(stderr, "rit: unsupported stash save option '{arg}'")?;
@@ -634,7 +653,12 @@ fn parse_stash_save_args(
     }
 
     let message = (!message_parts.is_empty()).then(|| message_parts.join(" "));
-    Ok(Some(StashSaveArgs { message, quiet }))
+    Ok(Some(StashSaveArgs {
+        message,
+        quiet,
+        include_untracked,
+        all,
+    }))
 }
 
 fn parse_stash_branch_args(

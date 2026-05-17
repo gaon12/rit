@@ -682,6 +682,84 @@ fn stash_save_quiet_and_clean_match_git() {
 }
 
 #[test]
+fn stash_save_untracked_modes_match_git() {
+    for (name, args, ignored_file) in [
+        (
+            "save-include-untracked",
+            vec!["stash", "save", "--include-untracked", "legacy u"],
+            false,
+        ),
+        (
+            "save-all",
+            vec!["stash", "save", "--all", "legacy all"],
+            true,
+        ),
+    ] {
+        let root = temp_path(name);
+        let git_repo = root.join("git");
+        let rit_repo = root.join("rit");
+        init_repo(&git_repo);
+        if ignored_file {
+            fs::write(repo_file(&git_repo, ".gitignore"), "*.log\n")
+                .expect("git ignore file should write");
+            run_git(&git_repo, ["add", ".gitignore"]);
+            run_git(&git_repo, ["commit", "--quiet", "-m", "ignore"]);
+        }
+        copy_directory(&git_repo, &rit_repo);
+        fs::write(repo_file(&git_repo, "tracked.txt"), "tracked change\n")
+            .expect("git tracked change should write");
+        fs::write(repo_file(&rit_repo, "tracked.txt"), "tracked change\n")
+            .expect("rit tracked change should write");
+        let untracked_name = if ignored_file {
+            "ignored.log"
+        } else {
+            "new.txt"
+        };
+        fs::write(repo_file(&git_repo, untracked_name), "new\n")
+            .expect("git untracked should write");
+        fs::write(repo_file(&rit_repo, untracked_name), "new\n")
+            .expect("rit untracked should write");
+
+        let git_save = run_capture("git", args.iter().copied(), &git_repo);
+        let rit_save = run_capture(rit_binary(), args.iter().copied(), &rit_repo);
+
+        assert_eq!(git_save.exit_code, 0, "git stderr: {}", git_save.stderr);
+        assert_eq!(rit_save.exit_code, 0, "rit stderr: {}", rit_save.stderr);
+        assert_eq!(git_save.stdout, rit_save.stdout, "args: {args:?}");
+        assert_eq!(git_save.stderr, rit_save.stderr, "args: {args:?}");
+        assert_eq!(
+            run_capture("git", ["status", "--porcelain=v1", "--ignored"], &git_repo).stdout,
+            run_capture(
+                rit_binary(),
+                ["status", "--porcelain=v1", "--ignored"],
+                &rit_repo
+            )
+            .stdout
+        );
+        assert_eq!(
+            run_capture("git", ["stash", "list"], &git_repo).stdout,
+            run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+        );
+        assert_eq!(
+            run_capture(
+                "git",
+                ["stash", "show", "--include-untracked", "--name-status"],
+                &git_repo,
+            )
+            .stdout,
+            run_capture(
+                rit_binary(),
+                ["stash", "show", "--include-untracked", "--name-status"],
+                &rit_repo,
+            )
+            .stdout
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+}
+
+#[test]
 fn stash_create_tracked_change_matches_git_without_storing_or_cleaning() {
     let root = temp_path("create-tracked");
     let git_repo = root.join("git");

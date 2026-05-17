@@ -591,6 +591,8 @@ Completion criteria:
     additions for stat/name-only/name-status/numstat/patch output.
   - [x] Basic legacy `stash save [-q] [<message>]` uses the same tracked-change
     stash shape as push and matches Git's saved/no-change output.
+  - [x] Legacy `stash save -u/--include-untracked` and `-a/--all` reuse the
+    push untracked stash shapes while preserving legacy positional messages.
   - [x] `rit stash create [<message>]` creates the same tracked-change stash
     commit shape without updating `refs/stash` or cleaning the worktree.
   - [x] Basic `stash apply -q [<stash>]` restores tracked worktree changes from
