@@ -261,6 +261,15 @@ impl DiffPatch {
         }
         Ok(output)
     }
+
+    /// Renders Git-like `--raw` records for the patch files.
+    pub fn to_raw_text_with_options(&self, options: &PatchRenderOptions) -> String {
+        let mut output = String::new();
+        for file in &self.files {
+            output.push_str(&file.to_raw_text(options));
+        }
+        output
+    }
 }
 
 /// Options that affect patch text rendering without changing the diff itself.
@@ -306,6 +315,35 @@ pub struct DiffPatchFile {
 }
 
 impl DiffPatchFile {
+    fn to_raw_text(&self, options: &PatchRenderOptions) -> String {
+        let old_mode = if self.old_object_id.is_some() {
+            self.mode
+        } else {
+            0
+        };
+        let new_mode = if self.new_object_id.is_some() {
+            self.mode
+        } else {
+            0
+        };
+        let old_id = raw_object_id(self.old_object_id, options);
+        let new_id = raw_object_id(self.new_object_id, options);
+        let old_path = self.old_path.as_deref().unwrap_or(&self.path);
+        if self.status == 'R' || self.status == 'C' {
+            return format!(
+                ":{old_mode:06o} {new_mode:06o} {old_id} {new_id} {}{:03}\t{old_path}\t{}\n",
+                self.status,
+                self.similarity_score.unwrap_or(100),
+                self.path
+            );
+        }
+
+        format!(
+            ":{old_mode:06o} {new_mode:06o} {old_id} {new_id} {}\t{}\n",
+            self.status, self.path
+        )
+    }
+
     fn to_patch_text(&self, options: &PatchRenderOptions) -> Result<String> {
         let mut output = String::new();
         let is_binary = is_binary_data(&self.old_data) || is_binary_data(&self.new_data);
@@ -2132,6 +2170,16 @@ fn patch_object_id(
     "0".repeat(zero_length)
 }
 
+fn raw_object_id(object_id: Option<ObjectId>, options: &PatchRenderOptions) -> String {
+    let abbrev = options.abbrev.max(4);
+    object_id
+        .map(|object_id| {
+            let hex = object_id.to_hex();
+            hex[..abbrev.min(hex.len())].to_owned()
+        })
+        .unwrap_or_else(|| "0".repeat(abbrev))
+}
+
 fn count_lines(data: &[u8]) -> usize {
     if is_binary_data(data) {
         return 0;
@@ -2519,6 +2567,51 @@ mod tests {
             "index {}..{} 100644\n",
             &old_id.to_hex()[..4],
             &new_id.to_hex()[..4]
+        )));
+    }
+
+    #[test]
+    fn raw_patch_text_renders_git_like_records() {
+        let old_id = crate::hash_object(crate::ObjectKind::Blob, b"old\n");
+        let new_id = crate::hash_object(crate::ObjectKind::Blob, b"new\n");
+        let patch = super::DiffPatch {
+            files: vec![
+                super::DiffPatchFile {
+                    status: 'M',
+                    old_path: None,
+                    path: "tracked.txt".to_owned(),
+                    similarity_score: None,
+                    old_object_id: Some(old_id),
+                    new_object_id: Some(new_id),
+                    mode: 0o100644,
+                    old_data: b"old\n".to_vec(),
+                    new_data: b"new\n".to_vec(),
+                },
+                super::DiffPatchFile {
+                    status: 'A',
+                    old_path: None,
+                    path: "new.txt".to_owned(),
+                    similarity_score: None,
+                    old_object_id: None,
+                    new_object_id: Some(new_id),
+                    mode: 0o100644,
+                    old_data: Vec::new(),
+                    new_data: b"new\n".to_vec(),
+                },
+            ],
+            warnings: Vec::new(),
+        };
+
+        let text = patch.to_raw_text_with_options(&super::PatchRenderOptions::default());
+
+        assert!(text.contains(&format!(
+            ":100644 100644 {} {} M\ttracked.txt\n",
+            &old_id.to_hex()[..7],
+            &new_id.to_hex()[..7]
+        )));
+        assert!(text.contains(&format!(
+            ":000000 100644 0000000 {} A\tnew.txt\n",
+            &new_id.to_hex()[..7]
         )));
     }
 

@@ -408,7 +408,10 @@ fn stash_command(
         };
         if matches!(
             format,
-            StashShowFormat::Patch | StashShowFormat::StatAndPatch
+            StashShowFormat::Patch
+                | StashShowFormat::StatAndPatch
+                | StashShowFormat::Raw
+                | StashShowFormat::RawAndPatch
         ) {
             let patch_result = match untracked_mode {
                 StashShowUntrackedMode::Tracked => {
@@ -430,6 +433,20 @@ fn stash_command(
                 }) {
                     Ok(text) => {
                         let has_changes = !patch.files.is_empty();
+                        if matches!(format, StashShowFormat::Raw | StashShowFormat::RawAndPatch) {
+                            let raw_text =
+                                patch.to_raw_text_with_options(&rit_core::PatchRenderOptions {
+                                    full_index: show_args.full_index,
+                                    abbrev: show_args.abbrev,
+                                });
+                            stdout.write_all(raw_text.as_bytes())?;
+                            if matches!(format, StashShowFormat::Raw) {
+                                return Ok(stash_show_exit_code(show_args.exit_code, has_changes));
+                            }
+                            if !raw_text.is_empty() && !text.is_empty() {
+                                writeln!(stdout)?;
+                            }
+                        }
                         if matches!(format, StashShowFormat::StatAndPatch) {
                             let summary = match untracked_mode {
                                 StashShowUntrackedMode::Tracked => repository
@@ -487,6 +504,9 @@ fn stash_command(
                     }
                     StashShowFormat::StatAndPatch => {
                         unreachable!("stat and patch are handled before summary output")
+                    }
+                    StashShowFormat::Raw | StashShowFormat::RawAndPatch => {
+                        unreachable!("raw is handled before summary output")
                     }
                     StashShowFormat::ShortStat => {
                         stdout.write_all(diff.to_shortstat_text().as_bytes())?
@@ -598,6 +618,8 @@ enum StashShowFormat {
     Stat,
     Patch,
     StatAndPatch,
+    Raw,
+    RawAndPatch,
     ShortStat,
     NameOnly,
     NameStatus,
@@ -655,13 +677,21 @@ fn parse_stash_show_args(
                 diff_option = true;
             }
             "--patch-with-stat" => format = Some(StashShowFormat::StatAndPatch),
+            "--patch-with-raw" => format = Some(StashShowFormat::RawAndPatch),
             "-p" | "--patch" => {
                 format = Some(match format {
+                    Some(StashShowFormat::Raw) => StashShowFormat::RawAndPatch,
                     Some(StashShowFormat::Stat) => StashShowFormat::StatAndPatch,
                     _ => StashShowFormat::Patch,
                 });
             }
             "--no-patch" => format = Some(StashShowFormat::None),
+            "--raw" => {
+                format = Some(match format {
+                    Some(StashShowFormat::Patch) => StashShowFormat::RawAndPatch,
+                    _ => StashShowFormat::Raw,
+                });
+            }
             "--name-only" => format = Some(StashShowFormat::NameOnly),
             "--name-status" => format = Some(StashShowFormat::NameStatus),
             "--numstat" => format = Some(StashShowFormat::Numstat),
