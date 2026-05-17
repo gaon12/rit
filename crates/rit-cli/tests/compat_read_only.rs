@@ -153,6 +153,31 @@ fn diff_renames_config_matches_git() {
 }
 
 #[test]
+fn diff_bad_renames_config_error_matches_git() {
+    let fixture = ExactRenameFixture::new("bad-renames-config");
+    run_git(fixture.path(), ["config", "diff.renames", "bad"]);
+
+    for args in [
+        vec!["diff", "--cached", "--name-status"],
+        vec!["diff", "--cached"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "bad diff.renames config {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_no_renames_option_order_matches_git() {
     let fixture = ExactRenameFixture::new("cached-no-renames");
 

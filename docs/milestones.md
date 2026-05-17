@@ -178,6 +178,8 @@ Completion criteria:
   - [x] Cached diff enables rename detection by default, honors
     `diff.renames=false`, and treats `diff.renames=copies` as default copy
     detection.
+  - [x] Invalid `diff.renames` values fail with Git-compatible fatal output
+    and exit code.
   - [ ] Broader worktree rename/copy detection, full rename limits, and
     advanced Git diffcore parity.
 - [x] Binary diff accounting for summary modes.

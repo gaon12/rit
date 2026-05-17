@@ -206,7 +206,8 @@
 - 2026-05-17 diff.renames default/config slice checked Git 2.52.0.windows.1
   with `git --version`, `git help -a`, `git diff -h`, and direct Git
   comparisons for cached default rename detection plus `diff.renames=false`
-  and `diff.renames=copies`.
+  and `diff.renames=copies`, including invalid `diff.renames` fatal output
+  and exit code.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
   `--pathspec-file-nul`, including a quoted pathspec entry.
@@ -1132,6 +1133,7 @@
   files. `--find-copies-harder` also considers unchanged HEAD files as staged
   copy sources. `--no-renames` disables prior `-M`/`-C` detection and later
   `-M`/`-C` options re-enable detection, matching Git's option-order behavior.
+  Invalid `diff.renames` values use Git-compatible fatal output and exit code.
   Default worktree diff supports `-M[<n>]` and `-C[<n>]` when the added
   worktree path is represented by Git's intent-to-add index state;
   `--find-copies-harder` can also use unchanged index files as worktree copy

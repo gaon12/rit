@@ -2651,7 +2651,9 @@ fn diff_command(
 
 fn write_diff_error(stderr: &mut dyn Write, error: &rit_core::RitError) -> io::Result<ExitCode> {
     let message = error.to_string();
-    if message.starts_with("bad numeric config value ") {
+    if message.starts_with("bad numeric config value ")
+        || message.starts_with("bad boolean config value ")
+    {
         writeln!(stderr, "fatal: {message}")?;
         return Ok(ExitCode::from(128));
     }
