@@ -393,7 +393,11 @@ fn stash_command(
         let Some(show_args) = parse_stash_show_args(rest, stderr)? else {
             return Ok(ExitCode::from(129));
         };
-        let format = match stash_show_format(&repository, show_args.format, show_args.exit_code) {
+        let format = match stash_show_format(
+            &repository,
+            show_args.format,
+            show_args.exit_code || show_args.diff_option,
+        ) {
             Ok(format) => format,
             Err(error) => return write_command_error(stderr, error),
         };
@@ -602,6 +606,7 @@ struct StashShowArgs {
     format: Option<StashShowFormat>,
     untracked_mode: Option<StashShowUntrackedMode>,
     exit_code: bool,
+    diff_option: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -618,6 +623,7 @@ fn parse_stash_show_args(
     let mut format = None;
     let mut untracked_mode = None;
     let mut exit_code = false;
+    let mut diff_option = false;
     let mut stash = None;
     for arg in args {
         match arg.as_str() {
@@ -625,6 +631,9 @@ fn parse_stash_show_args(
             "--shortstat" => format = Some(StashShowFormat::ShortStat),
             "--quiet" => format = Some(StashShowFormat::Quiet),
             "--exit-code" => exit_code = true,
+            "--no-ext-diff" | "--ext-diff" | "--no-color" | "--color=never" | "--color=auto" => {
+                diff_option = true;
+            }
             "-p" | "--patch" => format = Some(StashShowFormat::Patch),
             "--no-patch" => format = Some(StashShowFormat::None),
             "--name-only" => format = Some(StashShowFormat::NameOnly),
@@ -651,6 +660,7 @@ fn parse_stash_show_args(
         format,
         untracked_mode,
         exit_code,
+        diff_option,
     }))
 }
 

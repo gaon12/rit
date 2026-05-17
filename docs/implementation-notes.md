@@ -1473,7 +1473,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]`
   as the legacy save form,
-  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--no-patch|--quiet|--exit-code|--stat|--shortstat|--name-only|--name-status|--numstat] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--no-patch|--quiet|--exit-code|--stat|--shortstat|--name-only|--name-status|--numstat] [--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
   worktree/index restoration when `HEAD` matches the stash base,
@@ -1579,6 +1579,9 @@
   checked tracked and untracked show scopes. `--exit-code` returns the same
   diff-exists exit codes while preserving explicit output formats; without an
   explicit output format it uses Git's patch output for the checked show scope.
+  `--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`, and
+  `--color=auto` are accepted for Git-compatible no-external-diff/no-color
+  output in the checked capture environment.
 - Git-compatible behavior: `rit stash store` resolves an existing commit,
   appends a loose stash reflog entry using the configured committer identity,
   and updates loose `.git/refs/stash`. `-q` is accepted and the default

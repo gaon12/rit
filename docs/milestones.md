@@ -608,6 +608,9 @@ Completion criteria:
   - [x] `stash show --exit-code` returns Git-compatible diff-exists exit
     codes while preserving explicit output formats, and defaults to patch
     output when no format is provided.
+  - [x] `stash show` accepts no-external-diff and no-color diff options
+    (`--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`,
+    `--color=auto`) for Git-compatible no-color output in checked captures.
   - [x] Basic legacy `stash save [-q] [<message>]` uses the same tracked-change
     stash shape as push and matches Git's saved/no-change output.
   - [x] Legacy `stash save -u/--include-untracked` and `-a/--all` reuse the
