@@ -1037,6 +1037,55 @@ fn stash_apply_quiet_restores_untracked_files_without_dropping() {
 }
 
 #[test]
+fn stash_apply_and_pop_index_restore_staged_state_like_git() {
+    for (name, subcommand) in [("apply-index", "apply"), ("pop-index", "pop")] {
+        let root = temp_path(name);
+        let git_repo = root.join("git");
+        let rit_repo = root.join("rit");
+        init_repo(&git_repo);
+        fs::write(repo_file(&git_repo, "tracked.txt"), "staged\n")
+            .expect("git staged change should write");
+        run_git(&git_repo, ["add", "tracked.txt"]);
+        fs::write(repo_file(&git_repo, "tracked.txt"), "unstaged\n")
+            .expect("git unstaged change should write");
+        run_git(&git_repo, ["stash", "push", "-m", "indexed"]);
+        copy_directory(&git_repo, &rit_repo);
+
+        let git_apply = run_capture("git", ["stash", subcommand, "--index", "-q"], &git_repo);
+        let rit_apply = run_capture(
+            rit_binary(),
+            ["stash", subcommand, "--index", "-q"],
+            &rit_repo,
+        );
+
+        assert_eq!(git_apply.exit_code, 0, "git stderr: {}", git_apply.stderr);
+        assert_eq!(rit_apply.exit_code, 0, "rit stderr: {}", rit_apply.stderr);
+        assert_eq!(
+            git_apply.stdout, rit_apply.stdout,
+            "subcommand: {subcommand}"
+        );
+        assert_eq!(
+            git_apply.stderr, rit_apply.stderr,
+            "subcommand: {subcommand}"
+        );
+        assert_eq!(
+            run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+            run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+        );
+        assert_eq!(
+            fs::read_to_string(repo_file(&git_repo, "tracked.txt")).ok(),
+            fs::read_to_string(repo_file(&rit_repo, "tracked.txt")).ok()
+        );
+        assert_eq!(
+            run_capture("git", ["stash", "list"], &git_repo).stdout,
+            run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+}
+
+#[test]
 fn stash_apply_quiet_older_entry_matches_git_state() {
     let root = temp_path("apply-older");
     let git_repo = root.join("git");

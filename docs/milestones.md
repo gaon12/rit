@@ -601,6 +601,10 @@ Completion criteria:
     a loose stash without dropping it when `HEAD` matches the stash base.
   - [x] Basic `stash pop -q [<stash>]` restores tracked worktree changes and
     drops the selected loose stash entry when `HEAD` matches the stash base.
+  - [x] Basic `stash apply --index -q [<stash>]` restores the stash index
+    parent for the same clean tracked apply scope.
+  - [x] Basic `stash pop --index -q [<stash>]` restores the stash index parent
+    before dropping the selected loose stash entry.
   - [x] Default `stash apply` and `stash pop` print Git-compatible human status
     summaries for the same clean tracked apply/pop scope.
   - [x] Basic `stash branch <branchname> [<stash>]` creates a branch at the
@@ -608,9 +612,8 @@ Completion criteria:
     selected loose stash entry on success.
   - [ ] `stash export/import`,
     packed stash ref cleanup, same-path staged+unstaged `--staged` cleanup
-    failure parity, `--index`, broader untracked apply/pop restoration, broader
-    show options, broader error parity, and conflict handling for
-    apply/pop/branch.
+    failure parity, broader untracked apply/pop restoration, broader show
+    options, broader error parity, and conflict handling for apply/pop/branch.
 - [~] Conflict index stages.
   - [x] Preserve stage 0/1/2/3 in index read, write, sorting, and
     `ls-files --stage` output.

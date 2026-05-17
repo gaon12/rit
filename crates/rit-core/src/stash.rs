@@ -236,10 +236,18 @@ impl Repository {
     /// Applies tracked working-tree changes from one loose stash entry.
     ///
     /// This first apply slice requires a clean tracked index/worktree and a
-    /// current `HEAD` that still matches the stash base. It restores worktree
-    /// files only; `--index`, conflict handling, and cross-branch applies are
-    /// later milestone work.
+    /// current `HEAD` that still matches the stash base. Conflict handling and
+    /// cross-branch applies are later milestone work.
     pub fn stash_apply(&self, display_index: usize) -> Result<StashApplyResult> {
+        self.stash_apply_with_index(display_index, false)
+    }
+
+    /// Applies one stash entry and optionally restores its saved index state.
+    pub fn stash_apply_with_index(
+        &self,
+        display_index: usize,
+        restore_index: bool,
+    ) -> Result<StashApplyResult> {
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
                 "stash apply must be run in a repository with a working tree",
@@ -273,6 +281,24 @@ impl Repository {
         let base_entries = index_entries_by_path(self.commit_index_entries(base_id)?);
         let stash_entries = index_entries_by_path(self.commit_index_entries(stash_id)?);
         let mut changed_paths = changed_stash_paths(&base_entries, &stash_entries);
+        let index_parent_entries = if restore_index {
+            let index_parent_id = stash_commit
+                .parents
+                .get(1)
+                .copied()
+                .ok_or_else(|| RitError::invalid_input("stash commit has no index parent"))?;
+            let entries = self.commit_index_entries(index_parent_id)?;
+            changed_paths.extend(changed_stash_paths(
+                &base_entries,
+                &index_entries_by_path(entries.clone()),
+            ));
+            Some(Index {
+                entries,
+                extensions: Vec::new(),
+            })
+        } else {
+            None
+        };
         let symlinks_enabled = self.core_symlinks_enabled()?;
         for path in &changed_paths {
             let full_path = join_slash_path(worktree, path);
@@ -294,6 +320,10 @@ impl Repository {
                 }
                 None => remove_file_if_exists(&full_path)?,
             }
+        }
+        if let Some(index_parent) = index_parent_entries {
+            let target_paths = changed_paths.iter().cloned().collect::<Vec<_>>();
+            self.replace_stash_paths_in_index(&index_parent, &target_paths)?;
         }
         if let Some(untracked_id) = stash_commit.parents.get(2).copied() {
             let untracked_entries = self.commit_index_entries(untracked_id)?;
@@ -325,9 +355,19 @@ impl Repository {
     ///
     /// This uses the same intentionally small apply implementation as
     /// [`Repository::stash_apply`], so it currently requires the stash base to
-    /// match `HEAD` and does not restore the index.
+    /// match `HEAD`.
     pub fn stash_pop(&self, display_index: usize, name: String) -> Result<StashDropResult> {
-        self.stash_apply(display_index)?;
+        self.stash_pop_with_index(display_index, name, false)
+    }
+
+    /// Applies one stash entry and drops it, optionally restoring its saved index state.
+    pub fn stash_pop_with_index(
+        &self,
+        display_index: usize,
+        name: String,
+        restore_index: bool,
+    ) -> Result<StashDropResult> {
+        self.stash_apply_with_index(display_index, restore_index)?;
         self.stash_drop(display_index, name)
     }
 
@@ -968,6 +1008,41 @@ impl Repository {
                 }
             }
         }
+        Index {
+            entries: index_entries.into_values().collect(),
+            extensions: Vec::new(),
+        }
+        .write(&index_path)
+    }
+
+    fn replace_stash_paths_in_index(
+        &self,
+        source_index: &Index,
+        target_paths: &[String],
+    ) -> Result<()> {
+        let source_entries = index_entries_by_path(
+            source_index
+                .entries
+                .iter()
+                .filter(|entry| entry.stage == 0)
+                .cloned()
+                .collect(),
+        );
+        let index_path = self.git_dir().join("index");
+        let index = Index::read(&index_path)?;
+        let mut index_entries = index_entries_by_path(index.entries);
+
+        for path in target_paths {
+            match source_entries.get(path) {
+                Some(entry) => {
+                    index_entries.insert(path.clone(), entry.clone());
+                }
+                None => {
+                    index_entries.remove(path);
+                }
+            }
+        }
+
         Index {
             entries: index_entries.into_values().collect(),
             extensions: Vec::new(),

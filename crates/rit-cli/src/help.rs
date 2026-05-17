@@ -227,8 +227,8 @@ rit stash [push [(-m|--message) <message>] [-S|--staged] [-k|--keep-index] [-u|-
 rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]
 rit stash show [-u|--include-untracked|--only-untracked] [-p|--patch|--stat|--name-only|--name-status|--numstat] [<stash>]
 rit stash drop [-q|--quiet] [<stash>]
-rit stash apply [-q|--quiet] [<stash>]
-rit stash pop [-q|--quiet] [<stash>]
+rit stash apply [--index] [-q|--quiet] [<stash>]
+rit stash pop [--index] [-q|--quiet] [<stash>]
 rit stash branch <branchname> [<stash>]
 rit stash create [<message>]
 rit stash store [(-m|--message) <message>] [-q|--quiet] <commit>

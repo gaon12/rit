@@ -1474,9 +1474,9 @@
   as the legacy save form,
   `rit stash show [-u|--include-untracked|--only-untracked] [-p|--patch|--stat|--name-only|--name-status|--numstat] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
-  `rit stash apply [-q|--quiet] [<stash>]` for clean tracked worktree
-  restoration when `HEAD` matches the stash base,
-  `rit stash pop [-q|--quiet] [<stash>]` for the same clean tracked
+  `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
+  worktree/index restoration when `HEAD` matches the stash base,
+  `rit stash pop [--index] [-q|--quiet] [<stash>]` for the same clean tracked
   restoration followed by dropping the selected loose stash entry,
   `rit stash branch <branchname> [<stash>]` for creating a branch at the
   stash base and applying the same clean tracked stash scope,
@@ -1484,7 +1484,7 @@
   `rit stash store [(-m|--message) <message>] [-q|--quiet] <commit>`, and
   `rit stash clear` for loose stash refs.
 - Unsupported options: `export`, `import`, broader stash show options, save
-  `--patch`, push packed stash ref cleanup, `--index`, untracked apply/pop
+  `--patch`, push packed stash ref cleanup, broader untracked apply/pop
   restoration, and stash apply/pop/branch conflict handling.
 - Git-compatible behavior: `rit stash push` without untracked/pathspec options
   writes the usual two-parent stash shape for tracked changes, stores it in
@@ -1521,6 +1521,8 @@
 - Git-compatible behavior: `rit stash apply -q [<stash>]` restores tracked
   worktree changes from a loose stash without dropping it when the current
   tracked state is clean and `HEAD` matches the stash base.
+- Git-compatible behavior: `rit stash apply --index -q [<stash>]` also
+  restores the saved index parent for the checked clean tracked scope.
 - Git-compatible behavior: `rit stash apply -q [<stash>]` also restores
   untracked files recorded in the stash's third parent for the checked clean
   apply scope.
@@ -1529,6 +1531,9 @@
 - Git-compatible behavior: `rit stash pop -q [<stash>]` uses the same tracked
   clean apply path, then removes the selected loose stash reflog entry and
   updates loose `.git/refs/stash`.
+- Git-compatible behavior: `rit stash pop --index -q [<stash>]` also restores
+  the saved index parent before dropping the selected loose stash entry for the
+  checked clean tracked scope.
 - Git-compatible behavior: `rit stash pop -q [<stash>]` also restores
   untracked files through the shared clean apply path before dropping the
   selected loose stash entry.

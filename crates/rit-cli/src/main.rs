@@ -179,7 +179,7 @@ fn stash_command(
         let Some(apply_args) = parse_stash_apply_args(rest, stderr)? else {
             return Ok(ExitCode::from(129));
         };
-        return match repository.stash_apply(apply_args.index) {
+        return match repository.stash_apply_with_index(apply_args.index, apply_args.restore_index) {
             Ok(_result) => {
                 if !apply_args.quiet {
                     write_stash_human_status(&repository, stdout)?;
@@ -260,7 +260,11 @@ fn stash_command(
         let Some(pop_args) = parse_stash_pop_args(rest, stderr)? else {
             return Ok(ExitCode::from(129));
         };
-        return match repository.stash_pop(pop_args.index, pop_args.name.clone()) {
+        return match repository.stash_pop_with_index(
+            pop_args.index,
+            pop_args.name.clone(),
+            pop_args.restore_index,
+        ) {
             Ok(result) => {
                 if !pop_args.quiet {
                     write_stash_human_status(&repository, stdout)?;
@@ -512,11 +516,13 @@ struct StashPopArgs {
     index: usize,
     name: String,
     quiet: bool,
+    restore_index: bool,
 }
 
 struct StashApplyArgs {
     index: usize,
     quiet: bool,
+    restore_index: bool,
 }
 
 struct StashBranchArgs {
@@ -711,10 +717,12 @@ fn parse_stash_apply_args(
     stderr: &mut dyn Write,
 ) -> io::Result<Option<StashApplyArgs>> {
     let mut quiet = false;
+    let mut restore_index = false;
     let mut stash = None;
     for arg in args {
         match arg.as_str() {
             "-q" | "--quiet" => quiet = true,
+            "--index" => restore_index = true,
             _ if arg.starts_with('-') => {
                 writeln!(stderr, "rit: unsupported stash apply option '{arg}'")?;
                 return Ok(None);
@@ -728,7 +736,11 @@ fn parse_stash_apply_args(
     }
 
     let (index, _) = parse_stash_name(stash.unwrap_or("refs/stash@{0}"))?;
-    Ok(Some(StashApplyArgs { index, quiet }))
+    Ok(Some(StashApplyArgs {
+        index,
+        quiet,
+        restore_index,
+    }))
 }
 
 fn parse_stash_pop_args(
@@ -736,10 +748,12 @@ fn parse_stash_pop_args(
     stderr: &mut dyn Write,
 ) -> io::Result<Option<StashPopArgs>> {
     let mut quiet = false;
+    let mut restore_index = false;
     let mut stash = None;
     for arg in args {
         match arg.as_str() {
             "-q" | "--quiet" => quiet = true,
+            "--index" => restore_index = true,
             _ if arg.starts_with('-') => {
                 writeln!(stderr, "rit: unsupported stash pop option '{arg}'")?;
                 return Ok(None);
@@ -753,7 +767,12 @@ fn parse_stash_pop_args(
     }
 
     let (index, name) = parse_stash_name(stash.unwrap_or("refs/stash@{0}"))?;
-    Ok(Some(StashPopArgs { index, name, quiet }))
+    Ok(Some(StashPopArgs {
+        index,
+        name,
+        quiet,
+        restore_index,
+    }))
 }
 
 fn parse_stash_store_args(
