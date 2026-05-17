@@ -106,6 +106,10 @@
 - 2026-05-17 stash show text passthrough slice checked `git stash -h`,
   `git diff -h`, and direct Git comparisons for `stash show --text` and
   `stash show -a --patch` on text stash changes.
+- 2026-05-17 stash push no pathspec-file-nul slice checked `git stash -h` and
+  direct Git comparisons for `stash push --pathspec-file-nul
+  --no-pathspec-file-nul`, verifying the shared pathspec-file parser returns
+  to text mode for stash path filtering.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
 - 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git
@@ -1517,7 +1521,8 @@
 - Git-compatible behavior: `rit stash push --pathspec-from-file=<file>` and
   `--pathspec-file-nul` reuse the shared Git-compatible pathspec file parser,
   including text and NUL-delimited pathspec files for the checked tracked
-  change scope.
+  change scope. `--no-pathspec-file-nul` turns a preceding NUL pathspec-file
+  mode back into text pathspec-file parsing for checked stash push filtering.
 - Git-compatible behavior: `rit stash push --keep-index` records the same
   tracked stash shape while restoring selected paths to the pre-stash index
   state, so staged changes remain staged and unstaged-only changes are cleaned.
