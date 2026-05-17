@@ -1512,6 +1512,50 @@ fn reset_honors_core_ignorecase_for_mismatched_case_pathspec() {
 }
 
 #[test]
+fn restore_rejects_core_ignorecase_mismatched_case_pathspec_like_git() {
+    let fixture = temp_path("restore-core-ignorecase-fixture");
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    run_git(&fixture, ["config", "core.ignorecase", "true"]);
+    fs::write(fixture.join("Camel.txt"), "base\n").expect("case file should be written");
+    run_git(&fixture, ["add", "Camel.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    fs::write(fixture.join("Camel.txt"), "changed\n").expect("case file should be changed");
+
+    let workspace = temp_path("restore-core-ignorecase-compare");
+    let git_repo = workspace.join("git");
+    let rit_repo = workspace.join("rit");
+    copy_directory(&fixture, &git_repo);
+    copy_directory(&fixture, &rit_repo);
+
+    let git = run_command_allow_failure(&command_words("git", ["restore", "camel.txt"]), &git_repo);
+    let rit = run_command_allow_failure(
+        &command_words(rit_binary(), ["restore", "camel.txt"]),
+        &rit_repo,
+    );
+    let git_status = run_capture("git", ["status", "--porcelain=v1"], &git_repo).0;
+    let rit_status = run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).0;
+
+    assert!(
+        !git.success,
+        "git should reject the mismatched-case pathspec"
+    );
+    assert_eq!(git.exit_code, rit.exit_code);
+    assert_eq!(git.stdout, rit.stdout);
+    assert_eq!(git.stderr, rit.stderr);
+    assert_eq!(git_status, rit_status);
+    assert_eq!(
+        fs::read_to_string(git_repo.join("Camel.txt")).expect("git file should read"),
+        fs::read_to_string(rit_repo.join("Camel.txt")).expect("rit file should read")
+    );
+    let _ = fs::remove_dir_all(fixture);
+    let _ = fs::remove_dir_all(workspace);
+}
+
+#[test]
 fn add_chmod_executable_matches_git_status_and_tree_mode() {
     let fixture = LocalWriteFixture::new("add-chmod", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");

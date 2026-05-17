@@ -329,6 +329,8 @@ Completion criteria:
     pathspecs that Git accepts as no-ops.
   - [x] `git reset <pathspec>` accepts `core.ignorecase=true`
     mismatched-case tracked pathspecs as Git-compatible no-ops.
+  - [x] `git restore <pathspec>` keeps Git-compatible rejection behavior for
+    mismatched-case tracked pathspecs even when `core.ignorecase=true`.
   - [ ] Broader platform/config parity for case-sensitive path lookup.
 
 Completion criteria:

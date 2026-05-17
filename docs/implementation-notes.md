@@ -117,6 +117,10 @@
 - 2026-05-17 stash show rename-limit passthrough slice checked
   `git stash show -h`, `git diff -h`, and direct Git comparisons for
   `stash show --patch -l0` and `-l1` on simple text stash changes.
+- 2026-05-17 restore core.ignorecase rejection slice checked
+  `git restore <mismatched-case-path>` with `core.ignorecase=true` on
+  `git version 2.52.0.windows.1`; Git and rit both reject the pathspec and
+  leave status and working-tree contents unchanged.
 - 2026-05-17 stash push no pathspec-file-nul slice checked `git stash -h` and
   direct Git comparisons for `stash push --pathspec-file-nul
   --no-pathspec-file-nul`, verifying the shared pathspec-file parser returns
@@ -1945,6 +1949,9 @@
 - `rit reset` now mirrors that no-op acceptance for non-wildcard tracked
   pathspecs with mismatched case. Wildcard and advanced pathspec parity remain
   tracked separately in M4/M6.
+- `rit restore` keeps Git's rejection behavior for mismatched-case pathspecs
+  under `core.ignorecase=true`, with compatibility coverage for exit code,
+  stdout, stderr, status, and unchanged worktree contents.
 
 ### System keychain adapters
 
