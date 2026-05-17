@@ -1769,6 +1769,7 @@ fn stash_show_include_untracked_config_matches_git() {
     for args in [
         vec!["stash", "show", "--name-only"],
         vec!["stash", "show", "--name-status"],
+        vec!["stash", "show", "--no-include-untracked", "--name-only"],
         vec!["stash", "show", "--only-untracked", "--name-only"],
     ] {
         let git_show = run_capture("git", args.iter().copied(), &git_repo);
@@ -1802,6 +1803,7 @@ fn stash_show_stat_and_patch_configs_match_git() {
             &[
                 &["stash", "show"],
                 &["stash", "show", "--stat"],
+                &["stash", "show", "--no-patch"],
                 &["stash", "show", "--name-only"],
             ],
         ),

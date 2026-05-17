@@ -600,6 +600,8 @@ Completion criteria:
   - [x] `stash.showStat` and `stash.showPatch` config values control default
     `stash show` stat/patch output, including Git's combined stat-plus-patch
     mode, while explicit show format options take precedence.
+  - [x] `stash show --no-include-untracked` and `stash show --no-patch`
+    disable config-provided untracked and patch output like Git.
   - [x] Basic legacy `stash save [-q] [<message>]` uses the same tracked-change
     stash shape as push and matches Git's saved/no-change output.
   - [x] Legacy `stash save -u/--include-untracked` and `-a/--all` reuse the

@@ -1473,7 +1473,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]`
   as the legacy save form,
-  `rit stash show [-u|--include-untracked|--only-untracked] [-p|--patch|--stat|--name-only|--name-status|--numstat] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--no-patch|--stat|--name-only|--name-status|--numstat] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
   worktree/index restoration when `HEAD` matches the stash base,
@@ -1573,7 +1573,8 @@
   show untracked option is provided. Default `stash show` output also honors
   `stash.showStat` and `stash.showPatch`, including Git's combined
   stat-then-patch output when both are true, while explicit diff-format
-  options still take precedence.
+  options still take precedence. `--no-include-untracked` and `--no-patch`
+  explicitly disable config-provided untracked and patch output.
 - Git-compatible behavior: `rit stash store` resolves an existing commit,
   appends a loose stash reflog entry using the configured committer identity,
   and updates loose `.git/refs/stash`. `-q` is accepted and the default

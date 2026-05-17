@@ -609,10 +609,12 @@ fn parse_stash_show_args(
         match arg.as_str() {
             "--stat" => format = Some(StashShowFormat::Stat),
             "-p" | "--patch" => format = Some(StashShowFormat::Patch),
+            "--no-patch" => format = Some(StashShowFormat::None),
             "--name-only" => format = Some(StashShowFormat::NameOnly),
             "--name-status" => format = Some(StashShowFormat::NameStatus),
             "--numstat" => format = Some(StashShowFormat::Numstat),
             "-u" | "--include-untracked" => untracked_mode = Some(StashShowUntrackedMode::Include),
+            "--no-include-untracked" => untracked_mode = Some(StashShowUntrackedMode::Tracked),
             "--only-untracked" => untracked_mode = Some(StashShowUntrackedMode::Only),
             _ if arg.starts_with('-') => {
                 writeln!(stderr, "rit: unsupported stash show option '{arg}'")?;
