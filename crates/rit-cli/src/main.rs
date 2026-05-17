@@ -441,6 +441,7 @@ fn stash_command(
                         full_index: show_args.full_index,
                         abbrev: show_args.abbrev,
                         context_lines: show_args.context_lines,
+                        default_prefixes: show_args.default_prefixes,
                     }) {
                         Ok(text) => {
                             let has_changes = !patch.files.is_empty();
@@ -451,6 +452,7 @@ fn stash_command(
                                         full_index: show_args.full_index,
                                         abbrev: show_args.abbrev,
                                         context_lines: show_args.context_lines,
+                                        default_prefixes: show_args.default_prefixes,
                                     });
                                 stdout.write_all(raw_text.as_bytes())?;
                                 if matches!(format, StashShowFormat::Raw) {
@@ -751,6 +753,7 @@ struct StashShowArgs {
     full_index: bool,
     abbrev: usize,
     context_lines: usize,
+    default_prefixes: bool,
     diff_filter: Option<rit_core::DiffStatusFilter>,
 }
 
@@ -772,6 +775,7 @@ fn parse_stash_show_args(
     let mut full_index = false;
     let mut abbrev = 7;
     let mut context_lines = 3;
+    let mut default_prefixes = true;
     let mut diff_filter = None;
     let mut stash = None;
     for arg in args {
@@ -808,6 +812,14 @@ fn parse_stash_show_args(
             }
             "--no-ext-diff" | "--ext-diff" | "--no-color" | "--color=never" | "--color=auto" => {
                 diff_option = true;
+            }
+            "--no-prefix" => {
+                diff_option = true;
+                default_prefixes = false;
+            }
+            "--default-prefix" => {
+                diff_option = true;
+                default_prefixes = true;
             }
             "--patch-with-stat" => format = Some(StashShowFormat::StatAndPatch),
             "--patch-with-raw" => format = Some(StashShowFormat::RawAndPatch),
@@ -904,6 +916,7 @@ fn parse_stash_show_args(
         full_index,
         abbrev,
         context_lines,
+        default_prefixes,
         diff_filter,
     }))
 }

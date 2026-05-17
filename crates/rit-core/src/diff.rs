@@ -363,6 +363,8 @@ pub struct PatchRenderOptions {
     pub abbrev: usize,
     /// Number of unchanged context lines to include around each hunk.
     pub context_lines: usize,
+    /// Whether patch paths use Git's default `a/` and `b/` prefixes.
+    pub default_prefixes: bool,
 }
 
 impl Default for PatchRenderOptions {
@@ -371,6 +373,7 @@ impl Default for PatchRenderOptions {
             full_index: false,
             abbrev: 7,
             context_lines: 3,
+            default_prefixes: true,
         }
     }
 }
@@ -449,7 +452,11 @@ impl DiffPatchFile {
         let mut output = String::new();
         let is_binary = is_binary_data(&self.old_data) || is_binary_data(&self.new_data);
         let old_path = self.old_path.as_deref().unwrap_or(&self.path);
-        output.push_str(&format!("diff --git a/{old_path} b/{}\n", self.path));
+        output.push_str(&format!(
+            "diff --git {} {}\n",
+            prefixed_old_path(old_path, options),
+            prefixed_new_path(&self.path, options)
+        ));
         match self.status {
             'R' | 'C' => {
                 let action = if self.status == 'R' { "rename" } else { "copy" };
@@ -469,8 +476,8 @@ impl DiffPatchFile {
                     self.mode
                 ));
                 if !is_binary {
-                    output.push_str(&format!("--- a/{old_path}\n"));
-                    output.push_str(&format!("+++ b/{}\n", self.path));
+                    output.push_str(&format!("--- {}\n", prefixed_old_path(old_path, options)));
+                    output.push_str(&format!("+++ {}\n", prefixed_new_path(&self.path, options)));
                 }
             }
             'A' => {
@@ -482,7 +489,7 @@ impl DiffPatchFile {
                 ));
                 if !is_binary {
                     output.push_str("--- /dev/null\n");
-                    output.push_str(&format!("+++ b/{}\n", self.path));
+                    output.push_str(&format!("+++ {}\n", prefixed_new_path(&self.path, options)));
                 }
             }
             'D' => {
@@ -493,7 +500,7 @@ impl DiffPatchFile {
                     patch_object_id(None, self.old_object_id, options)
                 ));
                 if !is_binary {
-                    output.push_str(&format!("--- a/{}\n", self.path));
+                    output.push_str(&format!("--- {}\n", prefixed_old_path(&self.path, options)));
                     output.push_str("+++ /dev/null\n");
                 }
             }
@@ -505,13 +512,13 @@ impl DiffPatchFile {
                     self.mode
                 ));
                 if !is_binary {
-                    output.push_str(&format!("--- a/{}\n", self.path));
-                    output.push_str(&format!("+++ b/{}\n", self.path));
+                    output.push_str(&format!("--- {}\n", prefixed_old_path(&self.path, options)));
+                    output.push_str(&format!("+++ {}\n", prefixed_new_path(&self.path, options)));
                 }
             }
         }
         if is_binary {
-            output.push_str(&binary_patch_line(self));
+            output.push_str(&binary_patch_line(self, options));
         } else {
             output.push_str(&unified_hunk_with_context(
                 &self.old_data,
@@ -527,14 +534,30 @@ fn rename_summary_path(old_path: &str, new_path: &str) -> String {
     format!("{old_path} => {new_path}")
 }
 
-fn binary_patch_line(file: &DiffPatchFile) -> String {
+fn prefixed_old_path(path: &str, options: &PatchRenderOptions) -> String {
+    prefixed_path("a/", path, options)
+}
+
+fn prefixed_new_path(path: &str, options: &PatchRenderOptions) -> String {
+    prefixed_path("b/", path, options)
+}
+
+fn prefixed_path(prefix: &str, path: &str, options: &PatchRenderOptions) -> String {
+    if options.default_prefixes {
+        format!("{prefix}{path}")
+    } else {
+        path.to_owned()
+    }
+}
+
+fn binary_patch_line(file: &DiffPatchFile, options: &PatchRenderOptions) -> String {
     let old_path = if file.old_object_id.is_some() {
-        format!("a/{}", file.old_path.as_deref().unwrap_or(&file.path))
+        prefixed_old_path(file.old_path.as_deref().unwrap_or(&file.path), options)
     } else {
         "/dev/null".to_owned()
     };
     let new_path = if file.new_object_id.is_some() {
-        format!("b/{}", file.path)
+        prefixed_new_path(&file.path, options)
     } else {
         "/dev/null".to_owned()
     };
@@ -2714,6 +2737,35 @@ mod tests {
         assert!(text.contains("@@ -2 +2 @@ one\n-two\n+changed\n"));
         assert!(!text.contains("\n one\n"));
         assert!(!text.contains("\n three\n"));
+    }
+
+    #[test]
+    fn patch_render_options_can_omit_default_prefixes() {
+        let patch = DiffPatch {
+            files: vec![DiffPatchFile {
+                status: 'M',
+                old_path: None,
+                path: "file.txt".to_owned(),
+                similarity_score: None,
+                old_object_id: Some(crate::hash_object(crate::ObjectKind::Blob, b"old\n")),
+                new_object_id: Some(crate::hash_object(crate::ObjectKind::Blob, b"new\n")),
+                mode: 0o100644,
+                old_data: b"old\n".to_vec(),
+                new_data: b"new\n".to_vec(),
+            }],
+            warnings: Vec::new(),
+        };
+
+        let text = patch
+            .to_patch_text_with_options(&PatchRenderOptions {
+                default_prefixes: false,
+                ..PatchRenderOptions::default()
+            })
+            .expect("patch should render");
+
+        assert!(text.contains("diff --git file.txt file.txt\n"));
+        assert!(text.contains("--- file.txt\n+++ file.txt\n"));
+        assert!(!text.contains("diff --git a/file.txt b/file.txt\n"));
     }
 
     #[test]
