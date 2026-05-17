@@ -1720,6 +1720,7 @@ impl Repository {
         )?;
         remove_file_if_exists(&self.git_dir().join("CHERRY_PICK_HEAD"))?;
         remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))?;
+        remove_dir_if_exists(&self.git_dir().join("sequencer"))?;
         self.refresh_indexdb_after_git_write();
         Ok(result)
     }

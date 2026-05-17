@@ -464,6 +464,54 @@ fn multi_commit_cherry_pick_conflict_writes_sequencer_like_git() {
 }
 
 #[test]
+fn multi_commit_cherry_pick_continue_clears_final_sequencer_like_git() {
+    let root = temp_path("multi-conflict-continue");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_multi_commit_cherry_pick_with_second_conflict(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    run_capture("git", ["cherry-pick", "pick-one", "pick-two"], &git_repo);
+    run_capture(
+        rit_binary(),
+        ["cherry-pick", "pick-one", "pick-two"],
+        &rit_repo,
+    );
+    fs::write(git_repo.join("conflict.txt"), "resolved\n").expect("git resolution should write");
+    fs::write(rit_repo.join("conflict.txt"), "resolved\n").expect("rit resolution should write");
+    run_git(&git_repo, ["add", "conflict.txt"]);
+    run_git(&rit_repo, ["add", "conflict.txt"]);
+
+    let git_continue = run_capture("git", ["cherry-pick", "--continue"], &git_repo);
+    let rit_continue = run_capture(rit_binary(), ["cherry-pick", "--continue"], &rit_repo);
+
+    assert_eq!(
+        git_continue.exit_code, 0,
+        "git stderr: {}",
+        git_continue.stderr
+    );
+    assert_eq!(
+        rit_continue.exit_code, 0,
+        "rit stderr: {}",
+        rit_continue.stderr
+    );
+    assert!(!git_repo.join(".git").join("sequencer").exists());
+    assert!(!rit_repo.join(".git").join("sequencer").exists());
+    assert!(!git_repo.join(".git").join("CHERRY_PICK_HEAD").exists());
+    assert!(!rit_repo.join(".git").join("CHERRY_PICK_HEAD").exists());
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["log", "--pretty=format:%s", "-3"], &git_repo).stdout,
+        run_capture("git", ["log", "--pretty=format:%s", "-3"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn conflicting_cherry_pick_writes_git_shaped_state_and_abort_restores_head() {
     let root = temp_path("conflict");
     let git_repo = root.join("git");

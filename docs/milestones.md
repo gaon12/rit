@@ -516,8 +516,11 @@ Completion criteria:
     changes to the index/worktree without advancing `HEAD`.
   - [x] Multi-target committing cherry-pick writes Git-shaped sequencer
     `head`, `abort-safety`, and `todo` metadata when a later target conflicts.
-  - [ ] Multi-target sequencer continue/skip replay, strategy options,
-    conflict continuation for merge commits, and editor/hook parity.
+  - [x] `cherry-pick --continue` clears final multi-target sequencer state
+    after committing the resolved stopped pick.
+  - [ ] Multi-target sequencer continue/skip replay for additional remaining
+    todo entries, strategy options, conflict continuation for merge commits,
+    and editor/hook parity.
 - [~] `rit rebase`
   - [x] `rit rebase <upstream>` reports Git-compatible up-to-date status when
     the upstream is already an ancestor of `HEAD`.

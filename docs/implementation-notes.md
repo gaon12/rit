@@ -745,6 +745,9 @@
   target conflicts after earlier targets were committed. The todo file keeps
   the stopped pick and remaining picks, and `--abort` uses the sequencer head
   to restore the original branch tip.
+- `rit cherry-pick --continue` now clears `.git/sequencer` when the stopped
+  multi-target pick is the final todo entry, matching Git's checked final
+  sequencer cleanup state.
 - Clean `rit cherry-pick -x <commit>` now appends Git's original-commit trailer
   to the created commit message.
 - Clean `rit cherry-pick --ff <commit>` now fast-forwards without creating a
@@ -1462,7 +1465,8 @@
   Multi-target no-commit picks use the index/worktree result from the previous
   pick as the base for the next target. Multi-target committing picks that
   stop on a later conflict write `.git/sequencer` metadata matching Git's
-  checked `head`, `abort-safety`, and `todo` state for that conflict start.
+  checked `head`, `abort-safety`, and `todo` state for that conflict start,
+  and continuing the final stopped pick clears that sequencer state.
 - Intentional differences: output and hints are simplified, and sequencer
   continue/skip replay for multiple commits is not implemented.
 - Repository mutation: yes, for clean picks it updates the worktree, index,
