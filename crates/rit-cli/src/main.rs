@@ -4529,16 +4529,62 @@ fn cherry_pick_command(
             }
             return match repository.continue_cherry_pick(&rit_core::CommitOptions::default()) {
                 Ok(result) => {
-                    record_operation(
-                        &repository,
-                        "cherry-pick",
-                        "continue cherry-pick",
-                        before,
-                        vec![result.commit_id],
-                        stderr,
+                    if result.stopped_commit_id.is_some() {
+                        record_operation_with_changed_paths(
+                            &repository,
+                            "cherry-pick",
+                            "continue cherry-pick",
+                            before,
+                            result
+                                .conflict_reports
+                                .iter()
+                                .map(|report| report.path.clone())
+                                .collect(),
+                            vec![result.commit.commit_id],
+                            stderr,
+                        )?;
+                    } else {
+                        record_operation(
+                            &repository,
+                            "cherry-pick",
+                            "continue cherry-pick",
+                            before,
+                            vec![result.commit.commit_id],
+                            stderr,
+                        )?;
+                    }
+                    writeln!(
+                        stdout,
+                        "[{}] cherry-pick",
+                        &result.commit.commit_id.to_hex()[..7]
                     )?;
-                    writeln!(stdout, "[{}] cherry-pick", &result.commit_id.to_hex()[..7])?;
-                    Ok(ExitCode::SUCCESS)
+                    if let Some(stopped_commit_id) = result.stopped_commit_id {
+                        let stopped_commit_hex = stopped_commit_id.to_hex();
+                        let target_label = result
+                            .conflict_target_label
+                            .as_deref()
+                            .unwrap_or(stopped_commit_hex.as_str());
+                        for report in &result.conflict_reports {
+                            write_merge_conflict_report(stdout, report, target_label)?;
+                        }
+                        writeln!(
+                            stderr,
+                            "error: could not apply {}... {}",
+                            &stopped_commit_id.to_hex()[..7],
+                            result.stopped_message_summary.as_deref().unwrap_or("")
+                        )?;
+                        writeln!(
+                            stderr,
+                            "hint: After resolving the conflicts, mark them with \"rit add <path>\", then run \"rit cherry-pick --continue\"."
+                        )?;
+                        writeln!(
+                            stderr,
+                            "hint: To abort and get back to the state before \"rit cherry-pick\", run \"rit cherry-pick --abort\"."
+                        )?;
+                        Ok(ExitCode::from(1))
+                    } else {
+                        Ok(ExitCode::SUCCESS)
+                    }
                 }
                 Err(error) => write_command_error(stderr, error),
             };

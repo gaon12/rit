@@ -593,6 +593,25 @@ fn multi_commit_cherry_pick_continue_stops_on_later_conflict_like_git() {
 
     assert_ne!(git_continue.exit_code, 0);
     assert_ne!(rit_continue.exit_code, 0);
+    assert!(git_continue.stdout.contains("Auto-merging three.txt\n"));
+    assert!(rit_continue.stdout.contains("Auto-merging three.txt\n"));
+    assert!(
+        git_continue
+            .stdout
+            .contains("CONFLICT (content): Merge conflict in three.txt\n")
+    );
+    assert!(
+        rit_continue
+            .stdout
+            .contains("CONFLICT (content): Merge conflict in three.txt\n")
+    );
+    assert!(rit_continue.stderr.contains("error: could not apply "));
+    assert!(rit_continue.stderr.contains("pick three"));
+    assert!(
+        !rit_continue
+            .stderr
+            .contains("cherry-pick continue stopped on a later conflict")
+    );
     assert_eq!(
         read_optional_file(&git_repo.join(".git").join("sequencer").join("todo")),
         read_optional_file(&rit_repo.join(".git").join("sequencer").join("todo"))

@@ -168,11 +168,11 @@ pub use workspace_recommendation::{
     WorkspaceRecommendationReport,
 };
 pub use write::{
-    AddOptions, AddPlan, CherryPickOptions, CherryPickResult, CommitHookMode, CommitOptions,
-    CommitPlan, CommitResult, FileModeOverride, MergeConflictKind, MergeConflictReport,
-    MergeConflictSide, MergeConflictStageEntry, MergeConflictStagePlan, MergeOptions, MergePlan,
-    MergeResult, RebaseContinueResult, RebaseCurrentPatch, RebaseSkipResult, RebaseStartResult,
-    ResetPlan, SignatureIdentity, SignatureTime,
+    AddOptions, AddPlan, CherryPickContinueResult, CherryPickOptions, CherryPickResult,
+    CommitHookMode, CommitOptions, CommitPlan, CommitResult, FileModeOverride, MergeConflictKind,
+    MergeConflictReport, MergeConflictSide, MergeConflictStageEntry, MergeConflictStagePlan,
+    MergeOptions, MergePlan, MergeResult, RebaseContinueResult, RebaseCurrentPatch,
+    RebaseSkipResult, RebaseStartResult, ResetPlan, SignatureIdentity, SignatureTime,
 };
 pub use write_plan::{
     PlannedHook, PlannedObjectWrite, PlannedPathAction, PlannedPathChange, PlannedPolicyCheck,

@@ -1448,11 +1448,12 @@
   merge commits, `-x` for clean committing picks, `--ff` for direct-parent
   fast-forwards, `-s`/`--signoff` for clean committing picks, Git-shaped
   sequencer metadata for multi-target picks that stop on a conflict,
-  `--continue` replay of remaining clean todo entries and later-conflict state,
-  `--abort`, and `--quit`/`--skip` for the supported conflict state.
-- Unsupported options: exact later-conflict progress output, signing, strategy
-  options, empty-commit handling, conflict continuation for merge commits, and
-  full sequencer/editor/hook parity.
+  `--continue` replay of remaining clean todo entries and later-conflict
+  state/output, `--abort`, and `--quit`/`--skip` for the supported conflict
+  state.
+- Unsupported options: exact full later-conflict commit summary/hint parity,
+  signing, strategy options, empty-commit handling, conflict continuation for
+  merge commits, and full sequencer/editor/hook parity.
 - Git-compatible behavior: clean single-parent picks apply the picked commit's
   parent-to-commit tree change onto `HEAD`, create a new one-parent commit, and
   preserve the picked author and commit message. With `-n`/`--no-commit`, the
@@ -1478,11 +1479,12 @@
   order before clearing the sequencer. If a later remaining todo entry
   conflicts during `--continue`, rit leaves Git-compatible `CHERRY_PICK_HEAD`,
   `MERGE_MSG`, `.git/sequencer/todo`, unmerged index stages, and worktree
-  conflict markers for the new stopped pick. Skipping the stopped pick uses the
-  same remaining-clean-todo replay path.
+  conflict markers for the new stopped pick, and prints the new conflict
+  reports plus `error: could not apply <id>... <summary>`. Skipping the stopped
+  pick uses the same remaining-clean-todo replay path.
 - Intentional differences: output and hints are simplified, including the
-  progress text printed when `--continue` stops on a later remaining todo
-  conflict.
+  commit summary and full advice text printed when `--continue` stops on a
+  later remaining todo conflict.
 - Repository mutation: yes, for clean picks it updates the worktree, index,
   `ORIG_HEAD`, and current `HEAD`.
 - Risk: moderate; this first slice requires a clean worktree and writes only

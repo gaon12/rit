@@ -523,10 +523,12 @@ Completion criteria:
   - [x] `cherry-pick --continue` stops with Git-compatible state when a later
     remaining todo commit conflicts after the resolved stopped pick is
     created.
+  - [x] `cherry-pick --continue` prints conflict reports and `could not apply`
+    output when a later remaining todo commit conflicts.
   - [x] `cherry-pick --skip` drops the stopped pick and replays additional
     remaining clean sequencer todo entries.
-  - [ ] Exact later-conflict progress output, strategy options, conflict
-    continuation for merge commits, and editor/hook parity.
+  - [ ] Exact full later-conflict commit summary/hint parity, strategy options,
+    conflict continuation for merge commits, and editor/hook parity.
 - [~] `rit rebase`
   - [x] `rit rebase <upstream>` reports Git-compatible up-to-date status when
     the upstream is already an ancestor of `HEAD`.

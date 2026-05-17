@@ -505,6 +505,23 @@ impl SignatureTime {
     }
 }
 
+/// Result of continuing a resolved in-progress cherry-pick.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CherryPickContinueResult {
+    /// Commit created from the resolved index.
+    pub commit: CommitResult,
+    /// Number of remaining todo commits replayed after the resolved commit.
+    pub replayed_remaining_count: usize,
+    /// Commit that stopped replay after the continued commit.
+    pub stopped_commit_id: Option<ObjectId>,
+    /// First line of the stopped commit message, when replay stopped.
+    pub stopped_message_summary: Option<String>,
+    /// Conflict reports from a later stopped replay.
+    pub conflict_reports: Vec<MergeConflictReport>,
+    /// Target label for conflict messages from a later stopped replay.
+    pub conflict_target_label: Option<String>,
+}
+
 /// Commit and patch currently stopped by an in-progress rebase.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RebaseCurrentPatch {
@@ -1734,7 +1751,10 @@ impl Repository {
     }
 
     /// Commits a resolved in-progress cherry-pick.
-    pub fn continue_cherry_pick(&self, options: &CommitOptions) -> Result<CommitResult> {
+    pub fn continue_cherry_pick(
+        &self,
+        options: &CommitOptions,
+    ) -> Result<CherryPickContinueResult> {
         let state = self.merge_state()?;
         let Some(picked_id) = state.cherry_pick_head else {
             return Err(RitError::invalid_input("no cherry-pick to continue"));
@@ -1785,6 +1805,7 @@ impl Repository {
             sequencer_todo
         };
         let replay_options = CherryPickOptions::default();
+        let mut replayed_remaining_count = 0;
         for (todo_index, item) in remaining_todo.iter().enumerate() {
             let target = item.commit_id.to_hex();
             let replay_result =
@@ -1799,14 +1820,32 @@ impl Repository {
                     current_head,
                     &remaining_todo[todo_index..],
                 )?;
-                return Err(RitError::invalid_input(
-                    "cherry-pick continue stopped on a later conflict",
-                ));
+                let picked_object = self.read_object(item.commit_id)?;
+                let picked_commit = parse_commit(&picked_object.data)?;
+                let target_label =
+                    cherry_pick_conflict_label(item.commit_id, &picked_commit.message);
+                self.refresh_indexdb_after_git_write();
+                return Ok(CherryPickContinueResult {
+                    commit: result,
+                    replayed_remaining_count,
+                    stopped_commit_id: Some(item.commit_id),
+                    stopped_message_summary: Some(rebase_commit_summary(&picked_commit.message)),
+                    conflict_reports: replay_result.conflict_reports,
+                    conflict_target_label: Some(target_label),
+                });
             }
+            replayed_remaining_count += 1;
         }
         remove_dir_if_exists(&self.git_dir().join("sequencer"))?;
         self.refresh_indexdb_after_git_write();
-        Ok(result)
+        Ok(CherryPickContinueResult {
+            commit: result,
+            replayed_remaining_count,
+            stopped_commit_id: None,
+            stopped_message_summary: None,
+            conflict_reports: Vec::new(),
+            conflict_target_label: None,
+        })
     }
 
     fn read_cherry_pick_sequencer_head(&self) -> Result<Option<ObjectId>> {
