@@ -264,11 +264,22 @@ impl DiffPatch {
 }
 
 /// Options that affect patch text rendering without changing the diff itself.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PatchRenderOptions {
     /// Render full object IDs in `index` header lines instead of Git's default
     /// abbreviated IDs.
     pub full_index: bool,
+    /// Number of object ID hex characters to show when `full_index` is false.
+    pub abbrev: usize,
+}
+
+impl Default for PatchRenderOptions {
+    fn default() -> Self {
+        Self {
+            full_index: false,
+            abbrev: 7,
+        }
+    }
 }
 
 /// One file in a patch-form diff.
@@ -314,8 +325,8 @@ impl DiffPatchFile {
                 }
                 output.push_str(&format!(
                     "index {}..{} {:06o}\n",
-                    patch_object_id(self.old_object_id, self.new_object_id, options.full_index),
-                    patch_object_id(self.new_object_id, self.old_object_id, options.full_index),
+                    patch_object_id(self.old_object_id, self.new_object_id, options),
+                    patch_object_id(self.new_object_id, self.old_object_id, options),
                     self.mode
                 ));
                 if !is_binary {
@@ -327,8 +338,8 @@ impl DiffPatchFile {
                 output.push_str(&format!("new file mode {:06o}\n", self.mode));
                 output.push_str(&format!(
                     "index {}..{}\n",
-                    patch_object_id(None, self.new_object_id, options.full_index),
-                    patch_object_id(self.new_object_id, self.old_object_id, options.full_index)
+                    patch_object_id(None, self.new_object_id, options),
+                    patch_object_id(self.new_object_id, self.old_object_id, options)
                 ));
                 if !is_binary {
                     output.push_str("--- /dev/null\n");
@@ -339,8 +350,8 @@ impl DiffPatchFile {
                 output.push_str(&format!("deleted file mode {:06o}\n", self.mode));
                 output.push_str(&format!(
                     "index {}..{}\n",
-                    patch_object_id(self.old_object_id, self.new_object_id, options.full_index),
-                    patch_object_id(None, self.old_object_id, options.full_index)
+                    patch_object_id(self.old_object_id, self.new_object_id, options),
+                    patch_object_id(None, self.old_object_id, options)
                 ));
                 if !is_binary {
                     output.push_str(&format!("--- a/{}\n", self.path));
@@ -350,8 +361,8 @@ impl DiffPatchFile {
             _ => {
                 output.push_str(&format!(
                     "index {}..{} {:06o}\n",
-                    patch_object_id(self.old_object_id, self.new_object_id, options.full_index),
-                    patch_object_id(self.new_object_id, self.old_object_id, options.full_index),
+                    patch_object_id(self.old_object_id, self.new_object_id, options),
+                    patch_object_id(self.new_object_id, self.old_object_id, options),
                     self.mode
                 ));
                 if !is_binary {
@@ -2102,20 +2113,21 @@ fn hunk_range(start: usize, count: usize) -> String {
 fn patch_object_id(
     object_id: Option<ObjectId>,
     peer: Option<ObjectId>,
-    full_index: bool,
+    options: &PatchRenderOptions,
 ) -> String {
+    let abbrev = options.abbrev.max(4);
     if let Some(object_id) = object_id {
         let hex = object_id.to_hex();
-        if full_index {
+        if options.full_index {
             return hex;
         }
-        return hex[..7.min(hex.len())].to_owned();
+        return hex[..abbrev.min(hex.len())].to_owned();
     }
 
-    let zero_length = if full_index {
+    let zero_length = if options.full_index {
         peer.map(|object_id| object_id.to_hex().len()).unwrap_or(40)
     } else {
-        7
+        abbrev
     };
     "0".repeat(zero_length)
 }
@@ -2453,13 +2465,60 @@ mod tests {
         };
 
         let text = patch
-            .to_patch_text_with_options(&super::PatchRenderOptions { full_index: true })
+            .to_patch_text_with_options(&super::PatchRenderOptions {
+                full_index: true,
+                ..super::PatchRenderOptions::default()
+            })
             .expect("full-index patch should render");
 
         assert!(text.contains(&format!("index {}..{} 100644\n", old_id, new_id)));
         assert!(text.contains(&format!(
             "index 0000000000000000000000000000000000000000..{}\n",
             new_id
+        )));
+    }
+
+    #[test]
+    fn patch_abbrev_renders_requested_object_id_length_with_git_minimum() {
+        let old_id = crate::hash_object(crate::ObjectKind::Blob, b"old\n");
+        let new_id = crate::hash_object(crate::ObjectKind::Blob, b"new\n");
+        let patch = super::DiffPatch {
+            files: vec![super::DiffPatchFile {
+                status: 'M',
+                old_path: None,
+                path: "tracked.txt".to_owned(),
+                similarity_score: None,
+                old_object_id: Some(old_id),
+                new_object_id: Some(new_id),
+                mode: 0o100644,
+                old_data: b"old\n".to_vec(),
+                new_data: b"new\n".to_vec(),
+            }],
+            warnings: Vec::new(),
+        };
+
+        let text = patch
+            .to_patch_text_with_options(&super::PatchRenderOptions {
+                abbrev: 12,
+                ..super::PatchRenderOptions::default()
+            })
+            .expect("abbreviated patch should render");
+        assert!(text.contains(&format!(
+            "index {}..{} 100644\n",
+            &old_id.to_hex()[..12],
+            &new_id.to_hex()[..12]
+        )));
+
+        let text = patch
+            .to_patch_text_with_options(&super::PatchRenderOptions {
+                abbrev: 1,
+                ..super::PatchRenderOptions::default()
+            })
+            .expect("minimum abbreviated patch should render");
+        assert!(text.contains(&format!(
+            "index {}..{} 100644\n",
+            &old_id.to_hex()[..4],
+            &new_id.to_hex()[..4]
         )));
     }
 

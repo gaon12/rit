@@ -426,6 +426,7 @@ fn stash_command(
             return match patch_result {
                 Ok(patch) => match patch.to_patch_text_with_options(&rit_core::PatchRenderOptions {
                     full_index: show_args.full_index,
+                    abbrev: show_args.abbrev,
                 }) {
                     Ok(text) => {
                         let has_changes = !patch.files.is_empty();
@@ -610,6 +611,7 @@ struct StashShowArgs {
     exit_code: bool,
     diff_option: bool,
     full_index: bool,
+    abbrev: usize,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -628,6 +630,7 @@ fn parse_stash_show_args(
     let mut exit_code = false;
     let mut diff_option = false;
     let mut full_index = false;
+    let mut abbrev = 7;
     let mut stash = None;
     for arg in args {
         match arg.as_str() {
@@ -643,6 +646,10 @@ fn parse_stash_show_args(
             "--full-index" => {
                 diff_option = true;
                 full_index = true;
+            }
+            "--abbrev" => {
+                diff_option = true;
+                abbrev = 7;
             }
             "--no-ext-diff" | "--ext-diff" | "--no-color" | "--color=never" | "--color=auto" => {
                 diff_option = true;
@@ -661,6 +668,11 @@ fn parse_stash_show_args(
             "-u" | "--include-untracked" => untracked_mode = Some(StashShowUntrackedMode::Include),
             "--no-include-untracked" => untracked_mode = Some(StashShowUntrackedMode::Tracked),
             "--only-untracked" => untracked_mode = Some(StashShowUntrackedMode::Only),
+            _ if arg.starts_with("--abbrev=") => {
+                let value = arg.trim_start_matches("--abbrev=");
+                diff_option = true;
+                abbrev = value.parse::<usize>().unwrap_or(0).max(4);
+            }
             _ if arg.starts_with('-') => {
                 writeln!(stderr, "rit: unsupported stash show option '{arg}'")?;
                 return Ok(None);
@@ -681,6 +693,7 @@ fn parse_stash_show_args(
         exit_code,
         diff_option,
         full_index,
+        abbrev,
     }))
 }
 

@@ -613,6 +613,9 @@ Completion criteria:
   - [x] `stash show --full-index` renders Git-compatible full object IDs in
     patch index headers, including combined stat-plus-patch and untracked
     patch scopes.
+  - [x] `stash show --abbrev[=<n>]` renders Git-compatible abbreviated object
+    IDs in patch index headers, including Git's four-character minimum and
+    `--full-index` precedence.
   - [x] `stash show` accepts no-external-diff and no-color diff options
     (`--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`,
     `--color=auto`) for Git-compatible no-color output in checked captures.

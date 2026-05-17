@@ -1473,7 +1473,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]`
   as the legacy save form,
-  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--no-patch|--quiet|--exit-code|--stat|--shortstat|--name-only|--name-status|--numstat] [--full-index|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--no-patch|--quiet|--exit-code|--stat|--shortstat|--name-only|--name-status|--numstat] [--full-index|--abbrev[=<n>]|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
   worktree/index restoration when `HEAD` matches the stash base,
@@ -1581,7 +1581,9 @@
   diff-exists exit codes while preserving explicit output formats; without an
   explicit output format it uses Git's patch output for the checked show scope.
   `--full-index` renders complete object IDs in patch `index` headers,
-  including full-width zero object IDs for additions and deletions.
+  including full-width zero object IDs for additions and deletions. `--abbrev`
+  and `--abbrev=<n>` control patch `index` header abbreviation length, with
+  Git's four-character minimum and `--full-index` precedence.
   `--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`, and
   `--color=auto` are accepted for Git-compatible no-external-diff/no-color
   output in the checked capture environment.
