@@ -1534,7 +1534,9 @@ fn stash_show_summary_formats_match_git() {
     for args in [
         vec!["stash", "show"],
         vec!["stash", "show", "-p"],
+        vec!["stash", "show", "--patch", "--full-index"],
         vec!["stash", "show", "--patch-with-stat"],
+        vec!["stash", "show", "--patch-with-stat", "--full-index"],
         vec!["stash", "show", "--stat", "--patch"],
         vec!["stash", "show", "--patch", "--stat"],
         vec!["stash", "show", "--patch", "stash@{1}"],
@@ -1598,6 +1600,13 @@ fn stash_show_include_untracked_summary_formats_match_git() {
         vec!["stash", "show", "--include-untracked", "--numstat"],
         vec!["stash", "show", "--include-untracked", "--shortstat"],
         vec!["stash", "show", "--include-untracked", "--patch-with-stat"],
+        vec![
+            "stash",
+            "show",
+            "--include-untracked",
+            "--patch",
+            "--full-index",
+        ],
         vec!["stash", "show", "--include-untracked", "--patch"],
         vec!["stash", "show", "--only-untracked"],
         vec!["stash", "show", "--only-untracked", "--name-only"],
@@ -1605,6 +1614,13 @@ fn stash_show_include_untracked_summary_formats_match_git() {
         vec!["stash", "show", "--only-untracked", "--numstat"],
         vec!["stash", "show", "--only-untracked", "--shortstat"],
         vec!["stash", "show", "--only-untracked", "--patch-with-stat"],
+        vec![
+            "stash",
+            "show",
+            "--only-untracked",
+            "--patch",
+            "--full-index",
+        ],
         vec!["stash", "show", "--only-untracked", "--patch"],
     ] {
         let git_show = run_capture("git", args.iter().copied(), &git_repo);
@@ -1903,8 +1919,8 @@ fn stash_show_exit_code_matches_git() {
 }
 
 #[test]
-fn stash_show_diff_noop_options_match_git() {
-    let root = temp_path("show-diff-noop-options");
+fn stash_show_diff_passthrough_options_match_git() {
+    let root = temp_path("show-diff-passthrough-options");
     let git_repo = root.join("git");
     let rit_repo = root.join("rit");
     setup_stashes(&git_repo);
@@ -1916,6 +1932,7 @@ fn stash_show_diff_noop_options_match_git() {
         vec!["stash", "show", "--no-color"],
         vec!["stash", "show", "--color=never"],
         vec!["stash", "show", "--color=auto"],
+        vec!["stash", "show", "--full-index"],
         vec!["stash", "show", "--no-color", "--stat"],
         vec!["stash", "show", "--color=never", "--patch"],
         vec!["stash", "show", "--no-ext-diff", "--name-status"],

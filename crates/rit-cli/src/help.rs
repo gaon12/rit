@@ -225,7 +225,7 @@ const STASH_HELP: &str = "\
 rit stash list
 rit stash [push [(-m|--message) <message>] [-S|--staged] [-k|--keep-index] [-u|--include-untracked] [-a|--all] [-q|--quiet] [--pathspec-from-file <file>] [--pathspec-file-nul] [--] [<pathspec>...]]
 rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]
-rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--no-patch|--quiet|--exit-code|--stat|--shortstat|--name-only|--name-status|--numstat] [--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto] [<stash>]
+rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--no-patch|--quiet|--exit-code|--stat|--shortstat|--name-only|--name-status|--numstat] [--full-index|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto] [<stash>]
 rit stash drop [-q|--quiet] [<stash>]
 rit stash apply [--index] [-q|--quiet] [<stash>]
 rit stash pop [--index] [-q|--quiet] [<stash>]

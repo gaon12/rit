@@ -424,7 +424,9 @@ fn stash_command(
                 ),
             };
             return match patch_result {
-                Ok(patch) => match patch.to_patch_text() {
+                Ok(patch) => match patch.to_patch_text_with_options(&rit_core::PatchRenderOptions {
+                    full_index: show_args.full_index,
+                }) {
                     Ok(text) => {
                         let has_changes = !patch.files.is_empty();
                         if matches!(format, StashShowFormat::StatAndPatch) {
@@ -607,6 +609,7 @@ struct StashShowArgs {
     untracked_mode: Option<StashShowUntrackedMode>,
     exit_code: bool,
     diff_option: bool,
+    full_index: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -624,6 +627,7 @@ fn parse_stash_show_args(
     let mut untracked_mode = None;
     let mut exit_code = false;
     let mut diff_option = false;
+    let mut full_index = false;
     let mut stash = None;
     for arg in args {
         match arg.as_str() {
@@ -636,6 +640,10 @@ fn parse_stash_show_args(
             "--shortstat" => format = Some(StashShowFormat::ShortStat),
             "--quiet" => format = Some(StashShowFormat::Quiet),
             "--exit-code" => exit_code = true,
+            "--full-index" => {
+                diff_option = true;
+                full_index = true;
+            }
             "--no-ext-diff" | "--ext-diff" | "--no-color" | "--color=never" | "--color=auto" => {
                 diff_option = true;
             }
@@ -672,6 +680,7 @@ fn parse_stash_show_args(
         untracked_mode,
         exit_code,
         diff_option,
+        full_index,
     }))
 }
 

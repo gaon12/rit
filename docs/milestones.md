@@ -610,6 +610,9 @@ Completion criteria:
   - [x] `stash show --exit-code` returns Git-compatible diff-exists exit
     codes while preserving explicit output formats, and defaults to patch
     output when no format is provided.
+  - [x] `stash show --full-index` renders Git-compatible full object IDs in
+    patch index headers, including combined stat-plus-patch and untracked
+    patch scopes.
   - [x] `stash show` accepts no-external-diff and no-color diff options
     (`--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`,
     `--color=auto`) for Git-compatible no-color output in checked captures.
