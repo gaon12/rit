@@ -2330,7 +2330,21 @@ fn stash_show_diff_passthrough_options_match_git() {
         vec!["stash", "show", "--patch", "--ignore-blank-lines"],
         vec!["stash", "show", "--patch", "--indent-heuristic"],
         vec!["stash", "show", "--patch", "--no-indent-heuristic"],
+        vec!["stash", "show", "--patch", "--ws-error-highlight=none"],
+        vec!["stash", "show", "--patch", "--ws-error-highlight=all"],
+        vec!["stash", "show", "--patch", "--ws-error-highlight=default"],
+        vec!["stash", "show", "--patch", "--ws-error-highlight=old,new"],
+        vec![
+            "stash",
+            "show",
+            "--patch",
+            "--ws-error-highlight=old,new,context",
+        ],
         vec!["stash", "show", "--patch", "--anchored=base"],
+        vec!["stash", "show", "--patch", "--irreversible-delete"],
+        vec!["stash", "show", "--patch", "-D"],
+        vec!["stash", "show", "--patch", "--function-context"],
+        vec!["stash", "show", "--patch", "-W"],
         vec!["stash", "show", "--textconv"],
         vec!["stash", "show", "--no-textconv"],
         vec!["stash", "show", "--ignore-submodules"],
@@ -2418,6 +2432,7 @@ fn stash_show_diff_passthrough_options_match_git() {
         vec!["stash", "show", "--stat=80,40,1,2"],
         vec!["stash", "show", "--patch", "--diff-algorithm=bad"],
         vec!["stash", "show", "--patch", "--diff-algorithm="],
+        vec!["stash", "show", "--patch", "--ws-error-highlight=bad"],
     ] {
         let git_show = run_capture("git", args.iter().copied(), &git_repo);
         let rit_show = run_capture(rit_binary(), args.iter().copied(), &rit_repo);

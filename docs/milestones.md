@@ -711,8 +711,12 @@ Completion criteria:
   - [x] `stash show` accepts whitespace and indent heuristic passthrough diff
     options (`-w`, `--ignore-all-space`, `-b`, `--ignore-space-change`,
     `--ignore-space-at-eol`, `--ignore-cr-at-eol`, `--ignore-blank-lines`,
-    `--indent-heuristic`, `--no-indent-heuristic`) for Git-compatible simple
-    text patch output in checked captures.
+    `--indent-heuristic`, `--no-indent-heuristic`,
+    `--ws-error-highlight=<kind>`) for Git-compatible simple text patch output
+    in checked captures, including invalid ws-error-highlight errors.
+  - [x] `stash show` accepts checked patch context/delete passthrough diff
+    options (`--irreversible-delete`, `-D`, `--function-context`, `-W`) for
+    Git-compatible simple text patch output in checked captures.
   - [x] `stash show` accepts rename/copy/binary passthrough diff options
     (`--binary`, `--no-renames`, `--find-renames[=<n>]`, `-M[<n>]`,
     `--find-copies[=<n>]`, `-C[<n>]`, `--find-copies-harder`, `-l<n>`) for

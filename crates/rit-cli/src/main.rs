@@ -974,6 +974,10 @@ fn parse_stash_show_args(
             | "--ignore-blank-lines"
             | "--indent-heuristic"
             | "--no-indent-heuristic"
+            | "--irreversible-delete"
+            | "-D"
+            | "--function-context"
+            | "-W"
             | "-a"
             | "--text"
             | "--textconv"
@@ -1170,6 +1174,14 @@ fn parse_stash_show_args(
                     return Ok(None);
                 }
             }
+            _ if arg.starts_with("--ws-error-highlight=") => {
+                let value = arg.trim_start_matches("--ws-error-highlight=");
+                diff_option = true;
+                if !is_valid_ws_error_highlight(value) {
+                    writeln!(stderr, "error: unknown value after ws-error-highlight=")?;
+                    return Ok(None);
+                }
+            }
             option if option.starts_with("--find-renames=") || option.starts_with("-M") => {
                 diff_option = true;
                 if let Err(error) = parse_similarity_option(option, "-M", "--find-renames=") {
@@ -1340,6 +1352,15 @@ fn first_invalid_color_moved_ws_mode(value: &str) -> Option<&str> {
                 | "ignore-space-at-eol"
                 | "ignore-all-space"
                 | "allow-indentation-change"
+        )
+    })
+}
+
+fn is_valid_ws_error_highlight(value: &str) -> bool {
+    value.split(',').all(|mode| {
+        matches!(
+            mode,
+            "" | "all" | "default" | "old" | "new" | "context" | "none"
         )
     })
 }
