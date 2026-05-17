@@ -682,6 +682,11 @@ Completion criteria:
   - [x] `stash show` accepts no-external-diff and no-color diff options
     (`--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`,
     `--color=auto`) for Git-compatible no-color output in checked captures.
+  - [x] `stash show` accepts color-moved and root-relative passthrough diff
+    options (`--color-moved[=<mode>]`, `--no-color-moved`,
+    `--color-moved-ws=<modes>`, `--relative`) for Git-compatible no-color
+    simple text patch output in checked captures, including invalid
+    color-moved mode errors.
   - [x] `stash show` accepts diff algorithm passthrough options
     (`--minimal`, `--patience`, `--histogram`, `--anchored=<text>`) for
     Git-compatible simple text patch output in checked captures.

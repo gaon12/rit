@@ -876,6 +876,9 @@ fn parse_stash_show_args(
             | "--no-color"
             | "--color=never"
             | "--color=auto"
+            | "--color-moved"
+            | "--no-color-moved"
+            | "--relative"
             | "--binary"
             | "--no-renames"
             | "--find-renames"
@@ -997,6 +1000,33 @@ fn parse_stash_show_args(
             }
             _ if arg.starts_with("--anchored=") => {
                 diff_option = true;
+            }
+            _ if arg.starts_with("--color-moved=") => {
+                let value = arg.trim_start_matches("--color-moved=");
+                diff_option = true;
+                if !is_supported_color_moved_mode(value) {
+                    writeln!(
+                        stderr,
+                        "error: color moved setting must be one of 'no', 'default', 'blocks', 'zebra', 'dimmed-zebra', 'plain'"
+                    )?;
+                    writeln!(stderr, "error: bad --color-moved argument: {value}")?;
+                    return Ok(None);
+                }
+            }
+            _ if arg.starts_with("--color-moved-ws=") => {
+                let value = arg.trim_start_matches("--color-moved-ws=");
+                diff_option = true;
+                if let Some(invalid_mode) = first_invalid_color_moved_ws_mode(value) {
+                    writeln!(
+                        stderr,
+                        "error: unknown color-moved-ws mode '{invalid_mode}', possible values are 'ignore-space-change', 'ignore-space-at-eol', 'ignore-all-space', 'allow-indentation-change'"
+                    )?;
+                    writeln!(
+                        stderr,
+                        "error: invalid mode '{invalid_mode}' in --color-moved-ws"
+                    )?;
+                    return Ok(None);
+                }
             }
             option if option.starts_with("--find-renames=") || option.starts_with("-M") => {
                 diff_option = true;
@@ -1125,6 +1155,25 @@ fn parse_output_indicator(value: &str) -> std::result::Result<Option<char>, ()> 
         return Err(());
     }
     Ok(Some(character))
+}
+
+fn is_supported_color_moved_mode(value: &str) -> bool {
+    matches!(
+        value,
+        "no" | "default" | "blocks" | "zebra" | "dimmed-zebra" | "plain"
+    )
+}
+
+fn first_invalid_color_moved_ws_mode(value: &str) -> Option<&str> {
+    value.split(',').find(|mode| {
+        !matches!(
+            *mode,
+            "no" | "ignore-space-change"
+                | "ignore-space-at-eol"
+                | "ignore-all-space"
+                | "allow-indentation-change"
+        )
+    })
 }
 
 fn stash_show_patch_options(show_args: &StashShowArgs) -> rit_core::PatchRenderOptions {

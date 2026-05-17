@@ -2192,6 +2192,23 @@ fn stash_show_diff_passthrough_options_match_git() {
         vec!["stash", "show", "--no-color"],
         vec!["stash", "show", "--color=never"],
         vec!["stash", "show", "--color=auto"],
+        vec!["stash", "show", "--patch", "--color-moved"],
+        vec!["stash", "show", "--patch", "--color-moved=plain"],
+        vec!["stash", "show", "--patch", "--color-moved=blocks"],
+        vec!["stash", "show", "--patch", "--no-color-moved"],
+        vec![
+            "stash",
+            "show",
+            "--patch",
+            "--color-moved-ws=ignore-all-space",
+        ],
+        vec![
+            "stash",
+            "show",
+            "--patch",
+            "--color-moved-ws=ignore-space-change,ignore-all-space",
+        ],
+        vec!["stash", "show", "--patch", "--relative"],
         vec!["stash", "show", "--patch", "--binary"],
         vec!["stash", "show", "--patch", "--no-renames"],
         vec!["stash", "show", "--patch", "--find-renames"],
@@ -2253,6 +2270,26 @@ fn stash_show_diff_passthrough_options_match_git() {
     let rit_show = run_capture(
         rit_binary(),
         ["stash", "show", "--ignore-submodules=bad"],
+        &rit_repo,
+    );
+    assert_eq!(git_show.exit_code, rit_show.exit_code);
+    assert_eq!(git_show.stdout, rit_show.stdout);
+    assert_eq!(git_show.stderr, rit_show.stderr);
+
+    let git_show = run_capture("git", ["stash", "show", "--color-moved=bad"], &git_repo);
+    let rit_show = run_capture(
+        rit_binary(),
+        ["stash", "show", "--color-moved=bad"],
+        &rit_repo,
+    );
+    assert_eq!(git_show.exit_code, rit_show.exit_code);
+    assert_eq!(git_show.stdout, rit_show.stdout);
+    assert_eq!(git_show.stderr, rit_show.stderr);
+
+    let git_show = run_capture("git", ["stash", "show", "--color-moved-ws=bad"], &git_repo);
+    let rit_show = run_capture(
+        rit_binary(),
+        ["stash", "show", "--color-moved-ws=bad"],
         &rit_repo,
     );
     assert_eq!(git_show.exit_code, rit_show.exit_code);
