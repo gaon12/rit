@@ -843,6 +843,19 @@ fn parse_stash_show_args(
                     _ => StashShowFormat::CompactStat,
                 });
             }
+            "--no-compact-summary" => {
+                diff_option = true;
+                format = match format {
+                    Some(StashShowFormat::CompactStat) => Some(StashShowFormat::Stat),
+                    Some(StashShowFormat::CompactStatAndPatch) => {
+                        Some(StashShowFormat::StatAndPatch)
+                    }
+                    Some(StashShowFormat::CompactStatAndSummary) => {
+                        Some(StashShowFormat::StatAndSummary)
+                    }
+                    other => other,
+                };
+            }
             "--shortstat" => format = Some(StashShowFormat::ShortStat),
             "--quiet" => format = Some(StashShowFormat::Quiet),
             "--exit-code" => exit_code = true,

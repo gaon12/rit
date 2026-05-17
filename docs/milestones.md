@@ -588,8 +588,8 @@ Completion criteria:
   - [x] `rit stash drop -q` and basic empty/out-of-range drop errors match
     Git.
   - [x] `rit stash show` supports default stat output plus `--stat`,
-    `--shortstat`, `--name-only`, `--name-status`, and `--numstat` for loose
-    stash entries.
+    `--compact-summary`, `--no-compact-summary`, `--shortstat`,
+    `--name-only`, `--name-status`, and `--numstat` for loose stash entries.
   - [x] `rit stash show -p/--patch` renders Git-compatible patch output for
     loose stash entries.
   - [x] `rit stash store` stores an existing commit in loose `refs/stash` with

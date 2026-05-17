@@ -120,6 +120,10 @@
 - 2026-05-17 stash show NUL summary slice checked `git stash show -h`,
   `git diff -h`, and direct Git comparisons for `stash show -z --name-only`,
   `-z --name-status`, and `-z --numstat` on text stash changes.
+- 2026-05-18 stash show no compact summary slice checked
+  Git 2.52.0.windows.1 with `git --version`, `git help -a`, `git stash -h`,
+  and direct Git comparisons for `stash show --no-compact-summary` and
+  combinations with `--compact-summary`, `--patch`, and `--summary`.
 - 2026-05-17 restore core.ignorecase rejection slice checked
   `git restore <mismatched-case-path>` with `core.ignorecase=true` on
   `git version 2.52.0.windows.1`; Git and rit both reject the pathspec and
@@ -1580,7 +1584,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]`
   as the legacy save form,
-  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [-z] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--inter-hunk-context=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--minimal|--patience|--histogram|--binary|--no-renames|--find-renames[=<n>]|-M[<n>]|--find-copies[=<n>]|-C[<n>]|--find-copies-harder|-l<n>|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--no-compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [-z] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--inter-hunk-context=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--minimal|--patience|--histogram|--binary|--no-renames|--find-renames[=<n>]|-M[<n>]|--find-copies[=<n>]|-C[<n>]|--find-copies-harder|-l<n>|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
   worktree/index restoration when `HEAD` matches the stash base,
@@ -1611,6 +1615,9 @@
 - Git-compatible behavior: `rit stash push --no-pathspec-from-file` is
   accepted as a no-op when no pathspec file selection is active, matching Git's
   checked tracked path filtering behavior.
+- Git-compatible behavior: `rit stash show --no-compact-summary` is accepted
+  as a diff option. Alone it selects patch output through Git's diff-option
+  default, and after `--compact-summary` it falls back to ordinary stat output.
 - Git-compatible behavior: `rit stash push --keep-index` records the same
   tracked stash shape while restoring selected paths to the pre-stash index
   state, so staged changes remain staged and unstaged-only changes are cleaned.
