@@ -415,6 +415,8 @@ fn stash_command(
                 | StashShowFormat::Summary
                 | StashShowFormat::SummaryAndPatch
                 | StashShowFormat::StatAndSummary
+                | StashShowFormat::CompactStatAndPatch
+                | StashShowFormat::CompactStatAndSummary
         ) {
             let patch_result = match untracked_mode {
                 StashShowUntrackedMode::Tracked => {
@@ -463,7 +465,11 @@ fn stash_command(
                                 writeln!(stdout)?;
                             }
                         }
-                        if matches!(format, StashShowFormat::StatAndSummary) {
+                        if matches!(
+                            format,
+                            StashShowFormat::StatAndSummary
+                                | StashShowFormat::CompactStatAndSummary
+                        ) {
                             let summary = match untracked_mode {
                                 StashShowUntrackedMode::Tracked => repository
                                     .stash_show(show_args.index, &rit_core::PathspecSet::all()),
@@ -480,7 +486,14 @@ fn stash_command(
                             };
                             match summary {
                                 Ok(diff) => {
-                                    stdout.write_all(diff.to_stat_text().as_bytes())?;
+                                    let stat_text =
+                                        if matches!(format, StashShowFormat::CompactStatAndSummary)
+                                        {
+                                            diff.to_compact_stat_text()
+                                        } else {
+                                            diff.to_stat_text()
+                                        };
+                                    stdout.write_all(stat_text.as_bytes())?;
                                     stdout.write_all(patch.to_summary_text().as_bytes())?;
                                     return Ok(stash_show_exit_code(
                                         show_args.exit_code,
@@ -490,7 +503,10 @@ fn stash_command(
                                 Err(error) => return write_stash_error(stderr, error),
                             }
                         }
-                        if matches!(format, StashShowFormat::StatAndPatch) {
+                        if matches!(
+                            format,
+                            StashShowFormat::StatAndPatch | StashShowFormat::CompactStatAndPatch
+                        ) {
                             let summary = match untracked_mode {
                                 StashShowUntrackedMode::Tracked => repository
                                     .stash_show(show_args.index, &rit_core::PathspecSet::all()),
@@ -507,7 +523,12 @@ fn stash_command(
                             };
                             match summary {
                                 Ok(diff) => {
-                                    let stat_text = diff.to_stat_text();
+                                    let stat_text =
+                                        if matches!(format, StashShowFormat::CompactStatAndPatch) {
+                                            diff.to_compact_stat_text()
+                                        } else {
+                                            diff.to_stat_text()
+                                        };
                                     stdout.write_all(stat_text.as_bytes())?;
                                     if !stat_text.is_empty() && !text.is_empty() {
                                         writeln!(stdout)?;
@@ -542,11 +563,17 @@ fn stash_command(
                         return Ok(stash_show_exit_code(true, !diff.files.is_empty()));
                     }
                     StashShowFormat::Stat => stdout.write_all(diff.to_stat_text().as_bytes())?,
+                    StashShowFormat::CompactStat => {
+                        stdout.write_all(diff.to_compact_stat_text().as_bytes())?
+                    }
                     StashShowFormat::Patch => {
                         unreachable!("patch is handled before summary output")
                     }
                     StashShowFormat::StatAndPatch => {
                         unreachable!("stat and patch are handled before summary output")
+                    }
+                    StashShowFormat::CompactStatAndPatch => {
+                        unreachable!("compact stat and patch are handled before summary output")
                     }
                     StashShowFormat::Raw | StashShowFormat::RawAndPatch => {
                         unreachable!("raw is handled before summary output")
@@ -556,6 +583,9 @@ fn stash_command(
                     }
                     StashShowFormat::StatAndSummary => {
                         unreachable!("stat and summary are handled before summary output")
+                    }
+                    StashShowFormat::CompactStatAndSummary => {
+                        unreachable!("compact stat and summary are handled before summary output")
                     }
                     StashShowFormat::ShortStat => {
                         stdout.write_all(diff.to_shortstat_text().as_bytes())?
@@ -665,13 +695,16 @@ enum StashShowFormat {
     None,
     Quiet,
     Stat,
+    CompactStat,
     Patch,
     StatAndPatch,
+    CompactStatAndPatch,
     Raw,
     RawAndPatch,
     Summary,
     SummaryAndPatch,
     StatAndSummary,
+    CompactStatAndSummary,
     ShortStat,
     NameOnly,
     NameStatus,
@@ -712,7 +745,19 @@ fn parse_stash_show_args(
                 format = Some(match format {
                     Some(StashShowFormat::Patch) => StashShowFormat::StatAndPatch,
                     Some(StashShowFormat::Summary) => StashShowFormat::StatAndSummary,
+                    Some(StashShowFormat::CompactStat) => StashShowFormat::Stat,
+                    Some(StashShowFormat::CompactStatAndPatch) => StashShowFormat::StatAndPatch,
+                    Some(StashShowFormat::CompactStatAndSummary) => StashShowFormat::StatAndSummary,
                     _ => StashShowFormat::Stat,
+                });
+            }
+            "--compact-summary" => {
+                format = Some(match format {
+                    Some(StashShowFormat::Patch) => StashShowFormat::CompactStatAndPatch,
+                    Some(StashShowFormat::Summary) => StashShowFormat::CompactStatAndSummary,
+                    Some(StashShowFormat::StatAndPatch) => StashShowFormat::CompactStatAndPatch,
+                    Some(StashShowFormat::StatAndSummary) => StashShowFormat::CompactStatAndSummary,
+                    _ => StashShowFormat::CompactStat,
                 });
             }
             "--shortstat" => format = Some(StashShowFormat::ShortStat),
@@ -736,6 +781,7 @@ fn parse_stash_show_args(
                     Some(StashShowFormat::Raw) => StashShowFormat::RawAndPatch,
                     Some(StashShowFormat::Summary) => StashShowFormat::SummaryAndPatch,
                     Some(StashShowFormat::Stat) => StashShowFormat::StatAndPatch,
+                    Some(StashShowFormat::CompactStat) => StashShowFormat::CompactStatAndPatch,
                     _ => StashShowFormat::Patch,
                 });
             }
@@ -750,6 +796,10 @@ fn parse_stash_show_args(
                 format = Some(match format {
                     Some(StashShowFormat::Patch) => StashShowFormat::SummaryAndPatch,
                     Some(StashShowFormat::Stat) => StashShowFormat::StatAndSummary,
+                    Some(StashShowFormat::CompactStat) => StashShowFormat::CompactStatAndSummary,
+                    Some(StashShowFormat::CompactStatAndPatch) => {
+                        StashShowFormat::CompactStatAndSummary
+                    }
                     _ => StashShowFormat::Summary,
                 });
             }

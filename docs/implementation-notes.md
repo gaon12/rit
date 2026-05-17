@@ -1473,7 +1473,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]`
   as the legacy save form,
-  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [--full-index|--abbrev[=<n>]|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [--full-index|--abbrev[=<n>]|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
   worktree/index restoration when `HEAD` matches the stash base,
@@ -1585,11 +1585,14 @@
   and `--abbrev=<n>` control patch `index` header abbreviation length, with
   Git's four-character minimum and `--full-index` precedence. `--raw`,
   `--patch-with-raw`, `--raw --patch`, and `--patch --raw` render Git-compatible
-  raw records for the checked tracked and untracked patch scopes. `--summary`,
-  `--summary --patch`, `--patch --summary`, `--summary --stat`, and
-  `--stat --summary` render Git-compatible extended file summaries for
-  additions, deletions, and renames in the checked tracked and untracked patch
-  scopes.
+  raw records for the checked tracked and untracked patch scopes.
+  `--compact-summary`, `--compact-summary --patch`, and
+  `--patch --compact-summary` render Git-compatible compact stat output that
+  marks added and deleted files. `--summary`, `--summary --patch`,
+  `--patch --summary`, `--summary --stat`, `--stat --summary`,
+  `--compact-summary --summary`, and `--summary --compact-summary` render
+  Git-compatible extended file summaries for additions, deletions, and renames
+  in the checked tracked and untracked patch scopes.
   `--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`, and
   `--color=auto` are accepted for Git-compatible no-external-diff/no-color
   output in the checked capture environment.

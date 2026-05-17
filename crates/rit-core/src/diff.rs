@@ -158,6 +158,15 @@ impl DiffSummary {
 
     /// Renders a Git-like `--stat` summary.
     pub fn to_stat_text(&self) -> String {
+        self.to_stat_text_with_paths(DiffFileStat::display_path)
+    }
+
+    /// Renders a Git-like `--compact-summary` summary.
+    pub fn to_compact_stat_text(&self) -> String {
+        self.to_stat_text_with_paths(DiffFileStat::compact_display_path)
+    }
+
+    fn to_stat_text_with_paths(&self, display_path: fn(&DiffFileStat) -> String) -> String {
         if self.files.is_empty() {
             return String::new();
         }
@@ -165,7 +174,7 @@ impl DiffSummary {
         let max_path_width = self
             .files
             .iter()
-            .map(|file| file.display_path().len())
+            .map(|file| display_path(file).len())
             .max()
             .unwrap_or(0);
         let max_change_width = self
@@ -184,7 +193,7 @@ impl DiffSummary {
             .any(|file| file.status == 'R' || file.status == 'C');
 
         for file in &self.files {
-            let path = file.display_path();
+            let path = display_path(file);
             total_insertions += file.insertions;
             total_deletions += file.deletions;
             if file.binary {
@@ -500,6 +509,14 @@ impl DiffFileStat {
             )
         } else {
             self.path.clone()
+        }
+    }
+
+    fn compact_display_path(&self) -> String {
+        match self.status {
+            'A' => format!("{} (new)", self.display_path()),
+            'D' => format!("{} (gone)", self.display_path()),
+            _ => self.display_path(),
         }
     }
 }
@@ -2295,6 +2312,42 @@ mod tests {
         assert_eq!(
             summary.to_stat_text(),
             " a.txt | 1 +\n 1 file changed, 1 insertion(+)\n"
+        );
+    }
+
+    #[test]
+    fn compact_stat_text_marks_added_and_deleted_paths() {
+        let summary = DiffSummary {
+            files: vec![
+                DiffFileStat {
+                    status: 'A',
+                    old_path: None,
+                    path: "added.txt".to_owned(),
+                    similarity_score: None,
+                    insertions: 1,
+                    deletions: 0,
+                    binary: false,
+                    old_size: 0,
+                    new_size: 0,
+                },
+                DiffFileStat {
+                    status: 'D',
+                    old_path: None,
+                    path: "deleted.txt".to_owned(),
+                    similarity_score: None,
+                    insertions: 0,
+                    deletions: 1,
+                    binary: false,
+                    old_size: 0,
+                    new_size: 0,
+                },
+            ],
+            warnings: Vec::new(),
+        };
+
+        assert_eq!(
+            summary.to_compact_stat_text(),
+            " added.txt (new)    | 1 +\n deleted.txt (gone) | 1 -\n 2 files changed, 1 insertion(+), 1 deletion(-)\n"
         );
     }
 
