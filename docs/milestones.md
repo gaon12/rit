@@ -407,6 +407,9 @@ Completion criteria:
 - [x] Local clone/fetch object transfer.
   - [x] `clone --local --no-checkout` copies objects and local refs without
     calling external `git` in production code.
+  - [x] `clone --local --no-hardlinks --no-checkout` follows the same
+    copy-based local clone path and matches checked no-checkout object/ref
+    state.
   - [x] `fetch <local-repository>` copies objects into an existing repository
     and writes `FETCH_HEAD` without updating refs.
 - [x] Protocol model for local, HTTP(S), and SSH location classification.

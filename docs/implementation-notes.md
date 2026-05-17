@@ -480,6 +480,9 @@
   official Git LFS specification for v1 pointer format.
 - 2026-05-11 local clone object-transfer slice checked `git clone -h` and a
   direct Git comparison for `clone --local --no-checkout`.
+- 2026-05-18 local clone no-hardlinks slice checked Git 2.52.0.windows.1 with
+  `git --version`, `git help -a`, `git clone -h`, and direct Git comparison
+  for `clone --local --no-hardlinks --no-checkout`.
 - 2026-05-11 local fetch object-transfer slice checked `git fetch -h` and a
   direct Git comparison for `fetch <local-repository>`.
 - 2026-05-11 transport protocol model slice checked `git clone -h` and
@@ -1425,13 +1428,18 @@
 ### `rit clone`
 
 - Baseline command checked: `git clone -h`
-- Supported options: `--local`/`-l`, `--no-checkout`/`-n`, and `--quiet`/`-q`.
+- Supported options: `--local`/`-l`, `--no-checkout`/`-n`,
+  `--no-hardlinks`, and `--quiet`/`-q`.
 - Unsupported options: checkout, bare/mirror clones, remote protocols,
-  hardlink/shared/reference modes, branch selection, shallow/partial clone,
+  hardlink/shared/reference modes other than `--no-hardlinks`, branch
+  selection, shallow/partial clone,
   submodules, sparse checkout, templates, and config overrides.
 - Git-compatible behavior: local no-checkout clone copies the source object
   store, local heads/tags, optional `packed-refs`, writes a symbolic `HEAD`,
   and records `remote.origin` plus current branch merge config.
+- Git-compatible behavior: `--no-hardlinks` is accepted for the checked local
+  no-checkout clone shape; rit's local clone path already copies object files
+  rather than creating hardlinks.
 - Intentional differences: checkout is rejected instead of silently producing a
   partial worktree; remote clone protocols are still pending.
 - Repository mutation: creates a new repository directory and copies local

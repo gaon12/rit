@@ -21,6 +21,7 @@ pub fn clone_command(
             "-q" | "--quiet" if !after_separator => quiet = true,
             "-l" | "--local" if !after_separator => local = true,
             "-n" | "--no-checkout" if !after_separator => no_checkout = true,
+            "--no-hardlinks" if !after_separator => {}
             unsupported if unsupported.starts_with('-') && !after_separator => {
                 writeln!(stderr, "rit: unsupported clone option '{unsupported}'")?;
                 return Ok(ExitCode::from(129));
