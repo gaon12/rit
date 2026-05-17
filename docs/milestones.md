@@ -652,6 +652,9 @@ Completion criteria:
   - [x] `stash show` accepts no-external-diff and no-color diff options
     (`--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`,
     `--color=auto`) for Git-compatible no-color output in checked captures.
+  - [x] `stash show` accepts diff algorithm passthrough options
+    (`--minimal`, `--patience`, `--histogram`) for Git-compatible simple text
+    patch output in checked captures.
   - [x] `stash show` accepts text and submodule/textconv passthrough diff
     options (`-a`, `--text`, `--textconv`, `--no-textconv`,
     `--ignore-submodules[=<when>]`) for Git-compatible non-submodule text
