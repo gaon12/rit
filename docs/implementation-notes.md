@@ -117,6 +117,9 @@
 - 2026-05-17 stash show rename-limit passthrough slice checked
   `git stash show -h`, `git diff -h`, and direct Git comparisons for
   `stash show --patch -l0` and `-l1` on simple text stash changes.
+- 2026-05-17 stash show NUL summary slice checked `git stash show -h`,
+  `git diff -h`, and direct Git comparisons for `stash show -z --name-only`,
+  `-z --name-status`, and `-z --numstat` on text stash changes.
 - 2026-05-17 restore core.ignorecase rejection slice checked
   `git restore <mismatched-case-path>` with `core.ignorecase=true` on
   `git version 2.52.0.windows.1`; Git and rit both reject the pathspec and
@@ -1525,7 +1528,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]`
   as the legacy save form,
-  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--inter-hunk-context=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--minimal|--patience|--histogram|--binary|--no-renames|--find-renames[=<n>]|-M[<n>]|--find-copies[=<n>]|-C[<n>]|--find-copies-harder|-l<n>|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [-z] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--inter-hunk-context=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--minimal|--patience|--histogram|--binary|--no-renames|--find-renames[=<n>]|-M[<n>]|--find-copies[=<n>]|-C[<n>]|--find-copies-harder|-l<n>|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
   worktree/index restoration when `HEAD` matches the stash base,
@@ -1661,7 +1664,8 @@
   filters checked stash show summary and patch formats with Git-compatible
   uppercase include letters, lowercase exclude letters, invalid-class errors,
   and `*` all-or-none handling for the checked `A`, `D`, and `M` stash file
-  statuses.
+  statuses. `-z` renders NUL-terminated output for the checked
+  `--name-only`, `--name-status`, and `--numstat` formats.
   `--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`, and
   `--color=auto` are accepted for Git-compatible no-external-diff/no-color
   output in the checked capture environment. `--minimal`, `--patience`, and

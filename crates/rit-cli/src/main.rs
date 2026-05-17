@@ -622,15 +622,27 @@ fn stash_command(
                         stdout.write_all(diff.to_shortstat_text().as_bytes())?
                     }
                     StashShowFormat::NameOnly => {
-                        for path in diff.name_only() {
-                            writeln!(stdout, "{path}")?;
+                        if show_args.nul_terminated {
+                            stdout.write_all(&diff.to_name_only_z())?;
+                        } else {
+                            for path in diff.name_only() {
+                                writeln!(stdout, "{path}")?;
+                            }
                         }
                     }
                     StashShowFormat::NameStatus => {
-                        stdout.write_all(diff.to_name_status_text().as_bytes())?;
+                        if show_args.nul_terminated {
+                            stdout.write_all(&diff.to_name_status_z())?;
+                        } else {
+                            stdout.write_all(diff.to_name_status_text().as_bytes())?;
+                        }
                     }
                     StashShowFormat::Numstat => {
-                        stdout.write_all(diff.to_numstat_text().as_bytes())?
+                        if show_args.nul_terminated {
+                            stdout.write_all(&diff.to_numstat_z())?
+                        } else {
+                            stdout.write_all(diff.to_numstat_text().as_bytes())?
+                        }
                     }
                 }
                 Ok(stash_show_exit_code(
@@ -749,6 +761,7 @@ struct StashShowArgs {
     untracked_mode: Option<StashShowUntrackedMode>,
     exit_code: bool,
     diff_option: bool,
+    nul_terminated: bool,
     full_index: bool,
     abbrev: usize,
     context_lines: usize,
@@ -769,6 +782,7 @@ impl StashShowArgs {
             untracked_mode: None,
             exit_code: false,
             diff_option: false,
+            nul_terminated: false,
             full_index: false,
             abbrev: 7,
             context_lines: 3,
@@ -797,6 +811,7 @@ fn parse_stash_show_args(
     let mut untracked_mode = None;
     let mut exit_code = false;
     let mut diff_option = false;
+    let mut nul_terminated = false;
     let mut full_index = false;
     let mut abbrev = 7;
     let mut context_lines = 3;
@@ -831,6 +846,10 @@ fn parse_stash_show_args(
             "--shortstat" => format = Some(StashShowFormat::ShortStat),
             "--quiet" => format = Some(StashShowFormat::Quiet),
             "--exit-code" => exit_code = true,
+            "-z" => {
+                diff_option = true;
+                nul_terminated = true;
+            }
             "--full-index" => {
                 diff_option = true;
                 full_index = true;
@@ -1045,6 +1064,7 @@ fn parse_stash_show_args(
         untracked_mode,
         exit_code,
         diff_option,
+        nul_terminated,
         full_index,
         abbrev,
         context_lines,

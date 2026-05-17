@@ -1610,8 +1610,11 @@ fn stash_show_summary_formats_match_git() {
         vec!["stash", "show", "--stat", "stash@{1}"],
         vec!["stash", "show", "--shortstat"],
         vec!["stash", "show", "--name-only"],
+        vec!["stash", "show", "-z", "--name-only"],
         vec!["stash", "show", "--name-status"],
+        vec!["stash", "show", "-z", "--name-status"],
         vec!["stash", "show", "--numstat", "1"],
+        vec!["stash", "show", "-z", "--numstat", "1"],
     ] {
         let git_show = run_capture("git", args.iter().copied(), &git_repo);
         let rit_show = run_capture(rit_binary(), args.iter().copied(), &rit_repo);

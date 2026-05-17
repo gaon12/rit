@@ -696,6 +696,8 @@ Completion criteria:
   - [x] Basic `stash export --print`, `stash export --to-ref <ref>`, and
     `stash import <commit>` write/read Git-compatible stash-export chains for
     all loose stash entries and selected stash arguments.
+  - [x] `stash show -z` renders NUL-terminated `--name-only`,
+    `--name-status`, and `--numstat` summary output.
   - [ ] Broader untracked apply/pop restoration, broader show options, broader
     error parity, and conflict handling for apply/pop/branch.
 - [~] Conflict index stages.
