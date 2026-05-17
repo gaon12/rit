@@ -2321,6 +2321,7 @@ fn stash_show_diff_passthrough_options_match_git() {
         vec!["stash", "show", "--patch", "--diff-algorithm=patience"],
         vec!["stash", "show", "--patch", "--diff-algorithm=histogram"],
         vec!["stash", "show", "--patch", "--diff-algorithm=default"],
+        vec!["stash", "show", "--patch", "--word-diff=none"],
         vec!["stash", "show", "--patch", "-w"],
         vec!["stash", "show", "--patch", "--ignore-all-space"],
         vec!["stash", "show", "--patch", "-b"],
@@ -2432,6 +2433,8 @@ fn stash_show_diff_passthrough_options_match_git() {
         vec!["stash", "show", "--stat=80,40,1,2"],
         vec!["stash", "show", "--patch", "--diff-algorithm=bad"],
         vec!["stash", "show", "--patch", "--diff-algorithm="],
+        vec!["stash", "show", "--patch", "--word-diff=bad"],
+        vec!["stash", "show", "--patch", "--word-diff="],
         vec!["stash", "show", "--patch", "--ws-error-highlight=bad"],
     ] {
         let git_show = run_capture("git", args.iter().copied(), &git_repo);

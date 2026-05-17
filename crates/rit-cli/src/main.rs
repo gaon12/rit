@@ -1095,6 +1095,14 @@ fn parse_stash_show_args(
                     return Ok(None);
                 }
             }
+            _ if arg.starts_with("--word-diff=") => {
+                let value = arg.trim_start_matches("--word-diff=");
+                diff_option = true;
+                if !matches!(value, "none") {
+                    writeln!(stderr, "error: bad --word-diff argument: {value}")?;
+                    return Ok(None);
+                }
+            }
             _ if arg.starts_with("--anchored=") => {
                 diff_option = true;
             }

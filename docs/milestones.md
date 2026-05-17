@@ -717,6 +717,8 @@ Completion criteria:
   - [x] `stash show` accepts checked patch context/delete passthrough diff
     options (`--irreversible-delete`, `-D`, `--function-context`, `-W`) for
     Git-compatible simple text patch output in checked captures.
+  - [x] `stash show --word-diff=none` is accepted for checked simple text
+    patch output and invalid `--word-diff=<mode>` errors match Git.
   - [x] `stash show` accepts rename/copy/binary passthrough diff options
     (`--binary`, `--no-renames`, `--find-renames[=<n>]`, `-M[<n>]`,
     `--find-copies[=<n>]`, `-C[<n>]`, `--find-copies-harder`, `-l<n>`) for
