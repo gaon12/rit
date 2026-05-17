@@ -2353,6 +2353,9 @@ fn init_command(
                 };
                 options.initial_branch = branch_name.clone();
             }
+            option if option.starts_with("--initial-branch=") => {
+                options.initial_branch = option.trim_start_matches("--initial-branch=").to_owned();
+            }
             unsupported if unsupported.starts_with('-') => {
                 writeln!(stderr, "rit: unsupported init option '{unsupported}'")?;
                 return Ok(ExitCode::from(129));

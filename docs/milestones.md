@@ -190,6 +190,8 @@ Completion criteria:
 ## M4: Local Write Commands
 
 - [x] `rit init`
+  - [x] `--initial-branch=<branch>` equals-form parsing writes the same
+    initial `HEAD` target as Git for a checked local init.
 - [x] `rit add` explicit regular files.
 - [x] `rit commit -m`
 - [x] `rit branch` local list/create/delete basics.

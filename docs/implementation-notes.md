@@ -480,6 +480,9 @@
   official Git LFS specification for v1 pointer format.
 - 2026-05-11 local clone object-transfer slice checked `git clone -h` and a
   direct Git comparison for `clone --local --no-checkout`.
+- 2026-05-18 init initial-branch equals-form slice checked Git
+  2.52.0.windows.1 with `git --version`, `git help -a`, `git init -h`, and a
+  direct Git comparison for `init -q --initial-branch=topic`.
 - 2026-05-18 local clone no-hardlinks slice checked Git 2.52.0.windows.1 with
   `git --version`, `git help -a`, `git clone -h`, and direct Git comparison
   for `clone --local --no-hardlinks --no-checkout`.
@@ -1133,7 +1136,9 @@
 ### `rit init`
 
 - Baseline command checked: `git init -h`
-- Supported options: `-q`, `--quiet`, `--bare`, `-b <branch>`, `--initial-branch <branch>`, optional directory.
+- Supported options: `-q`, `--quiet`, `--bare`, `-b <branch>`,
+  `--initial-branch <branch>`, `--initial-branch=<branch>`, optional
+  directory.
 - Unsupported options: templates, separate git dir, object format, ref format, shared repositories.
 - Git-compatible behavior: creates `HEAD`, `config`, `objects`, `refs`, `info`, `hooks`, `branches`.
 - Intentional differences: default branch is currently `master` unless explicitly set; template hooks are not copied.

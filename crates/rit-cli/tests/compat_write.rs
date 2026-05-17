@@ -8,6 +8,49 @@ use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
+fn init_initial_branch_equals_form_matches_git_head() {
+    let workspace = temp_path("init-initial-branch-equals");
+    let git_target = workspace.join("git-target");
+    let rit_target = workspace.join("rit-target");
+    fs::create_dir_all(&workspace).expect("workspace should be created");
+
+    let git_output = Command::new(git_program())
+        .args(["init", "-q", "--initial-branch=topic"])
+        .arg(&git_target)
+        .output()
+        .expect("git init should start");
+    assert!(
+        git_output.status.success(),
+        "git init failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&git_output.stdout),
+        String::from_utf8_lossy(&git_output.stderr)
+    );
+
+    let rit_output = Command::new(rit_binary())
+        .args(["init", "-q", "--initial-branch=topic"])
+        .arg(&rit_target)
+        .output()
+        .expect("rit init should start");
+    assert!(
+        rit_output.status.success(),
+        "rit init failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&rit_output.stdout),
+        String::from_utf8_lossy(&rit_output.stderr)
+    );
+    assert_eq!(git_output.stdout, rit_output.stdout);
+    assert_eq!(git_output.stderr, rit_output.stderr);
+
+    let git_head = fs::read_to_string(git_target.join(".git").join("HEAD"))
+        .expect("git HEAD should be readable");
+    let rit_head = fs::read_to_string(rit_target.join(".git").join("HEAD"))
+        .expect("rit HEAD should be readable");
+    assert_eq!(git_head, "ref: refs/heads/topic\n");
+    assert_eq!(git_head, rit_head);
+
+    let _ = fs::remove_dir_all(workspace);
+}
+
+#[test]
 fn add_directory_pathspec_matches_git_status() {
     let fixture = LocalWriteFixture::new("add-directory", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");
