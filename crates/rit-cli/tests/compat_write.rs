@@ -51,6 +51,80 @@ fn init_initial_branch_equals_form_matches_git_head() {
 }
 
 #[test]
+fn init_no_option_forms_match_git_state() {
+    let workspace = temp_path("init-no-option-forms");
+    fs::create_dir_all(&workspace).expect("workspace should be created");
+
+    let no_bare_git = workspace.join("git-no-bare");
+    let no_bare_rit = workspace.join("rit-no-bare");
+    let git_output = Command::new(git_program())
+        .args(["init", "-q", "--bare", "--no-bare"])
+        .arg(&no_bare_git)
+        .output()
+        .expect("git init should start");
+    assert!(git_output.status.success());
+    let rit_output = Command::new(rit_binary())
+        .args(["init", "-q", "--bare", "--no-bare"])
+        .arg(&no_bare_rit)
+        .output()
+        .expect("rit init should start");
+    assert!(rit_output.status.success());
+    assert_eq!(git_output.stdout, rit_output.stdout);
+    assert_eq!(git_output.stderr, rit_output.stderr);
+    assert_eq!(
+        fs::read_to_string(no_bare_git.join(".git").join("HEAD"))
+            .expect("git HEAD should be readable"),
+        fs::read_to_string(no_bare_rit.join(".git").join("HEAD"))
+            .expect("rit HEAD should be readable")
+    );
+
+    let no_initial_git = workspace.join("git-no-initial");
+    let no_initial_rit = workspace.join("rit-no-initial");
+    let git_output = Command::new(git_program())
+        .args([
+            "init",
+            "-q",
+            "--initial-branch=topic",
+            "--no-initial-branch",
+        ])
+        .arg(&no_initial_git)
+        .output()
+        .expect("git init should start");
+    assert!(git_output.status.success());
+    let rit_output = Command::new(rit_binary())
+        .args([
+            "init",
+            "-q",
+            "--initial-branch=topic",
+            "--no-initial-branch",
+        ])
+        .arg(&no_initial_rit)
+        .output()
+        .expect("rit init should start");
+    assert!(rit_output.status.success());
+    assert_eq!(git_output.stdout, rit_output.stdout);
+    assert_eq!(git_output.stderr, rit_output.stderr);
+    let git_head = fs::read_to_string(no_initial_git.join(".git").join("HEAD"))
+        .expect("git HEAD should be readable");
+    let rit_head = fs::read_to_string(no_initial_rit.join(".git").join("HEAD"))
+        .expect("rit HEAD should be readable");
+    assert_eq!(git_head, "ref: refs/heads/master\n");
+    assert_eq!(git_head, rit_head);
+
+    let no_quiet_rit = workspace.join("rit-no-quiet");
+    let rit_output = Command::new(rit_binary())
+        .args(["init", "-q", "--no-quiet"])
+        .arg(&no_quiet_rit)
+        .output()
+        .expect("rit init should start");
+    assert!(rit_output.status.success());
+    assert!(!rit_output.stdout.is_empty());
+    assert!(rit_output.stderr.is_empty());
+
+    let _ = fs::remove_dir_all(workspace);
+}
+
+#[test]
 fn add_directory_pathspec_matches_git_status() {
     let fixture = LocalWriteFixture::new("add-directory", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");

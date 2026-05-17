@@ -2340,7 +2340,9 @@ fn init_command(
     while index < args.len() {
         match args[index].as_str() {
             "-q" | "--quiet" => options.quiet = true,
+            "--no-quiet" => options.quiet = false,
             "--bare" => options.bare = true,
+            "--no-bare" => options.bare = false,
             "-b" | "--initial-branch" => {
                 index += 1;
                 let Some(branch_name) = args.get(index) else {
@@ -2355,6 +2357,9 @@ fn init_command(
             }
             option if option.starts_with("--initial-branch=") => {
                 options.initial_branch = option.trim_start_matches("--initial-branch=").to_owned();
+            }
+            "--no-initial-branch" => {
+                options.initial_branch = "master".to_owned();
             }
             unsupported if unsupported.starts_with('-') => {
                 writeln!(stderr, "rit: unsupported init option '{unsupported}'")?;

@@ -192,6 +192,8 @@ Completion criteria:
 - [x] `rit init`
   - [x] `--initial-branch=<branch>` equals-form parsing writes the same
     initial `HEAD` target as Git for a checked local init.
+  - [x] `--no-bare`, `--no-initial-branch`, and `--no-quiet` reverse earlier
+    init flags for the checked local init cases.
 - [x] `rit add` explicit regular files.
 - [x] `rit commit -m`
 - [x] `rit branch` local list/create/delete basics.
