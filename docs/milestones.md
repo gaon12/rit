@@ -615,6 +615,9 @@ Completion criteria:
   - [x] Basic `stash branch <branchname> [<stash>]` creates a branch at the
     stash base, checks it out, applies the clean tracked stash, and drops the
     selected loose stash entry on success.
+  - [x] Default `stash apply`, `stash pop`, and `stash branch` match
+    Git-compatible human status output for checked untracked-only stash
+    restores.
   - [x] Basic `stash export --print`, `stash export --to-ref <ref>`, and
     `stash import <commit>` write/read Git-compatible stash-export chains for
     all loose stash entries and selected stash arguments.

@@ -1170,6 +1170,59 @@ fn stash_apply_and_pop_refuse_to_overwrite_untracked_files_like_git() {
 }
 
 #[test]
+fn stash_untracked_only_default_outputs_match_git() {
+    for (name, args) in [
+        ("apply-untracked-human", vec!["stash", "apply"]),
+        ("pop-untracked-human", vec!["stash", "pop"]),
+        ("branch-untracked-human", vec!["stash", "branch", "topic"]),
+    ] {
+        let root = temp_path(name);
+        let git_repo = root.join("git");
+        let rit_repo = root.join("rit");
+        init_repo(&git_repo);
+        fs::write(repo_file(&git_repo, "new.txt"), "new\n").expect("git untracked should write");
+        run_git(
+            &git_repo,
+            [
+                "stash",
+                "push",
+                "--include-untracked",
+                "-m",
+                "with untracked",
+            ],
+        );
+        copy_directory(&git_repo, &rit_repo);
+
+        let git_result = run_capture("git", args.iter().copied(), &git_repo);
+        let rit_result = run_capture(rit_binary(), args.iter().copied(), &rit_repo);
+
+        assert_eq!(git_result.exit_code, 0, "git stderr: {}", git_result.stderr);
+        assert_eq!(rit_result.exit_code, 0, "rit stderr: {}", rit_result.stderr);
+        assert_eq!(git_result.stdout, rit_result.stdout, "args: {args:?}");
+        assert_eq!(git_result.stderr, rit_result.stderr, "args: {args:?}");
+        assert_eq!(
+            run_capture("git", ["status", "--porcelain=v1", "-uall"], &git_repo).stdout,
+            run_capture(
+                rit_binary(),
+                ["status", "--porcelain=v1", "-uall"],
+                &rit_repo
+            )
+            .stdout
+        );
+        assert_eq!(
+            fs::read_to_string(repo_file(&git_repo, "new.txt")).ok(),
+            fs::read_to_string(repo_file(&rit_repo, "new.txt")).ok()
+        );
+        assert_eq!(
+            run_capture("git", ["stash", "list"], &git_repo).stdout,
+            run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+}
+
+#[test]
 fn stash_apply_and_pop_index_restore_staged_state_like_git() {
     for (name, subcommand) in [("apply-index", "apply"), ("pop-index", "pop")] {
         let root = temp_path(name);

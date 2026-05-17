@@ -192,6 +192,7 @@ fn stash_command(
         return match repository.stash_apply_with_index(apply_args.index, apply_args.restore_index) {
             Ok(_result) => {
                 if !apply_args.quiet {
+                    write_stash_already_up_to_date_if_no_tracked_changes(&repository, stdout)?;
                     write_stash_human_status(&repository, stdout)?;
                 }
                 Ok(ExitCode::SUCCESS)
@@ -273,6 +274,7 @@ fn stash_command(
         ) {
             Ok(result) => {
                 writeln!(stderr, "Switched to a new branch '{}'", branch_args.branch)?;
+                write_stash_already_up_to_date_if_no_tracked_changes(&repository, stdout)?;
                 write_stash_human_status(&repository, stdout)?;
                 writeln!(stdout, "Dropped {} ({})", result.name, result.object_id)?;
                 Ok(ExitCode::SUCCESS)
@@ -293,6 +295,7 @@ fn stash_command(
         ) {
             Ok(result) => {
                 if !pop_args.quiet {
+                    write_stash_already_up_to_date_if_no_tracked_changes(&repository, stdout)?;
                     write_stash_human_status(&repository, stdout)?;
                 }
                 if !pop_args.quiet {
@@ -1074,6 +1077,21 @@ fn is_stash_untracked_restore_error(error: &rit_core::RitError) -> bool {
     )
 }
 
+fn write_stash_already_up_to_date_if_no_tracked_changes(
+    repository: &rit_core::Repository,
+    stdout: &mut dyn Write,
+) -> io::Result<()> {
+    let status = repository.status_porcelain_v1().map_err(io::Error::other)?;
+    let has_tracked_changes = status
+        .entries
+        .iter()
+        .any(|entry| entry.index_status != '?' || entry.worktree_status != '?');
+    if !has_tracked_changes {
+        writeln!(stdout, "Already up to date.")?;
+    }
+    Ok(())
+}
+
 fn write_stash_human_status(
     repository: &rit_core::Repository,
     stdout: &mut dyn Write,
@@ -1134,10 +1152,21 @@ fn write_stash_human_status(
 
     if !status.entries.is_empty() {
         writeln!(stdout)?;
-        writeln!(
-            stdout,
-            "no changes added to commit (use \"git add\" and/or \"git commit -a\")"
-        )?;
+        if status
+            .entries
+            .iter()
+            .all(|entry| entry.index_status == '?' && entry.worktree_status == '?')
+        {
+            writeln!(
+                stdout,
+                "nothing added to commit but untracked files present (use \"git add\" to track)"
+            )?;
+        } else {
+            writeln!(
+                stdout,
+                "no changes added to commit (use \"git add\" and/or \"git commit -a\")"
+            )?;
+        }
     }
     Ok(())
 }

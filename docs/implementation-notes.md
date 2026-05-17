@@ -1532,7 +1532,8 @@
   apply scope, and refuses to overwrite existing untracked paths while leaving
   the stash entry intact.
 - Git-compatible behavior: default `rit stash apply [<stash>]` prints the
-  checked Git human status summary for the same clean tracked apply scope.
+  checked Git human status summary for the same clean tracked apply scope,
+  including the untracked-only `Already up to date.` prefix and footer.
 - Git-compatible behavior: `rit stash pop -q [<stash>]` uses the same tracked
   clean apply path, then removes the selected loose stash reflog entry and
   updates loose `.git/refs/stash`.
@@ -1546,10 +1547,11 @@
   and keeps the stash entry.
 - Git-compatible behavior: default `rit stash pop [<stash>]` prints the checked
   Git human status summary before the dropped-entry message for the same clean
-  tracked apply scope.
+  tracked apply scope, including untracked-only status wording.
 - Git-compatible behavior: `rit stash branch <branchname> [<stash>]` creates a
   new branch at the stash base, checks it out, applies the stash using the same
-  clean tracked apply path, and drops the selected loose stash entry on success.
+  clean tracked apply path, restores checked untracked-only stash entries, and
+  drops the selected loose stash entry on success.
 - Git-compatible behavior: `rit stash list` reads `.git/logs/refs/stash`
   directly, prints newest entries first as `stash@{n}: <reflog message>`, and
   prints nothing when no stash reflog exists.
