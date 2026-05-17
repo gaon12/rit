@@ -1845,6 +1845,8 @@ fn stash_show_extended_summary_matches_git() {
         vec!["stash", "show", "--no-prefix"],
         vec!["stash", "show", "--patch-with-stat", "--no-prefix"],
         vec!["stash", "show", "--no-prefix", "--default-prefix"],
+        vec!["stash", "show", "--src-prefix=old/"],
+        vec!["stash", "show", "--dst-prefix=new/"],
         vec![
             "stash",
             "show",

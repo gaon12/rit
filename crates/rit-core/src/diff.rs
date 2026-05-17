@@ -354,7 +354,7 @@ fn is_known_diff_filter_status(status: char) -> bool {
 }
 
 /// Options that affect patch text rendering without changing the diff itself.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PatchRenderOptions {
     /// Render full object IDs in `index` header lines instead of Git's default
     /// abbreviated IDs.
@@ -367,6 +367,10 @@ pub struct PatchRenderOptions {
     pub inter_hunk_context: usize,
     /// Whether patch paths use Git's default `a/` and `b/` prefixes.
     pub default_prefixes: bool,
+    /// Prefix for old-side patch paths when `default_prefixes` is enabled.
+    pub old_path_prefix: String,
+    /// Prefix for new-side patch paths when `default_prefixes` is enabled.
+    pub new_path_prefix: String,
     /// Prefix for inserted lines in unified hunks.
     pub new_line_indicator: Option<char>,
     /// Prefix for deleted lines in unified hunks.
@@ -383,6 +387,8 @@ impl Default for PatchRenderOptions {
             context_lines: 3,
             inter_hunk_context: 0,
             default_prefixes: true,
+            old_path_prefix: "a/".to_owned(),
+            new_path_prefix: "b/".to_owned(),
             new_line_indicator: Some('+'),
             old_line_indicator: Some('-'),
             context_line_indicator: Some(' '),
@@ -547,11 +553,11 @@ fn rename_summary_path(old_path: &str, new_path: &str) -> String {
 }
 
 fn prefixed_old_path(path: &str, options: &PatchRenderOptions) -> String {
-    prefixed_path("a/", path, options)
+    prefixed_path(&options.old_path_prefix, path, options)
 }
 
 fn prefixed_new_path(path: &str, options: &PatchRenderOptions) -> String {
-    prefixed_path("b/", path, options)
+    prefixed_path(&options.new_path_prefix, path, options)
 }
 
 fn prefixed_path(prefix: &str, path: &str, options: &PatchRenderOptions) -> String {
@@ -2861,6 +2867,35 @@ mod tests {
         assert!(text.contains("diff --git file.txt file.txt\n"));
         assert!(text.contains("--- file.txt\n+++ file.txt\n"));
         assert!(!text.contains("diff --git a/file.txt b/file.txt\n"));
+    }
+
+    #[test]
+    fn patch_render_options_control_path_prefixes() {
+        let patch = DiffPatch {
+            files: vec![DiffPatchFile {
+                status: 'M',
+                old_path: None,
+                path: "file.txt".to_owned(),
+                similarity_score: None,
+                old_object_id: Some(crate::hash_object(crate::ObjectKind::Blob, b"old\n")),
+                new_object_id: Some(crate::hash_object(crate::ObjectKind::Blob, b"new\n")),
+                mode: 0o100644,
+                old_data: b"old\n".to_vec(),
+                new_data: b"new\n".to_vec(),
+            }],
+            warnings: Vec::new(),
+        };
+
+        let text = patch
+            .to_patch_text_with_options(&PatchRenderOptions {
+                old_path_prefix: "old/".to_owned(),
+                new_path_prefix: "new/".to_owned(),
+                ..PatchRenderOptions::default()
+            })
+            .expect("patch should render");
+
+        assert!(text.contains("diff --git old/file.txt new/file.txt\n"));
+        assert!(text.contains("--- old/file.txt\n+++ new/file.txt\n"));
     }
 
     #[test]

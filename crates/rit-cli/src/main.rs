@@ -774,6 +774,8 @@ struct StashShowArgs {
     context_lines: usize,
     inter_hunk_context: usize,
     default_prefixes: bool,
+    old_path_prefix: String,
+    new_path_prefix: String,
     new_line_indicator: Option<char>,
     old_line_indicator: Option<char>,
     context_line_indicator: Option<char>,
@@ -796,6 +798,8 @@ impl StashShowArgs {
             context_lines: 3,
             inter_hunk_context: 0,
             default_prefixes: true,
+            old_path_prefix: "a/".to_owned(),
+            new_path_prefix: "b/".to_owned(),
             new_line_indicator: Some('+'),
             old_line_indicator: Some('-'),
             context_line_indicator: Some(' '),
@@ -826,6 +830,8 @@ fn parse_stash_show_args(
     let mut context_lines = 3;
     let mut inter_hunk_context = 0;
     let mut default_prefixes = true;
+    let mut old_path_prefix = "a/".to_owned();
+    let mut new_path_prefix = "b/".to_owned();
     let mut new_line_indicator = Some('+');
     let mut old_line_indicator = Some('-');
     let mut context_line_indicator = Some(' ');
@@ -1016,6 +1022,14 @@ fn parse_stash_show_args(
             _ if arg.starts_with("--anchored=") => {
                 diff_option = true;
             }
+            _ if arg.starts_with("--src-prefix=") => {
+                diff_option = true;
+                old_path_prefix = arg.trim_start_matches("--src-prefix=").to_owned();
+            }
+            _ if arg.starts_with("--dst-prefix=") => {
+                diff_option = true;
+                new_path_prefix = arg.trim_start_matches("--dst-prefix=").to_owned();
+            }
             _ if arg.starts_with("--output=") => {
                 diff_option = true;
                 output_path = Some(arg.trim_start_matches("--output=").to_owned());
@@ -1155,6 +1169,8 @@ fn parse_stash_show_args(
         context_lines,
         inter_hunk_context,
         default_prefixes,
+        old_path_prefix,
+        new_path_prefix,
         new_line_indicator,
         old_line_indicator,
         context_line_indicator,
@@ -1214,6 +1230,8 @@ fn stash_show_patch_options(show_args: &StashShowArgs) -> rit_core::PatchRenderO
         context_lines: show_args.context_lines,
         inter_hunk_context: show_args.inter_hunk_context,
         default_prefixes: show_args.default_prefixes,
+        old_path_prefix: show_args.old_path_prefix.clone(),
+        new_path_prefix: show_args.new_path_prefix.clone(),
         new_line_indicator: show_args.new_line_indicator,
         old_line_indicator: show_args.old_line_indicator,
         context_line_indicator: show_args.context_line_indicator,

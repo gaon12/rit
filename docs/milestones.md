@@ -675,6 +675,9 @@ Completion criteria:
   - [x] `stash show --no-prefix` and `--default-prefix` render
     Git-compatible patch path prefixes for checked tracked patch and
     stat-plus-patch scopes.
+  - [x] `stash show --src-prefix=<prefix>` and `--dst-prefix=<prefix>` render
+    Git-compatible custom old-side and new-side patch path prefixes for
+    checked single-prefix tracked patch scopes.
   - [x] `stash show --output-indicator-new=<char>`,
     `--output-indicator-old=<char>`, and
     `--output-indicator-context=<char>` render Git-compatible patch line
