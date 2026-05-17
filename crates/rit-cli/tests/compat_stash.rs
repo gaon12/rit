@@ -1676,12 +1676,16 @@ fn stash_show_extended_summary_matches_git() {
     let git_repo = root.join("git");
     let rit_repo = root.join("rit");
     init_repo(&git_repo);
-    fs::write(repo_file(&git_repo, "modified.txt"), "base\n").expect("modified base should write");
+    fs::write(repo_file(&git_repo, "modified.txt"), "one\ntwo\nthree\n")
+        .expect("modified base should write");
     fs::write(repo_file(&git_repo, "deleted.txt"), "gone\n").expect("deleted base should write");
     run_git(&git_repo, ["add", "modified.txt", "deleted.txt"]);
     run_git(&git_repo, ["commit", "-m", "base"]);
-    fs::write(repo_file(&git_repo, "modified.txt"), "changed\n")
-        .expect("modified change should write");
+    fs::write(
+        repo_file(&git_repo, "modified.txt"),
+        "one\nchanged\nthree\n",
+    )
+    .expect("modified change should write");
     fs::remove_file(repo_file(&git_repo, "deleted.txt")).expect("deleted file should remove");
     fs::write(repo_file(&git_repo, "added.txt"), "added\n").expect("added file should write");
     run_git(&git_repo, ["add", "added.txt"]);
@@ -1713,6 +1717,9 @@ fn stash_show_extended_summary_matches_git() {
         vec!["stash", "show", "--diff-filter=A", "--patch"],
         vec!["stash", "show", "--diff-filter=D", "--summary"],
         vec!["stash", "show", "--diff-filter=A", "--compact-summary"],
+        vec!["stash", "show", "--unified=0"],
+        vec!["stash", "show", "-U0"],
+        vec!["stash", "show", "--unified=1", "--patch-with-stat"],
         vec!["stash", "show", "--include-untracked", "--summary"],
         vec!["stash", "show", "--only-untracked", "--summary"],
         vec!["stash", "show", "--only-untracked", "--summary", "--patch"],
@@ -1735,6 +1742,17 @@ fn stash_show_extended_summary_matches_git() {
     assert_eq!(git_show.exit_code, rit_show.exit_code);
     assert_eq!(git_show.stdout, rit_show.stdout);
     assert_eq!(git_show.stderr, rit_show.stderr);
+
+    for args in [
+        ["stash", "show", "--unified=foo"],
+        ["stash", "show", "-Ufoo"],
+    ] {
+        let git_show = run_capture("git", args, &git_repo);
+        let rit_show = run_capture(rit_binary(), args, &rit_repo);
+        assert_eq!(git_show.exit_code, rit_show.exit_code, "args: {args:?}");
+        assert_eq!(git_show.stdout, rit_show.stdout, "args: {args:?}");
+        assert_eq!(git_show.stderr, rit_show.stderr, "args: {args:?}");
+    }
 
     let _ = fs::remove_dir_all(root);
 }

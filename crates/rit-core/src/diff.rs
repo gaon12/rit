@@ -361,6 +361,8 @@ pub struct PatchRenderOptions {
     pub full_index: bool,
     /// Number of object ID hex characters to show when `full_index` is false.
     pub abbrev: usize,
+    /// Number of unchanged context lines to include around each hunk.
+    pub context_lines: usize,
 }
 
 impl Default for PatchRenderOptions {
@@ -368,6 +370,7 @@ impl Default for PatchRenderOptions {
         Self {
             full_index: false,
             abbrev: 7,
+            context_lines: 3,
         }
     }
 }
@@ -510,7 +513,11 @@ impl DiffPatchFile {
         if is_binary {
             output.push_str(&binary_patch_line(self));
         } else {
-            output.push_str(&unified_hunk(&self.old_data, &self.new_data)?);
+            output.push_str(&unified_hunk_with_context(
+                &self.old_data,
+                &self.new_data,
+                options.context_lines,
+            )?);
         }
         Ok(output)
     }
@@ -2021,7 +2028,16 @@ fn parse_tree_mode(mode: &str) -> Result<u32> {
         .map_err(|_| RitError::invalid_input(format!("invalid tree mode: {mode}")))
 }
 
+#[cfg(test)]
 fn unified_hunk(old_data: &[u8], new_data: &[u8]) -> Result<String> {
+    unified_hunk_with_context(old_data, new_data, 3)
+}
+
+fn unified_hunk_with_context(
+    old_data: &[u8],
+    new_data: &[u8],
+    context_lines: usize,
+) -> Result<String> {
     let old_text = std::str::from_utf8(old_data)
         .map_err(|_| RitError::invalid_input("binary patch output is not implemented"))?;
     let new_text = std::str::from_utf8(new_data)
@@ -2034,7 +2050,7 @@ fn unified_hunk(old_data: &[u8], new_data: &[u8]) -> Result<String> {
     }
 
     let mut output = String::new();
-    for hunk in split_hunks(&operations) {
+    for hunk in split_hunks(&operations, context_lines) {
         let old_before = count_old_lines(&operations[..hunk.start]);
         let new_before = count_new_lines(&operations[..hunk.start]);
         let old_count = count_old_lines(&operations[hunk.start..hunk.end]);
@@ -2062,7 +2078,7 @@ struct HunkRange {
     end: usize,
 }
 
-fn split_hunks(operations: &[LineOperation<'_>]) -> Vec<HunkRange> {
+fn split_hunks(operations: &[LineOperation<'_>], context_lines: usize) -> Vec<HunkRange> {
     let mut hunks = Vec::new();
     let mut current: Option<HunkRange> = None;
 
@@ -2071,8 +2087,8 @@ fn split_hunks(operations: &[LineOperation<'_>]) -> Vec<HunkRange> {
             continue;
         }
 
-        let start = index.saturating_sub(3);
-        let end = (index + 4).min(operations.len());
+        let start = index.saturating_sub(context_lines);
+        let end = (index + context_lines + 1).min(operations.len());
         match &mut current {
             Some(range) if start <= range.end => range.end = range.end.max(end),
             Some(range) => {
@@ -2338,8 +2354,9 @@ fn plural(count: usize, singular: &str, plural: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        DiffFileStat, DiffOptions, DiffStatusFilter, DiffSummary, file_delta, line_delta,
-        rename_limit_exceeded, similarity_score, unified_hunk,
+        DiffFileStat, DiffOptions, DiffPatch, DiffPatchFile, DiffStatusFilter, DiffSummary,
+        PatchRenderOptions, file_delta, line_delta, rename_limit_exceeded, similarity_score,
+        unified_hunk,
     };
     use crate::{InitOptions, Repository};
     use std::fs;
@@ -2668,6 +2685,35 @@ mod tests {
             hunk,
             "@@ -1,5 +1,5 @@\n line1\n-line2\n+changed2\n line3\n line4\n line5\n@@ -7,6 +7,6 @@ line6\n line7\n line8\n line9\n-line10\n+changed10\n line11\n line12\n"
         );
+    }
+
+    #[test]
+    fn patch_render_options_control_unified_context_lines() {
+        let patch = DiffPatch {
+            files: vec![DiffPatchFile {
+                status: 'M',
+                old_path: None,
+                path: "file.txt".to_owned(),
+                similarity_score: None,
+                old_object_id: Some(crate::hash_object(crate::ObjectKind::Blob, b"two\n")),
+                new_object_id: Some(crate::hash_object(crate::ObjectKind::Blob, b"changed\n")),
+                mode: 0o100644,
+                old_data: b"one\ntwo\nthree\n".to_vec(),
+                new_data: b"one\nchanged\nthree\n".to_vec(),
+            }],
+            warnings: Vec::new(),
+        };
+
+        let text = patch
+            .to_patch_text_with_options(&PatchRenderOptions {
+                context_lines: 0,
+                ..PatchRenderOptions::default()
+            })
+            .expect("patch should render");
+
+        assert!(text.contains("@@ -2 +2 @@ one\n-two\n+changed\n"));
+        assert!(!text.contains("\n one\n"));
+        assert!(!text.contains("\n three\n"));
     }
 
     #[test]

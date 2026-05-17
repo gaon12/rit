@@ -630,6 +630,8 @@ Completion criteria:
     compact-summary, summary, and name-status output with Git-compatible
     uppercase include, lowercase exclude, invalid-class, and all-or-none
     behavior for checked added/deleted/modified stash paths.
+  - [x] `stash show -U<n>` and `--unified=<n>` render Git-compatible patch
+    context widths for checked tracked patch and stat-plus-patch scopes.
   - [x] `stash show` accepts no-external-diff and no-color diff options
     (`--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`,
     `--color=auto`) for Git-compatible no-color output in checked captures.

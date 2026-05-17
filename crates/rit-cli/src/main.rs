@@ -440,6 +440,7 @@ fn stash_command(
                     match patch.to_patch_text_with_options(&rit_core::PatchRenderOptions {
                         full_index: show_args.full_index,
                         abbrev: show_args.abbrev,
+                        context_lines: show_args.context_lines,
                     }) {
                         Ok(text) => {
                             let has_changes = !patch.files.is_empty();
@@ -449,6 +450,7 @@ fn stash_command(
                                     patch.to_raw_text_with_options(&rit_core::PatchRenderOptions {
                                         full_index: show_args.full_index,
                                         abbrev: show_args.abbrev,
+                                        context_lines: show_args.context_lines,
                                     });
                                 stdout.write_all(raw_text.as_bytes())?;
                                 if matches!(format, StashShowFormat::Raw) {
@@ -748,6 +750,7 @@ struct StashShowArgs {
     diff_option: bool,
     full_index: bool,
     abbrev: usize,
+    context_lines: usize,
     diff_filter: Option<rit_core::DiffStatusFilter>,
 }
 
@@ -768,6 +771,7 @@ fn parse_stash_show_args(
     let mut diff_option = false;
     let mut full_index = false;
     let mut abbrev = 7;
+    let mut context_lines = 3;
     let mut diff_filter = None;
     let mut stash = None;
     for arg in args {
@@ -845,6 +849,28 @@ fn parse_stash_show_args(
                 diff_option = true;
                 abbrev = value.parse::<usize>().unwrap_or(0).max(4);
             }
+            _ if arg.starts_with("--unified=") => {
+                let value = arg.trim_start_matches("--unified=");
+                diff_option = true;
+                context_lines = match parse_diff_context_lines(value) {
+                    Some(context_lines) => context_lines,
+                    None => {
+                        writeln!(stderr, "error: --unified expects a numerical value")?;
+                        return Ok(None);
+                    }
+                };
+            }
+            _ if arg.starts_with("-U") && arg.len() > 2 => {
+                let value = arg.trim_start_matches("-U");
+                diff_option = true;
+                context_lines = match parse_diff_context_lines(value) {
+                    Some(context_lines) => context_lines,
+                    None => {
+                        writeln!(stderr, "error: --unified expects a numerical value")?;
+                        return Ok(None);
+                    }
+                };
+            }
             _ if arg.starts_with("--diff-filter=") => {
                 let value = arg.trim_start_matches("--diff-filter=");
                 diff_option = true;
@@ -877,8 +903,13 @@ fn parse_stash_show_args(
         diff_option,
         full_index,
         abbrev,
+        context_lines,
         diff_filter,
     }))
+}
+
+fn parse_diff_context_lines(value: &str) -> Option<usize> {
+    value.parse::<usize>().ok()
 }
 
 fn stash_show_format(
