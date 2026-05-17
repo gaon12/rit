@@ -143,8 +143,13 @@ fn stash_command(
         }
         [subcommand, ..] if subcommand == "push" => {}
         [subcommand, rest @ ..] if subcommand == "show" => {
-            if parse_stash_show_args(rest, stderr)?.is_none() {
-                return Ok(ExitCode::from(129));
+            match parse_stash_show_args(rest, stderr)? {
+                Some(show_args) => {
+                    if let Some(exit_code) = show_args.immediate_exit_code {
+                        return Ok(ExitCode::from(exit_code));
+                    }
+                }
+                None => return Ok(ExitCode::from(129)),
             }
         }
         [subcommand, rest @ ..] if subcommand == "drop" => {
@@ -393,6 +398,9 @@ fn stash_command(
         let Some(show_args) = parse_stash_show_args(rest, stderr)? else {
             return Ok(ExitCode::from(129));
         };
+        if let Some(exit_code) = show_args.immediate_exit_code {
+            return Ok(ExitCode::from(exit_code));
+        }
         let format = match stash_show_format(
             &repository,
             show_args.format,
@@ -752,6 +760,7 @@ enum StashShowFormat {
 
 struct StashShowArgs {
     index: usize,
+    immediate_exit_code: Option<u8>,
     format: Option<StashShowFormat>,
     untracked_mode: Option<StashShowUntrackedMode>,
     exit_code: bool,
@@ -764,6 +773,27 @@ struct StashShowArgs {
     old_line_indicator: Option<char>,
     context_line_indicator: Option<char>,
     diff_filter: Option<rit_core::DiffStatusFilter>,
+}
+
+impl StashShowArgs {
+    fn immediate_exit(exit_code: u8) -> Self {
+        Self {
+            index: 0,
+            immediate_exit_code: Some(exit_code),
+            format: None,
+            untracked_mode: None,
+            exit_code: false,
+            diff_option: false,
+            full_index: false,
+            abbrev: 7,
+            context_lines: 3,
+            default_prefixes: true,
+            new_line_indicator: Some('+'),
+            old_line_indicator: Some('-'),
+            context_line_indicator: Some(' '),
+            diff_filter: None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -822,9 +852,14 @@ fn parse_stash_show_args(
                 diff_option = true;
                 abbrev = 7;
             }
-            "--no-ext-diff" | "--ext-diff" | "--no-color" | "--color=never" | "--color=auto" => {
-                diff_option = true;
-            }
+            "--no-ext-diff"
+            | "--ext-diff"
+            | "--no-color"
+            | "--color=never"
+            | "--color=auto"
+            | "--textconv"
+            | "--no-textconv"
+            | "--ignore-submodules" => diff_option = true,
             "--no-prefix" => {
                 diff_option = true;
                 default_prefixes = false;
@@ -906,6 +941,14 @@ fn parse_stash_show_args(
                     }
                 }
             }
+            _ if arg.starts_with("--ignore-submodules=") => {
+                let value = arg.trim_start_matches("--ignore-submodules=");
+                diff_option = true;
+                if !matches!(value, "all" | "none" | "dirty" | "untracked") {
+                    writeln!(stderr, "fatal: bad --ignore-submodules argument: {value}")?;
+                    return Ok(Some(StashShowArgs::immediate_exit(128)));
+                }
+            }
             _ if arg.starts_with("--output-indicator-new=") => {
                 let value = arg.trim_start_matches("--output-indicator-new=");
                 diff_option = true;
@@ -963,6 +1006,7 @@ fn parse_stash_show_args(
     let (index, _) = parse_stash_name(stash.unwrap_or("refs/stash@{0}"))?;
     Ok(Some(StashShowArgs {
         index,
+        immediate_exit_code: None,
         format,
         untracked_mode,
         exit_code,

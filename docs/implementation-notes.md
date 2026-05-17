@@ -1473,7 +1473,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]`
   as the legacy save form,
-  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--textconv|--no-textconv|--ignore-submodules[=<when>]] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
   worktree/index restoration when `HEAD` matches the stash base,
@@ -1589,7 +1589,10 @@
   patch path prefixes for the checked stash patch formats.
   `--output-indicator-new=<char>`, `--output-indicator-old=<char>`, and
   `--output-indicator-context=<char>` control Git-compatible unified hunk line
-  prefixes for the checked stash patch formats. `--raw`,
+  prefixes for the checked stash patch formats. `--textconv`,
+  `--no-textconv`, and `--ignore-submodules[=<when>]` are accepted as
+  Git-compatible diff passthrough options for checked non-submodule text stash
+  patches. `--raw`,
   `--patch-with-raw`, `--raw --patch`, and
   `--patch --raw` render Git-compatible raw records for the checked tracked
   and untracked patch scopes.
