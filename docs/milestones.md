@@ -701,8 +701,9 @@ Completion criteria:
     Git-compatible simple text patch output in checked captures.
   - [x] `stash show` accepts text and submodule/textconv passthrough diff
     options (`-a`, `--text`, `--textconv`, `--no-textconv`,
-    `--ignore-submodules[=<when>]`) for Git-compatible non-submodule text
-    patch output in checked captures.
+    `--ignore-submodules[=<when>]`, `--submodule[=<format>]`) for
+    Git-compatible non-submodule text patch output in checked captures,
+    including invalid `--submodule=<format>` errors.
   - [x] `stash show` accepts intent-to-add visibility passthrough diff
     options (`--ita-invisible-in-index`, `--ita-visible-in-index`) for
     Git-compatible simple text stash patch output in checked captures.

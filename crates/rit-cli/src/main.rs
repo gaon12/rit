@@ -905,6 +905,7 @@ fn parse_stash_show_args(
             | "--textconv"
             | "--no-textconv"
             | "--ignore-submodules"
+            | "--submodule"
             | "--ita-invisible-in-index"
             | "--ita-visible-in-index" => diff_option = true,
             "--no-prefix" => {
@@ -1059,6 +1060,17 @@ fn parse_stash_show_args(
                 if !matches!(value, "all" | "none" | "dirty" | "untracked") {
                     writeln!(stderr, "fatal: bad --ignore-submodules argument: {value}")?;
                     return Ok(Some(StashShowArgs::immediate_exit(128)));
+                }
+            }
+            _ if arg.starts_with("--submodule=") => {
+                let value = arg.trim_start_matches("--submodule=");
+                diff_option = true;
+                if !matches!(value, "short" | "log" | "diff") {
+                    writeln!(
+                        stderr,
+                        "error: failed to parse --submodule option parameter: '{value}'"
+                    )?;
+                    return Ok(None);
                 }
             }
             _ if arg.starts_with("--output-indicator-new=") => {

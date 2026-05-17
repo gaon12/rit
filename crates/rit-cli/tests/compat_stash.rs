@@ -2250,6 +2250,10 @@ fn stash_show_diff_passthrough_options_match_git() {
         vec!["stash", "show", "--ignore-submodules=none"],
         vec!["stash", "show", "--ignore-submodules=dirty"],
         vec!["stash", "show", "--ignore-submodules=untracked"],
+        vec!["stash", "show", "--submodule"],
+        vec!["stash", "show", "--submodule=short"],
+        vec!["stash", "show", "--submodule=log"],
+        vec!["stash", "show", "--submodule=diff"],
         vec!["stash", "show", "--full-index"],
         vec!["stash", "show", "--abbrev=12"],
         vec!["stash", "show", "--patch-with-raw", "--full-index"],
@@ -2280,6 +2284,16 @@ fn stash_show_diff_passthrough_options_match_git() {
     let rit_show = run_capture(
         rit_binary(),
         ["stash", "show", "--ignore-submodules=bad"],
+        &rit_repo,
+    );
+    assert_eq!(git_show.exit_code, rit_show.exit_code);
+    assert_eq!(git_show.stdout, rit_show.stdout);
+    assert_eq!(git_show.stderr, rit_show.stderr);
+
+    let git_show = run_capture("git", ["stash", "show", "--submodule=bad"], &git_repo);
+    let rit_show = run_capture(
+        rit_binary(),
+        ["stash", "show", "--submodule=bad"],
         &rit_repo,
     );
     assert_eq!(git_show.exit_code, rit_show.exit_code);

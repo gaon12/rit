@@ -106,6 +106,12 @@
 - 2026-05-17 stash show text passthrough slice checked `git stash -h`,
   `git diff -h`, and direct Git comparisons for `stash show --text` and
   `stash show -a --patch` on text stash changes.
+- 2026-05-18 stash show submodule format passthrough slice checked
+  Git 2.52.0.windows.1 with `git --version`, `git stash show -h`,
+  `git diff -h`, and direct Git comparisons for `stash show --patch` with
+  `--submodule`, `--submodule=short`, `--submodule=log`, and
+  `--submodule=diff` on non-submodule simple text stash changes, plus
+  Git-compatible invalid `--submodule=<format>` errors.
 - 2026-05-17 stash show diff algorithm passthrough slice checked
   `git stash -h`, `git diff -h`, and direct Git comparisons for
   `stash show --patch --minimal`, `--patience`, and `--histogram` on simple
@@ -1603,7 +1609,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]`
   as the legacy save form,
-  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--no-compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [-z] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--inter-hunk-context=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--color-moved[=<mode>]|--no-color-moved|--color-moved-ws=<modes>|--no-color-moved-ws|--relative|--no-relative|--minimal|--patience|--histogram|--anchored=<text>|-w|--ignore-all-space|-b|--ignore-space-change|--ignore-space-at-eol|--ignore-cr-at-eol|--ignore-blank-lines|--indent-heuristic|--no-indent-heuristic|--binary|--no-renames|--find-renames[=<n>]|-M[<n>]|--find-copies[=<n>]|-C[<n>]|--find-copies-harder|-l<n>|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]|--ita-invisible-in-index|--ita-visible-in-index] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--no-compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [-z] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--inter-hunk-context=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--color-moved[=<mode>]|--no-color-moved|--color-moved-ws=<modes>|--no-color-moved-ws|--relative|--no-relative|--minimal|--patience|--histogram|--anchored=<text>|-w|--ignore-all-space|-b|--ignore-space-change|--ignore-space-at-eol|--ignore-cr-at-eol|--ignore-blank-lines|--indent-heuristic|--no-indent-heuristic|--binary|--no-renames|--find-renames[=<n>]|-M[<n>]|--find-copies[=<n>]|-C[<n>]|--find-copies-harder|-l<n>|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]|--submodule[=<format>]|--ita-invisible-in-index|--ita-visible-in-index] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
   worktree/index restoration when `HEAD` matches the stash base,
@@ -1729,9 +1735,10 @@
   `--output-indicator-new=<char>`, `--output-indicator-old=<char>`, and
   `--output-indicator-context=<char>` control Git-compatible unified hunk line
   prefixes for the checked stash patch formats. `-a`, `--text`, `--textconv`,
-  `--no-textconv`, and `--ignore-submodules[=<when>]` are accepted as
-  Git-compatible diff passthrough options for checked non-submodule text stash
-  patches. `--raw`,
+  `--no-textconv`, `--ignore-submodules[=<when>]`, and
+  `--submodule[=<format>]` are accepted as Git-compatible diff passthrough
+  options for checked non-submodule text stash patches, including invalid
+  `--submodule=<format>` errors. `--raw`,
   `--patch-with-raw`, `--raw --patch`, and
   `--patch --raw` render Git-compatible raw records for the checked tracked
   and untracked patch scopes.
