@@ -1645,7 +1645,59 @@ impl Repository {
 
     /// Skips the current in-progress cherry-pick.
     pub fn skip_cherry_pick(&self) -> Result<ObjectId> {
+        if self.git_dir().join("sequencer").join("todo").exists() {
+            return self.skip_cherry_pick_sequencer();
+        }
         self.restore_cherry_pick_original_head("skip")
+    }
+
+    fn skip_cherry_pick_sequencer(&self) -> Result<ObjectId> {
+        let sequencer_todo = self.read_cherry_pick_sequencer_todo()?;
+        let state = self.merge_state()?;
+        let Some(picked_id) = state.cherry_pick_head else {
+            return Err(RitError::invalid_input("no cherry-pick to skip"));
+        };
+        let head_id = self
+            .resolve_head()?
+            .ok_or_else(|| RitError::invalid_input("cherry-pick skip requires an existing HEAD"))?;
+
+        self.checkout_commit_tree(head_id)?;
+        remove_file_if_exists(&self.git_dir().join("CHERRY_PICK_HEAD"))?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))?;
+
+        let remaining_todo = if sequencer_todo
+            .first()
+            .map(|item| item.commit_id == picked_id)
+            .unwrap_or(false)
+        {
+            sequencer_todo[1..].to_vec()
+        } else {
+            sequencer_todo
+        };
+        let sequencer_head = self.read_cherry_pick_sequencer_head()?;
+        let replay_options = CherryPickOptions::default();
+        for (todo_index, item) in remaining_todo.iter().enumerate() {
+            let target = item.commit_id.to_hex();
+            let replay_result =
+                self.cherry_pick_with_options_internal(&target, &replay_options, false, false)?;
+            if !replay_result.conflict_reports.is_empty() {
+                let original_head = sequencer_head.unwrap_or(head_id);
+                let current_head = self.resolve_head()?.ok_or_else(|| {
+                    RitError::invalid_input("cherry-pick skip requires an existing HEAD")
+                })?;
+                self.write_cherry_pick_sequencer(
+                    original_head,
+                    current_head,
+                    &remaining_todo[todo_index..],
+                )?;
+                return Err(RitError::invalid_input(
+                    "cherry-pick skip stopped on a later conflict",
+                ));
+            }
+        }
+        remove_dir_if_exists(&self.git_dir().join("sequencer"))?;
+        self.refresh_indexdb_after_git_write();
+        Ok(head_id)
     }
 
     fn restore_cherry_pick_original_head(&self, action: &str) -> Result<ObjectId> {

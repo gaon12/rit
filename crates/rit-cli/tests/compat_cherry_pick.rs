@@ -566,6 +566,48 @@ fn multi_commit_cherry_pick_continue_replays_remaining_clean_todo_like_git() {
 }
 
 #[test]
+fn multi_commit_cherry_pick_skip_replays_remaining_clean_todo_like_git() {
+    let root = temp_path("multi-conflict-skip-remaining");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_multi_commit_cherry_pick_with_remaining_clean_todo(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    run_capture(
+        "git",
+        ["cherry-pick", "pick-one", "pick-two", "pick-three"],
+        &git_repo,
+    );
+    run_capture(
+        rit_binary(),
+        ["cherry-pick", "pick-one", "pick-two", "pick-three"],
+        &rit_repo,
+    );
+
+    let git_skip = run_capture("git", ["cherry-pick", "--skip"], &git_repo);
+    let rit_skip = run_capture(rit_binary(), ["cherry-pick", "--skip"], &rit_repo);
+
+    assert_eq!(git_skip.exit_code, 0, "git stderr: {}", git_skip.stderr);
+    assert_eq!(rit_skip.exit_code, 0, "rit stderr: {}", rit_skip.stderr);
+    assert!(!git_repo.join(".git").join("sequencer").exists());
+    assert!(!rit_repo.join(".git").join("sequencer").exists());
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["log", "--pretty=format:%s", "-4"], &git_repo).stdout,
+        run_capture("git", ["log", "--pretty=format:%s", "-4"], &rit_repo).stdout
+    );
+    assert_eq!(
+        fs::read_to_string(git_repo.join("tail.txt")).expect("git tail file should read"),
+        fs::read_to_string(rit_repo.join("tail.txt")).expect("rit tail file should read")
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn conflicting_cherry_pick_writes_git_shaped_state_and_abort_restores_head() {
     let root = temp_path("conflict");
     let git_repo = root.join("git");
