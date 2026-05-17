@@ -195,13 +195,23 @@ fn stash_command(
         let Some(save_args) = parse_stash_save_args(rest, stderr)? else {
             return Ok(ExitCode::from(129));
         };
-        let result = if save_args.all {
+        let result = if save_args.staged {
+            repository.stash_push_staged_with_pathspecs(
+                save_args.message.as_deref(),
+                &rit_core::PathspecSet::all(),
+            )
+        } else if save_args.all {
             repository.stash_push_all_with_pathspecs(
                 save_args.message.as_deref(),
                 &rit_core::PathspecSet::all(),
             )
         } else if save_args.include_untracked {
             repository.stash_push_include_untracked_with_pathspecs(
+                save_args.message.as_deref(),
+                &rit_core::PathspecSet::all(),
+            )
+        } else if save_args.keep_index {
+            repository.stash_push_keep_index_with_pathspecs(
                 save_args.message.as_deref(),
                 &rit_core::PathspecSet::all(),
             )
@@ -518,6 +528,8 @@ struct StashBranchArgs {
 struct StashSaveArgs {
     message: Option<String>,
     quiet: bool,
+    keep_index: bool,
+    staged: bool,
     include_untracked: bool,
     all: bool,
 }
@@ -635,12 +647,17 @@ fn parse_stash_save_args(
     stderr: &mut dyn Write,
 ) -> io::Result<Option<StashSaveArgs>> {
     let mut quiet = false;
+    let mut keep_index = false;
+    let mut staged = false;
     let mut include_untracked = false;
     let mut all = false;
     let mut message_parts = Vec::new();
     for arg in args {
         match arg.as_str() {
             "-q" | "--quiet" if message_parts.is_empty() => quiet = true,
+            "-k" | "--keep-index" if message_parts.is_empty() => keep_index = true,
+            "--no-keep-index" if message_parts.is_empty() => keep_index = false,
+            "-S" | "--staged" if message_parts.is_empty() => staged = true,
             "-u" | "--include-untracked" if message_parts.is_empty() => include_untracked = true,
             "-a" | "--all" if message_parts.is_empty() => all = true,
             "--" if message_parts.is_empty() => {}
@@ -656,6 +673,8 @@ fn parse_stash_save_args(
     Ok(Some(StashSaveArgs {
         message,
         quiet,
+        keep_index,
+        staged,
         include_untracked,
         all,
     }))

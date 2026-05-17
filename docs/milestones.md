@@ -593,6 +593,8 @@ Completion criteria:
     stash shape as push and matches Git's saved/no-change output.
   - [x] Legacy `stash save -u/--include-untracked` and `-a/--all` reuse the
     push untracked stash shapes while preserving legacy positional messages.
+  - [x] Legacy `stash save -k/--keep-index` and `-S/--staged` reuse the push
+    keep-index/staged stash shapes while preserving legacy positional messages.
   - [x] `rit stash create [<message>]` creates the same tracked-change stash
     commit shape without updating `refs/stash` or cleaning the worktree.
   - [x] Basic `stash apply -q [<stash>]` restores tracked worktree changes from

@@ -760,6 +760,104 @@ fn stash_save_untracked_modes_match_git() {
 }
 
 #[test]
+fn stash_save_index_selection_modes_match_git() {
+    let keep_root = temp_path("save-keep-index");
+    let keep_git_repo = keep_root.join("git");
+    let keep_rit_repo = keep_root.join("rit");
+    init_repo(&keep_git_repo);
+    copy_directory(&keep_git_repo, &keep_rit_repo);
+    fs::write(repo_file(&keep_git_repo, "tracked.txt"), "staged\n")
+        .expect("git staged change should write");
+    fs::write(repo_file(&keep_rit_repo, "tracked.txt"), "staged\n")
+        .expect("rit staged change should write");
+    run_git(&keep_git_repo, ["add", "tracked.txt"]);
+    run_git(&keep_rit_repo, ["add", "tracked.txt"]);
+    fs::write(repo_file(&keep_git_repo, "tracked.txt"), "unstaged\n")
+        .expect("git unstaged change should write");
+    fs::write(repo_file(&keep_rit_repo, "tracked.txt"), "unstaged\n")
+        .expect("rit unstaged change should write");
+
+    let git_keep = run_capture(
+        "git",
+        ["stash", "save", "--keep-index", "keep msg"],
+        &keep_git_repo,
+    );
+    let rit_keep = run_capture(
+        rit_binary(),
+        ["stash", "save", "--keep-index", "keep msg"],
+        &keep_rit_repo,
+    );
+    assert_eq!(git_keep.exit_code, 0, "git stderr: {}", git_keep.stderr);
+    assert_eq!(rit_keep.exit_code, 0, "rit stderr: {}", rit_keep.stderr);
+    assert_eq!(git_keep.stdout, rit_keep.stdout);
+    assert_eq!(git_keep.stderr, rit_keep.stderr);
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &keep_git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &keep_rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["stash", "show", "--name-status"], &keep_git_repo).stdout,
+        run_capture(
+            rit_binary(),
+            ["stash", "show", "--name-status"],
+            &keep_rit_repo
+        )
+        .stdout
+    );
+
+    let staged_root = temp_path("save-staged");
+    let staged_git_repo = staged_root.join("git");
+    let staged_rit_repo = staged_root.join("rit");
+    init_repo(&staged_git_repo);
+    fs::write(repo_file(&staged_git_repo, "other.txt"), "base\n")
+        .expect("git other file should write");
+    run_git(&staged_git_repo, ["add", "other.txt"]);
+    run_git(&staged_git_repo, ["commit", "--quiet", "-m", "other"]);
+    copy_directory(&staged_git_repo, &staged_rit_repo);
+    fs::write(repo_file(&staged_git_repo, "tracked.txt"), "staged\n")
+        .expect("git staged change should write");
+    fs::write(repo_file(&staged_rit_repo, "tracked.txt"), "staged\n")
+        .expect("rit staged change should write");
+    run_git(&staged_git_repo, ["add", "tracked.txt"]);
+    run_git(&staged_rit_repo, ["add", "tracked.txt"]);
+    fs::write(repo_file(&staged_git_repo, "other.txt"), "unstaged\n")
+        .expect("git unstaged change should write");
+    fs::write(repo_file(&staged_rit_repo, "other.txt"), "unstaged\n")
+        .expect("rit unstaged change should write");
+
+    let git_staged = run_capture(
+        "git",
+        ["stash", "save", "--staged", "staged msg"],
+        &staged_git_repo,
+    );
+    let rit_staged = run_capture(
+        rit_binary(),
+        ["stash", "save", "--staged", "staged msg"],
+        &staged_rit_repo,
+    );
+    assert_eq!(git_staged.exit_code, 0, "git stderr: {}", git_staged.stderr);
+    assert_eq!(rit_staged.exit_code, 0, "rit stderr: {}", rit_staged.stderr);
+    assert_eq!(git_staged.stdout, rit_staged.stdout);
+    assert_eq!(git_staged.stderr, rit_staged.stderr);
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &staged_git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &staged_rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["stash", "show", "--name-status"], &staged_git_repo).stdout,
+        run_capture(
+            rit_binary(),
+            ["stash", "show", "--name-status"],
+            &staged_rit_repo
+        )
+        .stdout
+    );
+
+    let _ = fs::remove_dir_all(keep_root);
+    let _ = fs::remove_dir_all(staged_root);
+}
+
+#[test]
 fn stash_create_tracked_change_matches_git_without_storing_or_cleaning() {
     let root = temp_path("create-tracked");
     let git_repo = root.join("git");
