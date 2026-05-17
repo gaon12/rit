@@ -1952,10 +1952,15 @@ fn stash_show_stat_graph_and_count_options_match_git_for_simple_stat() {
         vec!["stash", "show", "--stat-count=1"],
         vec!["stash", "show", "--stat-width=80"],
         vec!["stash", "show", "--stat-name-width=80"],
+        vec!["stash", "show", "--stat=80"],
+        vec!["stash", "show", "--stat=80,40"],
+        vec!["stash", "show", "--stat=80,40,1"],
+        vec!["stash", "show", "--stat="],
         vec!["stash", "show", "--patch-with-stat", "--stat-graph-width=4"],
         vec!["stash", "show", "--patch-with-stat", "--stat-count=1"],
         vec!["stash", "show", "--patch-with-stat", "--stat-width=80"],
         vec!["stash", "show", "--patch-with-stat", "--stat-name-width=80"],
+        vec!["stash", "show", "--patch", "--stat=80"],
     ] {
         let git_show = run_capture("git", args.iter().copied(), &git_repo);
         let rit_show = run_capture(rit_binary(), args.iter().copied(), &rit_repo);
@@ -2403,6 +2408,9 @@ fn stash_show_diff_passthrough_options_match_git() {
         ["stash", "show", "--stat-count=bad"],
         ["stash", "show", "--stat-width=bad"],
         ["stash", "show", "--stat-name-width=bad"],
+        ["stash", "show", "--stat=bad"],
+        ["stash", "show", "--stat=80,bad"],
+        ["stash", "show", "--stat=80,40,1,2"],
     ] {
         let git_show = run_capture("git", args, &git_repo);
         let rit_show = run_capture(rit_binary(), args, &rit_repo);

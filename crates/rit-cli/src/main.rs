@@ -1080,6 +1080,18 @@ fn parse_stash_show_args(
             _ if arg.starts_with("--anchored=") => {
                 diff_option = true;
             }
+            _ if arg.starts_with("--stat=") => {
+                let value = arg.trim_start_matches("--stat=");
+                diff_option = true;
+                format = Some(match format {
+                    Some(StashShowFormat::Patch) => StashShowFormat::StatAndPatch,
+                    other => other.unwrap_or(StashShowFormat::Stat),
+                });
+                if !is_valid_stat_value(value) {
+                    writeln!(stderr, "error: invalid --stat value: {value}")?;
+                    return Ok(None);
+                }
+            }
             _ if arg.starts_with("--stat-width=")
                 || arg.starts_with("--stat-name-width=")
                 || arg.starts_with("--stat-graph-width=")
@@ -1276,6 +1288,16 @@ fn parse_inter_hunk_context_lines(value: &str) -> Option<usize> {
         _ => (value, 1),
     };
     digits.parse::<usize>().ok()?.checked_mul(multiplier)
+}
+
+fn is_valid_stat_value(value: &str) -> bool {
+    let fields: Vec<&str> = value.split(',').collect();
+    if fields.len() > 3 {
+        return false;
+    }
+    fields
+        .iter()
+        .all(|field| field.is_empty() || field.parse::<i64>().is_ok())
 }
 
 fn parse_output_indicator(value: &str) -> std::result::Result<Option<char>, ()> {

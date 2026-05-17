@@ -680,7 +680,8 @@ Completion criteria:
     checked single-prefix tracked patch scopes.
   - [x] `stash show --line-prefix=<prefix>` prefixes checked explicit
     stat, patch, name-only, and numstat text output like Git.
-  - [x] `stash show --stat-width=<n>`, `--stat-name-width=<n>`,
+  - [x] `stash show --stat[=<width>[,<name-width>[,<count>]]]`,
+    `--stat-width=<n>`, `--stat-name-width=<n>`,
     `--stat-graph-width=<n>`, and `--stat-count=<n>` are accepted for checked
     simple stat and stat-plus-patch output, including Git-compatible invalid
     numeric errors.
