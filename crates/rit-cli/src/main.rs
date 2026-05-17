@@ -321,15 +321,15 @@ fn stash_command(
             return Ok(ExitCode::from(129));
         };
         if matches!(show_args.format, StashShowFormat::Patch) {
-            if show_args.include_untracked {
-                writeln!(
-                    stderr,
-                    "rit: stash show --patch --include-untracked is not implemented"
-                )?;
-                return Ok(ExitCode::from(129));
-            }
-            return match repository.stash_show_patch(show_args.index, &rit_core::PathspecSet::all())
-            {
+            let patch_result = if show_args.include_untracked {
+                repository.stash_show_patch_include_untracked(
+                    show_args.index,
+                    &rit_core::PathspecSet::all(),
+                )
+            } else {
+                repository.stash_show_patch(show_args.index, &rit_core::PathspecSet::all())
+            };
+            return match patch_result {
                 Ok(patch) => match patch.to_patch_text() {
                     Ok(text) => {
                         stdout.write_all(text.as_bytes())?;

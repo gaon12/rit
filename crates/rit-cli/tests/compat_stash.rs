@@ -1020,6 +1020,12 @@ fn stash_pop_quiet_restores_untracked_files_and_drops_entry() {
         .expect("rit tracked change should write");
     fs::write(repo_file(&git_repo, "new.txt"), "new\n").expect("git untracked should write");
     fs::write(repo_file(&rit_repo, "new.txt"), "new\n").expect("rit untracked should write");
+    fs::create_dir_all(repo_file(&git_repo, "nested")).expect("git nested dir should write");
+    fs::create_dir_all(repo_file(&rit_repo, "nested")).expect("rit nested dir should write");
+    fs::write(repo_file(&git_repo, "nested/first.txt"), "first\n")
+        .expect("git nested untracked should write");
+    fs::write(repo_file(&rit_repo, "nested/first.txt"), "first\n")
+        .expect("rit nested untracked should write");
     run_git(
         &git_repo,
         [
@@ -1175,6 +1181,7 @@ fn stash_show_include_untracked_summary_formats_match_git() {
         vec!["stash", "show", "--include-untracked", "--name-only"],
         vec!["stash", "show", "--include-untracked", "--name-status"],
         vec!["stash", "show", "--include-untracked", "--numstat"],
+        vec!["stash", "show", "--include-untracked", "--patch"],
     ] {
         let git_show = run_capture("git", args.iter().copied(), &git_repo);
         let rit_show = run_capture(rit_binary(), args.iter().copied(), &rit_repo);

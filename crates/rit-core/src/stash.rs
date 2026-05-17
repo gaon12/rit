@@ -8,8 +8,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::index::{Index, IndexEntry, IndexEntryStat, join_slash_path};
 use crate::write::write_worktree_entry_atomically;
 use crate::{
-    DiffFileStat, DiffPatch, DiffSummary, GitConfig, ObjectId, ObjectKind, PathspecSet, Repository,
-    Result, RitError, Signature, StatusOptions, UntrackedFilesMode, parse_commit,
+    DiffFileStat, DiffPatch, DiffPatchFile, DiffSummary, GitConfig, ObjectId, ObjectKind,
+    PathspecSet, Repository, Result, RitError, Signature, StatusOptions, UntrackedFilesMode,
+    parse_commit,
 };
 
 const ZERO_OBJECT_ID: &str = "0000000000000000000000000000000000000000";
@@ -487,6 +488,49 @@ impl Repository {
     ) -> Result<DiffPatch> {
         let (base_id, stash_id) = self.stash_diff_pair(display_index)?;
         self.diff_commits_patch_with_pathspecs(base_id, stash_id, pathspecs)
+    }
+
+    /// Shows tracked changes and untracked third-parent entries as patch output.
+    pub fn stash_show_patch_include_untracked(
+        &self,
+        display_index: usize,
+        pathspecs: &PathspecSet,
+    ) -> Result<DiffPatch> {
+        let mut patch = self.stash_show_patch(display_index, pathspecs)?;
+        if let Some(untracked_id) = self.stash_untracked_parent(display_index)? {
+            let attributes = self.root_attributes()?;
+            for entry in self
+                .commit_index_entries(untracked_id)?
+                .into_iter()
+                .filter(|entry| entry.stage == 0)
+            {
+                if !pathspecs.matches_with_attributes(&entry.path, Some(&attributes)) {
+                    continue;
+                }
+                let object = self.read_object(entry.object_id)?;
+                if object.kind != ObjectKind::Blob {
+                    return Err(RitError::invalid_input(format!(
+                        "object {} is {}, not blob",
+                        entry.object_id, object.kind
+                    )));
+                }
+                patch.files.push(DiffPatchFile {
+                    status: 'A',
+                    old_path: None,
+                    path: entry.path,
+                    similarity_score: None,
+                    old_object_id: None,
+                    new_object_id: Some(entry.object_id),
+                    mode: entry.mode,
+                    old_data: Vec::new(),
+                    new_data: object.data,
+                });
+            }
+            patch
+                .files
+                .sort_by(|left, right| left.path.cmp(&right.path));
+        }
+        Ok(patch)
     }
 
     fn stash_diff_pair(&self, display_index: usize) -> Result<(ObjectId, ObjectId)> {

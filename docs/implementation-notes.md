@@ -1483,10 +1483,10 @@
   `rit stash create [<message>]`,
   `rit stash store [(-m|--message) <message>] [-q|--quiet] <commit>`, and
   `rit stash clear` for loose stash refs.
-- Unsupported options: `export`, `import`, stash show untracked display
-  options, save `--patch`/`--staged`/`--keep-index`/untracked modes, push
-  packed stash ref cleanup, `--index`, untracked apply/pop restoration, and
-  stash apply/pop/branch conflict handling.
+- Unsupported options: `export`, `import`, broader stash show options, save
+  `--patch`/`--staged`/`--keep-index`/untracked modes, push packed stash ref
+  cleanup, `--index`, untracked apply/pop restoration, and stash
+  apply/pop/branch conflict handling.
 - Git-compatible behavior: `rit stash push` without untracked/pathspec options
   writes the usual two-parent stash shape for tracked changes, stores it in
   loose `refs/stash`, prints Git's saved/no-change messages, and restores the
@@ -1550,8 +1550,8 @@
 - Git-compatible behavior: `rit stash show` diffs the selected stash commit
   against its first parent and renders patch/stat/name-only/name-status/numstat
   output through the shared diff formatter. `--include-untracked` extends
-  summary formats with third-parent untracked additions for the checked
-  name-only/name-status/numstat scope.
+  summary formats and patch output with third-parent untracked additions for
+  the checked name-only/name-status/numstat/patch scope.
 - Git-compatible behavior: `rit stash store` resolves an existing commit,
   appends a loose stash reflog entry using the configured committer identity,
   and updates loose `.git/refs/stash`. `-q` is accepted and the default
