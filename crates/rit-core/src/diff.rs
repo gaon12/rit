@@ -365,6 +365,12 @@ pub struct PatchRenderOptions {
     pub context_lines: usize,
     /// Whether patch paths use Git's default `a/` and `b/` prefixes.
     pub default_prefixes: bool,
+    /// Prefix for inserted lines in unified hunks.
+    pub new_line_indicator: Option<char>,
+    /// Prefix for deleted lines in unified hunks.
+    pub old_line_indicator: Option<char>,
+    /// Prefix for unchanged context lines in unified hunks.
+    pub context_line_indicator: Option<char>,
 }
 
 impl Default for PatchRenderOptions {
@@ -374,6 +380,9 @@ impl Default for PatchRenderOptions {
             abbrev: 7,
             context_lines: 3,
             default_prefixes: true,
+            new_line_indicator: Some('+'),
+            old_line_indicator: Some('-'),
+            context_line_indicator: Some(' '),
         }
     }
 }
@@ -523,7 +532,7 @@ impl DiffPatchFile {
             output.push_str(&unified_hunk_with_context(
                 &self.old_data,
                 &self.new_data,
-                options.context_lines,
+                options,
             )?);
         }
         Ok(output)
@@ -2053,13 +2062,13 @@ fn parse_tree_mode(mode: &str) -> Result<u32> {
 
 #[cfg(test)]
 fn unified_hunk(old_data: &[u8], new_data: &[u8]) -> Result<String> {
-    unified_hunk_with_context(old_data, new_data, 3)
+    unified_hunk_with_context(old_data, new_data, &PatchRenderOptions::default())
 }
 
 fn unified_hunk_with_context(
     old_data: &[u8],
     new_data: &[u8],
-    context_lines: usize,
+    options: &PatchRenderOptions,
 ) -> Result<String> {
     let old_text = std::str::from_utf8(old_data)
         .map_err(|_| RitError::invalid_input("binary patch output is not implemented"))?;
@@ -2073,7 +2082,7 @@ fn unified_hunk_with_context(
     }
 
     let mut output = String::new();
-    for hunk in split_hunks(&operations, context_lines) {
+    for hunk in split_hunks(&operations, options.context_lines) {
         let old_before = count_old_lines(&operations[..hunk.start]);
         let new_before = count_new_lines(&operations[..hunk.start]);
         let old_count = count_old_lines(&operations[hunk.start..hunk.end]);
@@ -2086,9 +2095,15 @@ fn unified_hunk_with_context(
         ));
         for operation in &operations[hunk.start..hunk.end] {
             match operation {
-                LineOperation::Context(line) => push_patch_line(&mut output, ' ', line),
-                LineOperation::Delete(line) => push_patch_line(&mut output, '-', line),
-                LineOperation::Insert(line) => push_patch_line(&mut output, '+', line),
+                LineOperation::Context(line) => {
+                    push_patch_line(&mut output, options.context_line_indicator, line)
+                }
+                LineOperation::Delete(line) => {
+                    push_patch_line(&mut output, options.old_line_indicator, line)
+                }
+                LineOperation::Insert(line) => {
+                    push_patch_line(&mut output, options.new_line_indicator, line)
+                }
             }
         }
     }
@@ -2167,8 +2182,10 @@ fn hunk_header_suffix(operations: &[LineOperation<'_>], hunk_start: usize) -> St
     }
 }
 
-fn push_patch_line(output: &mut String, prefix: char, line: &str) {
-    output.push(prefix);
+fn push_patch_line(output: &mut String, prefix: Option<char>, line: &str) {
+    if let Some(prefix) = prefix {
+        output.push(prefix);
+    }
     output.push_str(line);
     if !line.ends_with('\n') {
         output.push('\n');
@@ -2766,6 +2783,35 @@ mod tests {
         assert!(text.contains("diff --git file.txt file.txt\n"));
         assert!(text.contains("--- file.txt\n+++ file.txt\n"));
         assert!(!text.contains("diff --git a/file.txt b/file.txt\n"));
+    }
+
+    #[test]
+    fn patch_render_options_control_output_indicators() {
+        let patch = DiffPatch {
+            files: vec![DiffPatchFile {
+                status: 'M',
+                old_path: None,
+                path: "file.txt".to_owned(),
+                similarity_score: None,
+                old_object_id: Some(crate::hash_object(crate::ObjectKind::Blob, b"two\n")),
+                new_object_id: Some(crate::hash_object(crate::ObjectKind::Blob, b"changed\n")),
+                mode: 0o100644,
+                old_data: b"one\ntwo\nthree\n".to_vec(),
+                new_data: b"one\nchanged\nthree\n".to_vec(),
+            }],
+            warnings: Vec::new(),
+        };
+
+        let text = patch
+            .to_patch_text_with_options(&PatchRenderOptions {
+                new_line_indicator: Some('>'),
+                old_line_indicator: Some('<'),
+                context_line_indicator: Some('.'),
+                ..PatchRenderOptions::default()
+            })
+            .expect("patch should render");
+
+        assert!(text.contains(".one\n<two\n>changed\n.three\n"));
     }
 
     #[test]

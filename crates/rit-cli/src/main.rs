@@ -442,6 +442,9 @@ fn stash_command(
                         abbrev: show_args.abbrev,
                         context_lines: show_args.context_lines,
                         default_prefixes: show_args.default_prefixes,
+                        new_line_indicator: show_args.new_line_indicator,
+                        old_line_indicator: show_args.old_line_indicator,
+                        context_line_indicator: show_args.context_line_indicator,
                     }) {
                         Ok(text) => {
                             let has_changes = !patch.files.is_empty();
@@ -453,6 +456,9 @@ fn stash_command(
                                         abbrev: show_args.abbrev,
                                         context_lines: show_args.context_lines,
                                         default_prefixes: show_args.default_prefixes,
+                                        new_line_indicator: show_args.new_line_indicator,
+                                        old_line_indicator: show_args.old_line_indicator,
+                                        context_line_indicator: show_args.context_line_indicator,
                                     });
                                 stdout.write_all(raw_text.as_bytes())?;
                                 if matches!(format, StashShowFormat::Raw) {
@@ -754,6 +760,9 @@ struct StashShowArgs {
     abbrev: usize,
     context_lines: usize,
     default_prefixes: bool,
+    new_line_indicator: Option<char>,
+    old_line_indicator: Option<char>,
+    context_line_indicator: Option<char>,
     diff_filter: Option<rit_core::DiffStatusFilter>,
 }
 
@@ -776,6 +785,9 @@ fn parse_stash_show_args(
     let mut abbrev = 7;
     let mut context_lines = 3;
     let mut default_prefixes = true;
+    let mut new_line_indicator = Some('+');
+    let mut old_line_indicator = Some('-');
+    let mut context_line_indicator = Some(' ');
     let mut diff_filter = None;
     let mut stash = None;
     for arg in args {
@@ -894,6 +906,48 @@ fn parse_stash_show_args(
                     }
                 }
             }
+            _ if arg.starts_with("--output-indicator-new=") => {
+                let value = arg.trim_start_matches("--output-indicator-new=");
+                diff_option = true;
+                new_line_indicator = match parse_output_indicator(value) {
+                    Ok(indicator) => indicator,
+                    Err(()) => {
+                        writeln!(
+                            stderr,
+                            "error: output-indicator-new expects a character, got '{value}'"
+                        )?;
+                        return Ok(None);
+                    }
+                };
+            }
+            _ if arg.starts_with("--output-indicator-old=") => {
+                let value = arg.trim_start_matches("--output-indicator-old=");
+                diff_option = true;
+                old_line_indicator = match parse_output_indicator(value) {
+                    Ok(indicator) => indicator,
+                    Err(()) => {
+                        writeln!(
+                            stderr,
+                            "error: output-indicator-old expects a character, got '{value}'"
+                        )?;
+                        return Ok(None);
+                    }
+                };
+            }
+            _ if arg.starts_with("--output-indicator-context=") => {
+                let value = arg.trim_start_matches("--output-indicator-context=");
+                diff_option = true;
+                context_line_indicator = match parse_output_indicator(value) {
+                    Ok(indicator) => indicator,
+                    Err(()) => {
+                        writeln!(
+                            stderr,
+                            "error: output-indicator-context expects a character, got '{value}'"
+                        )?;
+                        return Ok(None);
+                    }
+                };
+            }
             _ if arg.starts_with('-') => {
                 writeln!(stderr, "rit: unsupported stash show option '{arg}'")?;
                 return Ok(None);
@@ -917,12 +971,26 @@ fn parse_stash_show_args(
         abbrev,
         context_lines,
         default_prefixes,
+        new_line_indicator,
+        old_line_indicator,
+        context_line_indicator,
         diff_filter,
     }))
 }
 
 fn parse_diff_context_lines(value: &str) -> Option<usize> {
     value.parse::<usize>().ok()
+}
+
+fn parse_output_indicator(value: &str) -> std::result::Result<Option<char>, ()> {
+    let mut characters = value.chars();
+    let Some(character) = characters.next() else {
+        return Ok(None);
+    };
+    if characters.next().is_some() {
+        return Err(());
+    }
+    Ok(Some(character))
 }
 
 fn stash_show_format(

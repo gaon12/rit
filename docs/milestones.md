@@ -635,6 +635,10 @@ Completion criteria:
   - [x] `stash show --no-prefix` and `--default-prefix` render
     Git-compatible patch path prefixes for checked tracked patch and
     stat-plus-patch scopes.
+  - [x] `stash show --output-indicator-new=<char>`,
+    `--output-indicator-old=<char>`, and
+    `--output-indicator-context=<char>` render Git-compatible patch line
+    prefixes and invalid multi-character errors for checked tracked patches.
   - [x] `stash show` accepts no-external-diff and no-color diff options
     (`--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`,
     `--color=auto`) for Git-compatible no-color output in checked captures.

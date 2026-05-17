@@ -1723,6 +1723,14 @@ fn stash_show_extended_summary_matches_git() {
         vec!["stash", "show", "--no-prefix"],
         vec!["stash", "show", "--patch-with-stat", "--no-prefix"],
         vec!["stash", "show", "--no-prefix", "--default-prefix"],
+        vec![
+            "stash",
+            "show",
+            "--output-indicator-new=>",
+            "--output-indicator-old=<",
+            "--output-indicator-context=.",
+        ],
+        vec!["stash", "show", "--output-indicator-new="],
         vec!["stash", "show", "--include-untracked", "--summary"],
         vec!["stash", "show", "--only-untracked", "--summary"],
         vec!["stash", "show", "--only-untracked", "--summary", "--patch"],
@@ -1749,6 +1757,7 @@ fn stash_show_extended_summary_matches_git() {
     for args in [
         ["stash", "show", "--unified=foo"],
         ["stash", "show", "-Ufoo"],
+        ["stash", "show", "--output-indicator-new=XY"],
     ] {
         let git_show = run_capture("git", args, &git_repo);
         let rit_show = run_capture(rit_binary(), args, &rit_repo);
