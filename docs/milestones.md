@@ -613,9 +613,11 @@ Completion criteria:
   - [x] Basic `stash branch <branchname> [<stash>]` creates a branch at the
     stash base, checks it out, applies the clean tracked stash, and drops the
     selected loose stash entry on success.
-  - [ ] `stash export/import`, broader untracked apply/pop restoration,
-    broader show options, broader error parity, and conflict handling for
-    apply/pop/branch.
+  - [x] Basic `stash export --print`, `stash export --to-ref <ref>`, and
+    `stash import <commit>` write/read Git-compatible stash-export chains for
+    all loose stash entries and selected stash arguments.
+  - [ ] Broader untracked apply/pop restoration, broader show options, broader
+    error parity, and conflict handling for apply/pop/branch.
 - [~] Conflict index stages.
   - [x] Preserve stage 0/1/2/3 in index read, write, sorting, and
     `ls-files --stage` output.

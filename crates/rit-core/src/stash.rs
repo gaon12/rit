@@ -14,6 +14,7 @@ use crate::{
 };
 
 const ZERO_OBJECT_ID: &str = "0000000000000000000000000000000000000000";
+const STASH_EXPORT_PREFIX: &str = "git stash: ";
 
 /// One entry from `refs/stash` reflog, ordered as Git displays it.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -78,6 +79,13 @@ struct CreatedStashCommit {
     message: String,
     paths: Vec<String>,
     untracked_paths: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct StashExportItem {
+    stash_id: ObjectId,
+    base_id: ObjectId,
+    message: String,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -406,6 +414,87 @@ impl Repository {
         self.stash_drop(display_index, name)
     }
 
+    /// Exports selected stash entries into Git's stash-export commit chain.
+    ///
+    /// An empty `display_indices` slice exports all current entries in display
+    /// order, matching `git stash export --print`.
+    pub fn stash_export(&self, display_indices: &[usize]) -> Result<ObjectId> {
+        let entries = self.read_stash_reflog()?;
+        if entries.is_empty() {
+            return Err(RitError::invalid_input("No stash entries found."));
+        }
+        let indices = if display_indices.is_empty() {
+            (0..entries.len()).collect::<Vec<_>>()
+        } else {
+            display_indices.to_vec()
+        };
+        let mut items = Vec::new();
+        for display_index in indices {
+            let entry = stash_reflog_entry_at_display_index(&entries, display_index)?;
+            let stash_object = self.read_object(entry.new_id)?;
+            if stash_object.kind != ObjectKind::Commit {
+                return Err(RitError::invalid_input(format!(
+                    "stash entry {} is {}, not commit",
+                    entry.new_id, stash_object.kind
+                )));
+            }
+            let stash_commit = parse_commit(&stash_object.data)?;
+            let base_id = stash_commit
+                .parents
+                .first()
+                .copied()
+                .ok_or_else(|| RitError::invalid_input("stash commit has no parent"))?;
+            items.push(StashExportItem {
+                stash_id: entry.new_id,
+                base_id,
+                message: stash_reflog_message(entry)?,
+            });
+        }
+
+        self.write_stash_export_chain(&items)
+    }
+
+    /// Exports selected stash entries and writes the export commit to `ref_name`.
+    pub fn stash_export_to_ref(
+        &self,
+        display_indices: &[usize],
+        ref_name: &str,
+    ) -> Result<ObjectId> {
+        let object_id = self.stash_export(display_indices)?;
+        self.write_stash_export_ref(ref_name, object_id)?;
+        Ok(object_id)
+    }
+
+    /// Imports a Git stash-export commit chain into loose `refs/stash`.
+    pub fn stash_import(&self, export_id: ObjectId) -> Result<Vec<ObjectId>> {
+        let mut current_id = export_id;
+        let mut stash_ids = Vec::new();
+
+        loop {
+            let export_commit = self.parse_stash_export_commit(current_id)?;
+            let stash_id = *export_commit.parents.get(1).ok_or_else(|| {
+                RitError::invalid_input("stash export commit has no stash parent")
+            })?;
+            self.ensure_stash_commit(stash_id)?;
+            stash_ids.push(stash_id);
+
+            let Some(next_id) = export_commit.parents.first().copied() else {
+                break;
+            };
+            if self.is_stash_export_commit(next_id)? {
+                current_id = next_id;
+            } else {
+                break;
+            }
+        }
+
+        for stash_id in stash_ids.iter().rev() {
+            let message = self.stash_commit_subject(*stash_id)?;
+            self.stash_store(*stash_id, Some(&message))?;
+        }
+        Ok(stash_ids)
+    }
+
     /// Lists stashes by reading the Git-compatible `refs/stash` reflog.
     pub fn stash_list(&self) -> Result<Vec<StashListEntry>> {
         let mut messages = self
@@ -695,6 +784,84 @@ impl Repository {
     fn write_stash_ref(&self, target: ObjectId) -> Result<()> {
         let path = self.common_dir().join("refs").join("stash");
         write_file_atomically(&path, |file| writeln!(file, "{target}"))
+    }
+
+    fn write_stash_export_ref(&self, ref_name: &str, target: ObjectId) -> Result<()> {
+        validate_stash_export_ref_name(ref_name)?;
+        let path = self.common_dir().join(ref_name);
+        write_file_atomically(&path, |file| writeln!(file, "{target}"))?;
+        self.refresh_indexdb_after_git_write();
+        Ok(())
+    }
+
+    fn write_stash_export_chain(&self, items: &[StashExportItem]) -> Result<ObjectId> {
+        let empty_tree_id = self.loose_objects().write_object(ObjectKind::Tree, &[])?;
+        let mut previous_export_id = None;
+        for item in items.iter().rev() {
+            let first_parent = previous_export_id.unwrap_or(item.base_id);
+            let message = format!("{STASH_EXPORT_PREFIX}{}", item.message);
+            previous_export_id = Some(self.write_stash_commit(
+                empty_tree_id,
+                &[first_parent, item.stash_id],
+                &message,
+            )?);
+        }
+        previous_export_id.ok_or_else(|| RitError::invalid_input("No stash entries found."))
+    }
+
+    fn parse_stash_export_commit(&self, object_id: ObjectId) -> Result<crate::Commit> {
+        let object = self.read_object(object_id)?;
+        if object.kind != ObjectKind::Commit {
+            return Err(RitError::invalid_input(format!(
+                "stash export target {object_id} is {}, not commit",
+                object.kind
+            )));
+        }
+        let commit = parse_commit(&object.data)?;
+        if !commit.message.starts_with(STASH_EXPORT_PREFIX) || commit.parents.len() < 2 {
+            return Err(RitError::invalid_input(format!(
+                "commit {object_id} is not a stash export"
+            )));
+        }
+        Ok(commit)
+    }
+
+    fn is_stash_export_commit(&self, object_id: ObjectId) -> Result<bool> {
+        let object = self.read_object(object_id)?;
+        if object.kind != ObjectKind::Commit {
+            return Ok(false);
+        }
+        let commit = parse_commit(&object.data)?;
+        Ok(commit.message.starts_with(STASH_EXPORT_PREFIX) && commit.parents.len() >= 2)
+    }
+
+    fn ensure_stash_commit(&self, object_id: ObjectId) -> Result<()> {
+        let object = self.read_object(object_id)?;
+        if object.kind != ObjectKind::Commit {
+            return Err(RitError::invalid_input(format!(
+                "stash parent {object_id} is {}, not commit",
+                object.kind
+            )));
+        }
+        let commit = parse_commit(&object.data)?;
+        if commit.parents.len() < 2 {
+            return Err(RitError::invalid_input(format!(
+                "stash parent {object_id} is not a stash commit"
+            )));
+        }
+        Ok(())
+    }
+
+    fn stash_commit_subject(&self, object_id: ObjectId) -> Result<String> {
+        let object = self.read_object(object_id)?;
+        if object.kind != ObjectKind::Commit {
+            return Err(RitError::invalid_input(format!(
+                "stash parent {object_id} is {}, not commit",
+                object.kind
+            )));
+        }
+        let commit = parse_commit(&object.data)?;
+        Ok(commit.message.lines().next().unwrap_or("").to_owned())
     }
 
     fn remove_stash_from_packed_refs(&self) -> Result<()> {
@@ -1208,6 +1375,27 @@ fn parse_stash_reflog_entry(line: &str) -> Result<StashReflogEntry> {
     })
 }
 
+fn stash_reflog_entry_at_display_index(
+    entries: &[StashReflogEntry],
+    display_index: usize,
+) -> Result<&StashReflogEntry> {
+    if display_index >= entries.len() {
+        return Err(RitError::invalid_input(format!(
+            "log for 'stash' only has {} entries",
+            entries.len()
+        )));
+    }
+    Ok(&entries[entries.len() - 1 - display_index])
+}
+
+fn stash_reflog_message(entry: &StashReflogEntry) -> Result<String> {
+    entry
+        .rest
+        .split_once('\t')
+        .map(|(_, message)| message.to_owned())
+        .ok_or_else(|| RitError::invalid_input("malformed stash reflog entry"))
+}
+
 fn relink_stash_reflog_entries(entries: &mut [StashReflogEntry]) -> Result<()> {
     let mut previous = zero_object_id()?;
     for entry in entries {
@@ -1232,6 +1420,24 @@ fn format_reflog_signature(signature: &Signature) -> String {
         "{} <{}> {} {}",
         signature.name, signature.email, signature.timestamp, signature.offset
     )
+}
+
+fn validate_stash_export_ref_name(ref_name: &str) -> Result<()> {
+    if !ref_name.starts_with("refs/")
+        || ref_name.ends_with('/')
+        || ref_name.contains('\\')
+        || ref_name.contains("..")
+        || ref_name.contains("//")
+        || ref_name.ends_with(".lock")
+        || ref_name
+            .chars()
+            .any(|character| character.is_control() || character.is_whitespace())
+    {
+        return Err(RitError::invalid_input(format!(
+            "invalid ref name: {ref_name}"
+        )));
+    }
+    Ok(())
 }
 
 fn remove_file_if_exists(path: &Path) -> Result<()> {

@@ -157,6 +157,16 @@ fn stash_command(
                 return Ok(ExitCode::from(129));
             }
         }
+        [subcommand, rest @ ..] if subcommand == "export" => {
+            if parse_stash_export_args(rest, stderr)?.is_none() {
+                return Ok(ExitCode::from(129));
+            }
+        }
+        [subcommand, rest @ ..] if subcommand == "import" => {
+            if parse_stash_import_args(rest, stderr)?.is_none() {
+                return Ok(ExitCode::from(129));
+            }
+        }
         [subcommand, ..] => {
             writeln!(stderr, "rit: unsupported stash subcommand '{subcommand}'")?;
             return Ok(ExitCode::from(129));
@@ -459,6 +469,43 @@ fn stash_command(
             Err(error) => write_command_error(stderr, error),
         };
     }
+    if let [subcommand, rest @ ..] = args
+        && subcommand == "export"
+    {
+        let Some(export_args) = parse_stash_export_args(rest, stderr)? else {
+            return Ok(ExitCode::from(129));
+        };
+        return match export_args.target {
+            StashExportTarget::Print => match repository.stash_export(&export_args.indices) {
+                Ok(object_id) => {
+                    writeln!(stdout, "{object_id}")?;
+                    Ok(ExitCode::SUCCESS)
+                }
+                Err(error) => write_stash_error(stderr, error),
+            },
+            StashExportTarget::ToRef(ref_name) => {
+                match repository.stash_export_to_ref(&export_args.indices, &ref_name) {
+                    Ok(_) => Ok(ExitCode::SUCCESS),
+                    Err(error) => write_stash_error(stderr, error),
+                }
+            }
+        };
+    }
+    if let [subcommand, rest @ ..] = args
+        && subcommand == "import"
+    {
+        let Some(import_args) = parse_stash_import_args(rest, stderr)? else {
+            return Ok(ExitCode::from(129));
+        };
+        let target = match repository.resolve_revision(&import_args.commit) {
+            Ok(target) => target,
+            Err(error) => return write_command_error(stderr, error),
+        };
+        return match repository.stash_import(target) {
+            Ok(_) => Ok(ExitCode::SUCCESS),
+            Err(error) => write_stash_error(stderr, error),
+        };
+    }
 
     match repository.stash_list() {
         Ok(entries) => {
@@ -565,6 +612,20 @@ struct StashSaveArgs {
 struct StashStoreArgs {
     commit: String,
     message: Option<String>,
+}
+
+enum StashExportTarget {
+    Print,
+    ToRef(String),
+}
+
+struct StashExportArgs {
+    target: StashExportTarget,
+    indices: Vec<usize>,
+}
+
+struct StashImportArgs {
+    commit: String,
 }
 
 #[derive(Default)]
@@ -837,6 +898,84 @@ fn parse_stash_store_args(
         return Ok(None);
     };
     Ok(Some(StashStoreArgs { commit, message }))
+}
+
+fn parse_stash_export_args(
+    args: &[String],
+    stderr: &mut dyn Write,
+) -> io::Result<Option<StashExportArgs>> {
+    let mut target = None;
+    let mut stashes = Vec::new();
+    let mut index = 0;
+    while index < args.len() {
+        let arg = &args[index];
+        match arg.as_str() {
+            "--print" => {
+                if target.is_some() {
+                    writeln!(stderr, "rit: stash export accepts one target option")?;
+                    return Ok(None);
+                }
+                target = Some(StashExportTarget::Print);
+            }
+            "--to-ref" => {
+                if target.is_some() {
+                    writeln!(stderr, "rit: stash export accepts one target option")?;
+                    return Ok(None);
+                }
+                index += 1;
+                let Some(ref_name) = args.get(index) else {
+                    writeln!(stderr, "error: option `to-ref' requires a value")?;
+                    return Ok(None);
+                };
+                target = Some(StashExportTarget::ToRef(ref_name.to_owned()));
+            }
+            _ if arg.starts_with("--to-ref=") => {
+                if target.is_some() {
+                    writeln!(stderr, "rit: stash export accepts one target option")?;
+                    return Ok(None);
+                }
+                target = Some(StashExportTarget::ToRef(
+                    arg.trim_start_matches("--to-ref=").to_owned(),
+                ));
+            }
+            _ if arg.starts_with('-') => {
+                writeln!(stderr, "rit: unsupported stash export option '{arg}'")?;
+                return Ok(None);
+            }
+            _ => {
+                let (display_index, _) = parse_stash_name(arg)?;
+                stashes.push(display_index);
+            }
+        }
+        index += 1;
+    }
+
+    let Some(target) = target else {
+        writeln!(stderr, "rit: stash export requires --print or --to-ref")?;
+        return Ok(None);
+    };
+    Ok(Some(StashExportArgs {
+        target,
+        indices: stashes,
+    }))
+}
+
+fn parse_stash_import_args(
+    args: &[String],
+    stderr: &mut dyn Write,
+) -> io::Result<Option<StashImportArgs>> {
+    if args.len() != 1 {
+        writeln!(stderr, "rit: stash import requires one commit")?;
+        return Ok(None);
+    }
+    let commit = &args[0];
+    if commit.starts_with('-') {
+        writeln!(stderr, "rit: stash import requires one commit")?;
+        return Ok(None);
+    }
+    Ok(Some(StashImportArgs {
+        commit: commit.to_owned(),
+    }))
 }
 
 fn parse_stash_drop_args(

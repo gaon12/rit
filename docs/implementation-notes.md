@@ -1467,6 +1467,7 @@
 ### `rit stash`
 
 - Baseline command checked: `git stash -h`
+- Baseline Git version checked: `git version 2.52.0.windows.1`
 - Supported options: `rit stash list`,
   `rit stash [push [(-m|--message) <message>] [-S|--staged] [-k|--keep-index] [-u|--include-untracked] [-a|--all] [-q|--quiet] [--pathspec-from-file <file>] [--pathspec-file-nul] [--] [<pathspec>...]]`
   for tracked index and working-tree changes,
@@ -1481,11 +1482,13 @@
   `rit stash branch <branchname> [<stash>]` for creating a branch at the
   stash base and applying the same clean tracked stash scope,
   `rit stash create [<message>]`,
-  `rit stash store [(-m|--message) <message>] [-q|--quiet] <commit>`, and
+  `rit stash store [(-m|--message) <message>] [-q|--quiet] <commit>`,
+  `rit stash export (--print|--to-ref <ref>) [<stash>...]`,
+  `rit stash import <commit>`, and
   `rit stash clear` for loose stash refs.
-- Unsupported options: `export`, `import`, broader stash show options, save
-  `--patch`, broader untracked apply/pop restoration, and stash
-  apply/pop/branch conflict handling.
+- Unsupported options: broader stash show options, save `--patch`, broader
+  untracked apply/pop restoration, and stash apply/pop/branch conflict
+  handling.
 - Git-compatible behavior: `rit stash push` without untracked/pathspec options
   writes the usual two-parent stash shape for tracked changes, stores it in
   loose `refs/stash`, prints Git's saved/no-change messages, and restores the
@@ -1565,6 +1568,17 @@
   appends a loose stash reflog entry using the configured committer identity,
   and updates loose `.git/refs/stash`. `-q` is accepted and the default
   message is `Created via "git stash store".`
+- Git-compatible behavior: `rit stash export --print [<stash>...]` writes
+  Git's stash-export commit chain directly, prints the export commit ID, and
+  keeps the stash reflog unchanged. `rit stash export --to-ref <ref>
+  [<stash>...]` writes the same chain and stores the resulting object ID in a
+  loose full ref. Empty stash selection exports all stash entries in display
+  order, and explicit stash arguments preserve the argument order when later
+  imported.
+- Git-compatible behavior: `rit stash import <commit>` reads a stash-export
+  commit chain, appends the referenced stash commits to loose `refs/stash`,
+  and restores list order for the checked all-stash and selected-stash export
+  scopes.
 - Repository mutation: no for `stash list`.
 - Repository mutation: no for `stash show`.
 - Repository mutation: yes for `stash clear`; it removes loose and packed
@@ -1579,6 +1593,11 @@
   `.git/logs/refs/stash`, and updates loose `.git/refs/stash`.
 - Repository mutation: yes for `stash store`; it writes loose
   `.git/logs/refs/stash` and loose `.git/refs/stash`.
+- Repository mutation: yes for `stash export`; it writes loose commit/tree
+  objects and, with `--to-ref`, writes the requested loose ref. It does not
+  change `refs/stash`.
+- Repository mutation: yes for `stash import`; it appends loose
+  `.git/logs/refs/stash` entries and updates loose `.git/refs/stash`.
 - Risk: low to moderate; mutations are intentionally limited to stash refs,
   reflogs, and checked clean working-tree/index restoration paths.
 

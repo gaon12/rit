@@ -1668,6 +1668,115 @@ fn stash_store_default_message_and_quiet_match_git() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn stash_export_print_and_import_restores_list_like_git() {
+    let root = temp_path("export-print-import");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_stashes(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_export = run_capture("git", ["stash", "export", "--print"], &git_repo);
+    let rit_export = run_capture(rit_binary(), ["stash", "export", "--print"], &rit_repo);
+
+    assert_eq!(git_export.exit_code, 0, "git stderr: {}", git_export.stderr);
+    assert_eq!(rit_export.exit_code, 0, "rit stderr: {}", rit_export.stderr);
+    assert!(is_hex_object_id(git_export.stdout.trim()));
+    assert!(is_hex_object_id(rit_export.stdout.trim()));
+    assert_eq!(git_export.stderr, rit_export.stderr);
+
+    let git_export_id = git_export.stdout.trim().to_owned();
+    let rit_export_id = rit_export.stdout.trim().to_owned();
+    run_git(&git_repo, ["stash", "clear"]);
+    run_git(&rit_repo, ["stash", "clear"]);
+
+    let git_import = run_capture("git", ["stash", "import", &git_export_id], &git_repo);
+    let rit_import = run_capture(rit_binary(), ["stash", "import", &rit_export_id], &rit_repo);
+
+    assert_eq!(git_import.exit_code, 0, "git stderr: {}", git_import.stderr);
+    assert_eq!(rit_import.exit_code, 0, "rit stderr: {}", rit_import.stderr);
+    assert_eq!(git_import.stdout, rit_import.stdout);
+    assert_eq!(git_import.stderr, rit_import.stderr);
+    assert_eq!(
+        run_capture("git", ["stash", "list"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn stash_export_to_ref_selected_entries_imports_in_argument_order_like_git() {
+    let root = temp_path("export-to-ref-import");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_stashes(&git_repo);
+    fs::write(repo_file(&git_repo, "tracked.txt"), "third\n").expect("third change should write");
+    run_git(&git_repo, ["stash", "push", "-m", "third stash"]);
+    copy_directory(&git_repo, &rit_repo);
+
+    let export_args = [
+        "stash",
+        "export",
+        "--to-ref",
+        "refs/rit-test/exported-stashes",
+        "stash@{2}",
+        "stash@{0}",
+    ];
+    let git_export = run_capture("git", export_args, &git_repo);
+    let rit_export = run_capture(rit_binary(), export_args, &rit_repo);
+
+    assert_eq!(git_export.exit_code, 0, "git stderr: {}", git_export.stderr);
+    assert_eq!(rit_export.exit_code, 0, "rit stderr: {}", rit_export.stderr);
+    assert_eq!(git_export.stdout, rit_export.stdout);
+    assert_eq!(git_export.stderr, rit_export.stderr);
+    assert!(
+        read_optional_file(
+            &git_repo
+                .join(".git")
+                .join("refs")
+                .join("rit-test")
+                .join("exported-stashes")
+        )
+        .is_some()
+    );
+    assert!(
+        read_optional_file(
+            &rit_repo
+                .join(".git")
+                .join("refs")
+                .join("rit-test")
+                .join("exported-stashes")
+        )
+        .is_some()
+    );
+
+    run_git(&git_repo, ["stash", "clear"]);
+    run_git(&rit_repo, ["stash", "clear"]);
+
+    let git_import = run_capture(
+        "git",
+        ["stash", "import", "refs/rit-test/exported-stashes"],
+        &git_repo,
+    );
+    let rit_import = run_capture(
+        rit_binary(),
+        ["stash", "import", "refs/rit-test/exported-stashes"],
+        &rit_repo,
+    );
+
+    assert_eq!(git_import.exit_code, 0, "git stderr: {}", git_import.stderr);
+    assert_eq!(rit_import.exit_code, 0, "rit stderr: {}", rit_import.stderr);
+    assert_eq!(git_import.stdout, rit_import.stdout);
+    assert_eq!(git_import.stderr, rit_import.stderr);
+    assert_eq!(
+        run_capture("git", ["stash", "list"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct CapturedCommand {
     exit_code: i32,
     stdout: String,
