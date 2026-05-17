@@ -412,6 +412,8 @@ fn stash_command(
                 | StashShowFormat::StatAndPatch
                 | StashShowFormat::Raw
                 | StashShowFormat::RawAndPatch
+                | StashShowFormat::Summary
+                | StashShowFormat::SummaryAndPatch
         ) {
             let patch_result = match untracked_mode {
                 StashShowUntrackedMode::Tracked => {
@@ -444,6 +446,19 @@ fn stash_command(
                                 return Ok(stash_show_exit_code(show_args.exit_code, has_changes));
                             }
                             if !raw_text.is_empty() && !text.is_empty() {
+                                writeln!(stdout)?;
+                            }
+                        }
+                        if matches!(
+                            format,
+                            StashShowFormat::Summary | StashShowFormat::SummaryAndPatch
+                        ) {
+                            let summary_text = patch.to_summary_text();
+                            stdout.write_all(summary_text.as_bytes())?;
+                            if matches!(format, StashShowFormat::Summary) {
+                                return Ok(stash_show_exit_code(show_args.exit_code, has_changes));
+                            }
+                            if !summary_text.is_empty() && !text.is_empty() {
                                 writeln!(stdout)?;
                             }
                         }
@@ -507,6 +522,9 @@ fn stash_command(
                     }
                     StashShowFormat::Raw | StashShowFormat::RawAndPatch => {
                         unreachable!("raw is handled before summary output")
+                    }
+                    StashShowFormat::Summary | StashShowFormat::SummaryAndPatch => {
+                        unreachable!("summary is handled before summary output")
                     }
                     StashShowFormat::ShortStat => {
                         stdout.write_all(diff.to_shortstat_text().as_bytes())?
@@ -620,6 +638,8 @@ enum StashShowFormat {
     StatAndPatch,
     Raw,
     RawAndPatch,
+    Summary,
+    SummaryAndPatch,
     ShortStat,
     NameOnly,
     NameStatus,
@@ -681,6 +701,7 @@ fn parse_stash_show_args(
             "-p" | "--patch" => {
                 format = Some(match format {
                     Some(StashShowFormat::Raw) => StashShowFormat::RawAndPatch,
+                    Some(StashShowFormat::Summary) => StashShowFormat::SummaryAndPatch,
                     Some(StashShowFormat::Stat) => StashShowFormat::StatAndPatch,
                     _ => StashShowFormat::Patch,
                 });
@@ -690,6 +711,12 @@ fn parse_stash_show_args(
                 format = Some(match format {
                     Some(StashShowFormat::Patch) => StashShowFormat::RawAndPatch,
                     _ => StashShowFormat::Raw,
+                });
+            }
+            "--summary" => {
+                format = Some(match format {
+                    Some(StashShowFormat::Patch) => StashShowFormat::SummaryAndPatch,
+                    _ => StashShowFormat::Summary,
                 });
             }
             "--name-only" => format = Some(StashShowFormat::NameOnly),

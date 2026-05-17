@@ -270,6 +270,16 @@ impl DiffPatch {
         }
         output
     }
+
+    /// Renders Git-like `--summary` records for file creation, deletion,
+    /// rename, and copy changes.
+    pub fn to_summary_text(&self) -> String {
+        let mut output = String::new();
+        for file in &self.files {
+            output.push_str(&file.to_summary_text());
+        }
+        output
+    }
 }
 
 /// Options that affect patch text rendering without changing the diff itself.
@@ -315,6 +325,23 @@ pub struct DiffPatchFile {
 }
 
 impl DiffPatchFile {
+    fn to_summary_text(&self) -> String {
+        match self.status {
+            'A' => format!(" create mode {:06o} {}\n", self.mode, self.path),
+            'D' => format!(" delete mode {:06o} {}\n", self.mode, self.path),
+            'R' | 'C' => {
+                let action = if self.status == 'R' { "rename" } else { "copy" };
+                let old_path = self.old_path.as_deref().unwrap_or(&self.path);
+                format!(
+                    " {action} {} ({}%)\n",
+                    rename_summary_path(old_path, &self.path),
+                    self.similarity_score.unwrap_or(100)
+                )
+            }
+            _ => String::new(),
+        }
+    }
+
     fn to_raw_text(&self, options: &PatchRenderOptions) -> String {
         let old_mode = if self.old_object_id.is_some() {
             self.mode
@@ -416,6 +443,10 @@ impl DiffPatchFile {
         }
         Ok(output)
     }
+}
+
+fn rename_summary_path(old_path: &str, new_path: &str) -> String {
+    format!("{old_path} => {new_path}")
 }
 
 fn binary_patch_line(file: &DiffPatchFile) -> String {
@@ -2613,6 +2644,66 @@ mod tests {
             ":000000 100644 0000000 {} A\tnew.txt\n",
             &new_id.to_hex()[..7]
         )));
+    }
+
+    #[test]
+    fn summary_patch_text_renders_extended_change_records() {
+        let old_id = crate::hash_object(crate::ObjectKind::Blob, b"old\n");
+        let new_id = crate::hash_object(crate::ObjectKind::Blob, b"new\n");
+        let patch = super::DiffPatch {
+            files: vec![
+                super::DiffPatchFile {
+                    status: 'M',
+                    old_path: None,
+                    path: "modified.txt".to_owned(),
+                    similarity_score: None,
+                    old_object_id: Some(old_id),
+                    new_object_id: Some(new_id),
+                    mode: 0o100644,
+                    old_data: b"old\n".to_vec(),
+                    new_data: b"new\n".to_vec(),
+                },
+                super::DiffPatchFile {
+                    status: 'A',
+                    old_path: None,
+                    path: "new.txt".to_owned(),
+                    similarity_score: None,
+                    old_object_id: None,
+                    new_object_id: Some(new_id),
+                    mode: 0o100644,
+                    old_data: Vec::new(),
+                    new_data: b"new\n".to_vec(),
+                },
+                super::DiffPatchFile {
+                    status: 'D',
+                    old_path: None,
+                    path: "deleted.txt".to_owned(),
+                    similarity_score: None,
+                    old_object_id: Some(old_id),
+                    new_object_id: None,
+                    mode: 0o100644,
+                    old_data: b"old\n".to_vec(),
+                    new_data: Vec::new(),
+                },
+                super::DiffPatchFile {
+                    status: 'R',
+                    old_path: Some("old.txt".to_owned()),
+                    path: "renamed.txt".to_owned(),
+                    similarity_score: Some(100),
+                    old_object_id: Some(old_id),
+                    new_object_id: Some(old_id),
+                    mode: 0o100644,
+                    old_data: b"old\n".to_vec(),
+                    new_data: b"old\n".to_vec(),
+                },
+            ],
+            warnings: Vec::new(),
+        };
+
+        assert_eq!(
+            patch.to_summary_text(),
+            " create mode 100644 new.txt\n delete mode 100644 deleted.txt\n rename old.txt => renamed.txt (100%)\n"
+        );
     }
 
     #[test]

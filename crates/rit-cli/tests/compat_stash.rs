@@ -1549,6 +1549,7 @@ fn stash_show_summary_formats_match_git() {
         vec!["stash", "show", "--patch-with-raw", "--abbrev=12"],
         vec!["stash", "show", "--raw", "--patch"],
         vec!["stash", "show", "--patch", "--raw"],
+        vec!["stash", "show", "--summary"],
         vec!["stash", "show", "--abbrev=12", "--full-index"],
         vec!["stash", "show", "--stat", "--patch"],
         vec!["stash", "show", "--patch", "--stat"],
@@ -1612,6 +1613,7 @@ fn stash_show_include_untracked_summary_formats_match_git() {
         vec!["stash", "show", "--include-untracked", "--name-status"],
         vec!["stash", "show", "--include-untracked", "--numstat"],
         vec!["stash", "show", "--include-untracked", "--raw"],
+        vec!["stash", "show", "--include-untracked", "--summary"],
         vec!["stash", "show", "--include-untracked", "--shortstat"],
         vec!["stash", "show", "--include-untracked", "--patch-with-stat"],
         vec![
@@ -1634,6 +1636,7 @@ fn stash_show_include_untracked_summary_formats_match_git() {
         vec!["stash", "show", "--only-untracked", "--name-status"],
         vec!["stash", "show", "--only-untracked", "--numstat"],
         vec!["stash", "show", "--only-untracked", "--raw"],
+        vec!["stash", "show", "--only-untracked", "--summary"],
         vec!["stash", "show", "--only-untracked", "--shortstat"],
         vec!["stash", "show", "--only-untracked", "--patch-with-stat"],
         vec![
@@ -1651,6 +1654,47 @@ fn stash_show_include_untracked_summary_formats_match_git() {
             "--full-index",
         ],
         vec!["stash", "show", "--only-untracked", "--patch"],
+    ] {
+        let git_show = run_capture("git", args.iter().copied(), &git_repo);
+        let rit_show = run_capture(rit_binary(), args.iter().copied(), &rit_repo);
+
+        assert_eq!(git_show.exit_code, 0, "git stderr: {}", git_show.stderr);
+        assert_eq!(rit_show.exit_code, 0, "rit stderr: {}", rit_show.stderr);
+        assert_eq!(git_show.stdout, rit_show.stdout, "args: {args:?}");
+        assert_eq!(git_show.stderr, rit_show.stderr, "args: {args:?}");
+    }
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn stash_show_extended_summary_matches_git() {
+    let root = temp_path("show-summary");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    fs::write(repo_file(&git_repo, "modified.txt"), "base\n").expect("modified base should write");
+    fs::write(repo_file(&git_repo, "deleted.txt"), "gone\n").expect("deleted base should write");
+    run_git(&git_repo, ["add", "modified.txt", "deleted.txt"]);
+    run_git(&git_repo, ["commit", "-m", "base"]);
+    fs::write(repo_file(&git_repo, "modified.txt"), "changed\n")
+        .expect("modified change should write");
+    fs::remove_file(repo_file(&git_repo, "deleted.txt")).expect("deleted file should remove");
+    fs::write(repo_file(&git_repo, "added.txt"), "added\n").expect("added file should write");
+    fs::write(repo_file(&git_repo, "untracked.txt"), "new\n").expect("untracked file should write");
+    run_git(
+        &git_repo,
+        ["stash", "push", "--include-untracked", "-m", "summary"],
+    );
+    copy_directory(&git_repo, &rit_repo);
+
+    for args in [
+        vec!["stash", "show", "--summary"],
+        vec!["stash", "show", "--summary", "--patch"],
+        vec!["stash", "show", "--patch", "--summary"],
+        vec!["stash", "show", "--include-untracked", "--summary"],
+        vec!["stash", "show", "--only-untracked", "--summary"],
+        vec!["stash", "show", "--only-untracked", "--summary", "--patch"],
     ] {
         let git_show = run_capture("git", args.iter().copied(), &git_repo);
         let rit_show = run_capture(rit_binary(), args.iter().copied(), &rit_repo);
@@ -1903,6 +1947,7 @@ fn stash_show_exit_code_matches_git() {
         vec!["stash", "show", "--exit-code", "--patch-with-stat"],
         vec!["stash", "show", "--exit-code", "--raw"],
         vec!["stash", "show", "--exit-code", "--patch-with-raw"],
+        vec!["stash", "show", "--exit-code", "--summary"],
         vec!["stash", "show", "--exit-code", "--name-only"],
         vec!["stash", "show", "--exit-code", "--name-status"],
         vec!["stash", "show", "--exit-code", "--numstat"],
