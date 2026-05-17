@@ -1729,6 +1729,61 @@ fn stash_drop_errors_match_git() {
 }
 
 #[test]
+fn stash_show_include_untracked_config_matches_git() {
+    let root = temp_path("show-untracked-config");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    fs::write(repo_file(&git_repo, "tracked.txt"), "tracked change\n")
+        .expect("git tracked change should write");
+    fs::write(repo_file(&rit_repo, "tracked.txt"), "tracked change\n")
+        .expect("rit tracked change should write");
+    fs::write(repo_file(&git_repo, "new.txt"), "new\n").expect("git untracked should write");
+    fs::write(repo_file(&rit_repo, "new.txt"), "new\n").expect("rit untracked should write");
+    run_git(
+        &git_repo,
+        [
+            "stash",
+            "push",
+            "--include-untracked",
+            "-m",
+            "with untracked",
+        ],
+    );
+    let rit_push = run_capture(
+        rit_binary(),
+        [
+            "stash",
+            "push",
+            "--include-untracked",
+            "-m",
+            "with untracked",
+        ],
+        &rit_repo,
+    );
+    assert_eq!(rit_push.exit_code, 0, "rit stderr: {}", rit_push.stderr);
+    run_git(&git_repo, ["config", "stash.showIncludeUntracked", "true"]);
+    run_git(&rit_repo, ["config", "stash.showIncludeUntracked", "true"]);
+
+    for args in [
+        vec!["stash", "show", "--name-only"],
+        vec!["stash", "show", "--name-status"],
+        vec!["stash", "show", "--only-untracked", "--name-only"],
+    ] {
+        let git_show = run_capture("git", args.iter().copied(), &git_repo);
+        let rit_show = run_capture(rit_binary(), args.iter().copied(), &rit_repo);
+
+        assert_eq!(git_show.exit_code, 0, "git stderr: {}", git_show.stderr);
+        assert_eq!(rit_show.exit_code, 0, "rit stderr: {}", rit_show.stderr);
+        assert_eq!(git_show.stdout, rit_show.stdout, "args: {args:?}");
+        assert_eq!(git_show.stderr, rit_show.stderr, "args: {args:?}");
+    }
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn stash_store_existing_commit_matches_git_list_and_ref() {
     let root = temp_path("store");
     let git_repo = root.join("git");

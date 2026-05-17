@@ -393,8 +393,13 @@ fn stash_command(
         let Some(show_args) = parse_stash_show_args(rest, stderr)? else {
             return Ok(ExitCode::from(129));
         };
+        let untracked_mode = match stash_show_untracked_mode(&repository, show_args.untracked_mode)
+        {
+            Ok(mode) => mode,
+            Err(error) => return write_command_error(stderr, error),
+        };
         if matches!(show_args.format, StashShowFormat::Patch) {
-            let patch_result = match show_args.untracked_mode {
+            let patch_result = match untracked_mode {
                 StashShowUntrackedMode::Tracked => {
                     repository.stash_show_patch(show_args.index, &rit_core::PathspecSet::all())
                 }
@@ -418,7 +423,7 @@ fn stash_command(
                 Err(error) => write_stash_error(stderr, error),
             };
         }
-        let summary = match show_args.untracked_mode {
+        let summary = match untracked_mode {
             StashShowUntrackedMode::Tracked => {
                 repository.stash_show(show_args.index, &rit_core::PathspecSet::all())
             }
@@ -543,7 +548,7 @@ enum StashShowFormat {
 struct StashShowArgs {
     index: usize,
     format: StashShowFormat,
-    untracked_mode: StashShowUntrackedMode,
+    untracked_mode: Option<StashShowUntrackedMode>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -558,7 +563,7 @@ fn parse_stash_show_args(
     stderr: &mut dyn Write,
 ) -> io::Result<Option<StashShowArgs>> {
     let mut format = StashShowFormat::Stat;
-    let mut untracked_mode = StashShowUntrackedMode::Tracked;
+    let mut untracked_mode = None;
     let mut stash = None;
     for arg in args {
         match arg.as_str() {
@@ -567,8 +572,8 @@ fn parse_stash_show_args(
             "--name-only" => format = StashShowFormat::NameOnly,
             "--name-status" => format = StashShowFormat::NameStatus,
             "--numstat" => format = StashShowFormat::Numstat,
-            "-u" | "--include-untracked" => untracked_mode = StashShowUntrackedMode::Include,
-            "--only-untracked" => untracked_mode = StashShowUntrackedMode::Only,
+            "-u" | "--include-untracked" => untracked_mode = Some(StashShowUntrackedMode::Include),
+            "--only-untracked" => untracked_mode = Some(StashShowUntrackedMode::Only),
             _ if arg.starts_with('-') => {
                 writeln!(stderr, "rit: unsupported stash show option '{arg}'")?;
                 return Ok(None);
@@ -587,6 +592,26 @@ fn parse_stash_show_args(
         format,
         untracked_mode,
     }))
+}
+
+fn stash_show_untracked_mode(
+    repository: &rit_core::Repository,
+    explicit_mode: Option<StashShowUntrackedMode>,
+) -> rit_core::Result<StashShowUntrackedMode> {
+    if let Some(mode) = explicit_mode {
+        return Ok(mode);
+    }
+
+    let config_path = repository.common_dir().join("config");
+    if !config_path.exists() {
+        return Ok(StashShowUntrackedMode::Tracked);
+    }
+    let config = rit_core::GitConfig::read(&config_path)?;
+    if config.get_bool("stash", "showIncludeUntracked", false)? {
+        Ok(StashShowUntrackedMode::Include)
+    } else {
+        Ok(StashShowUntrackedMode::Tracked)
+    }
 }
 
 struct StashDropArgs {

@@ -1568,7 +1568,9 @@
   summary formats and patch output with third-parent untracked additions for
   the checked name-only/name-status/numstat/patch scope. `--only-untracked`
   renders only those third-parent additions across the same checked output
-  formats.
+  formats. If `stash.showIncludeUntracked=true` is set, default `stash show`
+  untracked handling uses the same include-untracked mode unless an explicit
+  show untracked option is provided.
 - Git-compatible behavior: `rit stash store` resolves an existing commit,
   appends a loose stash reflog entry using the configured committer identity,
   and updates loose `.git/refs/stash`. `-q` is accepted and the default

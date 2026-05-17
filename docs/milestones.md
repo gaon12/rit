@@ -594,6 +594,9 @@ Completion criteria:
     untracked additions in Git-compatible patch output.
   - [x] `stash show --only-untracked` renders only third-parent untracked
     additions for stat/name-only/name-status/numstat/patch output.
+  - [x] `stash.showIncludeUntracked=true` makes default `stash show` include
+    third-parent untracked entries unless an explicit untracked show option is
+    provided.
   - [x] Basic legacy `stash save [-q] [<message>]` uses the same tracked-change
     stash shape as push and matches Git's saved/no-change output.
   - [x] Legacy `stash save -u/--include-untracked` and `-a/--all` reuse the
