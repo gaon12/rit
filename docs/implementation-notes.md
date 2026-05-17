@@ -112,7 +112,7 @@
   to text mode for stash path filtering.
 - 2026-05-17 stash show inter-hunk slice checked `git stash -h`, `git diff -h`,
   and direct Git comparisons for `stash show --patch -U0
-  --inter-hunk-context=1`.
+  --inter-hunk-context=1` and the Git-accepted `k` suffix form.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
 - 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git
@@ -1612,9 +1612,9 @@
   Git's four-character minimum and `--full-index` precedence. `-U<n>` and
   `--unified=<n>` control unified patch context lines for the checked stash
   patch formats. `--inter-hunk-context=<n>` merges nearby hunks when the
-  omitted context line gap is within the requested threshold. `--no-prefix`
-  and `--default-prefix` control Git-compatible patch path prefixes for the
-  checked stash patch formats.
+  omitted context line gap is within the requested threshold, including Git's
+  `k`/`m`/`g` suffix multipliers. `--no-prefix` and `--default-prefix` control
+  Git-compatible patch path prefixes for the checked stash patch formats.
   `--output-indicator-new=<char>`, `--output-indicator-old=<char>`, and
   `--output-indicator-context=<char>` control Git-compatible unified hunk line
   prefixes for the checked stash patch formats. `-a`, `--text`, `--textconv`,

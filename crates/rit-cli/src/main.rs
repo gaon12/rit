@@ -911,7 +911,7 @@ fn parse_stash_show_args(
             _ if arg.starts_with("--inter-hunk-context=") => {
                 let value = arg.trim_start_matches("--inter-hunk-context=");
                 diff_option = true;
-                inter_hunk_context = match parse_diff_context_lines(value) {
+                inter_hunk_context = match parse_inter_hunk_context_lines(value) {
                     Some(inter_hunk_context) => inter_hunk_context,
                     None => {
                         writeln!(
@@ -1028,6 +1028,16 @@ fn parse_stash_show_args(
 
 fn parse_diff_context_lines(value: &str) -> Option<usize> {
     value.parse::<usize>().ok()
+}
+
+fn parse_inter_hunk_context_lines(value: &str) -> Option<usize> {
+    let (digits, multiplier) = match value.as_bytes().last().copied() {
+        Some(b'k') => (&value[..value.len() - 1], 1024usize),
+        Some(b'm') => (&value[..value.len() - 1], 1024usize * 1024),
+        Some(b'g') => (&value[..value.len() - 1], 1024usize * 1024 * 1024),
+        _ => (value, 1),
+    };
+    digits.parse::<usize>().ok()?.checked_mul(multiplier)
 }
 
 fn parse_output_indicator(value: &str) -> std::result::Result<Option<char>, ()> {
