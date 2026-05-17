@@ -390,6 +390,58 @@ fn stash_push_no_pathspec_file_nul_reverts_to_text_mode_like_git() {
 }
 
 #[test]
+fn stash_push_no_pathspec_from_file_without_file_matches_git() {
+    let root = temp_path("push-no-pathspec-from-file");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    fs::write(repo_file(&git_repo, "other.txt"), "other base\n")
+        .expect("second tracked file should write");
+    run_git(&git_repo, ["add", "other.txt"]);
+    run_git(&git_repo, ["commit", "--quiet", "-m", "other"]);
+    copy_directory(&git_repo, &rit_repo);
+    fs::write(repo_file(&git_repo, "tracked.txt"), "selected\n")
+        .expect("git selected change should write");
+    fs::write(repo_file(&rit_repo, "tracked.txt"), "selected\n")
+        .expect("rit selected change should write");
+    fs::write(repo_file(&git_repo, "other.txt"), "other change\n")
+        .expect("git unselected change should write");
+    fs::write(repo_file(&rit_repo, "other.txt"), "other change\n")
+        .expect("rit unselected change should write");
+
+    let args = [
+        "stash",
+        "push",
+        "-m",
+        "selected no file",
+        "--no-pathspec-from-file",
+        "--",
+        "tracked.txt",
+    ];
+    let git_push = run_capture("git", args, &git_repo);
+    let rit_push = run_capture(rit_binary(), args, &rit_repo);
+
+    assert_eq!(git_push.exit_code, 0, "git stderr: {}", git_push.stderr);
+    assert_eq!(rit_push.exit_code, 0, "rit stderr: {}", rit_push.stderr);
+    assert_eq!(git_push.stdout, rit_push.stdout);
+    assert_eq!(git_push.stderr, rit_push.stderr);
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["stash", "show", "--name-only"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "show", "--name-only"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["stash", "list"], &git_repo).stdout,
+        run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn stash_push_include_untracked_stores_third_parent_like_git() {
     let root = temp_path("push-include-untracked");
     let git_repo = root.join("git");

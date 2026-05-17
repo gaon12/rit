@@ -133,6 +133,10 @@
   direct Git comparisons for `stash push --pathspec-file-nul
   --no-pathspec-file-nul`, verifying the shared pathspec-file parser returns
   to text mode for stash path filtering.
+- 2026-05-18 stash push no pathspec-from-file slice checked
+  Git 2.52.0.windows.1 with `git --version`, `git help -a`, `git stash -h`,
+  and direct Git comparisons for
+  `stash push --no-pathspec-from-file -- <pathspec>`.
 - 2026-05-17 stash show inter-hunk slice checked `git stash -h`, `git diff -h`,
   and direct Git comparisons for `stash show --patch -U0
   --inter-hunk-context=1` and the Git-accepted `k` suffix form.
@@ -1604,6 +1608,9 @@
   including text and NUL-delimited pathspec files for the checked tracked
   change scope. `--no-pathspec-file-nul` turns a preceding NUL pathspec-file
   mode back into text pathspec-file parsing for checked stash push filtering.
+- Git-compatible behavior: `rit stash push --no-pathspec-from-file` is
+  accepted as a no-op when no pathspec file selection is active, matching Git's
+  checked tracked path filtering behavior.
 - Git-compatible behavior: `rit stash push --keep-index` records the same
   tracked stash shape while restoring selected paths to the pre-stash index
   state, so staged changes remain staged and unstaged-only changes are cleaned.

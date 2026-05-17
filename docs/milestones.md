@@ -607,6 +607,8 @@ Completion criteria:
   - [x] `stash push --no-pathspec-file-nul` turns a preceding NUL
     pathspec-file mode back into text pathspec parsing for tracked stash push
     path filtering.
+  - [x] `stash push --no-pathspec-from-file` is accepted as a Git-compatible
+    no-op when no pathspec file selection is active.
   - [x] Basic `stash push --keep-index` records tracked changes while restoring
     selected paths to the pre-stash index state so staged changes remain
     staged.
