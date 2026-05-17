@@ -410,6 +410,8 @@ Completion criteria:
   - [x] `clone --local --no-hardlinks --no-checkout` follows the same
     copy-based local clone path and matches checked no-checkout object/ref
     state.
+  - [x] `clone --local --no-checkout -o <name>` / `--origin=<name>` records
+    the checked remote name in clone config and branch merge config.
   - [x] `fetch <local-repository>` copies objects into an existing repository
     and writes `FETCH_HEAD` without updating refs.
 - [x] Protocol model for local, HTTP(S), and SSH location classification.

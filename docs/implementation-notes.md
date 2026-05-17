@@ -483,6 +483,10 @@
 - 2026-05-18 local clone no-hardlinks slice checked Git 2.52.0.windows.1 with
   `git --version`, `git help -a`, `git clone -h`, and direct Git comparison
   for `clone --local --no-hardlinks --no-checkout`.
+- 2026-05-18 local clone origin-name slice checked Git 2.52.0.windows.1 with
+  `git --version`, `git help -a`, `git clone -h`, and direct Git comparisons
+  for `clone --local --no-checkout -o upstream` and
+  `clone --local --no-checkout --origin=upstream`.
 - 2026-05-11 local fetch object-transfer slice checked `git fetch -h` and a
   direct Git comparison for `fetch <local-repository>`.
 - 2026-05-11 transport protocol model slice checked `git clone -h` and
@@ -1429,7 +1433,7 @@
 
 - Baseline command checked: `git clone -h`
 - Supported options: `--local`/`-l`, `--no-checkout`/`-n`,
-  `--no-hardlinks`, and `--quiet`/`-q`.
+  `--no-hardlinks`, `-o <name>`/`--origin=<name>`, and `--quiet`/`-q`.
 - Unsupported options: checkout, bare/mirror clones, remote protocols,
   hardlink/shared/reference modes other than `--no-hardlinks`, branch
   selection, shallow/partial clone,
@@ -1440,6 +1444,9 @@
 - Git-compatible behavior: `--no-hardlinks` is accepted for the checked local
   no-checkout clone shape; rit's local clone path already copies object files
   rather than creating hardlinks.
+- Git-compatible behavior: `-o <name>` and `--origin=<name>` record the
+  checked remote name in `remote.<name>`, its fetch refspec, and the current
+  branch's `remote` config.
 - Intentional differences: checkout is rejected instead of silently producing a
   partial worktree; remote clone protocols are still pending.
 - Repository mutation: creates a new repository directory and copies local

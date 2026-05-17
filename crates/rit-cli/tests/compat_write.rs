@@ -3641,9 +3641,11 @@ fn clone_local_no_checkout_copies_head_objects_and_refs() {
     run_git(&source, ["add", "a.txt"]);
     run_git(&source, ["commit", "--quiet", "-m", "base"]);
 
-    for (name, extra_args) in [
-        ("default", Vec::<&str>::new()),
-        ("no-hardlinks", vec!["--no-hardlinks"]),
+    for (name, extra_args, origin_name) in [
+        ("default", Vec::<&str>::new(), "origin"),
+        ("no-hardlinks", vec!["--no-hardlinks"], "origin"),
+        ("origin-short", vec!["-o", "upstream"], "upstream"),
+        ("origin-long", vec!["--origin=upstream"], "upstream"),
     ] {
         let git_target = workspace.join(format!("git-target-{name}"));
         let rit_target = workspace.join(format!("rit-target-{name}"));
@@ -3687,6 +3689,32 @@ fn clone_local_no_checkout_copies_head_objects_and_refs() {
         let rit_commit = run_capture(rit_binary(), ["cat-file", "-p", "HEAD"], &rit_target).0;
         assert_eq!(git_commit, rit_commit);
         assert!(!rit_target.join("a.txt").exists());
+
+        let remote_section = format!("remote.{origin_name}.url");
+        let git_remote_url =
+            run_capture("git", ["config", "--get", &remote_section], &git_target).0;
+        let rit_remote_url =
+            run_capture("git", ["config", "--get", &remote_section], &rit_target).0;
+        assert_eq!(git_remote_url, rit_remote_url);
+
+        let fetch_section = format!("remote.{origin_name}.fetch");
+        let git_fetch = run_capture("git", ["config", "--get", &fetch_section], &git_target).0;
+        let rit_fetch = run_capture("git", ["config", "--get", &fetch_section], &rit_target).0;
+        assert_eq!(git_fetch, rit_fetch);
+
+        let branch_remote = run_capture(
+            "git",
+            ["config", "--get", "branch.master.remote"],
+            &git_target,
+        )
+        .0;
+        let rit_branch_remote = run_capture(
+            "git",
+            ["config", "--get", "branch.master.remote"],
+            &rit_target,
+        )
+        .0;
+        assert_eq!(branch_remote, rit_branch_remote);
     }
 
     let _ = fs::remove_dir_all(workspace);

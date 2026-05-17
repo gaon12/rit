@@ -33,6 +33,8 @@ pub struct LocalCloneOptions {
     pub source: PathBuf,
     /// Directory to create as the destination working tree.
     pub directory: PathBuf,
+    /// Remote name recorded in the cloned repository config.
+    pub origin_name: String,
 }
 
 /// Options for fetching objects from a local repository.
@@ -140,7 +142,14 @@ impl LocalCloneOptions {
         Self {
             source: source.into(),
             directory: directory.into(),
+            origin_name: "origin".to_owned(),
         }
+    }
+
+    /// Sets the remote name recorded in the cloned repository config.
+    pub fn with_origin_name(mut self, origin_name: impl Into<String>) -> Self {
+        self.origin_name = origin_name.into();
+        self
     }
 }
 
@@ -291,7 +300,7 @@ impl Repository {
             &target.git_dir().join("HEAD"),
             format!("ref: refs/heads/{branch_name}\n").as_bytes(),
         )?;
-        append_clone_remote_config(&target, &source, &branch_name)?;
+        append_clone_remote_config(&target, &options.source, &branch_name, &options.origin_name)?;
 
         Ok(target)
     }
@@ -1061,21 +1070,22 @@ fn validate_receive_pack_status(status: &ReceivePackStatus, ref_name: &str) -> R
 
 fn append_clone_remote_config(
     target: &Repository,
-    source: &Repository,
+    source: &Path,
     branch_name: &str,
+    origin_name: &str,
 ) -> Result<()> {
-    let source_path = source
-        .worktree()
-        .unwrap_or_else(|| source.git_dir())
-        .to_string_lossy()
-        .replace('\\', "/");
+    let source_path = escape_git_config_value(&source.to_string_lossy());
     let config_path = target.common_dir().join("config");
     let mut config =
         fs::read_to_string(&config_path).map_err(|source| RitError::io(&config_path, source))?;
     config.push_str(&format!(
-        "[remote \"origin\"]\n\turl = {source_path}\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n[branch \"{branch_name}\"]\n\tremote = origin\n\tmerge = refs/heads/{branch_name}\n"
+        "[remote \"{origin_name}\"]\n\turl = {source_path}\n\tfetch = +refs/heads/*:refs/remotes/{origin_name}/*\n[branch \"{branch_name}\"]\n\tremote = {origin_name}\n\tmerge = refs/heads/{branch_name}\n"
     ));
     write_file(&config_path, config.as_bytes())
+}
+
+fn escape_git_config_value(value: &str) -> String {
+    value.replace('\\', "\\\\")
 }
 
 fn default_config(bare: bool) -> String {

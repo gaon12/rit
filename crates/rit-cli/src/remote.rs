@@ -12,22 +12,40 @@ pub fn clone_command(
     let mut quiet = false;
     let mut local = false;
     let mut no_checkout = false;
+    let mut origin_name = "origin".to_owned();
     let mut positional = Vec::new();
     let mut after_separator = false;
+    let mut pending_option: Option<&'static str> = None;
 
     for arg in args {
+        if let Some(option) = pending_option.take() {
+            match option {
+                "--origin" => origin_name = arg.to_owned(),
+                _ => unreachable!("unknown pending clone option"),
+            }
+            continue;
+        }
+
         match arg.as_str() {
             "--" if !after_separator => after_separator = true,
             "-q" | "--quiet" if !after_separator => quiet = true,
             "-l" | "--local" if !after_separator => local = true,
             "-n" | "--no-checkout" if !after_separator => no_checkout = true,
             "--no-hardlinks" if !after_separator => {}
+            "-o" | "--origin" if !after_separator => pending_option = Some("--origin"),
+            option if option.starts_with("--origin=") && !after_separator => {
+                origin_name = option.trim_start_matches("--origin=").to_owned();
+            }
             unsupported if unsupported.starts_with('-') && !after_separator => {
                 writeln!(stderr, "rit: unsupported clone option '{unsupported}'")?;
                 return Ok(ExitCode::from(129));
             }
             value => positional.push(value.to_owned()),
         }
+    }
+    if let Some(option) = pending_option {
+        writeln!(stderr, "rit: clone option '{option}' requires a value")?;
+        return Ok(ExitCode::from(129));
     }
 
     if !local {
@@ -61,7 +79,8 @@ pub fn clone_command(
         .get(1)
         .map(PathBuf::from)
         .unwrap_or_else(|| default_clone_directory(&source));
-    let options = rit_core::LocalCloneOptions::new(&source, &directory);
+    let options =
+        rit_core::LocalCloneOptions::new(&source, &directory).with_origin_name(origin_name);
 
     match rit_core::Repository::clone_local_no_checkout(&options) {
         Ok(_) => {
