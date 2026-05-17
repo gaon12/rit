@@ -1586,9 +1586,10 @@
   Git's four-character minimum and `--full-index` precedence. `--raw`,
   `--patch-with-raw`, `--raw --patch`, and `--patch --raw` render Git-compatible
   raw records for the checked tracked and untracked patch scopes. `--summary`,
-  `--summary --patch`, and `--patch --summary` render Git-compatible extended
-  file summaries for additions, deletions, and renames in the checked tracked
-  and untracked patch scopes.
+  `--summary --patch`, `--patch --summary`, `--summary --stat`, and
+  `--stat --summary` render Git-compatible extended file summaries for
+  additions, deletions, and renames in the checked tracked and untracked patch
+  scopes.
   `--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`, and
   `--color=auto` are accepted for Git-compatible no-external-diff/no-color
   output in the checked capture environment.

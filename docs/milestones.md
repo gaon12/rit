@@ -619,9 +619,9 @@ Completion criteria:
   - [x] `stash show --raw`, `--patch-with-raw`, `--raw --patch`, and
     `--patch --raw` render Git-compatible raw records for checked tracked and
     untracked patch scopes.
-  - [x] `stash show --summary`, `--summary --patch`, and `--patch --summary`
-    render Git-compatible extended file summaries for checked tracked and
-    untracked patch scopes.
+  - [x] `stash show --summary`, `--summary --patch`, `--patch --summary`,
+    `--summary --stat`, and `--stat --summary` render Git-compatible extended
+    file summaries for checked tracked and untracked patch scopes.
   - [x] `stash show` accepts no-external-diff and no-color diff options
     (`--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`,
     `--color=auto`) for Git-compatible no-color output in checked captures.

@@ -1692,6 +1692,8 @@ fn stash_show_extended_summary_matches_git() {
         vec!["stash", "show", "--summary"],
         vec!["stash", "show", "--summary", "--patch"],
         vec!["stash", "show", "--patch", "--summary"],
+        vec!["stash", "show", "--summary", "--stat"],
+        vec!["stash", "show", "--stat", "--summary"],
         vec!["stash", "show", "--include-untracked", "--summary"],
         vec!["stash", "show", "--only-untracked", "--summary"],
         vec!["stash", "show", "--only-untracked", "--summary", "--patch"],
