@@ -1839,6 +1839,64 @@ fn stash_show_quiet_exit_codes_match_git() {
 }
 
 #[test]
+fn stash_show_exit_code_matches_git() {
+    let root = temp_path("show-exit-code");
+    let tracked_git_repo = root.join("tracked-git");
+    let tracked_rit_repo = root.join("tracked-rit");
+    setup_stashes(&tracked_git_repo);
+    copy_directory(&tracked_git_repo, &tracked_rit_repo);
+
+    for args in [
+        vec!["stash", "show", "--exit-code"],
+        vec!["stash", "show", "--exit-code", "--stat"],
+        vec!["stash", "show", "--exit-code", "--shortstat"],
+        vec!["stash", "show", "--exit-code", "--name-only"],
+        vec!["stash", "show", "--exit-code", "--name-status"],
+        vec!["stash", "show", "--exit-code", "--numstat"],
+        vec!["stash", "show", "--exit-code", "--no-patch"],
+    ] {
+        let git_show = run_capture("git", args.iter().copied(), &tracked_git_repo);
+        let rit_show = run_capture(rit_binary(), args.iter().copied(), &tracked_rit_repo);
+
+        assert_eq!(git_show.exit_code, rit_show.exit_code, "args: {args:?}");
+        assert_eq!(git_show.stdout, rit_show.stdout, "args: {args:?}");
+        assert_eq!(git_show.stderr, rit_show.stderr, "args: {args:?}");
+    }
+
+    let untracked_git_repo = root.join("untracked-git");
+    let untracked_rit_repo = root.join("untracked-rit");
+    init_repo(&untracked_git_repo);
+    fs::write(repo_file(&untracked_git_repo, "new.txt"), "new\n")
+        .expect("git untracked should write");
+    run_git(
+        &untracked_git_repo,
+        [
+            "stash",
+            "push",
+            "--include-untracked",
+            "-m",
+            "with untracked",
+        ],
+    );
+    copy_directory(&untracked_git_repo, &untracked_rit_repo);
+
+    for args in [
+        vec!["stash", "show", "--exit-code"],
+        vec!["stash", "show", "--include-untracked", "--exit-code"],
+        vec!["stash", "show", "--only-untracked", "--exit-code"],
+    ] {
+        let git_show = run_capture("git", args.iter().copied(), &untracked_git_repo);
+        let rit_show = run_capture(rit_binary(), args.iter().copied(), &untracked_rit_repo);
+
+        assert_eq!(git_show.exit_code, rit_show.exit_code, "args: {args:?}");
+        assert_eq!(git_show.stdout, rit_show.stdout, "args: {args:?}");
+        assert_eq!(git_show.stderr, rit_show.stderr, "args: {args:?}");
+    }
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn stash_show_stat_and_patch_configs_match_git() {
     let root = temp_path("show-stat-patch-config");
     let source_repo = root.join("source");

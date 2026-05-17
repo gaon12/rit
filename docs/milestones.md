@@ -605,6 +605,9 @@ Completion criteria:
     disable config-provided untracked and patch output like Git.
   - [x] `stash show --quiet` suppresses output and returns Git-compatible
     diff-exists exit codes for tracked and untracked show scopes.
+  - [x] `stash show --exit-code` returns Git-compatible diff-exists exit
+    codes while preserving explicit output formats, and defaults to patch
+    output when no format is provided.
   - [x] Basic legacy `stash save [-q] [<message>]` uses the same tracked-change
     stash shape as push and matches Git's saved/no-change output.
   - [x] Legacy `stash save -u/--include-untracked` and `-a/--all` reuse the

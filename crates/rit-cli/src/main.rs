@@ -393,7 +393,7 @@ fn stash_command(
         let Some(show_args) = parse_stash_show_args(rest, stderr)? else {
             return Ok(ExitCode::from(129));
         };
-        let format = match stash_show_format(&repository, show_args.format) {
+        let format = match stash_show_format(&repository, show_args.format, show_args.exit_code) {
             Ok(format) => format,
             Err(error) => return write_command_error(stderr, error),
         };
@@ -422,6 +422,7 @@ fn stash_command(
             return match patch_result {
                 Ok(patch) => match patch.to_patch_text() {
                     Ok(text) => {
+                        let has_changes = !patch.files.is_empty();
                         if matches!(format, StashShowFormat::StatAndPatch) {
                             let summary = match untracked_mode {
                                 StashShowUntrackedMode::Tracked => repository
@@ -449,7 +450,7 @@ fn stash_command(
                             }
                         }
                         stdout.write_all(text.as_bytes())?;
-                        Ok(ExitCode::SUCCESS)
+                        Ok(stash_show_exit_code(show_args.exit_code, has_changes))
                     }
                     Err(error) => write_command_error(stderr, error),
                 },
@@ -471,11 +472,7 @@ fn stash_command(
                 match format {
                     StashShowFormat::None => {}
                     StashShowFormat::Quiet => {
-                        return Ok(if diff.files.is_empty() {
-                            ExitCode::SUCCESS
-                        } else {
-                            ExitCode::from(1)
-                        });
+                        return Ok(stash_show_exit_code(true, !diff.files.is_empty()));
                     }
                     StashShowFormat::Stat => stdout.write_all(diff.to_stat_text().as_bytes())?,
                     StashShowFormat::Patch => {
@@ -499,7 +496,10 @@ fn stash_command(
                         stdout.write_all(diff.to_numstat_text().as_bytes())?
                     }
                 }
-                Ok(ExitCode::SUCCESS)
+                Ok(stash_show_exit_code(
+                    show_args.exit_code,
+                    !diff.files.is_empty(),
+                ))
             }
             Err(error) => write_stash_error(stderr, error),
         };
@@ -601,6 +601,7 @@ struct StashShowArgs {
     index: usize,
     format: Option<StashShowFormat>,
     untracked_mode: Option<StashShowUntrackedMode>,
+    exit_code: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -616,12 +617,14 @@ fn parse_stash_show_args(
 ) -> io::Result<Option<StashShowArgs>> {
     let mut format = None;
     let mut untracked_mode = None;
+    let mut exit_code = false;
     let mut stash = None;
     for arg in args {
         match arg.as_str() {
             "--stat" => format = Some(StashShowFormat::Stat),
             "--shortstat" => format = Some(StashShowFormat::ShortStat),
             "--quiet" => format = Some(StashShowFormat::Quiet),
+            "--exit-code" => exit_code = true,
             "-p" | "--patch" => format = Some(StashShowFormat::Patch),
             "--no-patch" => format = Some(StashShowFormat::None),
             "--name-only" => format = Some(StashShowFormat::NameOnly),
@@ -647,15 +650,20 @@ fn parse_stash_show_args(
         index,
         format,
         untracked_mode,
+        exit_code,
     }))
 }
 
 fn stash_show_format(
     repository: &rit_core::Repository,
     explicit_format: Option<StashShowFormat>,
+    exit_code: bool,
 ) -> rit_core::Result<StashShowFormat> {
     if let Some(format) = explicit_format {
         return Ok(format);
+    }
+    if exit_code {
+        return Ok(StashShowFormat::Patch);
     }
 
     let config_path = repository.common_dir().join("config");
@@ -670,6 +678,14 @@ fn stash_show_format(
         (true, false) => Ok(StashShowFormat::Stat),
         (false, true) => Ok(StashShowFormat::Patch),
         (true, true) => Ok(StashShowFormat::StatAndPatch),
+    }
+}
+
+fn stash_show_exit_code(exit_code: bool, has_changes: bool) -> ExitCode {
+    if exit_code && has_changes {
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
     }
 }
 
