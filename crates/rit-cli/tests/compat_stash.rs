@@ -1939,6 +1939,33 @@ fn stash_show_relative_path_outputs_match_git() {
 }
 
 #[test]
+fn stash_show_stat_graph_and_count_options_match_git_for_simple_stat() {
+    let root = temp_path("show-stat-options");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_stashes(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    for args in [
+        vec!["stash", "show", "--stat-graph-width=4"],
+        vec!["stash", "show", "--stat-count=0"],
+        vec!["stash", "show", "--stat-count=1"],
+        vec!["stash", "show", "--patch-with-stat", "--stat-graph-width=4"],
+        vec!["stash", "show", "--patch-with-stat", "--stat-count=1"],
+    ] {
+        let git_show = run_capture("git", args.iter().copied(), &git_repo);
+        let rit_show = run_capture(rit_binary(), args.iter().copied(), &rit_repo);
+
+        assert_eq!(git_show.exit_code, 0, "git stderr: {}", git_show.stderr);
+        assert_eq!(rit_show.exit_code, 0, "rit stderr: {}", rit_show.stderr);
+        assert_eq!(git_show.stdout, rit_show.stdout, "args: {args:?}");
+        assert_eq!(git_show.stderr, rit_show.stderr, "args: {args:?}");
+    }
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn stash_drop_default_matches_git() {
     let root = temp_path("drop-default");
     let git_repo = root.join("git");
@@ -2366,6 +2393,17 @@ fn stash_show_diff_passthrough_options_match_git() {
     assert_eq!(git_show.exit_code, rit_show.exit_code);
     assert_eq!(git_show.stdout, rit_show.stdout);
     assert_eq!(git_show.stderr, rit_show.stderr);
+
+    for args in [
+        ["stash", "show", "--stat-graph-width=bad"],
+        ["stash", "show", "--stat-count=bad"],
+    ] {
+        let git_show = run_capture("git", args, &git_repo);
+        let rit_show = run_capture(rit_binary(), args, &rit_repo);
+        assert_eq!(git_show.exit_code, rit_show.exit_code, "args: {args:?}");
+        assert_eq!(git_show.stdout, rit_show.stdout, "args: {args:?}");
+        assert_eq!(git_show.stderr, rit_show.stderr, "args: {args:?}");
+    }
 
     let _ = fs::remove_dir_all(root);
 }
