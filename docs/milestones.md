@@ -703,6 +703,9 @@ Completion criteria:
     options (`-a`, `--text`, `--textconv`, `--no-textconv`,
     `--ignore-submodules[=<when>]`) for Git-compatible non-submodule text
     patch output in checked captures.
+  - [x] `stash show` accepts intent-to-add visibility passthrough diff
+    options (`--ita-invisible-in-index`, `--ita-visible-in-index`) for
+    Git-compatible simple text stash patch output in checked captures.
   - [x] Basic legacy `stash save [-q] [<message>]` uses the same tracked-change
     stash shape as push and matches Git's saved/no-change output.
   - [x] Legacy `stash save -u/--include-untracked` and `-a/--all` reuse the

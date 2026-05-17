@@ -2247,6 +2247,8 @@ fn stash_show_diff_passthrough_options_match_git() {
         vec!["stash", "show", "--patch-with-raw", "--full-index"],
         vec!["stash", "show", "--text"],
         vec!["stash", "show", "-a", "--patch"],
+        vec!["stash", "show", "--patch", "--ita-invisible-in-index"],
+        vec!["stash", "show", "--patch", "--ita-visible-in-index"],
         vec!["stash", "show", "--patch", "-U0", "--inter-hunk-context=1"],
         vec!["stash", "show", "--patch", "-U0", "--inter-hunk-context=1k"],
         vec!["stash", "show", "--no-color", "--stat"],

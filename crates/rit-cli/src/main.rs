@@ -902,7 +902,9 @@ fn parse_stash_show_args(
             | "--text"
             | "--textconv"
             | "--no-textconv"
-            | "--ignore-submodules" => diff_option = true,
+            | "--ignore-submodules"
+            | "--ita-invisible-in-index"
+            | "--ita-visible-in-index" => diff_option = true,
             "--no-prefix" => {
                 diff_option = true;
                 default_prefixes = false;
