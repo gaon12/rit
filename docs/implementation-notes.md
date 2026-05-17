@@ -217,6 +217,9 @@
 - 2026-05-12 stdin NUL pathspec-file slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   `--pathspec-from-file=- --pathspec-file-nul`.
+- 2026-05-17 deprecated reset stdin pathspec slice checked `git reset -h`
+  and direct Git comparisons for `git reset --stdin` and
+  `git reset --stdin -z`.
 - 2026-05-15 empty pathspec-file entry slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for leading
   empty line entries in `--pathspec-from-file`.
@@ -1220,8 +1223,8 @@
 - Supported options: ordinary literal file, directory, `.`, simple `*`, `?`,
   and bracket-class wildcard pathspecs plus positive `:(literal)`, `:(glob)`,
   `:(top)`, `:/`, and `:(icase)` pathspec magic, equivalent to unstaging matching paths
-  from `HEAD`, plus `--pathspec-from-file`, `--pathspec-from-file=-`, and
-  `--pathspec-file-nul`, and `--plan`.
+  from `HEAD`, plus `--pathspec-from-file`, `--pathspec-from-file=-`,
+  `--pathspec-file-nul`, deprecated `--stdin [-z]`, and `--plan`.
 - Unsupported options: commit-moving resets, soft/mixed/hard/merge/keep modes,
   patch mode, full Git pathspec-file edge cases.
 - Git-compatible behavior: unstages explicit paths and reports remaining unstaged modifications.
@@ -1229,6 +1232,10 @@
   index or `HEAD` path matches, including pathspecs read from a file.
 - Git-compatible behavior: an empty pathspec file resets all index entries
   from `HEAD`, matching Git's pathspec-file reset behavior.
+- Git-compatible behavior: deprecated `git reset --stdin` and
+  `git reset --stdin -z` read LF- and NUL-delimited pathspecs from stdin,
+  print Git's deprecation warning, and reuse the same pathspec-file reset
+  behavior.
 - Git-compatible behavior: clean tracked paths refresh cached index stat
   metadata during `status --porcelain=v1`.
 - rit-specific behavior: `--plan` prints which index entries would be restored

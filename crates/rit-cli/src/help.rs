@@ -170,7 +170,7 @@ Restore working tree files from the index, or staged files from HEAD.
 ";
 
 const RESET_HELP: &str = "\
-rit reset [--plan] [--pathspec-from-file <file>] [--pathspec-file-nul] <file>...
+rit reset [--plan] [--pathspec-from-file <file>] [--pathspec-file-nul] [--stdin [-z]] <file>...
 
 Reset staged file entries from HEAD, or print the planned index changes without writing.
 ";

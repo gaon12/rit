@@ -210,6 +210,9 @@ Completion criteria:
       `reset`.
     - [x] `--pathspec-from-file=- --pathspec-file-nul` stdin NUL pathspecs
       for `add`, `restore`, and `reset`.
+    - [x] Deprecated `git reset --stdin` and `git reset --stdin -z` aliases
+      reuse the shared stdin pathspec parser with Git-compatible warning and
+      status behavior.
     - [x] C-style quoted pathspec-file entries for common escapes.
     - [x] Octal C-style quoted pathspec-file escapes decode as UTF-8 bytes
       for `add`, `restore`, and `reset`.

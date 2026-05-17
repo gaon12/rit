@@ -3530,6 +3530,7 @@ fn parse_reset_args(
     let mut pathspec_file = None;
     let mut pathspec_file_nul = false;
     let mut from_pathspec_file = false;
+    let mut warned_deprecated_stdin = false;
     let mut after_separator = false;
     let mut index = 0;
     while index < args.len() {
@@ -3547,6 +3548,17 @@ fn parse_reset_args(
             &mut pathspec_file,
             &mut pathspec_file_nul,
         )? {
+        } else if arg == "--stdin" && !after_separator {
+            if !warned_deprecated_stdin {
+                writeln!(
+                    stderr,
+                    "warning: --stdin is deprecated, please use --pathspec-from-file=- instead"
+                )?;
+                warned_deprecated_stdin = true;
+            }
+            pathspec_file = Some("-".to_owned());
+        } else if arg == "-z" && !after_separator {
+            pathspec_file_nul = true;
         } else if arg == "--plan" && !after_separator {
             plan = true;
         } else if arg.starts_with('-') && !after_separator {

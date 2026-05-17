@@ -1891,6 +1891,58 @@ fn reset_nul_pathspec_from_stdin_matches_git_status() {
 }
 
 #[test]
+fn reset_deprecated_stdin_matches_git_status() {
+    let fixture = LocalWriteFixture::new(
+        "reset-deprecated-stdin",
+        LocalWriteFixtureKind::NestedTracked,
+    )
+    .expect("fixture should build");
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "changed\n",
+    )
+    .expect("tracked file should be modified");
+    run_git(fixture.path(), ["add", "nested"]);
+    let stdin = b"nested/tracked.txt\n";
+
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words_with_stdin("git", ["reset", "--stdin"], stdin),
+        command_words_with_stdin(rit_binary(), ["reset", "--stdin"], stdin),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
+}
+
+#[test]
+fn reset_deprecated_stdin_z_matches_git_status() {
+    let fixture = LocalWriteFixture::new(
+        "reset-deprecated-stdin-z",
+        LocalWriteFixtureKind::NestedTracked,
+    )
+    .expect("fixture should build");
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "changed\n",
+    )
+    .expect("tracked file should be modified");
+    run_git(fixture.path(), ["add", "nested"]);
+    let stdin = b"nested/tracked.txt\0";
+
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words_with_stdin("git", ["reset", "--stdin", "-z"], stdin),
+        command_words_with_stdin(rit_binary(), ["reset", "--stdin", "-z"], stdin),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
+}
+
+#[test]
 fn commit_author_and_date_overrides_match_git_object() {
     let fixture =
         LocalWriteFixture::new("commit-author-date", LocalWriteFixtureKind::NestedTracked)
