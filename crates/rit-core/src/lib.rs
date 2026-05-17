@@ -198,6 +198,7 @@ pub use auth::{
 pub use commit::{Commit, Signature, parse_commit};
 pub use config::{GitConfig, GitConfigEntry};
 pub use diff::{
-    DiffFileStat, DiffOptions, DiffPatch, DiffPatchFile, DiffSummary, PatchRenderOptions,
+    DiffFileStat, DiffOptions, DiffPatch, DiffPatchFile, DiffStatusFilter, DiffSummary,
+    PatchRenderOptions,
 };
 pub use doctor::{DoctorCheck, DoctorReport, DoctorSeverity};

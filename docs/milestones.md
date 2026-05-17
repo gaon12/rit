@@ -626,6 +626,10 @@ Completion criteria:
     `--patch --compact-summary`, `--compact-summary --summary`, and
     `--summary --compact-summary` render Git-compatible compact stat and
     extended summary combinations for checked tracked show scopes.
+  - [x] `stash show --diff-filter=<letters>` filters checked patch, stat,
+    compact-summary, summary, and name-status output with Git-compatible
+    uppercase include, lowercase exclude, invalid-class, and all-or-none
+    behavior for checked added/deleted/modified stash paths.
   - [x] `stash show` accepts no-external-diff and no-color diff options
     (`--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`,
     `--color=auto`) for Git-compatible no-color output in checked captures.

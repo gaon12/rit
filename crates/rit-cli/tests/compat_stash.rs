@@ -1684,6 +1684,7 @@ fn stash_show_extended_summary_matches_git() {
         .expect("modified change should write");
     fs::remove_file(repo_file(&git_repo, "deleted.txt")).expect("deleted file should remove");
     fs::write(repo_file(&git_repo, "added.txt"), "added\n").expect("added file should write");
+    run_git(&git_repo, ["add", "added.txt"]);
     fs::write(repo_file(&git_repo, "untracked.txt"), "new\n").expect("untracked file should write");
     run_git(
         &git_repo,
@@ -1702,6 +1703,16 @@ fn stash_show_extended_summary_matches_git() {
         vec!["stash", "show", "--patch", "--compact-summary"],
         vec!["stash", "show", "--compact-summary", "--summary"],
         vec!["stash", "show", "--summary", "--compact-summary"],
+        vec!["stash", "show", "--diff-filter=A"],
+        vec!["stash", "show", "--diff-filter=D"],
+        vec!["stash", "show", "--diff-filter=M"],
+        vec!["stash", "show", "--diff-filter=AD"],
+        vec!["stash", "show", "--diff-filter=d"],
+        vec!["stash", "show", "--diff-filter=ad"],
+        vec!["stash", "show", "--diff-filter=AM", "--name-status"],
+        vec!["stash", "show", "--diff-filter=A", "--patch"],
+        vec!["stash", "show", "--diff-filter=D", "--summary"],
+        vec!["stash", "show", "--diff-filter=A", "--compact-summary"],
         vec!["stash", "show", "--include-untracked", "--summary"],
         vec!["stash", "show", "--only-untracked", "--summary"],
         vec!["stash", "show", "--only-untracked", "--summary", "--patch"],
@@ -1714,6 +1725,16 @@ fn stash_show_extended_summary_matches_git() {
         assert_eq!(git_show.stdout, rit_show.stdout, "args: {args:?}");
         assert_eq!(git_show.stderr, rit_show.stderr, "args: {args:?}");
     }
+
+    let git_show = run_capture("git", ["stash", "show", "--diff-filter=Z"], &git_repo);
+    let rit_show = run_capture(
+        rit_binary(),
+        ["stash", "show", "--diff-filter=Z"],
+        &rit_repo,
+    );
+    assert_eq!(git_show.exit_code, rit_show.exit_code);
+    assert_eq!(git_show.stdout, rit_show.stdout);
+    assert_eq!(git_show.stderr, rit_show.stderr);
 
     let _ = fs::remove_dir_all(root);
 }

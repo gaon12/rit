@@ -17,6 +17,15 @@ pub struct DiffSummary {
 }
 
 impl DiffSummary {
+    /// Returns a copy containing only files accepted by a Git `--diff-filter`.
+    pub fn into_filtered_by_status(mut self, filter: &DiffStatusFilter) -> Self {
+        if filter.all_or_none && self.files.iter().any(|file| filter.matches(file.status)) {
+            return self;
+        }
+        self.files.retain(|file| filter.matches(file.status));
+        self
+    }
+
     /// Returns changed path names only.
     pub fn name_only(&self) -> Vec<&str> {
         self.files.iter().map(|file| file.path.as_str()).collect()
@@ -257,6 +266,15 @@ pub struct DiffPatch {
 }
 
 impl DiffPatch {
+    /// Returns a copy containing only files accepted by a Git `--diff-filter`.
+    pub fn into_filtered_by_status(mut self, filter: &DiffStatusFilter) -> Self {
+        if filter.all_or_none && self.files.iter().any(|file| filter.matches(file.status)) {
+            return self;
+        }
+        self.files.retain(|file| filter.matches(file.status));
+        self
+    }
+
     /// Renders a small Git-like unified patch.
     pub fn to_patch_text(&self) -> Result<String> {
         self.to_patch_text_with_options(&PatchRenderOptions::default())
@@ -289,6 +307,50 @@ impl DiffPatch {
         }
         output
     }
+}
+
+/// Parsed Git `--diff-filter=<letters>` status selector.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct DiffStatusFilter {
+    included: BTreeSet<char>,
+    excluded: BTreeSet<char>,
+    all_or_none: bool,
+}
+
+impl DiffStatusFilter {
+    /// Parses the letter form used by Git's `--diff-filter=<letters>` option.
+    pub fn from_git_diff_filter(value: &str) -> Result<Self> {
+        let mut filter = Self::default();
+        for character in value.chars() {
+            if character == '*' {
+                filter.all_or_none = true;
+                continue;
+            }
+            let status = character.to_ascii_uppercase();
+            if !is_known_diff_filter_status(status) {
+                return Err(RitError::invalid_input(format!(
+                    "unknown change class '{character}' in --diff-filter={value}"
+                )));
+            }
+            if character.is_ascii_lowercase() {
+                filter.excluded.insert(status);
+            } else {
+                filter.included.insert(status);
+            }
+        }
+        Ok(filter)
+    }
+
+    /// Returns true when `status` should be shown.
+    pub fn matches(&self, status: char) -> bool {
+        let status = status.to_ascii_uppercase();
+        let included = self.included.is_empty() || self.included.contains(&status);
+        included && !self.excluded.contains(&status)
+    }
+}
+
+fn is_known_diff_filter_status(status: char) -> bool {
+    matches!(status, 'A' | 'C' | 'D' | 'M' | 'R' | 'T' | 'U' | 'X' | 'B')
 }
 
 /// Options that affect patch text rendering without changing the diff itself.
@@ -2276,8 +2338,8 @@ fn plural(count: usize, singular: &str, plural: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        DiffFileStat, DiffOptions, DiffSummary, file_delta, line_delta, rename_limit_exceeded,
-        similarity_score, unified_hunk,
+        DiffFileStat, DiffOptions, DiffStatusFilter, DiffSummary, file_delta, line_delta,
+        rename_limit_exceeded, similarity_score, unified_hunk,
     };
     use crate::{InitOptions, Repository};
     use std::fs;
@@ -2348,6 +2410,72 @@ mod tests {
         assert_eq!(
             summary.to_compact_stat_text(),
             " added.txt (new)    | 1 +\n deleted.txt (gone) | 1 -\n 2 files changed, 1 insertion(+), 1 deletion(-)\n"
+        );
+    }
+
+    #[test]
+    fn diff_status_filter_includes_excludes_and_all_or_none() {
+        let summary = DiffSummary {
+            files: vec![
+                DiffFileStat {
+                    status: 'A',
+                    old_path: None,
+                    path: "added.txt".to_owned(),
+                    similarity_score: None,
+                    insertions: 1,
+                    deletions: 0,
+                    binary: false,
+                    old_size: 0,
+                    new_size: 0,
+                },
+                DiffFileStat {
+                    status: 'D',
+                    old_path: None,
+                    path: "deleted.txt".to_owned(),
+                    similarity_score: None,
+                    insertions: 0,
+                    deletions: 1,
+                    binary: false,
+                    old_size: 0,
+                    new_size: 0,
+                },
+                DiffFileStat {
+                    status: 'M',
+                    old_path: None,
+                    path: "modified.txt".to_owned(),
+                    similarity_score: None,
+                    insertions: 1,
+                    deletions: 1,
+                    binary: false,
+                    old_size: 0,
+                    new_size: 0,
+                },
+            ],
+            warnings: Vec::new(),
+        };
+
+        let added_or_deleted = DiffStatusFilter::from_git_diff_filter("AD").expect("valid filter");
+        assert_eq!(
+            summary
+                .clone()
+                .into_filtered_by_status(&added_or_deleted)
+                .name_only(),
+            vec!["added.txt", "deleted.txt"]
+        );
+
+        let exclude_deleted = DiffStatusFilter::from_git_diff_filter("d").expect("valid filter");
+        assert_eq!(
+            summary
+                .clone()
+                .into_filtered_by_status(&exclude_deleted)
+                .name_only(),
+            vec!["added.txt", "modified.txt"]
+        );
+
+        let all_if_added = DiffStatusFilter::from_git_diff_filter("A*").expect("valid filter");
+        assert_eq!(
+            summary.into_filtered_by_status(&all_if_added).name_only(),
+            vec!["added.txt", "deleted.txt", "modified.txt"]
         );
     }
 

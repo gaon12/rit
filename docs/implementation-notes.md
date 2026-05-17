@@ -1473,7 +1473,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]`
   as the legacy save form,
-  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [--full-index|--abbrev[=<n>]|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [--full-index|--abbrev[=<n>]|--diff-filter=<letters>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
   worktree/index restoration when `HEAD` matches the stash base,
@@ -1592,7 +1592,11 @@
   `--patch --summary`, `--summary --stat`, `--stat --summary`,
   `--compact-summary --summary`, and `--summary --compact-summary` render
   Git-compatible extended file summaries for additions, deletions, and renames
-  in the checked tracked and untracked patch scopes.
+  in the checked tracked and untracked patch scopes. `--diff-filter=<letters>`
+  filters checked stash show summary and patch formats with Git-compatible
+  uppercase include letters, lowercase exclude letters, invalid-class errors,
+  and `*` all-or-none handling for the checked `A`, `D`, and `M` stash file
+  statuses.
   `--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`, and
   `--color=auto` are accepted for Git-compatible no-external-diff/no-color
   output in the checked capture environment.

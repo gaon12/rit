@@ -432,116 +432,141 @@ fn stash_command(
                 ),
             };
             return match patch_result {
-                Ok(patch) => match patch.to_patch_text_with_options(&rit_core::PatchRenderOptions {
-                    full_index: show_args.full_index,
-                    abbrev: show_args.abbrev,
-                }) {
-                    Ok(text) => {
-                        let has_changes = !patch.files.is_empty();
-                        if matches!(format, StashShowFormat::Raw | StashShowFormat::RawAndPatch) {
-                            let raw_text =
-                                patch.to_raw_text_with_options(&rit_core::PatchRenderOptions {
-                                    full_index: show_args.full_index,
-                                    abbrev: show_args.abbrev,
-                                });
-                            stdout.write_all(raw_text.as_bytes())?;
-                            if matches!(format, StashShowFormat::Raw) {
-                                return Ok(stash_show_exit_code(show_args.exit_code, has_changes));
-                            }
-                            if !raw_text.is_empty() && !text.is_empty() {
-                                writeln!(stdout)?;
-                            }
-                        }
-                        if matches!(
-                            format,
-                            StashShowFormat::Summary | StashShowFormat::SummaryAndPatch
-                        ) {
-                            let summary_text = patch.to_summary_text();
-                            stdout.write_all(summary_text.as_bytes())?;
-                            if matches!(format, StashShowFormat::Summary) {
-                                return Ok(stash_show_exit_code(show_args.exit_code, has_changes));
-                            }
-                            if !summary_text.is_empty() && !text.is_empty() {
-                                writeln!(stdout)?;
-                            }
-                        }
-                        if matches!(
-                            format,
-                            StashShowFormat::StatAndSummary
-                                | StashShowFormat::CompactStatAndSummary
-                        ) {
-                            let summary = match untracked_mode {
-                                StashShowUntrackedMode::Tracked => repository
-                                    .stash_show(show_args.index, &rit_core::PathspecSet::all()),
-                                StashShowUntrackedMode::Include => repository
-                                    .stash_show_include_untracked(
-                                        show_args.index,
-                                        &rit_core::PathspecSet::all(),
-                                    ),
-                                StashShowUntrackedMode::Only => repository
-                                    .stash_show_only_untracked(
-                                        show_args.index,
-                                        &rit_core::PathspecSet::all(),
-                                    ),
-                            };
-                            match summary {
-                                Ok(diff) => {
-                                    let stat_text =
-                                        if matches!(format, StashShowFormat::CompactStatAndSummary)
-                                        {
-                                            diff.to_compact_stat_text()
-                                        } else {
-                                            diff.to_stat_text()
-                                        };
-                                    stdout.write_all(stat_text.as_bytes())?;
-                                    stdout.write_all(patch.to_summary_text().as_bytes())?;
+                Ok(patch) => {
+                    let patch = match &show_args.diff_filter {
+                        Some(filter) => patch.into_filtered_by_status(filter),
+                        None => patch,
+                    };
+                    match patch.to_patch_text_with_options(&rit_core::PatchRenderOptions {
+                        full_index: show_args.full_index,
+                        abbrev: show_args.abbrev,
+                    }) {
+                        Ok(text) => {
+                            let has_changes = !patch.files.is_empty();
+                            if matches!(format, StashShowFormat::Raw | StashShowFormat::RawAndPatch)
+                            {
+                                let raw_text =
+                                    patch.to_raw_text_with_options(&rit_core::PatchRenderOptions {
+                                        full_index: show_args.full_index,
+                                        abbrev: show_args.abbrev,
+                                    });
+                                stdout.write_all(raw_text.as_bytes())?;
+                                if matches!(format, StashShowFormat::Raw) {
                                     return Ok(stash_show_exit_code(
                                         show_args.exit_code,
                                         has_changes,
                                     ));
                                 }
-                                Err(error) => return write_stash_error(stderr, error),
+                                if !raw_text.is_empty() && !text.is_empty() {
+                                    writeln!(stdout)?;
+                                }
                             }
-                        }
-                        if matches!(
-                            format,
-                            StashShowFormat::StatAndPatch | StashShowFormat::CompactStatAndPatch
-                        ) {
-                            let summary = match untracked_mode {
-                                StashShowUntrackedMode::Tracked => repository
-                                    .stash_show(show_args.index, &rit_core::PathspecSet::all()),
-                                StashShowUntrackedMode::Include => repository
-                                    .stash_show_include_untracked(
-                                        show_args.index,
-                                        &rit_core::PathspecSet::all(),
-                                    ),
-                                StashShowUntrackedMode::Only => repository
-                                    .stash_show_only_untracked(
-                                        show_args.index,
-                                        &rit_core::PathspecSet::all(),
-                                    ),
-                            };
-                            match summary {
-                                Ok(diff) => {
-                                    let stat_text =
-                                        if matches!(format, StashShowFormat::CompactStatAndPatch) {
+                            if matches!(
+                                format,
+                                StashShowFormat::Summary | StashShowFormat::SummaryAndPatch
+                            ) {
+                                let summary_text = patch.to_summary_text();
+                                stdout.write_all(summary_text.as_bytes())?;
+                                if matches!(format, StashShowFormat::Summary) {
+                                    return Ok(stash_show_exit_code(
+                                        show_args.exit_code,
+                                        has_changes,
+                                    ));
+                                }
+                                if !summary_text.is_empty() && !text.is_empty() {
+                                    writeln!(stdout)?;
+                                }
+                            }
+                            if matches!(
+                                format,
+                                StashShowFormat::StatAndSummary
+                                    | StashShowFormat::CompactStatAndSummary
+                            ) {
+                                let summary = match untracked_mode {
+                                    StashShowUntrackedMode::Tracked => repository
+                                        .stash_show(show_args.index, &rit_core::PathspecSet::all()),
+                                    StashShowUntrackedMode::Include => repository
+                                        .stash_show_include_untracked(
+                                            show_args.index,
+                                            &rit_core::PathspecSet::all(),
+                                        ),
+                                    StashShowUntrackedMode::Only => repository
+                                        .stash_show_only_untracked(
+                                            show_args.index,
+                                            &rit_core::PathspecSet::all(),
+                                        ),
+                                };
+                                match summary {
+                                    Ok(diff) => {
+                                        let diff = match &show_args.diff_filter {
+                                            Some(filter) => diff.into_filtered_by_status(filter),
+                                            None => diff,
+                                        };
+                                        let stat_text = if matches!(
+                                            format,
+                                            StashShowFormat::CompactStatAndSummary
+                                        ) {
                                             diff.to_compact_stat_text()
                                         } else {
                                             diff.to_stat_text()
                                         };
-                                    stdout.write_all(stat_text.as_bytes())?;
-                                    if !stat_text.is_empty() && !text.is_empty() {
-                                        writeln!(stdout)?;
+                                        stdout.write_all(stat_text.as_bytes())?;
+                                        stdout.write_all(patch.to_summary_text().as_bytes())?;
+                                        return Ok(stash_show_exit_code(
+                                            show_args.exit_code,
+                                            has_changes,
+                                        ));
                                     }
+                                    Err(error) => return write_stash_error(stderr, error),
                                 }
-                                Err(error) => return write_stash_error(stderr, error),
                             }
+                            if matches!(
+                                format,
+                                StashShowFormat::StatAndPatch
+                                    | StashShowFormat::CompactStatAndPatch
+                            ) {
+                                let summary = match untracked_mode {
+                                    StashShowUntrackedMode::Tracked => repository
+                                        .stash_show(show_args.index, &rit_core::PathspecSet::all()),
+                                    StashShowUntrackedMode::Include => repository
+                                        .stash_show_include_untracked(
+                                            show_args.index,
+                                            &rit_core::PathspecSet::all(),
+                                        ),
+                                    StashShowUntrackedMode::Only => repository
+                                        .stash_show_only_untracked(
+                                            show_args.index,
+                                            &rit_core::PathspecSet::all(),
+                                        ),
+                                };
+                                match summary {
+                                    Ok(diff) => {
+                                        let diff = match &show_args.diff_filter {
+                                            Some(filter) => diff.into_filtered_by_status(filter),
+                                            None => diff,
+                                        };
+                                        let stat_text = if matches!(
+                                            format,
+                                            StashShowFormat::CompactStatAndPatch
+                                        ) {
+                                            diff.to_compact_stat_text()
+                                        } else {
+                                            diff.to_stat_text()
+                                        };
+                                        stdout.write_all(stat_text.as_bytes())?;
+                                        if !stat_text.is_empty() && !text.is_empty() {
+                                            writeln!(stdout)?;
+                                        }
+                                    }
+                                    Err(error) => return write_stash_error(stderr, error),
+                                }
+                            }
+                            stdout.write_all(text.as_bytes())?;
+                            Ok(stash_show_exit_code(show_args.exit_code, has_changes))
                         }
-                        stdout.write_all(text.as_bytes())?;
-                        Ok(stash_show_exit_code(show_args.exit_code, has_changes))
+                        Err(error) => write_command_error(stderr, error),
                     }
-                    Err(error) => write_command_error(stderr, error),
-                },
+                }
                 Err(error) => write_stash_error(stderr, error),
             };
         }
@@ -557,6 +582,10 @@ fn stash_command(
         };
         return match summary {
             Ok(diff) => {
+                let diff = match &show_args.diff_filter {
+                    Some(filter) => diff.into_filtered_by_status(filter),
+                    None => diff,
+                };
                 match format {
                     StashShowFormat::None => {}
                     StashShowFormat::Quiet => {
@@ -719,6 +748,7 @@ struct StashShowArgs {
     diff_option: bool,
     full_index: bool,
     abbrev: usize,
+    diff_filter: Option<rit_core::DiffStatusFilter>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -738,6 +768,7 @@ fn parse_stash_show_args(
     let mut diff_option = false;
     let mut full_index = false;
     let mut abbrev = 7;
+    let mut diff_filter = None;
     let mut stash = None;
     for arg in args {
         match arg.as_str() {
@@ -814,6 +845,17 @@ fn parse_stash_show_args(
                 diff_option = true;
                 abbrev = value.parse::<usize>().unwrap_or(0).max(4);
             }
+            _ if arg.starts_with("--diff-filter=") => {
+                let value = arg.trim_start_matches("--diff-filter=");
+                diff_option = true;
+                match rit_core::DiffStatusFilter::from_git_diff_filter(value) {
+                    Ok(filter) => diff_filter = Some(filter),
+                    Err(error) => {
+                        writeln!(stderr, "error: {error}")?;
+                        return Ok(None);
+                    }
+                }
+            }
             _ if arg.starts_with('-') => {
                 writeln!(stderr, "rit: unsupported stash show option '{arg}'")?;
                 return Ok(None);
@@ -835,6 +877,7 @@ fn parse_stash_show_args(
         diff_option,
         full_index,
         abbrev,
+        diff_filter,
     }))
 }
 
