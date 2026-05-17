@@ -445,29 +445,13 @@ fn stash_command(
                         Some(filter) => patch.into_filtered_by_status(filter),
                         None => patch,
                     };
-                    match patch.to_patch_text_with_options(&rit_core::PatchRenderOptions {
-                        full_index: show_args.full_index,
-                        abbrev: show_args.abbrev,
-                        context_lines: show_args.context_lines,
-                        default_prefixes: show_args.default_prefixes,
-                        new_line_indicator: show_args.new_line_indicator,
-                        old_line_indicator: show_args.old_line_indicator,
-                        context_line_indicator: show_args.context_line_indicator,
-                    }) {
+                    let patch_options = stash_show_patch_options(&show_args);
+                    match patch.to_patch_text_with_options(&patch_options) {
                         Ok(text) => {
                             let has_changes = !patch.files.is_empty();
                             if matches!(format, StashShowFormat::Raw | StashShowFormat::RawAndPatch)
                             {
-                                let raw_text =
-                                    patch.to_raw_text_with_options(&rit_core::PatchRenderOptions {
-                                        full_index: show_args.full_index,
-                                        abbrev: show_args.abbrev,
-                                        context_lines: show_args.context_lines,
-                                        default_prefixes: show_args.default_prefixes,
-                                        new_line_indicator: show_args.new_line_indicator,
-                                        old_line_indicator: show_args.old_line_indicator,
-                                        context_line_indicator: show_args.context_line_indicator,
-                                    });
+                                let raw_text = patch.to_raw_text_with_options(&patch_options);
                                 stdout.write_all(raw_text.as_bytes())?;
                                 if matches!(format, StashShowFormat::Raw) {
                                     return Ok(stash_show_exit_code(
@@ -857,6 +841,8 @@ fn parse_stash_show_args(
             | "--no-color"
             | "--color=never"
             | "--color=auto"
+            | "-a"
+            | "--text"
             | "--textconv"
             | "--no-textconv"
             | "--ignore-submodules" => diff_option = true,
@@ -1035,6 +1021,18 @@ fn parse_output_indicator(value: &str) -> std::result::Result<Option<char>, ()> 
         return Err(());
     }
     Ok(Some(character))
+}
+
+fn stash_show_patch_options(show_args: &StashShowArgs) -> rit_core::PatchRenderOptions {
+    rit_core::PatchRenderOptions {
+        full_index: show_args.full_index,
+        abbrev: show_args.abbrev,
+        context_lines: show_args.context_lines,
+        default_prefixes: show_args.default_prefixes,
+        new_line_indicator: show_args.new_line_indicator,
+        old_line_indicator: show_args.old_line_indicator,
+        context_line_indicator: show_args.context_line_indicator,
+    }
 }
 
 fn stash_show_format(

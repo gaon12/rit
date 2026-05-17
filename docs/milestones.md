@@ -647,9 +647,10 @@ Completion criteria:
   - [x] `stash show` accepts no-external-diff and no-color diff options
     (`--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`,
     `--color=auto`) for Git-compatible no-color output in checked captures.
-  - [x] `stash show` accepts textconv and ignore-submodules diff options
-    (`--textconv`, `--no-textconv`, `--ignore-submodules[=<when>]`) for
-    Git-compatible non-submodule text patch output in checked captures.
+  - [x] `stash show` accepts text and submodule/textconv passthrough diff
+    options (`-a`, `--text`, `--textconv`, `--no-textconv`,
+    `--ignore-submodules[=<when>]`) for Git-compatible non-submodule text
+    patch output in checked captures.
   - [x] Basic legacy `stash save [-q] [<message>]` uses the same tracked-change
     stash shape as push and matches Git's saved/no-change output.
   - [x] Legacy `stash save -u/--include-untracked` and `-a/--all` reuse the

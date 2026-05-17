@@ -2080,6 +2080,8 @@ fn stash_show_diff_passthrough_options_match_git() {
         vec!["stash", "show", "--full-index"],
         vec!["stash", "show", "--abbrev=12"],
         vec!["stash", "show", "--patch-with-raw", "--full-index"],
+        vec!["stash", "show", "--text"],
+        vec!["stash", "show", "-a", "--patch"],
         vec!["stash", "show", "--no-color", "--stat"],
         vec!["stash", "show", "--color=never", "--patch"],
         vec!["stash", "show", "--no-ext-diff", "--name-status"],

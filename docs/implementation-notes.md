@@ -103,6 +103,9 @@
 - 2026-05-16 thin-pack safety slice stopped requesting the advertised
   `thin-pack` upload-pack capability until rit has explicit thin-pack fixup
   before pack storage. `ofs-delta` remains selected when advertised.
+- 2026-05-17 stash show text passthrough slice checked `git stash -h`,
+  `git diff -h`, and direct Git comparisons for `stash show --text` and
+  `stash show -a --patch` on text stash changes.
 - 2026-05-12 exact rename-detection slice checked `git diff -h` and direct Git
   comparisons for `diff --cached -M` exact rename output.
 - 2026-05-12 similarity rename/copy slice checked `git diff -h` and direct Git
@@ -1488,7 +1491,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]`
   as the legacy save form,
-  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--textconv|--no-textconv|--ignore-submodules[=<when>]] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
   worktree/index restoration when `HEAD` matches the stash base,
@@ -1604,7 +1607,7 @@
   patch path prefixes for the checked stash patch formats.
   `--output-indicator-new=<char>`, `--output-indicator-old=<char>`, and
   `--output-indicator-context=<char>` control Git-compatible unified hunk line
-  prefixes for the checked stash patch formats. `--textconv`,
+  prefixes for the checked stash patch formats. `-a`, `--text`, `--textconv`,
   `--no-textconv`, and `--ignore-submodules[=<when>]` are accepted as
   Git-compatible diff passthrough options for checked non-submodule text stash
   patches. `--raw`,
