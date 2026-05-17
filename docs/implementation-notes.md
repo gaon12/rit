@@ -1529,7 +1529,8 @@
   restores the saved index parent for the checked clean tracked scope.
 - Git-compatible behavior: `rit stash apply -q [<stash>]` also restores
   untracked files recorded in the stash's third parent for the checked clean
-  apply scope.
+  apply scope, and refuses to overwrite existing untracked paths while leaving
+  the stash entry intact.
 - Git-compatible behavior: default `rit stash apply [<stash>]` prints the
   checked Git human status summary for the same clean tracked apply scope.
 - Git-compatible behavior: `rit stash pop -q [<stash>]` uses the same tracked
@@ -1540,7 +1541,9 @@
   checked clean tracked scope.
 - Git-compatible behavior: `rit stash pop -q [<stash>]` also restores
   untracked files through the shared clean apply path before dropping the
-  selected loose stash entry.
+  selected loose stash entry. If an untracked restore would overwrite an
+  existing untracked path, it reports Git-compatible checkout failure output
+  and keeps the stash entry.
 - Git-compatible behavior: default `rit stash pop [<stash>]` prints the checked
   Git human status summary before the dropped-entry message for the same clean
   tracked apply scope.

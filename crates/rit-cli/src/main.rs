@@ -196,7 +196,12 @@ fn stash_command(
                 }
                 Ok(ExitCode::SUCCESS)
             }
-            Err(error) => write_stash_error(stderr, error),
+            Err(error) => {
+                if apply_args.quiet && is_stash_untracked_restore_error(&error) {
+                    writeln!(stdout, "Already up to date.")?;
+                }
+                write_stash_error(stderr, error)
+            }
         };
     }
     if let [subcommand, rest @ ..] = args
@@ -295,7 +300,13 @@ fn stash_command(
                 }
                 Ok(ExitCode::SUCCESS)
             }
-            Err(error) => write_stash_error(stderr, error),
+            Err(error) => {
+                if pop_args.quiet && is_stash_untracked_restore_error(&error) {
+                    writeln!(stdout, "Already up to date.")?;
+                    writeln!(stdout, "The stash entry is kept in case you need it again.")?;
+                }
+                write_stash_error(stderr, error)
+            }
         };
     }
     if let [subcommand, rest @ ..] = args
@@ -1047,8 +1058,20 @@ fn write_stash_error(stderr: &mut dyn Write, error: rit_core::RitError) -> io::R
             writeln!(stderr, "fatal: log for 'stash' only has {count}")?;
             return Ok(ExitCode::from(128));
         }
+        if message.contains("error: could not restore untracked files from stash") {
+            writeln!(stderr, "{message}")?;
+            return Ok(ExitCode::from(1));
+        }
     }
     write_command_error(stderr, error)
+}
+
+fn is_stash_untracked_restore_error(error: &rit_core::RitError) -> bool {
+    matches!(
+        error,
+        rit_core::RitError::InvalidInput { message }
+            if message.contains("error: could not restore untracked files from stash")
+    )
 }
 
 fn write_stash_human_status(

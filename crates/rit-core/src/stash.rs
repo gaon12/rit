@@ -325,6 +325,10 @@ impl Repository {
             None
         };
         let symlinks_enabled = self.core_symlinks_enabled()?;
+        let untracked_parent_id = stash_commit.parents.get(2).copied();
+        if let Some(untracked_id) = untracked_parent_id {
+            self.ensure_untracked_stash_paths_available(worktree, untracked_id)?;
+        }
         for path in &changed_paths {
             let full_path = join_slash_path(worktree, path);
             match stash_entries.get(path) {
@@ -350,7 +354,7 @@ impl Repository {
             let target_paths = changed_paths.iter().cloned().collect::<Vec<_>>();
             self.replace_stash_paths_in_index(&index_parent, &target_paths)?;
         }
-        if let Some(untracked_id) = stash_commit.parents.get(2).copied() {
+        if let Some(untracked_id) = untracked_parent_id {
             let untracked_entries = self.commit_index_entries(untracked_id)?;
             for entry in untracked_entries.iter().filter(|entry| entry.stage == 0) {
                 let object = self.read_object(entry.object_id)?;
@@ -374,6 +378,27 @@ impl Repository {
             object_id: stash_id,
             paths: changed_paths.into_iter().collect(),
         })
+    }
+
+    fn ensure_untracked_stash_paths_available(
+        &self,
+        worktree: &Path,
+        untracked_id: ObjectId,
+    ) -> Result<()> {
+        for entry in self
+            .commit_index_entries(untracked_id)?
+            .into_iter()
+            .filter(|entry| entry.stage == 0)
+        {
+            let full_path = join_slash_path(worktree, &entry.path);
+            if fs::symlink_metadata(&full_path).is_ok() {
+                return Err(RitError::invalid_input(format!(
+                    "{} already exists, no checkout\nerror: could not restore untracked files from stash",
+                    entry.path
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Applies one tracked stash entry and drops it from the loose stash reflog.

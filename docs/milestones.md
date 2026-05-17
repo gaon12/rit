@@ -586,6 +586,8 @@ Completion criteria:
     parent without dropping the stash.
   - [x] Basic `stash pop -q` restores untracked files through the shared clean
     apply path and then drops the selected loose stash entry.
+  - [x] `stash apply/pop -q` refuse to overwrite existing untracked files from
+    a stash third parent and leave the selected stash entry intact on failure.
   - [x] `stash show --include-untracked` summary formats include third-parent
     untracked additions for name-only/name-status/numstat output.
   - [x] `stash show --include-untracked --patch` includes third-parent
