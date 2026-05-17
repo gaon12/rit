@@ -566,6 +566,62 @@ fn multi_commit_cherry_pick_continue_replays_remaining_clean_todo_like_git() {
 }
 
 #[test]
+fn multi_commit_cherry_pick_continue_stops_on_later_conflict_like_git() {
+    let root = temp_path("multi-conflict-continue-later-conflict");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_multi_commit_cherry_pick_with_later_conflict(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    run_capture(
+        "git",
+        ["cherry-pick", "pick-one", "pick-two", "pick-three"],
+        &git_repo,
+    );
+    run_capture(
+        rit_binary(),
+        ["cherry-pick", "pick-one", "pick-two", "pick-three"],
+        &rit_repo,
+    );
+    fs::write(git_repo.join("two.txt"), "resolved two\n").expect("git resolution should write");
+    fs::write(rit_repo.join("two.txt"), "resolved two\n").expect("rit resolution should write");
+    run_git(&git_repo, ["add", "two.txt"]);
+    run_git(&rit_repo, ["add", "two.txt"]);
+
+    let git_continue = run_capture("git", ["cherry-pick", "--continue"], &git_repo);
+    let rit_continue = run_capture(rit_binary(), ["cherry-pick", "--continue"], &rit_repo);
+
+    assert_ne!(git_continue.exit_code, 0);
+    assert_ne!(rit_continue.exit_code, 0);
+    assert_eq!(
+        read_optional_file(&git_repo.join(".git").join("sequencer").join("todo")),
+        read_optional_file(&rit_repo.join(".git").join("sequencer").join("todo"))
+    );
+    assert_eq!(
+        read_optional_file(&git_repo.join(".git").join("CHERRY_PICK_HEAD")),
+        read_optional_file(&rit_repo.join(".git").join("CHERRY_PICK_HEAD"))
+    );
+    assert_eq!(
+        read_optional_file(&git_repo.join(".git").join("MERGE_MSG")),
+        read_optional_file(&rit_repo.join(".git").join("MERGE_MSG"))
+    );
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["ls-files", "--stage"], &git_repo).stdout,
+        run_capture(rit_binary(), ["ls-files", "--stage"], &rit_repo).stdout
+    );
+    assert_eq!(
+        fs::read_to_string(git_repo.join("three.txt")).expect("git conflict file should read"),
+        fs::read_to_string(rit_repo.join("three.txt")).expect("rit conflict file should read")
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn multi_commit_cherry_pick_skip_replays_remaining_clean_todo_like_git() {
     let root = temp_path("multi-conflict-skip-remaining");
     let git_repo = root.join("git");
@@ -895,6 +951,23 @@ fn setup_multi_commit_cherry_pick_with_remaining_clean_todo(repo: &Path) {
     run_git(repo, ["branch", "pick-three"]);
     run_git(repo, ["checkout", "--quiet", "master"]);
     commit_text(repo, "conflict.txt", "head conflict\n", "head");
+}
+
+fn setup_multi_commit_cherry_pick_with_later_conflict(repo: &Path) {
+    init_repo(repo);
+    commit_text(repo, "one.txt", "base\n", "base one");
+    commit_text(repo, "two.txt", "base\n", "base two");
+    commit_text(repo, "three.txt", "base\n", "base three");
+    run_git(repo, ["checkout", "--quiet", "-b", "topic"]);
+    commit_text(repo, "one.txt", "topic one\n", "pick one");
+    run_git(repo, ["branch", "pick-one"]);
+    commit_text(repo, "two.txt", "topic two\n", "pick two");
+    run_git(repo, ["branch", "pick-two"]);
+    commit_text(repo, "three.txt", "topic three\n", "pick three");
+    run_git(repo, ["branch", "pick-three"]);
+    run_git(repo, ["checkout", "--quiet", "master"]);
+    commit_text(repo, "two.txt", "head two\n", "head two");
+    commit_text(repo, "three.txt", "head three\n", "head three");
 }
 
 fn init_repo(repo: &Path) {
