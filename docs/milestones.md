@@ -678,6 +678,8 @@ Completion criteria:
   - [x] `stash show --src-prefix=<prefix>` and `--dst-prefix=<prefix>` render
     Git-compatible custom old-side and new-side patch path prefixes for
     checked single-prefix tracked patch scopes.
+  - [x] `stash show --line-prefix=<prefix>` prefixes checked explicit
+    stat, patch, name-only, and numstat text output like Git.
   - [x] `stash show --output-indicator-new=<char>`,
     `--output-indicator-old=<char>`, and
     `--output-indicator-context=<char>` render Git-compatible patch line

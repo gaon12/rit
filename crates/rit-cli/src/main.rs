@@ -459,7 +459,7 @@ fn stash_command(
                             if matches!(format, StashShowFormat::Raw | StashShowFormat::RawAndPatch)
                             {
                                 let raw_text = patch.to_raw_text_with_options(&patch_options);
-                                stdout.write_all(raw_text.as_bytes())?;
+                                write_stash_show_text(stdout, &show_args.line_prefix, &raw_text)?;
                                 if matches!(format, StashShowFormat::Raw) {
                                     return Ok(stash_show_exit_code(
                                         show_args.exit_code,
@@ -467,7 +467,7 @@ fn stash_command(
                                     ));
                                 }
                                 if !raw_text.is_empty() && !text.is_empty() {
-                                    writeln!(stdout)?;
+                                    write_stash_show_blank_line(stdout, &show_args.line_prefix)?;
                                 }
                             }
                             if matches!(
@@ -475,7 +475,11 @@ fn stash_command(
                                 StashShowFormat::Summary | StashShowFormat::SummaryAndPatch
                             ) {
                                 let summary_text = patch.to_summary_text();
-                                stdout.write_all(summary_text.as_bytes())?;
+                                write_stash_show_text(
+                                    stdout,
+                                    &show_args.line_prefix,
+                                    &summary_text,
+                                )?;
                                 if matches!(format, StashShowFormat::Summary) {
                                     return Ok(stash_show_exit_code(
                                         show_args.exit_code,
@@ -483,7 +487,7 @@ fn stash_command(
                                     ));
                                 }
                                 if !summary_text.is_empty() && !text.is_empty() {
-                                    writeln!(stdout)?;
+                                    write_stash_show_blank_line(stdout, &show_args.line_prefix)?;
                                 }
                             }
                             if matches!(
@@ -519,8 +523,16 @@ fn stash_command(
                                         } else {
                                             diff.to_stat_text()
                                         };
-                                        stdout.write_all(stat_text.as_bytes())?;
-                                        stdout.write_all(patch.to_summary_text().as_bytes())?;
+                                        write_stash_show_text(
+                                            stdout,
+                                            &show_args.line_prefix,
+                                            &stat_text,
+                                        )?;
+                                        write_stash_show_text(
+                                            stdout,
+                                            &show_args.line_prefix,
+                                            &patch.to_summary_text(),
+                                        )?;
                                         return Ok(stash_show_exit_code(
                                             show_args.exit_code,
                                             has_changes,
@@ -562,15 +574,22 @@ fn stash_command(
                                         } else {
                                             diff.to_stat_text()
                                         };
-                                        stdout.write_all(stat_text.as_bytes())?;
+                                        write_stash_show_text(
+                                            stdout,
+                                            &show_args.line_prefix,
+                                            &stat_text,
+                                        )?;
                                         if !stat_text.is_empty() && !text.is_empty() {
-                                            writeln!(stdout)?;
+                                            write_stash_show_blank_line(
+                                                stdout,
+                                                &show_args.line_prefix,
+                                            )?;
                                         }
                                     }
                                     Err(error) => return write_stash_error(stderr, error),
                                 }
                             }
-                            stdout.write_all(text.as_bytes())?;
+                            write_stash_show_text(stdout, &show_args.line_prefix, &text)?;
                             Ok(stash_show_exit_code(show_args.exit_code, has_changes))
                         }
                         Err(error) => write_command_error(stderr, error),
@@ -600,10 +619,14 @@ fn stash_command(
                     StashShowFormat::Quiet => {
                         return Ok(stash_show_exit_code(true, !diff.files.is_empty()));
                     }
-                    StashShowFormat::Stat => stdout.write_all(diff.to_stat_text().as_bytes())?,
-                    StashShowFormat::CompactStat => {
-                        stdout.write_all(diff.to_compact_stat_text().as_bytes())?
+                    StashShowFormat::Stat => {
+                        write_stash_show_text(stdout, &show_args.line_prefix, &diff.to_stat_text())?
                     }
+                    StashShowFormat::CompactStat => write_stash_show_text(
+                        stdout,
+                        &show_args.line_prefix,
+                        &diff.to_compact_stat_text(),
+                    )?,
                     StashShowFormat::Patch => {
                         unreachable!("patch is handled before summary output")
                     }
@@ -625,30 +648,43 @@ fn stash_command(
                     StashShowFormat::CompactStatAndSummary => {
                         unreachable!("compact stat and summary are handled before summary output")
                     }
-                    StashShowFormat::ShortStat => {
-                        stdout.write_all(diff.to_shortstat_text().as_bytes())?
-                    }
+                    StashShowFormat::ShortStat => write_stash_show_text(
+                        stdout,
+                        &show_args.line_prefix,
+                        &diff.to_shortstat_text(),
+                    )?,
                     StashShowFormat::NameOnly => {
                         if show_args.nul_terminated {
                             stdout.write_all(&diff.to_name_only_z())?;
                         } else {
+                            let mut text = String::new();
                             for path in diff.name_only() {
-                                writeln!(stdout, "{path}")?;
+                                text.push_str(path);
+                                text.push('\n');
                             }
+                            write_stash_show_text(stdout, &show_args.line_prefix, &text)?;
                         }
                     }
                     StashShowFormat::NameStatus => {
                         if show_args.nul_terminated {
                             stdout.write_all(&diff.to_name_status_z())?;
                         } else {
-                            stdout.write_all(diff.to_name_status_text().as_bytes())?;
+                            write_stash_show_text(
+                                stdout,
+                                &show_args.line_prefix,
+                                &diff.to_name_status_text(),
+                            )?;
                         }
                     }
                     StashShowFormat::Numstat => {
                         if show_args.nul_terminated {
                             stdout.write_all(&diff.to_numstat_z())?
                         } else {
-                            stdout.write_all(diff.to_numstat_text().as_bytes())?
+                            write_stash_show_text(
+                                stdout,
+                                &show_args.line_prefix,
+                                &diff.to_numstat_text(),
+                            )?
                         }
                     }
                 }
@@ -776,6 +812,7 @@ struct StashShowArgs {
     default_prefixes: bool,
     old_path_prefix: String,
     new_path_prefix: String,
+    line_prefix: String,
     new_line_indicator: Option<char>,
     old_line_indicator: Option<char>,
     context_line_indicator: Option<char>,
@@ -800,6 +837,7 @@ impl StashShowArgs {
             default_prefixes: true,
             old_path_prefix: "a/".to_owned(),
             new_path_prefix: "b/".to_owned(),
+            line_prefix: String::new(),
             new_line_indicator: Some('+'),
             old_line_indicator: Some('-'),
             context_line_indicator: Some(' '),
@@ -832,6 +870,7 @@ fn parse_stash_show_args(
     let mut default_prefixes = true;
     let mut old_path_prefix = "a/".to_owned();
     let mut new_path_prefix = "b/".to_owned();
+    let mut line_prefix = String::new();
     let mut new_line_indicator = Some('+');
     let mut old_line_indicator = Some('-');
     let mut context_line_indicator = Some(' ');
@@ -1030,6 +1069,10 @@ fn parse_stash_show_args(
                 diff_option = true;
                 new_path_prefix = arg.trim_start_matches("--dst-prefix=").to_owned();
             }
+            _ if arg.starts_with("--line-prefix=") => {
+                diff_option = true;
+                line_prefix = arg.trim_start_matches("--line-prefix=").to_owned();
+            }
             _ if arg.starts_with("--output=") => {
                 diff_option = true;
                 output_path = Some(arg.trim_start_matches("--output=").to_owned());
@@ -1171,6 +1214,7 @@ fn parse_stash_show_args(
         default_prefixes,
         old_path_prefix,
         new_path_prefix,
+        line_prefix,
         new_line_indicator,
         old_line_indicator,
         context_line_indicator,
@@ -1221,6 +1265,24 @@ fn first_invalid_color_moved_ws_mode(value: &str) -> Option<&str> {
                 | "allow-indentation-change"
         )
     })
+}
+
+fn write_stash_show_text(stdout: &mut dyn Write, line_prefix: &str, text: &str) -> io::Result<()> {
+    if line_prefix.is_empty() {
+        return stdout.write_all(text.as_bytes());
+    }
+    for line in text.split_inclusive('\n') {
+        stdout.write_all(line_prefix.as_bytes())?;
+        stdout.write_all(line.as_bytes())?;
+    }
+    Ok(())
+}
+
+fn write_stash_show_blank_line(stdout: &mut dyn Write, line_prefix: &str) -> io::Result<()> {
+    if !line_prefix.is_empty() {
+        stdout.write_all(line_prefix.as_bytes())?;
+    }
+    writeln!(stdout)
 }
 
 fn stash_show_patch_options(show_args: &StashShowArgs) -> rit_core::PatchRenderOptions {
