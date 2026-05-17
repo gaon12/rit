@@ -21,6 +21,9 @@ pub fn handle_pathspec_file_option(
         *pathspec_file_nul = true;
         return Ok(true);
     }
+    if arg == "--no-pathspec-from-file" {
+        return Ok(true);
+    }
     if arg == "--no-pathspec-file-nul" {
         *pathspec_file_nul = false;
         return Ok(true);

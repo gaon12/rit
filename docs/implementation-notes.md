@@ -264,6 +264,10 @@
 - 2026-05-17 no pathspec-file-nul slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   `--pathspec-file-nul --no-pathspec-file-nul`.
+- 2026-05-17 no pathspec-from-file slice checked Git 2.52.0.windows.1 with
+  `git --version`, `git help -a`, `git add -h`, and direct Git comparisons for
+  `--no-pathspec-from-file <path>` plus option-order probes showing it does
+  not clear an earlier `--pathspec-from-file=<file>` selection.
 - 2026-05-15 empty pathspec-file entry slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for leading
   empty line entries in `--pathspec-from-file`.
@@ -604,6 +608,10 @@
   into text pathspec-file parsing for `add`, `restore`, and `reset`.
 - Repeated `--pathspec-from-file` options use the last file, matching Git for
   `add`, `restore`, and `reset`.
+- `--no-pathspec-from-file` is accepted as a Git-compatible no-op when no
+  pathspec file selection is active for `add`, `restore`, and `reset`; Git
+  still rejects later ordinary pathspec arguments if an earlier
+  `--pathspec-from-file` remains active.
 - `--pathspec-from-file` cannot be mixed with ordinary pathspec arguments,
   matching Git's fatal pre-mutation validation for `add`, `restore`, and
   `reset`.
