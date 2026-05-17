@@ -46,6 +46,7 @@ fn stash_clear_removes_stash_list_like_git() {
     let git_repo = root.join("git");
     let rit_repo = root.join("rit");
     setup_stashes(&git_repo);
+    run_git(&git_repo, ["pack-refs", "--all"]);
     copy_directory(&git_repo, &rit_repo);
 
     let git_clear = run_capture("git", ["stash", "clear"], &git_repo);
@@ -57,6 +58,10 @@ fn stash_clear_removes_stash_list_like_git() {
     assert_eq!(
         run_capture("git", ["stash", "list"], &git_repo).stdout,
         run_capture(rit_binary(), ["stash", "list"], &rit_repo).stdout
+    );
+    assert_eq!(
+        packed_refs_contains(&git_repo, "refs/stash"),
+        packed_refs_contains(&rit_repo, "refs/stash")
     );
 
     let _ = fs::remove_dir_all(root);
@@ -1691,6 +1696,16 @@ fn copy_directory(from: &Path, to: &Path) {
 
 fn read_optional_file(path: &Path) -> Option<String> {
     fs::read_to_string(path).ok()
+}
+
+fn packed_refs_contains(repo: &Path, ref_name: &str) -> bool {
+    read_optional_file(&repo.join(".git").join("packed-refs"))
+        .map(|contents| {
+            contents
+                .lines()
+                .any(|line| line.split_whitespace().nth(1) == Some(ref_name))
+        })
+        .unwrap_or(false)
 }
 
 fn is_hex_object_id(value: &str) -> bool {

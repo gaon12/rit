@@ -1484,8 +1484,8 @@
   `rit stash store [(-m|--message) <message>] [-q|--quiet] <commit>`, and
   `rit stash clear` for loose stash refs.
 - Unsupported options: `export`, `import`, broader stash show options, save
-  `--patch`, push packed stash ref cleanup, broader untracked apply/pop
-  restoration, and stash apply/pop/branch conflict handling.
+  `--patch`, broader untracked apply/pop restoration, and stash
+  apply/pop/branch conflict handling.
 - Git-compatible behavior: `rit stash push` without untracked/pathspec options
   writes the usual two-parent stash shape for tracked changes, stores it in
   loose `refs/stash`, prints Git's saved/no-change messages, and restores the
@@ -1546,9 +1546,10 @@
 - Git-compatible behavior: `rit stash list` reads `.git/logs/refs/stash`
   directly, prints newest entries first as `stash@{n}: <reflog message>`, and
   prints nothing when no stash reflog exists.
-- Git-compatible behavior: `rit stash drop` removes the selected loose reflog
-  entry, rewrites remaining old/new reflog links, updates loose
-  `.git/refs/stash` to the newest remaining entry, and removes loose stash
+- Git-compatible behavior: `rit stash clear` removes loose and packed
+  `refs/stash` state plus the stash reflog. `rit stash drop` removes the
+  selected loose reflog entry, rewrites remaining old/new reflog links, updates
+  loose `.git/refs/stash` to the newest remaining entry, and removes stash
   state when the last entry is dropped. `-q` suppresses the dropped-entry
   message; empty and out-of-range loose reflog errors match the checked Git
   shape.
@@ -1565,8 +1566,8 @@
   message is `Created via "git stash store".`
 - Repository mutation: no for `stash list`.
 - Repository mutation: no for `stash show`.
-- Repository mutation: yes for `stash clear`; it removes loose `.git/refs/stash`
-  and `.git/logs/refs/stash`.
+- Repository mutation: yes for `stash clear`; it removes loose and packed
+  `refs/stash` plus `.git/logs/refs/stash`.
 - Repository mutation: yes for `stash drop`; it rewrites loose
   `.git/logs/refs/stash` and loose `.git/refs/stash`.
 - Repository mutation: yes for `stash pop`; it writes/removes tracked worktree
@@ -1577,8 +1578,8 @@
   `.git/logs/refs/stash`, and updates loose `.git/refs/stash`.
 - Repository mutation: yes for `stash store`; it writes loose
   `.git/logs/refs/stash` and loose `.git/refs/stash`.
-- Risk: low to moderate; mutations are intentionally limited to loose stash
-  state and do not yet edit packed stash refs.
+- Risk: low to moderate; mutations are intentionally limited to stash refs,
+  reflogs, and checked clean working-tree/index restoration paths.
 
 ### `rit op` and `rit undo`
 

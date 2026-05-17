@@ -549,6 +549,7 @@ Completion criteria:
   - [x] `rit stash list` reads the Git-compatible `refs/stash` reflog and
     prints entries in newest-first order.
   - [x] `rit stash clear` removes loose `refs/stash` state and its reflog.
+  - [x] `rit stash clear` also removes packed `refs/stash` entries.
   - [x] `rit stash drop` removes a loose reflog entry, relinks remaining
     reflog entries, and updates loose `refs/stash`.
   - [x] `rit stash drop -q` and basic empty/out-of-range drop errors match
@@ -610,8 +611,7 @@ Completion criteria:
   - [x] Basic `stash branch <branchname> [<stash>]` creates a branch at the
     stash base, checks it out, applies the clean tracked stash, and drops the
     selected loose stash entry on success.
-  - [ ] `stash export/import`,
-    packed stash ref cleanup, same-path staged+unstaged `--staged` cleanup
+  - [ ] `stash export/import`, same-path staged+unstaged `--staged` cleanup
     failure parity, broader untracked apply/pop restoration, broader show
     options, broader error parity, and conflict handling for apply/pop/branch.
 - [~] Conflict index stages.

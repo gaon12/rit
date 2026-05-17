@@ -413,6 +413,7 @@ impl Repository {
     /// Clears the loose `refs/stash` ref and its reflog.
     pub fn stash_clear(&self) -> Result<()> {
         remove_file_if_exists(&self.common_dir().join("refs").join("stash"))?;
+        self.remove_stash_from_packed_refs()?;
         remove_file_if_exists(&self.common_dir().join("logs").join("refs").join("stash"))
     }
 
@@ -677,6 +678,44 @@ impl Repository {
     fn write_stash_ref(&self, target: ObjectId) -> Result<()> {
         let path = self.common_dir().join("refs").join("stash");
         write_file_atomically(&path, |file| writeln!(file, "{target}"))
+    }
+
+    fn remove_stash_from_packed_refs(&self) -> Result<()> {
+        let path = self.common_dir().join("packed-refs");
+        let contents = match fs::read_to_string(&path) {
+            Ok(contents) => contents,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(source) => return Err(RitError::io(&path, source)),
+        };
+
+        let mut changed = false;
+        let mut skip_peeled_line = false;
+        let mut kept_lines = Vec::new();
+        for line in contents.lines() {
+            if skip_peeled_line && line.starts_with('^') {
+                changed = true;
+                continue;
+            }
+            skip_peeled_line = false;
+
+            let ref_name = line.split_whitespace().nth(1);
+            if ref_name == Some("refs/stash") {
+                changed = true;
+                skip_peeled_line = true;
+                continue;
+            }
+            kept_lines.push(line.to_owned());
+        }
+
+        if changed {
+            write_file_atomically(&path, |file| {
+                for line in &kept_lines {
+                    writeln!(file, "{line}")?;
+                }
+                Ok(())
+            })?;
+        }
+        Ok(())
     }
 
     fn create_tracked_stash_commit(
