@@ -748,6 +748,9 @@
 - `rit cherry-pick --continue` now clears `.git/sequencer` when the stopped
   multi-target pick is the final todo entry, matching Git's checked final
   sequencer cleanup state.
+- `rit cherry-pick --continue` now replays additional remaining clean
+  multi-target sequencer todo entries after committing the resolved stopped
+  pick, then clears the sequencer when all remaining entries complete.
 - Clean `rit cherry-pick -x <commit>` now appends Git's original-commit trailer
   to the created commit message.
 - Clean `rit cherry-pick --ff <commit>` now fast-forwards without creating a
@@ -1443,9 +1446,10 @@
   fast-forwards, `-s`/`--signoff` for clean committing picks, Git-shaped
   sequencer metadata for multi-target picks that stop on a conflict, `--abort`,
   `--continue`, and `--quit`/`--skip` for the supported conflict state.
-- Unsupported options: full multi-target sequencer continue/skip replay,
-  signing, strategy options, empty-commit handling, conflict continuation for
-  merge commits, and full sequencer/editor/hook parity.
+- Unsupported options: multi-target sequencer skip replay and later-conflict
+  continuation after replaying additional todo entries, signing, strategy
+  options, empty-commit handling, conflict continuation for merge commits, and
+  full sequencer/editor/hook parity.
 - Git-compatible behavior: clean single-parent picks apply the picked commit's
   parent-to-commit tree change onto `HEAD`, create a new one-parent commit, and
   preserve the picked author and commit message. With `-n`/`--no-commit`, the
@@ -1466,9 +1470,12 @@
   pick as the base for the next target. Multi-target committing picks that
   stop on a later conflict write `.git/sequencer` metadata matching Git's
   checked `head`, `abort-safety`, and `todo` state for that conflict start,
-  and continuing the final stopped pick clears that sequencer state.
+  continuing the final stopped pick clears that sequencer state, and
+  continuing with additional remaining clean todo entries replays them in
+  order before clearing the sequencer.
 - Intentional differences: output and hints are simplified, and sequencer
-  continue/skip replay for multiple commits is not implemented.
+  skip replay and later-conflict continuation after replaying additional todo
+  entries are not implemented.
 - Repository mutation: yes, for clean picks it updates the worktree, index,
   `ORIG_HEAD`, and current `HEAD`.
 - Risk: moderate; this first slice requires a clean worktree and writes only
