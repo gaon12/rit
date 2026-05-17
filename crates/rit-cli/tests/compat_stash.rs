@@ -2311,6 +2311,13 @@ fn stash_show_diff_passthrough_options_match_git() {
         vec!["stash", "show", "--patch", "-C"],
         vec!["stash", "show", "--patch", "-C90%"],
         vec!["stash", "show", "--patch", "--find-copies-harder"],
+        vec!["stash", "show", "--patch", "--pickaxe-all"],
+        vec!["stash", "show", "--patch", "--pickaxe-regex"],
+        vec!["stash", "show", "--patch", "--break-rewrites"],
+        vec!["stash", "show", "--patch", "--break-rewrites=50%"],
+        vec!["stash", "show", "--patch", "-B"],
+        vec!["stash", "show", "--patch", "-B50%/60%"],
+        vec!["stash", "show", "--patch", "-B/70%"],
         vec!["stash", "show", "--patch", "-l0"],
         vec!["stash", "show", "--patch", "-l1"],
         vec!["stash", "show", "--patch", "--minimal"],
@@ -2436,6 +2443,8 @@ fn stash_show_diff_passthrough_options_match_git() {
         vec!["stash", "show", "--patch", "--word-diff=bad"],
         vec!["stash", "show", "--patch", "--word-diff="],
         vec!["stash", "show", "--patch", "--ws-error-highlight=bad"],
+        vec!["stash", "show", "--patch", "-Bbad"],
+        vec!["stash", "show", "--patch", "--break-rewrites=bad"],
     ] {
         let git_show = run_capture("git", args.iter().copied(), &git_repo);
         let rit_show = run_capture(rit_binary(), args.iter().copied(), &rit_repo);

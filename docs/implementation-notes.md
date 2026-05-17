@@ -151,6 +151,12 @@
   with `git --version` and direct Git comparisons for
   `stash show --patch --word-diff=none` on simple text stash changes, plus
   Git-compatible invalid word-diff mode errors.
+- 2026-05-18 stash show rewrite/pickaxe passthrough slice checked
+  Git 2.52.0.windows.1 with `git --version`, `git stash show -h`,
+  `git diff -h`, and direct Git comparisons for `stash show --patch` with
+  `--pickaxe-all`, `--pickaxe-regex`, `--break-rewrites`,
+  `--break-rewrites=50%`, `-B`, `-B50%/60%`, and `-B/70%` on simple text
+  stash changes, including Git-compatible invalid break-rewrites errors.
 - 2026-05-18 stash show color-moved/relative passthrough slice checked
   Git 2.52.0.windows.1 with `git --version`, `git stash show -h`,
   `git diff -h`, and direct Git comparisons for `stash show --patch` with
@@ -1641,7 +1647,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]`
   as the legacy save form,
-  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat[=<width>[,<name-width>[,<count>]]]|--compact-summary|--no-compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [-z] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--inter-hunk-context=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--src-prefix=<prefix>|--dst-prefix=<prefix>|--line-prefix=<prefix>|--stat-width=<n>|--stat-name-width=<n>|--stat-graph-width=<n>|--stat-count=<n>|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--color-moved[=<mode>]|--no-color-moved|--color-moved-ws=<modes>|--no-color-moved-ws|--relative[=<path>]|--no-relative|--minimal|--patience|--histogram|--diff-algorithm=<algorithm>|--anchored=<text>|--output=<file>|-w|--ignore-all-space|-b|--ignore-space-change|--ignore-space-at-eol|--ignore-cr-at-eol|--ignore-blank-lines|--indent-heuristic|--no-indent-heuristic|--ws-error-highlight=<kind>|--irreversible-delete|-D|--function-context|-W|--word-diff=none|--binary|--no-renames|--find-renames[=<n>]|-M[<n>]|--find-copies[=<n>]|-C[<n>]|--find-copies-harder|-l<n>|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]|--submodule[=<format>]|--ita-invisible-in-index|--ita-visible-in-index] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat[=<width>[,<name-width>[,<count>]]]|--compact-summary|--no-compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [-z] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--inter-hunk-context=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--src-prefix=<prefix>|--dst-prefix=<prefix>|--line-prefix=<prefix>|--stat-width=<n>|--stat-name-width=<n>|--stat-graph-width=<n>|--stat-count=<n>|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--color-moved[=<mode>]|--no-color-moved|--color-moved-ws=<modes>|--no-color-moved-ws|--relative[=<path>]|--no-relative|--minimal|--patience|--histogram|--diff-algorithm=<algorithm>|--anchored=<text>|--output=<file>|-w|--ignore-all-space|-b|--ignore-space-change|--ignore-space-at-eol|--ignore-cr-at-eol|--ignore-blank-lines|--indent-heuristic|--no-indent-heuristic|--ws-error-highlight=<kind>|--irreversible-delete|-D|--function-context|-W|--word-diff=none|--pickaxe-all|--pickaxe-regex|--break-rewrites[=<n>[/<m>]]|-B[<n>[/<m>]]|--binary|--no-renames|--find-renames[=<n>]|-M[<n>]|--find-copies[=<n>]|-C[<n>]|--find-copies-harder|-l<n>|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]|--submodule[=<format>]|--ita-invisible-in-index|--ita-visible-in-index] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
   worktree/index restoration when `HEAD` matches the stash base,
@@ -1821,7 +1827,11 @@
   errors. `--irreversible-delete`, `-D`, `--function-context`, and `-W` are
   accepted for checked simple text stash patches. `--word-diff=none` is
   accepted for checked simple text stash patches, with Git-compatible invalid
-  word-diff mode errors. `--binary`,
+  word-diff mode errors. `--pickaxe-all`, `--pickaxe-regex`,
+  `--break-rewrites[=<n>[/<m>]]`, and `-B[<n>[/<m>]]` are accepted as
+  rewrite/pickaxe passthrough options for the same checked simple text stash
+  patch scope, including Git-compatible invalid break-rewrites errors.
+  `--binary`,
   `--no-renames`, `--find-renames[=<n>]`,
   `-M[<n>]`, `--find-copies[=<n>]`, `-C[<n>]`, and `--find-copies-harder`
   are accepted as rename/copy/binary passthrough options for the same checked

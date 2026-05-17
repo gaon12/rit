@@ -960,6 +960,10 @@ fn parse_stash_show_args(
             | "--find-renames"
             | "--find-copies"
             | "--find-copies-harder"
+            | "--pickaxe-all"
+            | "--pickaxe-regex"
+            | "--break-rewrites"
+            | "-B"
             | "-M"
             | "-C"
             | "--minimal"
@@ -1201,6 +1205,13 @@ fn parse_stash_show_args(
                 diff_option = true;
                 if let Err(error) = parse_similarity_option(option, "-C", "--find-copies=") {
                     writeln!(stderr, "rit: {error}")?;
+                    return Ok(None);
+                }
+            }
+            option if option.starts_with("--break-rewrites=") || option.starts_with("-B") => {
+                diff_option = true;
+                if !is_valid_break_rewrites_option(option) {
+                    writeln!(stderr, "error: break-rewrites expects <n>/<m> form")?;
                     return Ok(None);
                 }
             }
@@ -2991,6 +3002,45 @@ fn parse_similarity_option(
     let numerator = u128::from(threshold) * 100;
     let fractional_percent = numerator.div_ceil(denominator);
     Ok(fractional_percent.min(u128::from(u32::MAX)) as u32)
+}
+
+fn is_valid_break_rewrites_option(option: &str) -> bool {
+    let raw_value = if option == "--break-rewrites" {
+        ""
+    } else if let Some(value) = option.strip_prefix("--break-rewrites=") {
+        value
+    } else if let Some(value) = option.strip_prefix("-B") {
+        value
+    } else {
+        return false;
+    };
+
+    if raw_value.is_empty() {
+        return true;
+    }
+
+    let mut thresholds = raw_value.split('/');
+    let first = thresholds.next().unwrap_or_default();
+    let second = thresholds.next();
+    if thresholds.next().is_some() {
+        return false;
+    }
+
+    match second {
+        Some(second) => {
+            if first.is_empty() && second.is_empty() {
+                return false;
+            }
+            (first.is_empty() || is_valid_break_rewrites_threshold(first))
+                && (second.is_empty() || is_valid_break_rewrites_threshold(second))
+        }
+        None => is_valid_break_rewrites_threshold(first),
+    }
+}
+
+fn is_valid_break_rewrites_threshold(value: &str) -> bool {
+    let digits = value.strip_suffix('%').unwrap_or(value);
+    !digits.is_empty() && digits.chars().all(|character| character.is_ascii_digit())
 }
 
 fn parse_rename_limit_option(option: &str) -> Result<usize, String> {

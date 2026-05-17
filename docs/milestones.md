@@ -719,6 +719,11 @@ Completion criteria:
     Git-compatible simple text patch output in checked captures.
   - [x] `stash show --word-diff=none` is accepted for checked simple text
     patch output and invalid `--word-diff=<mode>` errors match Git.
+  - [x] `stash show` accepts pickaxe and rewrite passthrough diff options
+    (`--pickaxe-all`, `--pickaxe-regex`,
+    `--break-rewrites[=<n>[/<m>]]`, `-B[<n>[/<m>]]`) for Git-compatible
+    simple text patch output in checked captures, including invalid
+    break-rewrites threshold errors.
   - [x] `stash show` accepts rename/copy/binary passthrough diff options
     (`--binary`, `--no-renames`, `--find-renames[=<n>]`, `-M[<n>]`,
     `--find-copies[=<n>]`, `-C[<n>]`, `--find-copies-harder`, `-l<n>`) for
