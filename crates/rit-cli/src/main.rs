@@ -844,6 +844,13 @@ fn parse_stash_show_args(
             | "--no-color"
             | "--color=never"
             | "--color=auto"
+            | "--binary"
+            | "--no-renames"
+            | "--find-renames"
+            | "--find-copies"
+            | "--find-copies-harder"
+            | "-M"
+            | "-C"
             | "--minimal"
             | "--patience"
             | "--histogram"
@@ -945,6 +952,20 @@ fn parse_stash_show_args(
                         writeln!(stderr, "error: {error}")?;
                         return Ok(None);
                     }
+                }
+            }
+            option if option.starts_with("--find-renames=") || option.starts_with("-M") => {
+                diff_option = true;
+                if let Err(error) = parse_similarity_option(option, "-M", "--find-renames=") {
+                    writeln!(stderr, "rit: {error}")?;
+                    return Ok(None);
+                }
+            }
+            option if option.starts_with("--find-copies=") || option.starts_with("-C") => {
+                diff_option = true;
+                if let Err(error) = parse_similarity_option(option, "-C", "--find-copies=") {
+                    writeln!(stderr, "rit: {error}")?;
+                    return Ok(None);
                 }
             }
             _ if arg.starts_with("--ignore-submodules=") => {

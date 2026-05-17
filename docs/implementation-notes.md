@@ -110,6 +110,10 @@
   `git stash -h`, `git diff -h`, and direct Git comparisons for
   `stash show --patch --minimal`, `--patience`, and `--histogram` on simple
   text stash changes.
+- 2026-05-17 stash show rename/copy passthrough slice checked `git stash -h`,
+  `git diff -h`, and direct Git comparisons for `stash show --patch` with
+  `--binary`, `--no-renames`, `--find-renames`, `-M`, `--find-copies`, `-C`,
+  and `--find-copies-harder` forms on simple text stash changes.
 - 2026-05-17 stash push no pathspec-file-nul slice checked `git stash -h` and
   direct Git comparisons for `stash push --pathspec-file-nul
   --no-pathspec-file-nul`, verifying the shared pathspec-file parser returns
@@ -1502,7 +1506,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]`
   as the legacy save form,
-  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--inter-hunk-context=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--minimal|--patience|--histogram|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--inter-hunk-context=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--minimal|--patience|--histogram|--binary|--no-renames|--find-renames[=<n>]|-M[<n>]|--find-copies[=<n>]|-C[<n>]|--find-copies-harder|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
   worktree/index restoration when `HEAD` matches the stash base,
@@ -1644,7 +1648,10 @@
   output in the checked capture environment. `--minimal`, `--patience`, and
   `--histogram` are accepted as diff algorithm passthrough options for checked
   simple text stash patches where the current diff engine produces Git's same
-  patch shape.
+  patch shape. `--binary`, `--no-renames`, `--find-renames[=<n>]`,
+  `-M[<n>]`, `--find-copies[=<n>]`, `-C[<n>]`, and `--find-copies-harder`
+  are accepted as rename/copy/binary passthrough options for the same checked
+  simple text stash patch scope.
 - Git-compatible behavior: `rit stash store` resolves an existing commit,
   appends a loose stash reflog entry using the configured committer identity,
   and updates loose `.git/refs/stash`. `-q` is accepted and the default
