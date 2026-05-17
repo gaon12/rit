@@ -321,13 +321,18 @@ fn stash_command(
             return Ok(ExitCode::from(129));
         };
         if matches!(show_args.format, StashShowFormat::Patch) {
-            let patch_result = if show_args.include_untracked {
-                repository.stash_show_patch_include_untracked(
+            let patch_result = match show_args.untracked_mode {
+                StashShowUntrackedMode::Tracked => {
+                    repository.stash_show_patch(show_args.index, &rit_core::PathspecSet::all())
+                }
+                StashShowUntrackedMode::Include => repository.stash_show_patch_include_untracked(
                     show_args.index,
                     &rit_core::PathspecSet::all(),
-                )
-            } else {
-                repository.stash_show_patch(show_args.index, &rit_core::PathspecSet::all())
+                ),
+                StashShowUntrackedMode::Only => repository.stash_show_patch_only_untracked(
+                    show_args.index,
+                    &rit_core::PathspecSet::all(),
+                ),
             };
             return match patch_result {
                 Ok(patch) => match patch.to_patch_text() {
@@ -340,10 +345,15 @@ fn stash_command(
                 Err(error) => write_stash_error(stderr, error),
             };
         }
-        let summary = if show_args.include_untracked {
-            repository.stash_show_include_untracked(show_args.index, &rit_core::PathspecSet::all())
-        } else {
-            repository.stash_show(show_args.index, &rit_core::PathspecSet::all())
+        let summary = match show_args.untracked_mode {
+            StashShowUntrackedMode::Tracked => {
+                repository.stash_show(show_args.index, &rit_core::PathspecSet::all())
+            }
+            StashShowUntrackedMode::Include => repository
+                .stash_show_include_untracked(show_args.index, &rit_core::PathspecSet::all()),
+            StashShowUntrackedMode::Only => {
+                repository.stash_show_only_untracked(show_args.index, &rit_core::PathspecSet::all())
+            }
         };
         return match summary {
             Ok(diff) => {
@@ -423,7 +433,14 @@ enum StashShowFormat {
 struct StashShowArgs {
     index: usize,
     format: StashShowFormat,
-    include_untracked: bool,
+    untracked_mode: StashShowUntrackedMode,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StashShowUntrackedMode {
+    Tracked,
+    Include,
+    Only,
 }
 
 fn parse_stash_show_args(
@@ -431,7 +448,7 @@ fn parse_stash_show_args(
     stderr: &mut dyn Write,
 ) -> io::Result<Option<StashShowArgs>> {
     let mut format = StashShowFormat::Stat;
-    let mut include_untracked = false;
+    let mut untracked_mode = StashShowUntrackedMode::Tracked;
     let mut stash = None;
     for arg in args {
         match arg.as_str() {
@@ -440,7 +457,8 @@ fn parse_stash_show_args(
             "--name-only" => format = StashShowFormat::NameOnly,
             "--name-status" => format = StashShowFormat::NameStatus,
             "--numstat" => format = StashShowFormat::Numstat,
-            "-u" | "--include-untracked" => include_untracked = true,
+            "-u" | "--include-untracked" => untracked_mode = StashShowUntrackedMode::Include,
+            "--only-untracked" => untracked_mode = StashShowUntrackedMode::Only,
             _ if arg.starts_with('-') => {
                 writeln!(stderr, "rit: unsupported stash show option '{arg}'")?;
                 return Ok(None);
@@ -457,7 +475,7 @@ fn parse_stash_show_args(
     Ok(Some(StashShowArgs {
         index,
         format,
-        include_untracked,
+        untracked_mode,
     }))
 }
 

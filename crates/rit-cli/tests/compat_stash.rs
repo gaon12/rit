@@ -1182,6 +1182,11 @@ fn stash_show_include_untracked_summary_formats_match_git() {
         vec!["stash", "show", "--include-untracked", "--name-status"],
         vec!["stash", "show", "--include-untracked", "--numstat"],
         vec!["stash", "show", "--include-untracked", "--patch"],
+        vec!["stash", "show", "--only-untracked"],
+        vec!["stash", "show", "--only-untracked", "--name-only"],
+        vec!["stash", "show", "--only-untracked", "--name-status"],
+        vec!["stash", "show", "--only-untracked", "--numstat"],
+        vec!["stash", "show", "--only-untracked", "--patch"],
     ] {
         let git_show = run_capture("git", args.iter().copied(), &git_repo);
         let rit_show = run_capture(rit_binary(), args.iter().copied(), &rit_repo);

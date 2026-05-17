@@ -587,6 +587,8 @@ Completion criteria:
     untracked additions for name-only/name-status/numstat output.
   - [x] `stash show --include-untracked --patch` includes third-parent
     untracked additions in Git-compatible patch output.
+  - [x] `stash show --only-untracked` renders only third-parent untracked
+    additions for stat/name-only/name-status/numstat/patch output.
   - [x] Basic legacy `stash save [-q] [<message>]` uses the same tracked-change
     stash shape as push and matches Git's saved/no-change output.
   - [x] `rit stash create [<message>]` creates the same tracked-change stash

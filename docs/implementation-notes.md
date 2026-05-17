@@ -1472,7 +1472,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [<message>]` as the legacy tracked-change save
   form,
-  `rit stash show [-p|--patch|--stat|--name-only|--name-status|--numstat] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--only-untracked] [-p|--patch|--stat|--name-only|--name-status|--numstat] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [-q|--quiet] [<stash>]` for clean tracked worktree
   restoration when `HEAD` matches the stash base,
@@ -1551,7 +1551,9 @@
   against its first parent and renders patch/stat/name-only/name-status/numstat
   output through the shared diff formatter. `--include-untracked` extends
   summary formats and patch output with third-parent untracked additions for
-  the checked name-only/name-status/numstat/patch scope.
+  the checked name-only/name-status/numstat/patch scope. `--only-untracked`
+  renders only those third-parent additions across the same checked output
+  formats.
 - Git-compatible behavior: `rit stash store` resolves an existing commit,
   appends a loose stash reflog entry using the configured committer identity,
   and updates loose `.git/refs/stash`. `-q` is accepted and the default

@@ -446,24 +446,25 @@ impl Repository {
         pathspecs: &PathspecSet,
     ) -> Result<DiffSummary> {
         let mut diff = self.stash_show(display_index, pathspecs)?;
+        diff.files.extend(
+            self.stash_show_only_untracked(display_index, pathspecs)?
+                .files,
+        );
+        diff.files.sort_by(|left, right| left.path.cmp(&right.path));
+        Ok(diff)
+    }
+
+    /// Shows only untracked third-parent entries from one stash.
+    pub fn stash_show_only_untracked(
+        &self,
+        display_index: usize,
+        pathspecs: &PathspecSet,
+    ) -> Result<DiffSummary> {
+        let mut files = Vec::new();
         if let Some(untracked_id) = self.stash_untracked_parent(display_index)? {
-            let attributes = self.root_attributes()?;
-            for entry in self
-                .commit_index_entries(untracked_id)?
-                .into_iter()
-                .filter(|entry| entry.stage == 0)
-            {
-                if !pathspecs.matches_with_attributes(&entry.path, Some(&attributes)) {
-                    continue;
-                }
-                let object = self.read_object(entry.object_id)?;
-                if object.kind != ObjectKind::Blob {
-                    return Err(RitError::invalid_input(format!(
-                        "object {} is {}, not blob",
-                        entry.object_id, object.kind
-                    )));
-                }
-                diff.files.push(DiffFileStat {
+            for entry in self.stash_untracked_entries(untracked_id, pathspecs)? {
+                let object = self.read_stash_blob(entry.object_id)?;
+                files.push(DiffFileStat {
                     status: 'A',
                     old_path: None,
                     path: entry.path,
@@ -475,9 +476,12 @@ impl Repository {
                     new_size: object.data.len(),
                 });
             }
-            diff.files.sort_by(|left, right| left.path.cmp(&right.path));
+            files.sort_by(|left, right| left.path.cmp(&right.path));
         }
-        Ok(diff)
+        Ok(DiffSummary {
+            files,
+            warnings: Vec::new(),
+        })
     }
 
     /// Shows patch output for the changes recorded by one stash.
@@ -497,24 +501,27 @@ impl Repository {
         pathspecs: &PathspecSet,
     ) -> Result<DiffPatch> {
         let mut patch = self.stash_show_patch(display_index, pathspecs)?;
+        patch.files.extend(
+            self.stash_show_patch_only_untracked(display_index, pathspecs)?
+                .files,
+        );
+        patch
+            .files
+            .sort_by(|left, right| left.path.cmp(&right.path));
+        Ok(patch)
+    }
+
+    /// Shows only untracked third-parent entries as patch output.
+    pub fn stash_show_patch_only_untracked(
+        &self,
+        display_index: usize,
+        pathspecs: &PathspecSet,
+    ) -> Result<DiffPatch> {
+        let mut files = Vec::new();
         if let Some(untracked_id) = self.stash_untracked_parent(display_index)? {
-            let attributes = self.root_attributes()?;
-            for entry in self
-                .commit_index_entries(untracked_id)?
-                .into_iter()
-                .filter(|entry| entry.stage == 0)
-            {
-                if !pathspecs.matches_with_attributes(&entry.path, Some(&attributes)) {
-                    continue;
-                }
-                let object = self.read_object(entry.object_id)?;
-                if object.kind != ObjectKind::Blob {
-                    return Err(RitError::invalid_input(format!(
-                        "object {} is {}, not blob",
-                        entry.object_id, object.kind
-                    )));
-                }
-                patch.files.push(DiffPatchFile {
+            for entry in self.stash_untracked_entries(untracked_id, pathspecs)? {
+                let object = self.read_stash_blob(entry.object_id)?;
+                files.push(DiffPatchFile {
                     status: 'A',
                     old_path: None,
                     path: entry.path,
@@ -526,11 +533,12 @@ impl Repository {
                     new_data: object.data,
                 });
             }
-            patch
-                .files
-                .sort_by(|left, right| left.path.cmp(&right.path));
+            files.sort_by(|left, right| left.path.cmp(&right.path));
         }
-        Ok(patch)
+        Ok(DiffPatch {
+            files,
+            warnings: Vec::new(),
+        })
     }
 
     fn stash_diff_pair(&self, display_index: usize) -> Result<(ObjectId, ObjectId)> {
@@ -562,6 +570,33 @@ impl Repository {
         }
         let stash_commit = crate::parse_commit(&stash_object.data)?;
         Ok(stash_commit.parents.get(2).copied())
+    }
+
+    fn stash_untracked_entries(
+        &self,
+        untracked_id: ObjectId,
+        pathspecs: &PathspecSet,
+    ) -> Result<Vec<IndexEntry>> {
+        let attributes = self.root_attributes()?;
+        Ok(self
+            .commit_index_entries(untracked_id)?
+            .into_iter()
+            .filter(|entry| {
+                entry.stage == 0
+                    && pathspecs.matches_with_attributes(&entry.path, Some(&attributes))
+            })
+            .collect())
+    }
+
+    fn read_stash_blob(&self, object_id: ObjectId) -> Result<crate::GitObject> {
+        let object = self.read_object(object_id)?;
+        if object.kind != ObjectKind::Blob {
+            return Err(RitError::invalid_input(format!(
+                "object {object_id} is {}, not blob",
+                object.kind
+            )));
+        }
+        Ok(object)
     }
 
     fn read_stash_reflog(&self) -> Result<Vec<StashReflogEntry>> {
