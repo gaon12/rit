@@ -112,6 +112,11 @@
   `--submodule`, `--submodule=short`, `--submodule=log`, and
   `--submodule=diff` on non-submodule simple text stash changes, plus
   Git-compatible invalid `--submodule=<format>` errors.
+- 2026-05-18 stash show output file slice checked Git 2.52.0.windows.1
+  with `git --version`, direct Git comparisons for `stash show --output=<file>`,
+  `--patch --output=<file>`, `--stat --output=<file>`, and
+  `--name-only --output=<file>`, verifying empty stdout and matching output
+  file bytes.
 - 2026-05-17 stash show diff algorithm passthrough slice checked
   `git stash -h`, `git diff -h`, and direct Git comparisons for
   `stash show --patch --minimal`, `--patience`, and `--histogram` on simple
@@ -1609,7 +1614,7 @@
   for tracked index and working-tree changes,
   `rit stash save [-q|--quiet] [-k|--keep-index] [-S|--staged] [-u|--include-untracked] [-a|--all] [<message>]`
   as the legacy save form,
-  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--no-compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [-z] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--inter-hunk-context=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--color-moved[=<mode>]|--no-color-moved|--color-moved-ws=<modes>|--no-color-moved-ws|--relative|--no-relative|--minimal|--patience|--histogram|--anchored=<text>|-w|--ignore-all-space|-b|--ignore-space-change|--ignore-space-at-eol|--ignore-cr-at-eol|--ignore-blank-lines|--indent-heuristic|--no-indent-heuristic|--binary|--no-renames|--find-renames[=<n>]|-M[<n>]|--find-copies[=<n>]|-C[<n>]|--find-copies-harder|-l<n>|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]|--submodule[=<format>]|--ita-invisible-in-index|--ita-visible-in-index] [<stash>]`,
+  `rit stash show [-u|--include-untracked|--no-include-untracked|--only-untracked] [-p|--patch|--patch-with-stat|--patch-with-raw|--no-patch|--quiet|--exit-code|--stat|--compact-summary|--no-compact-summary|--shortstat|--raw|--summary|--name-only|--name-status|--numstat] [-z] [--full-index|--abbrev[=<n>]|-U<n>|--unified=<n>|--inter-hunk-context=<n>|--diff-filter=<letters>|--no-prefix|--default-prefix|--output-indicator-new=<char>|--output-indicator-old=<char>|--output-indicator-context=<char>|--no-ext-diff|--ext-diff|--no-color|--color=never|--color=auto|--color-moved[=<mode>]|--no-color-moved|--color-moved-ws=<modes>|--no-color-moved-ws|--relative|--no-relative|--minimal|--patience|--histogram|--anchored=<text>|--output=<file>|-w|--ignore-all-space|-b|--ignore-space-change|--ignore-space-at-eol|--ignore-cr-at-eol|--ignore-blank-lines|--indent-heuristic|--no-indent-heuristic|--binary|--no-renames|--find-renames[=<n>]|-M[<n>]|--find-copies[=<n>]|-C[<n>]|--find-copies-harder|-l<n>|-a|--text|--textconv|--no-textconv|--ignore-submodules[=<when>]|--submodule[=<format>]|--ita-invisible-in-index|--ita-visible-in-index] [<stash>]`,
   `rit stash drop [-q|--quiet] [<stash>]`,
   `rit stash apply [--index] [-q|--quiet] [<stash>]` for clean tracked
   worktree/index restoration when `HEAD` matches the stash base,
@@ -1756,7 +1761,9 @@
   `--name-only`, `--name-status`, and `--numstat` formats.
   `--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`, and
   `--color=auto` are accepted for Git-compatible no-external-diff/no-color
-  output in the checked capture environment. `--color-moved[=<mode>]`,
+  output in the checked capture environment. `--output=<file>` writes checked
+  patch, stat, name-only, and default diff output to the target file with
+  Git-compatible empty stdout. `--color-moved[=<mode>]`,
   `--no-color-moved`, `--color-moved-ws=<modes>`, and
   `--no-color-moved-ws` are accepted as color-moved passthrough options for
   checked no-color simple text patch output, with Git-compatible invalid mode

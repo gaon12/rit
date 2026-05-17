@@ -682,6 +682,9 @@ Completion criteria:
   - [x] `stash show` accepts no-external-diff and no-color diff options
     (`--no-ext-diff`, `--ext-diff`, `--no-color`, `--color=never`,
     `--color=auto`) for Git-compatible no-color output in checked captures.
+  - [x] `stash show --output=<file>` writes checked patch, stat,
+    name-only, and default diff output to the target file with
+    Git-compatible empty stdout.
   - [x] `stash show` accepts color-moved and root-relative passthrough diff
     options (`--color-moved[=<mode>]`, `--no-color-moved`,
     `--color-moved-ws=<modes>`, `--no-color-moved-ws`, `--relative`,

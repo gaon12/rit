@@ -401,6 +401,13 @@ fn stash_command(
         if let Some(exit_code) = show_args.immediate_exit_code {
             return Ok(ExitCode::from(exit_code));
         }
+        let mut output_file;
+        let stdout: &mut dyn Write = if let Some(path) = &show_args.output_path {
+            output_file = std::fs::File::create(path)?;
+            &mut output_file
+        } else {
+            stdout
+        };
         let format = match stash_show_format(
             &repository,
             show_args.format,
@@ -771,6 +778,7 @@ struct StashShowArgs {
     old_line_indicator: Option<char>,
     context_line_indicator: Option<char>,
     diff_filter: Option<rit_core::DiffStatusFilter>,
+    output_path: Option<String>,
 }
 
 impl StashShowArgs {
@@ -792,6 +800,7 @@ impl StashShowArgs {
             old_line_indicator: Some('-'),
             context_line_indicator: Some(' '),
             diff_filter: None,
+            output_path: None,
         }
     }
 }
@@ -821,6 +830,7 @@ fn parse_stash_show_args(
     let mut old_line_indicator = Some('-');
     let mut context_line_indicator = Some(' ');
     let mut diff_filter = None;
+    let mut output_path = None;
     let mut stash = None;
     for arg in args {
         match arg.as_str() {
@@ -1006,6 +1016,10 @@ fn parse_stash_show_args(
             _ if arg.starts_with("--anchored=") => {
                 diff_option = true;
             }
+            _ if arg.starts_with("--output=") => {
+                diff_option = true;
+                output_path = Some(arg.trim_start_matches("--output=").to_owned());
+            }
             _ if arg.starts_with("--color-moved=") => {
                 let value = arg.trim_start_matches("--color-moved=");
                 diff_option = true;
@@ -1145,6 +1159,7 @@ fn parse_stash_show_args(
         old_line_indicator,
         context_line_indicator,
         diff_filter,
+        output_path,
     }))
 }
 
