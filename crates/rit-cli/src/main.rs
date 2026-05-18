@@ -3784,27 +3784,8 @@ fn tag_command(
             let patterns = patterns.iter().map(String::as_str).collect::<Vec<_>>();
             write_tag_list_matching(&repository, &patterns, stdout, stderr)
         }
-        [flag, name] if flag == "-d" || flag == "--delete" => {
-            let before = capture_operation_snapshot(&repository, stderr)?;
-            match repository.delete_tag(name) {
-                Ok(target) => {
-                    record_operation(
-                        &repository,
-                        "tag",
-                        &format!("delete tag {name}"),
-                        before,
-                        Vec::new(),
-                        stderr,
-                    )?;
-                    writeln!(
-                        stdout,
-                        "Deleted tag '{name}' (was {}).",
-                        &target.to_hex()[..7]
-                    )?;
-                    Ok(ExitCode::SUCCESS)
-                }
-                Err(error) => write_command_error(stderr, error),
-            }
+        [flag, names @ ..] if is_tag_delete_flag(flag) && !names.is_empty() => {
+            delete_tags(&repository, names, stdout, stderr)
         }
         [name] if !name.starts_with('-') => {
             let before = capture_operation_snapshot(&repository, stderr)?;
@@ -3834,6 +3815,10 @@ fn is_tag_list_flag(flag: &str) -> bool {
     flag == "-l" || flag == "--list"
 }
 
+fn is_tag_delete_flag(flag: &str) -> bool {
+    flag == "-d" || flag == "--delete"
+}
+
 fn write_tag_list(
     repository: &rit_core::Repository,
     stdout: &mut dyn Write,
@@ -3860,6 +3845,39 @@ fn write_tag_list_matching(
 fn write_tags(stdout: &mut dyn Write, tags: Vec<rit_core::Tag>) -> io::Result<ExitCode> {
     for tag in tags {
         writeln!(stdout, "{}", tag.name)?;
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn delete_tags(
+    repository: &rit_core::Repository,
+    names: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let before = capture_operation_snapshot(repository, stderr)?;
+    let mut deleted_tags = Vec::new();
+
+    for name in names {
+        match repository.delete_tag(name) {
+            Ok(target) => deleted_tags.push((name, target)),
+            Err(error) => return write_command_error(stderr, error),
+        }
+    }
+
+    let summary = if names.len() == 1 {
+        format!("delete tag {}", names[0])
+    } else {
+        format!("delete tags {}", names.join(" "))
+    };
+    record_operation(repository, "tag", &summary, before, Vec::new(), stderr)?;
+
+    for (name, target) in deleted_tags {
+        writeln!(
+            stdout,
+            "Deleted tag '{name}' (was {})",
+            &target.to_hex()[..7]
+        )?;
     }
     Ok(ExitCode::SUCCESS)
 }

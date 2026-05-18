@@ -513,6 +513,9 @@
   `git --version`, `git help -a`, `git tag -h`, and direct Git comparisons
   for `tag -l`/`tag --list [<pattern>...]` using simple tag-name wildcard
   filters.
+- 2026-05-18 tag multi-delete slice checked Git 2.52.0.windows.1 with
+  `git --version`, `git help -a`, `git tag -h`, and direct Git comparison
+  for `tag -d <tag-name>...`.
 - 2026-05-18 local clone no-hardlinks slice checked Git 2.52.0.windows.1 with
   `git --version`, `git help -a`, `git clone -h`, and direct Git comparison
   for `clone --local --no-hardlinks --no-checkout`.
@@ -1390,7 +1393,7 @@
 ### `rit tag`
 
 - Baseline command checked: `git tag -h`
-- Supported options: list tags, `-l`/`--list [<pattern>...]`, create lightweight tag at `HEAD`, `-d`/`--delete`.
+- Supported options: list tags, `-l`/`--list [<pattern>...]`, create lightweight tag at `HEAD`, `-d`/`--delete <tag-name>...`.
 - Unsupported options: annotated/signed tags, messages, object arguments, verification, sort/format controls.
 - Git-compatible behavior: lightweight tags are refs under `refs/tags`.
 - Intentional differences: only `HEAD` can be tagged for now.

@@ -416,6 +416,36 @@ fn tag_short_list_patterns_match_git_tag_names() {
 }
 
 #[test]
+fn tag_delete_multiple_names_matches_git_tags() {
+    let fixture =
+        LocalWriteFixture::new("tag-delete-multiple", LocalWriteFixtureKind::NestedTracked)
+            .expect("fixture should build");
+    run_git(fixture.path(), ["tag", "one"]);
+    run_git(fixture.path(), ["tag", "two"]);
+    run_git(fixture.path(), ["tag", "three"]);
+
+    let workspace = temp_path("tag-delete-multiple");
+    let git_repo = workspace.join("git");
+    let rit_repo = workspace.join("rit");
+    copy_directory(fixture.path(), &git_repo);
+    copy_directory(fixture.path(), &rit_repo);
+
+    let git_output = run_capture("git", ["tag", "-d", "one", "two"], &git_repo);
+    let rit_output = run_capture(rit_binary(), ["tag", "-d", "one", "two"], &rit_repo);
+
+    assert_eq!(rit_output, git_output);
+    assert_eq!(
+        run_capture("git", ["tag", "--list"], &rit_repo).0,
+        "three\n"
+    );
+    assert_eq!(
+        run_capture("git", ["tag", "--list"], &rit_repo).0,
+        run_capture("git", ["tag", "--list"], &git_repo).0
+    );
+    let _ = fs::remove_dir_all(workspace);
+}
+
+#[test]
 fn add_directory_pathspec_matches_git_status() {
     let fixture = LocalWriteFixture::new("add-directory", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");
