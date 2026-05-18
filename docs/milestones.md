@@ -207,6 +207,8 @@ Completion criteria:
     branch list output.
   - [x] `branch --list <pattern>...` filters local branch names with checked
     Git-style wildcard behavior for simple branch globs.
+  - [x] `branch -l [<pattern>...]` follows the same checked list behavior as
+    Git's short list option.
 - [x] `rit tag` lightweight tag list/create/delete basics.
 - [x] `rit restore` explicit tracked files.
 - [x] `rit reset` explicit path unstaging.

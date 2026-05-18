@@ -3673,8 +3673,8 @@ fn branch_command(
 
     match args {
         [] => write_branch_list(&repository, stdout, stderr),
-        [flag] if flag == "--list" => write_branch_list(&repository, stdout, stderr),
-        [flag, patterns @ ..] if flag == "--list" => {
+        [flag] if is_branch_list_flag(flag) => write_branch_list(&repository, stdout, stderr),
+        [flag, patterns @ ..] if is_branch_list_flag(flag) => {
             let patterns = patterns.iter().map(String::as_str).collect::<Vec<_>>();
             write_branch_list_matching(&repository, &patterns, stdout, stderr)
         }
@@ -3730,6 +3730,10 @@ fn branch_command(
             Ok(ExitCode::from(129))
         }
     }
+}
+
+fn is_branch_list_flag(flag: &str) -> bool {
+    flag == "--list" || flag == "-l"
 }
 
 fn write_branch_list(
