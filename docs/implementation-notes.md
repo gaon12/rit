@@ -17,6 +17,9 @@
   forms.
 - 2026-05-12 POSIX bracket pathspec slice checked `git add -h` and direct Git
   comparisons for `[[:digit:]]` forms in write-command pathspec expansion.
+- 2026-05-18 POSIX bracket write-pathspec verification extended direct Git
+  comparisons for `[[:digit:]]` to `restore` and `reset`, confirming the
+  shared matcher is covered across the checked write commands.
 - 2026-05-09 diff patch milestone checked: `git diff -h`.
 - 2026-05-09 detached checkout milestone checked: `git checkout -h`.
 - 2026-05-09 branch delete safety milestone checked: `git branch -h`.

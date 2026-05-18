@@ -222,6 +222,8 @@ Completion criteria:
       and `reset`.
     - [x] POSIX bracket character classes such as `[[:digit:]]` in shared
       pathspec glob matching.
+    - [x] POSIX bracket write-command coverage is verified against Git for
+      `add`, `restore`, and `reset`.
     - [x] `:(glob)` double-star matching crosses slashes only in Git's special
       `**/` and trailing `**` forms; other `**` pairs stay within one path
       component.

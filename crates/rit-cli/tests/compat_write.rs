@@ -1990,6 +1990,41 @@ fn restore_wildcard_pathspec_matches_git_status_and_files() {
 }
 
 #[test]
+fn restore_posix_bracket_pathspec_matches_git_status_and_files() {
+    let fixture = LocalWriteFixture::new(
+        "restore-posix-bracket",
+        LocalWriteFixtureKind::NestedTracked,
+    )
+    .expect("fixture should build");
+    let numbered_file = fixture.path().join("1.txt");
+    let letter_file = fixture.path().join("a.txt");
+    fs::write(&numbered_file, "number\n").expect("number file should be written");
+    fs::write(&letter_file, "letter\n").expect("letter file should be written");
+    run_git(fixture.path(), ["add", "1.txt", "a.txt"]);
+    run_git(fixture.path(), ["commit", "-m", "add files"]);
+    fs::write(&numbered_file, "changed number\n").expect("number file should be changed");
+    fs::write(&letter_file, "changed letter\n").expect("letter file should be changed");
+
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words("git", ["restore", "[[:digit:]].txt"]),
+        command_words(rit_binary(), ["restore", "[[:digit:]].txt"]),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
+    assert_eq!(
+        fs::read_to_string(outcome.git_repo.join("1.txt")).expect("git number file should read"),
+        fs::read_to_string(outcome.rit_repo.join("1.txt")).expect("rit number file should read")
+    );
+    assert_eq!(
+        fs::read_to_string(outcome.git_repo.join("a.txt")).expect("git letter file should read"),
+        fs::read_to_string(outcome.rit_repo.join("a.txt")).expect("rit letter file should read")
+    );
+}
+
+#[test]
 fn restore_magic_pathspec_matches_git_status_and_files() {
     let fixture = LocalWriteFixture::new("restore-magic", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");
@@ -2198,6 +2233,26 @@ fn reset_wildcard_pathspec_matches_git_status() {
         fixture.path(),
         command_words("git", ["reset", "nested/[tn]*.txt"]),
         command_words(rit_binary(), ["reset", "nested/[tn]*.txt"]),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
+}
+
+#[test]
+fn reset_posix_bracket_pathspec_matches_git_status() {
+    let fixture =
+        LocalWriteFixture::new("reset-posix-bracket", LocalWriteFixtureKind::NestedTracked)
+            .expect("fixture should build");
+    fs::write(fixture.path().join("1.txt"), "number\n").expect("number file should be written");
+    fs::write(fixture.path().join("a.txt"), "letter\n").expect("letter file should be written");
+    run_git(fixture.path(), ["add", "1.txt", "a.txt"]);
+
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words("git", ["reset", "[[:digit:]].txt"]),
+        command_words(rit_binary(), ["reset", "[[:digit:]].txt"]),
     );
 
     assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
