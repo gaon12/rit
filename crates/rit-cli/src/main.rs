@@ -3674,6 +3674,10 @@ fn branch_command(
     match args {
         [] => write_branch_list(&repository, stdout, stderr),
         [flag] if flag == "--list" => write_branch_list(&repository, stdout, stderr),
+        [flag, patterns @ ..] if flag == "--list" => {
+            let patterns = patterns.iter().map(String::as_str).collect::<Vec<_>>();
+            write_branch_list_matching(&repository, &patterns, stdout, stderr)
+        }
         [flag] if flag == "--show-current" => match repository.current_branch_name() {
             Ok(Some(branch)) => {
                 writeln!(stdout, "{branch}")?;
@@ -3734,15 +3738,29 @@ fn write_branch_list(
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
     match repository.list_branches() {
-        Ok(branches) => {
-            for branch in branches {
-                let marker = if branch.current { '*' } else { ' ' };
-                writeln!(stdout, "{marker} {}", branch.name)?;
-            }
-            Ok(ExitCode::SUCCESS)
-        }
+        Ok(branches) => write_branches(stdout, branches),
         Err(error) => write_command_error(stderr, error),
     }
+}
+
+fn write_branch_list_matching(
+    repository: &rit_core::Repository,
+    patterns: &[&str],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    match repository.list_branches_matching(patterns) {
+        Ok(branches) => write_branches(stdout, branches),
+        Err(error) => write_command_error(stderr, error),
+    }
+}
+
+fn write_branches(stdout: &mut dyn Write, branches: Vec<rit_core::Branch>) -> io::Result<ExitCode> {
+    for branch in branches {
+        let marker = if branch.current { '*' } else { ' ' };
+        writeln!(stdout, "{marker} {}", branch.name)?;
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 fn tag_command(

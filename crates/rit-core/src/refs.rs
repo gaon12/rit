@@ -60,6 +60,22 @@ impl Repository {
             .collect())
     }
 
+    /// Lists local branches whose names match at least one branch pattern.
+    pub fn list_branches_matching(&self, patterns: &[&str]) -> Result<Vec<Branch>> {
+        let branches = self.list_branches()?;
+        if patterns.is_empty() {
+            return Ok(branches);
+        }
+        Ok(branches
+            .into_iter()
+            .filter(|branch| {
+                patterns
+                    .iter()
+                    .any(|pattern| branch_name_matches_pattern(pattern, &branch.name))
+            })
+            .collect())
+    }
+
     /// Creates a local branch at `HEAD`.
     pub fn create_branch(&self, name: &str) -> Result<ObjectId> {
         validate_ref_short_name(name)?;
@@ -321,6 +337,101 @@ fn write_ref_atomically(path: &std::path::Path, target: ObjectId) -> Result<()> 
     Ok(())
 }
 
+fn branch_name_matches_pattern(pattern: &str, branch_name: &str) -> bool {
+    if branch_pattern_has_wildcard(pattern) {
+        wildcard_matches(pattern, branch_name)
+    } else {
+        pattern == branch_name
+    }
+}
+
+fn branch_pattern_has_wildcard(pattern: &str) -> bool {
+    pattern.contains('*') || pattern.contains('?') || pattern.contains('[')
+}
+
+fn wildcard_matches(pattern: &str, value: &str) -> bool {
+    let pattern = pattern.as_bytes();
+    let value = value.as_bytes();
+    let mut pattern_index = 0;
+    let mut value_index = 0;
+    let mut last_star = None;
+    let mut value_after_star = 0;
+
+    while value_index < value.len() {
+        if let Some(next_pattern_index) =
+            match_single_pattern_item(pattern, pattern_index, value[value_index])
+        {
+            pattern_index = next_pattern_index;
+            value_index += 1;
+        } else if pattern_index < pattern.len() && pattern[pattern_index] == b'*' {
+            last_star = Some(pattern_index);
+            pattern_index += 1;
+            value_after_star = value_index;
+        } else if let Some(star_index) = last_star {
+            pattern_index = star_index + 1;
+            value_after_star += 1;
+            value_index = value_after_star;
+        } else {
+            return false;
+        }
+    }
+
+    pattern[pattern_index..]
+        .iter()
+        .all(|character| *character == b'*')
+}
+
+fn match_single_pattern_item(pattern: &[u8], index: usize, value_byte: u8) -> Option<usize> {
+    let pattern_byte = *pattern.get(index)?;
+    match pattern_byte {
+        b'?' => Some(index + 1),
+        b'[' => match_bracket_class(pattern, index, value_byte),
+        literal if literal == value_byte => Some(index + 1),
+        _ => None,
+    }
+}
+
+fn match_bracket_class(pattern: &[u8], index: usize, value_byte: u8) -> Option<usize> {
+    let mut cursor = index + 1;
+    let negated = matches!(pattern.get(cursor), Some(b'!' | b'^'));
+    if negated {
+        cursor += 1;
+    }
+
+    let class_start = cursor;
+    let mut matched = false;
+    while cursor < pattern.len() {
+        if pattern[cursor] == b']' && cursor > class_start {
+            return if matched != negated {
+                Some(cursor + 1)
+            } else {
+                None
+            };
+        }
+
+        if cursor + 2 < pattern.len() && pattern[cursor + 1] == b'-' && pattern[cursor + 2] != b']'
+        {
+            let start = pattern[cursor];
+            let end = pattern[cursor + 2];
+            if start <= value_byte && value_byte <= end {
+                matched = true;
+            }
+            cursor += 3;
+        } else {
+            if pattern[cursor] == value_byte {
+                matched = true;
+            }
+            cursor += 1;
+        }
+    }
+
+    if value_byte == b'[' {
+        Some(index + 1)
+    } else {
+        None
+    }
+}
+
 /// Validates a conservative local ref short name.
 pub fn validate_ref_short_name(name: &str) -> Result<()> {
     if name.is_empty()
@@ -344,7 +455,7 @@ pub fn validate_ref_short_name(name: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_ref_short_name;
+    use super::{branch_name_matches_pattern, validate_ref_short_name};
 
     #[test]
     fn validates_basic_ref_names() {
@@ -352,5 +463,15 @@ mod tests {
         assert!(validate_ref_short_name("bad name").is_err());
         assert!(validate_ref_short_name("bad..name").is_err());
         assert!(validate_ref_short_name("-bad").is_err());
+    }
+
+    #[test]
+    fn branch_patterns_match_git_style_globs() {
+        assert!(branch_name_matches_pattern("topic*", "topic/one"));
+        assert!(branch_name_matches_pattern("*/one", "feature/one"));
+        assert!(branch_name_matches_pattern("release", "release"));
+        assert!(branch_name_matches_pattern("topic-[ot]ne", "topic-one"));
+        assert!(!branch_name_matches_pattern("topic/*", "topic-one"));
+        assert!(!branch_name_matches_pattern("release", "release/v1"));
     }
 }

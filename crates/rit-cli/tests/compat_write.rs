@@ -279,6 +279,32 @@ fn branch_list_option_matches_default_branch_list() {
 }
 
 #[test]
+fn branch_list_patterns_match_git_branch_names() {
+    let fixture =
+        LocalWriteFixture::new("branch-list-patterns", LocalWriteFixtureKind::NestedTracked)
+            .expect("fixture should build");
+    run_git(fixture.path(), ["branch", "topic-one"]);
+    run_git(fixture.path(), ["branch", "topic/two"]);
+    run_git(fixture.path(), ["branch", "feature/one"]);
+    run_git(fixture.path(), ["branch", "release"]);
+
+    let git_output = run_capture(
+        "git",
+        ["branch", "--list", "topic*", "*/one", "release"],
+        fixture.path(),
+    )
+    .0;
+    let rit_output = run_capture(
+        rit_binary(),
+        ["branch", "--list", "topic*", "*/one", "release"],
+        fixture.path(),
+    )
+    .0;
+
+    assert_eq!(rit_output, git_output);
+}
+
+#[test]
 fn add_directory_pathspec_matches_git_status() {
     let fixture = LocalWriteFixture::new("add-directory", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");

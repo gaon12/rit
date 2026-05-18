@@ -205,6 +205,8 @@ Completion criteria:
 - [x] `rit branch` local list/create/delete basics.
   - [x] `branch --list` without patterns follows the checked default local
     branch list output.
+  - [x] `branch --list <pattern>...` filters local branch names with checked
+    Git-style wildcard behavior for simple branch globs.
 - [x] `rit tag` lightweight tag list/create/delete basics.
 - [x] `rit restore` explicit tracked files.
 - [x] `rit reset` explicit path unstaging.
