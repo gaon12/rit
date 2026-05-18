@@ -509,6 +509,10 @@
 - 2026-05-18 branch short list slice checked Git 2.52.0.windows.1 with
   `git --version`, `git help -a`, `git branch -h`, and direct Git comparisons
   for `branch -l [<pattern>...]`.
+- 2026-05-18 tag list pattern slice checked Git 2.52.0.windows.1 with
+  `git --version`, `git help -a`, `git tag -h`, and direct Git comparisons
+  for `tag -l`/`tag --list [<pattern>...]` using simple tag-name wildcard
+  filters.
 - 2026-05-18 local clone no-hardlinks slice checked Git 2.52.0.windows.1 with
   `git --version`, `git help -a`, `git clone -h`, and direct Git comparison
   for `clone --local --no-hardlinks --no-checkout`.
@@ -1386,8 +1390,8 @@
 ### `rit tag`
 
 - Baseline command checked: `git tag -h`
-- Supported options: list tags, `-l`/`--list`, create lightweight tag at `HEAD`, `-d`/`--delete`.
-- Unsupported options: annotated/signed tags, messages, object arguments, patterns, verification, sort/format controls.
+- Supported options: list tags, `-l`/`--list [<pattern>...]`, create lightweight tag at `HEAD`, `-d`/`--delete`.
+- Unsupported options: annotated/signed tags, messages, object arguments, verification, sort/format controls.
 - Git-compatible behavior: lightweight tags are refs under `refs/tags`.
 - Intentional differences: only `HEAD` can be tagged for now.
 - Repository mutation: tag create/delete writes or removes refs.
@@ -1751,11 +1755,12 @@
 - Git-compatible behavior: `rit stash show --no-compact-summary` is accepted
   as a diff option. Alone it selects patch output through Git's diff-option
   default, and after `--compact-summary` it falls back to ordinary stat output.
-- Git-compatible behavior: `rit stash show --src-prefix=<prefix>` and
-  `--dst-prefix=<prefix>` customize checked old-side and new-side patch path
-  prefixes for single-prefix tracked patch captures.
-- Git-compatible behavior: `rit stash show --line-prefix=<prefix>` prefixes
-  checked explicit stat, patch, name-only, and numstat text output.
+- Intentional difference: Git for Windows 2.52.0 emits nondeterministic
+  escaped bytes after `git stash show --src-prefix=<prefix>` and
+  `--dst-prefix=<prefix>` in single-prefix tracked patch captures, and after
+  `--line-prefix=<prefix>` in checked explicit stat, patch, name-only, and
+  numstat text output. `rit` keeps the literal requested prefixes for
+  deterministic output.
 - Git-compatible behavior:
   `rit stash show --stat[=<width>[,<name-width>[,<count>]]]`,
   `--stat-width=<n>`, `--stat-name-width=<n>`, `--stat-graph-width=<n>`, and

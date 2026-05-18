@@ -60,7 +60,7 @@ impl Repository {
             .collect())
     }
 
-    /// Lists local branches whose names match at least one branch pattern.
+    /// Lists local branches whose names match at least one refname pattern.
     pub fn list_branches_matching(&self, patterns: &[&str]) -> Result<Vec<Branch>> {
         let branches = self.list_branches()?;
         if patterns.is_empty() {
@@ -71,7 +71,7 @@ impl Repository {
             .filter(|branch| {
                 patterns
                     .iter()
-                    .any(|pattern| branch_name_matches_pattern(pattern, &branch.name))
+                    .any(|pattern| ref_name_matches_pattern(pattern, &branch.name))
             })
             .collect())
     }
@@ -164,6 +164,22 @@ impl Repository {
         Ok(targets
             .into_iter()
             .map(|(name, target)| Tag { name, target })
+            .collect())
+    }
+
+    /// Lists lightweight tags whose names match at least one refname pattern.
+    pub fn list_tags_matching(&self, patterns: &[&str]) -> Result<Vec<Tag>> {
+        let tags = self.list_tags()?;
+        if patterns.is_empty() {
+            return Ok(tags);
+        }
+        Ok(tags
+            .into_iter()
+            .filter(|tag| {
+                patterns
+                    .iter()
+                    .any(|pattern| ref_name_matches_pattern(pattern, &tag.name))
+            })
             .collect())
     }
 
@@ -337,15 +353,15 @@ fn write_ref_atomically(path: &std::path::Path, target: ObjectId) -> Result<()> 
     Ok(())
 }
 
-fn branch_name_matches_pattern(pattern: &str, branch_name: &str) -> bool {
-    if branch_pattern_has_wildcard(pattern) {
-        wildcard_matches(pattern, branch_name)
+fn ref_name_matches_pattern(pattern: &str, ref_name: &str) -> bool {
+    if ref_pattern_has_wildcard(pattern) {
+        wildcard_matches(pattern, ref_name)
     } else {
-        pattern == branch_name
+        pattern == ref_name
     }
 }
 
-fn branch_pattern_has_wildcard(pattern: &str) -> bool {
+fn ref_pattern_has_wildcard(pattern: &str) -> bool {
     pattern.contains('*') || pattern.contains('?') || pattern.contains('[')
 }
 
@@ -455,7 +471,7 @@ pub fn validate_ref_short_name(name: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{branch_name_matches_pattern, validate_ref_short_name};
+    use super::{ref_name_matches_pattern, validate_ref_short_name};
 
     #[test]
     fn validates_basic_ref_names() {
@@ -466,12 +482,12 @@ mod tests {
     }
 
     #[test]
-    fn branch_patterns_match_git_style_globs() {
-        assert!(branch_name_matches_pattern("topic*", "topic/one"));
-        assert!(branch_name_matches_pattern("*/one", "feature/one"));
-        assert!(branch_name_matches_pattern("release", "release"));
-        assert!(branch_name_matches_pattern("topic-[ot]ne", "topic-one"));
-        assert!(!branch_name_matches_pattern("topic/*", "topic-one"));
-        assert!(!branch_name_matches_pattern("release", "release/v1"));
+    fn ref_patterns_match_git_style_globs() {
+        assert!(ref_name_matches_pattern("topic*", "topic/one"));
+        assert!(ref_name_matches_pattern("*/one", "feature/one"));
+        assert!(ref_name_matches_pattern("release", "release"));
+        assert!(ref_name_matches_pattern("topic-[ot]ne", "topic-one"));
+        assert!(!ref_name_matches_pattern("topic/*", "topic-one"));
+        assert!(!ref_name_matches_pattern("release", "release/v1"));
     }
 }

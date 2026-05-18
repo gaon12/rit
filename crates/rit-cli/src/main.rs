@@ -3778,24 +3778,12 @@ fn tag_command(
     };
 
     match args {
-        [] => match repository.list_tags() {
-            Ok(tags) => {
-                for tag in tags {
-                    writeln!(stdout, "{}", tag.name)?;
-                }
-                Ok(ExitCode::SUCCESS)
-            }
-            Err(error) => write_command_error(stderr, error),
-        },
-        [flag] if flag == "-l" || flag == "--list" => match repository.list_tags() {
-            Ok(tags) => {
-                for tag in tags {
-                    writeln!(stdout, "{}", tag.name)?;
-                }
-                Ok(ExitCode::SUCCESS)
-            }
-            Err(error) => write_command_error(stderr, error),
-        },
+        [] => write_tag_list(&repository, stdout, stderr),
+        [flag] if is_tag_list_flag(flag) => write_tag_list(&repository, stdout, stderr),
+        [flag, patterns @ ..] if is_tag_list_flag(flag) => {
+            let patterns = patterns.iter().map(String::as_str).collect::<Vec<_>>();
+            write_tag_list_matching(&repository, &patterns, stdout, stderr)
+        }
         [flag, name] if flag == "-d" || flag == "--delete" => {
             let before = capture_operation_snapshot(&repository, stderr)?;
             match repository.delete_tag(name) {
@@ -3840,6 +3828,40 @@ fn tag_command(
             Ok(ExitCode::from(129))
         }
     }
+}
+
+fn is_tag_list_flag(flag: &str) -> bool {
+    flag == "-l" || flag == "--list"
+}
+
+fn write_tag_list(
+    repository: &rit_core::Repository,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    match repository.list_tags() {
+        Ok(tags) => write_tags(stdout, tags),
+        Err(error) => write_command_error(stderr, error),
+    }
+}
+
+fn write_tag_list_matching(
+    repository: &rit_core::Repository,
+    patterns: &[&str],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    match repository.list_tags_matching(patterns) {
+        Ok(tags) => write_tags(stdout, tags),
+        Err(error) => write_command_error(stderr, error),
+    }
+}
+
+fn write_tags(stdout: &mut dyn Write, tags: Vec<rit_core::Tag>) -> io::Result<ExitCode> {
+    for tag in tags {
+        writeln!(stdout, "{}", tag.name)?;
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 fn restore_command(args: &[String], stderr: &mut dyn Write) -> io::Result<ExitCode> {

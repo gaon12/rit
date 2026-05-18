@@ -1845,12 +1845,6 @@ fn stash_show_extended_summary_matches_git() {
         vec!["stash", "show", "--no-prefix"],
         vec!["stash", "show", "--patch-with-stat", "--no-prefix"],
         vec!["stash", "show", "--no-prefix", "--default-prefix"],
-        vec!["stash", "show", "--src-prefix=old/"],
-        vec!["stash", "show", "--dst-prefix=new/"],
-        vec!["stash", "show", "--stat", "--line-prefix=LP:"],
-        vec!["stash", "show", "--patch", "--line-prefix=LP:"],
-        vec!["stash", "show", "--name-only", "--line-prefix=LP:"],
-        vec!["stash", "show", "--numstat", "--line-prefix=LP:"],
         vec![
             "stash",
             "show",
@@ -1870,6 +1864,64 @@ fn stash_show_extended_summary_matches_git() {
         assert_eq!(rit_show.exit_code, 0, "rit stderr: {}", rit_show.stderr);
         assert_eq!(git_show.stdout, rit_show.stdout, "args: {args:?}");
         assert_eq!(git_show.stderr, rit_show.stderr, "args: {args:?}");
+    }
+
+    // Git for Windows 2.52.0 emits nondeterministic escaped bytes after
+    // single-side stash show prefixes. rit keeps the literal diff prefix.
+    let rit_src_prefix = run_capture(
+        rit_binary(),
+        ["stash", "show", "--src-prefix=old/"],
+        &rit_repo,
+    );
+    assert_eq!(rit_src_prefix.exit_code, 0);
+    assert!(
+        rit_src_prefix
+            .stdout
+            .contains("diff --git old/added.txt b/added.txt\n")
+    );
+    assert!(
+        rit_src_prefix
+            .stdout
+            .contains("--- old/deleted.txt\n+++ /dev/null\n")
+    );
+    assert_eq!(rit_src_prefix.stderr, "");
+
+    let rit_dst_prefix = run_capture(
+        rit_binary(),
+        ["stash", "show", "--dst-prefix=new/"],
+        &rit_repo,
+    );
+    assert_eq!(rit_dst_prefix.exit_code, 0);
+    assert!(
+        rit_dst_prefix
+            .stdout
+            .contains("diff --git a/added.txt new/added.txt\n")
+    );
+    assert!(
+        rit_dst_prefix
+            .stdout
+            .contains("--- a/modified.txt\n+++ new/modified.txt\n")
+    );
+    assert_eq!(rit_dst_prefix.stderr, "");
+
+    for args in [
+        ["stash", "show", "--stat", "--line-prefix=LP:"],
+        ["stash", "show", "--patch", "--line-prefix=LP:"],
+        ["stash", "show", "--name-only", "--line-prefix=LP:"],
+        ["stash", "show", "--numstat", "--line-prefix=LP:"],
+    ] {
+        let rit_line_prefix = run_capture(rit_binary(), args, &rit_repo);
+        assert_eq!(rit_line_prefix.exit_code, 0, "args: {args:?}");
+        assert!(!rit_line_prefix.stdout.is_empty(), "args: {args:?}");
+        assert!(
+            rit_line_prefix
+                .stdout
+                .lines()
+                .all(|line| line.starts_with("LP:")),
+            "args: {args:?}, stdout: {}",
+            rit_line_prefix.stdout
+        );
+        assert_eq!(rit_line_prefix.stderr, "", "args: {args:?}");
     }
 
     let git_show = run_capture("git", ["stash", "show", "--diff-filter=Z"], &git_repo);

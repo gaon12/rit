@@ -161,6 +161,10 @@ List, create, or delete local branches.
 
 const TAG_HELP: &str = "\
 rit tag
+rit tag -l
+rit tag -l <pattern>...
+rit tag --list
+rit tag --list <pattern>...
 rit tag <tag-name>
 rit tag -d <tag-name>
 

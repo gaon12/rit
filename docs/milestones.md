@@ -210,6 +210,10 @@ Completion criteria:
   - [x] `branch -l [<pattern>...]` follows the same checked list behavior as
     Git's short list option.
 - [x] `rit tag` lightweight tag list/create/delete basics.
+  - [x] `tag -l`/`tag --list` without patterns follows the checked default tag
+    list output.
+  - [x] `tag -l`/`tag --list <pattern>...` filters lightweight tag names
+    with checked Git-style wildcard behavior for simple tag globs.
 - [x] `rit restore` explicit tracked files.
 - [x] `rit reset` explicit path unstaging.
 - [x] `rit checkout` local branch basics.
