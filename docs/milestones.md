@@ -209,6 +209,8 @@ Completion criteria:
     Git-style wildcard behavior for simple branch globs.
   - [x] `branch -l [<pattern>...]` follows the same checked list behavior as
     Git's short list option.
+  - [x] `branch -d <branch-name>...` deletes multiple local branches in order
+    with checked Git-compatible output.
 - [x] `rit tag` lightweight tag list/create/delete basics.
   - [x] `tag -l`/`tag --list` without patterns follows the checked default tag
     list output.

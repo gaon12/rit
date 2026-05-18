@@ -3686,27 +3686,8 @@ fn branch_command(
             Ok(None) => Ok(ExitCode::SUCCESS),
             Err(error) => write_command_error(stderr, error),
         },
-        [flag, name] if flag == "-d" || flag == "--delete" => {
-            let before = capture_operation_snapshot(&repository, stderr)?;
-            match repository.delete_branch(name) {
-                Ok(target) => {
-                    record_operation(
-                        &repository,
-                        "branch",
-                        &format!("delete branch {name}"),
-                        before,
-                        Vec::new(),
-                        stderr,
-                    )?;
-                    writeln!(
-                        stdout,
-                        "Deleted branch {name} (was {}).",
-                        &target.to_hex()[..7]
-                    )?;
-                    Ok(ExitCode::SUCCESS)
-                }
-                Err(error) => write_command_error(stderr, error),
-            }
+        [flag, names @ ..] if is_branch_delete_flag(flag) && !names.is_empty() => {
+            delete_branches(&repository, names, stdout, stderr)
         }
         [name] if !name.starts_with('-') => {
             let before = capture_operation_snapshot(&repository, stderr)?;
@@ -3736,6 +3717,10 @@ fn is_branch_list_flag(flag: &str) -> bool {
     flag == "--list" || flag == "-l"
 }
 
+fn is_branch_delete_flag(flag: &str) -> bool {
+    flag == "-d" || flag == "--delete"
+}
+
 fn write_branch_list(
     repository: &rit_core::Repository,
     stdout: &mut dyn Write,
@@ -3763,6 +3748,39 @@ fn write_branches(stdout: &mut dyn Write, branches: Vec<rit_core::Branch>) -> io
     for branch in branches {
         let marker = if branch.current { '*' } else { ' ' };
         writeln!(stdout, "{marker} {}", branch.name)?;
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn delete_branches(
+    repository: &rit_core::Repository,
+    names: &[String],
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    let before = capture_operation_snapshot(repository, stderr)?;
+    let mut deleted_branches = Vec::new();
+
+    for name in names {
+        match repository.delete_branch(name) {
+            Ok(target) => deleted_branches.push((name, target)),
+            Err(error) => return write_command_error(stderr, error),
+        }
+    }
+
+    let summary = if names.len() == 1 {
+        format!("delete branch {}", names[0])
+    } else {
+        format!("delete branches {}", names.join(" "))
+    };
+    record_operation(repository, "branch", &summary, before, Vec::new(), stderr)?;
+
+    for (name, target) in deleted_branches {
+        writeln!(
+            stdout,
+            "Deleted branch {name} (was {}).",
+            &target.to_hex()[..7]
+        )?;
     }
     Ok(ExitCode::SUCCESS)
 }

@@ -509,6 +509,9 @@
 - 2026-05-18 branch short list slice checked Git 2.52.0.windows.1 with
   `git --version`, `git help -a`, `git branch -h`, and direct Git comparisons
   for `branch -l [<pattern>...]`.
+- 2026-05-18 branch multi-delete slice checked Git 2.52.0.windows.1 with
+  `git --version`, `git help -a`, `git branch -h`, and direct Git comparison
+  for `branch -d <branch-name>...`.
 - 2026-05-18 tag list pattern slice checked Git 2.52.0.windows.1 with
   `git --version`, `git help -a`, `git tag -h`, and direct Git comparisons
   for `tag -l`/`tag --list [<pattern>...]` using simple tag-name wildcard
@@ -1378,7 +1381,8 @@
 
 - Baseline command checked: `git branch -h`
 - Supported options: list local branches, `-l`/`--list [<pattern>...]`,
-  `--show-current`, create branch at `HEAD`, `-d`/`--delete`.
+  `--show-current`, create branch at `HEAD`,
+  `-d`/`--delete <branch-name>...`.
 - Unsupported options: remote branches, rename/copy, upstream config,
   `--merged`/`--no-merged` listing filters, formatting, sorting controls,
   force.

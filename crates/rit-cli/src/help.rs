@@ -154,7 +154,7 @@ rit branch --list
 rit branch --list <pattern>...
 rit branch --show-current
 rit branch <branch-name>
-rit branch -d <branch-name>
+rit branch -d <branch-name>...
 
 List, create, or delete local branches.
 ";

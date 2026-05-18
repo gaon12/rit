@@ -348,6 +348,38 @@ fn branch_short_list_patterns_match_git_branch_names() {
 }
 
 #[test]
+fn branch_delete_multiple_names_matches_git_branches() {
+    let fixture = LocalWriteFixture::new(
+        "branch-delete-multiple",
+        LocalWriteFixtureKind::NestedTracked,
+    )
+    .expect("fixture should build");
+    run_git(fixture.path(), ["branch", "one"]);
+    run_git(fixture.path(), ["branch", "two"]);
+    run_git(fixture.path(), ["branch", "three"]);
+
+    let workspace = temp_path("branch-delete-multiple");
+    let git_repo = workspace.join("git");
+    let rit_repo = workspace.join("rit");
+    copy_directory(fixture.path(), &git_repo);
+    copy_directory(fixture.path(), &rit_repo);
+
+    let git_output = run_capture("git", ["branch", "-d", "one", "two"], &git_repo);
+    let rit_output = run_capture(rit_binary(), ["branch", "-d", "one", "two"], &rit_repo);
+
+    assert_eq!(rit_output, git_output);
+    let rit_branches = run_capture("git", ["branch", "--list"], &rit_repo).0;
+    assert!(rit_branches.contains("  three\n"));
+    assert!(!rit_branches.contains("  one\n"));
+    assert!(!rit_branches.contains("  two\n"));
+    assert_eq!(
+        rit_branches,
+        run_capture("git", ["branch", "--list"], &git_repo).0
+    );
+    let _ = fs::remove_dir_all(workspace);
+}
+
+#[test]
 fn tag_list_option_matches_git_tag_list() {
     let fixture = LocalWriteFixture::new("tag-list-option", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");
