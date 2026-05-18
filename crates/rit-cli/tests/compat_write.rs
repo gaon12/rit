@@ -1822,6 +1822,46 @@ fn add_honors_core_ignorecase_for_mismatched_case_pathspec() {
 }
 
 #[test]
+fn add_rejects_core_ignorecase_false_mismatched_case_pathspec_like_git() {
+    let fixture = temp_path("add-core-ignorecase-false-fixture");
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    run_git(&fixture, ["config", "core.ignorecase", "false"]);
+    fs::write(fixture.join("Camel.txt"), "base\n").expect("case file should be written");
+    run_git(&fixture, ["add", "Camel.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    fs::write(fixture.join("Camel.txt"), "changed\n").expect("case file should be changed");
+
+    let workspace = temp_path("add-core-ignorecase-false-compare");
+    let git_repo = workspace.join("git");
+    let rit_repo = workspace.join("rit");
+    copy_directory(&fixture, &git_repo);
+    copy_directory(&fixture, &rit_repo);
+
+    let git = run_command_allow_failure(&command_words("git", ["add", "camel.txt"]), &git_repo);
+    let rit = run_command_allow_failure(
+        &command_words(rit_binary(), ["add", "camel.txt"]),
+        &rit_repo,
+    );
+    let git_status = run_capture("git", ["status", "--porcelain=v1"], &git_repo).0;
+    let rit_status = run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).0;
+
+    assert!(
+        !git.success,
+        "git should reject the mismatched-case pathspec"
+    );
+    assert_eq!(git.exit_code, rit.exit_code);
+    assert_eq!(git.stdout, rit.stdout);
+    assert_eq!(git.stderr, rit.stderr);
+    assert_eq!(git_status, rit_status);
+    let _ = fs::remove_dir_all(fixture);
+    let _ = fs::remove_dir_all(workspace);
+}
+
+#[test]
 fn reset_honors_core_ignorecase_for_mismatched_case_pathspec() {
     let fixture = temp_path("reset-core-ignorecase-fixture");
     fs::create_dir_all(&fixture).expect("fixture should be created");

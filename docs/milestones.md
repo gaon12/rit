@@ -353,6 +353,8 @@ Completion criteria:
 - [~] Case-sensitivity behavior by platform/config.
   - [x] `git add` honors `core.ignorecase=true` for mismatched-case
     pathspecs that Git accepts as no-ops.
+  - [x] `git add` rejects mismatched-case pathspecs like Git when
+    `core.ignorecase=false`.
   - [x] `git reset <pathspec>` accepts `core.ignorecase=true`
     mismatched-case tracked pathspecs as Git-compatible no-ops.
   - [x] `git restore <pathspec>` keeps Git-compatible rejection behavior for

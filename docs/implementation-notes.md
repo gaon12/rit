@@ -42,6 +42,9 @@
   `:(icase)` in `status`, `diff`, and `add`.
 - 2026-05-10 core.ignorecase add slice checked `git config -h`, `git add -h`,
   and direct Git comparisons for mismatched-case `git add` pathspecs.
+- 2026-05-18 core.ignorecase false add slice checked Git 2.52.0.windows.1 with
+  `git add -h` and a direct Git comparison showing `git add <mismatched-case>`
+  rejects the pathspec when `core.ignorecase=false`.
 - 2026-05-10 exclude pathspec magic slice checked direct Git comparisons for
   `:!`, `:^`, and `:(exclude)` in `status`, `diff`, `ls-files`, and `add`.
 - 2026-05-11 attr pathspec magic slice checked `git config -h`, `git status -h`,
