@@ -3672,16 +3672,8 @@ fn branch_command(
     };
 
     match args {
-        [] => match repository.list_branches() {
-            Ok(branches) => {
-                for branch in branches {
-                    let marker = if branch.current { '*' } else { ' ' };
-                    writeln!(stdout, "{marker} {}", branch.name)?;
-                }
-                Ok(ExitCode::SUCCESS)
-            }
-            Err(error) => write_command_error(stderr, error),
-        },
+        [] => write_branch_list(&repository, stdout, stderr),
+        [flag] if flag == "--list" => write_branch_list(&repository, stdout, stderr),
         [flag] if flag == "--show-current" => match repository.current_branch_name() {
             Ok(Some(branch)) => {
                 writeln!(stdout, "{branch}")?;
@@ -3733,6 +3725,23 @@ fn branch_command(
             writeln!(stderr, "rit: unsupported branch arguments")?;
             Ok(ExitCode::from(129))
         }
+    }
+}
+
+fn write_branch_list(
+    repository: &rit_core::Repository,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> io::Result<ExitCode> {
+    match repository.list_branches() {
+        Ok(branches) => {
+            for branch in branches {
+                let marker = if branch.current { '*' } else { ' ' };
+                writeln!(stdout, "{marker} {}", branch.name)?;
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        Err(error) => write_command_error(stderr, error),
     }
 }
 

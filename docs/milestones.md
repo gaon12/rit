@@ -203,6 +203,8 @@ Completion criteria:
 - [x] `rit add` explicit regular files.
 - [x] `rit commit -m`
 - [x] `rit branch` local list/create/delete basics.
+  - [x] `branch --list` without patterns follows the checked default local
+    branch list output.
 - [x] `rit tag` lightweight tag list/create/delete basics.
 - [x] `rit restore` explicit tracked files.
 - [x] `rit reset` explicit path unstaging.

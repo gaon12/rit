@@ -148,6 +148,7 @@ Compare read-only rit command output against the current Git executable, summari
 
 const BRANCH_HELP: &str = "\
 rit branch
+rit branch --list
 rit branch --show-current
 rit branch <branch-name>
 rit branch -d <branch-name>

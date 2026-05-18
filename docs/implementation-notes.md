@@ -494,6 +494,9 @@
 - 2026-05-18 init no-template slice checked Git 2.52.0.windows.1 with
   `git --version`, `git init -h`, and direct Git comparisons for
   `init -q --no-template` and template-selection resets.
+- 2026-05-18 branch explicit list slice checked Git 2.52.0.windows.1 with
+  `git --version`, `git branch -h`, and a direct Git comparison for
+  `branch --list` without patterns.
 - 2026-05-18 local clone no-hardlinks slice checked Git 2.52.0.windows.1 with
   `git --version`, `git help -a`, `git clone -h`, and direct Git comparison
   for `clone --local --no-hardlinks --no-checkout`.
@@ -1355,7 +1358,8 @@
 ### `rit branch`
 
 - Baseline command checked: `git branch -h`
-- Supported options: list local branches, `--show-current`, create branch at `HEAD`, `-d`/`--delete`.
+- Supported options: list local branches, `--list` without patterns,
+  `--show-current`, create branch at `HEAD`, `-d`/`--delete`.
 - Unsupported options: remote branches, rename/copy, upstream config,
   `--merged`/`--no-merged` listing filters, formatting, sorting controls,
   force.

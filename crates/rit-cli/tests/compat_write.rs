@@ -264,6 +264,21 @@ fn init_no_template_resets_template_selection_like_git() {
 }
 
 #[test]
+fn branch_list_option_matches_default_branch_list() {
+    let fixture =
+        LocalWriteFixture::new("branch-list-option", LocalWriteFixtureKind::NestedTracked)
+            .expect("fixture should build");
+    run_git(fixture.path(), ["branch", "topic"]);
+
+    let git_default = run_capture("git", ["branch"], fixture.path()).0;
+    let git_list = run_capture("git", ["branch", "--list"], fixture.path()).0;
+    let rit_list = run_capture(rit_binary(), ["branch", "--list"], fixture.path()).0;
+
+    assert_eq!(git_list, git_default);
+    assert_eq!(rit_list, git_list);
+}
+
+#[test]
 fn add_directory_pathspec_matches_git_status() {
     let fixture = LocalWriteFixture::new("add-directory", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");
