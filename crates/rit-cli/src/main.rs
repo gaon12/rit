@@ -3687,7 +3687,10 @@ fn branch_command(
             Err(error) => write_command_error(stderr, error),
         },
         [flag, names @ ..] if is_branch_delete_flag(flag) && !names.is_empty() => {
-            delete_branches(&repository, names, stdout, stderr)
+            delete_branches(&repository, names, false, stdout, stderr)
+        }
+        [flag, names @ ..] if is_branch_force_delete_flag(flag) && !names.is_empty() => {
+            delete_branches(&repository, names, true, stdout, stderr)
         }
         [name] if !name.starts_with('-') => {
             let before = capture_operation_snapshot(&repository, stderr)?;
@@ -3719,6 +3722,10 @@ fn is_branch_list_flag(flag: &str) -> bool {
 
 fn is_branch_delete_flag(flag: &str) -> bool {
     flag == "-d" || flag == "--delete"
+}
+
+fn is_branch_force_delete_flag(flag: &str) -> bool {
+    flag == "-D"
 }
 
 fn write_branch_list(
@@ -3755,6 +3762,7 @@ fn write_branches(stdout: &mut dyn Write, branches: Vec<rit_core::Branch>) -> io
 fn delete_branches(
     repository: &rit_core::Repository,
     names: &[String],
+    force: bool,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
@@ -3762,7 +3770,12 @@ fn delete_branches(
     let mut deleted_branches = Vec::new();
 
     for name in names {
-        match repository.delete_branch(name) {
+        let result = if force {
+            repository.delete_branch_force(name)
+        } else {
+            repository.delete_branch(name)
+        };
+        match result {
             Ok(target) => deleted_branches.push((name, target)),
             Err(error) => return write_command_error(stderr, error),
         }

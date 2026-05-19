@@ -120,6 +120,15 @@ impl Repository {
 
     /// Deletes a local branch ref.
     pub fn delete_branch(&self, name: &str) -> Result<ObjectId> {
+        self.delete_branch_with_options(name, false)
+    }
+
+    /// Deletes a local branch ref without requiring it to be merged.
+    pub fn delete_branch_force(&self, name: &str) -> Result<ObjectId> {
+        self.delete_branch_with_options(name, true)
+    }
+
+    fn delete_branch_with_options(&self, name: &str, force: bool) -> Result<ObjectId> {
         validate_ref_short_name(name)?;
         if self.current_branch_name()?.as_deref() == Some(name) {
             return Err(RitError::invalid_input(format!(
@@ -137,13 +146,17 @@ impl Repository {
         }
         let target = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
         let target = ObjectId::from_hex(target.trim())?;
-        let head = self.resolve_head()?.ok_or_else(|| {
-            RitError::invalid_input("cannot delete branch because HEAD does not point at a commit")
-        })?;
-        if !self.commit_is_reachable_from(target, head)? {
-            return Err(RitError::invalid_input(format!(
-                "branch '{name}' is not fully merged"
-            )));
+        if !force {
+            let head = self.resolve_head()?.ok_or_else(|| {
+                RitError::invalid_input(
+                    "cannot delete branch because HEAD does not point at a commit",
+                )
+            })?;
+            if !self.commit_is_reachable_from(target, head)? {
+                return Err(RitError::invalid_input(format!(
+                    "branch '{name}' is not fully merged"
+                )));
+            }
         }
         fs::remove_file(&path).map_err(|source| RitError::io(&path, source))?;
         self.refresh_indexdb_after_git_write();

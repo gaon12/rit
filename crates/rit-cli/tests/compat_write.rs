@@ -380,6 +380,38 @@ fn branch_delete_multiple_names_matches_git_branches() {
 }
 
 #[test]
+fn branch_force_delete_unmerged_branch_matches_git() {
+    let fixture = LocalWriteFixture::new(
+        "branch-force-delete-unmerged",
+        LocalWriteFixtureKind::UnmergedBranch,
+    )
+    .expect("fixture should build");
+    let workspace = temp_path("branch-force-delete-unmerged");
+    let git_repo = workspace.join("git");
+    let rit_repo = workspace.join("rit");
+    copy_directory(fixture.path(), &git_repo);
+    copy_directory(fixture.path(), &rit_repo);
+
+    let git_output = run_capture("git", ["branch", "-D", "topic"], &git_repo);
+    let rit_output = run_capture(rit_binary(), ["branch", "-D", "topic"], &rit_repo);
+
+    assert_eq!(rit_output, git_output);
+    assert!(
+        !rit_repo
+            .join(".git")
+            .join("refs")
+            .join("heads")
+            .join("topic")
+            .exists()
+    );
+    assert_eq!(
+        run_capture("git", ["branch", "--list"], &rit_repo).0,
+        run_capture("git", ["branch", "--list"], &git_repo).0
+    );
+    let _ = fs::remove_dir_all(workspace);
+}
+
+#[test]
 fn tag_list_option_matches_git_tag_list() {
     let fixture = LocalWriteFixture::new("tag-list-option", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");

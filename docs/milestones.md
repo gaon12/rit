@@ -211,6 +211,8 @@ Completion criteria:
     Git's short list option.
   - [x] `branch -d <branch-name>...` deletes multiple local branches in order
     with checked Git-compatible output.
+  - [x] `branch -D <branch-name>...` force-deletes checked local unmerged
+    branches without requiring reachability from `HEAD`.
 - [x] `rit tag` lightweight tag list/create/delete basics.
   - [x] `tag -l`/`tag --list` without patterns follows the checked default tag
     list output.

@@ -512,6 +512,9 @@
 - 2026-05-18 branch multi-delete slice checked Git 2.52.0.windows.1 with
   `git --version`, `git help -a`, `git branch -h`, and direct Git comparison
   for `branch -d <branch-name>...`.
+- 2026-05-18 branch force-delete slice checked Git 2.52.0.windows.1 with
+  `git --version`, `git help -a`, `git branch -h`, and direct Git comparison
+  for `branch -D <branch-name>...` on an unmerged local branch.
 - 2026-05-18 tag list pattern slice checked Git 2.52.0.windows.1 with
   `git --version`, `git help -a`, `git tag -h`, and direct Git comparisons
   for `tag -l`/`tag --list [<pattern>...]` using simple tag-name wildcard
@@ -1382,15 +1385,14 @@
 - Baseline command checked: `git branch -h`
 - Supported options: list local branches, `-l`/`--list [<pattern>...]`,
   `--show-current`, create branch at `HEAD`,
-  `-d`/`--delete <branch-name>...`.
+  `-d`/`--delete <branch-name>...`, `-D <branch-name>...`.
 - Unsupported options: remote branches, rename/copy, upstream config,
   `--merged`/`--no-merged` listing filters, formatting, sorting controls,
-  force.
+  remaining force create/reset forms.
 - Git-compatible behavior: local branches are refs under `refs/heads`; current branch is detected from symbolic `HEAD`.
 - Git-compatible behavior: `-d` refuses the current branch and refuses local
   branches whose target commit is not reachable from `HEAD`.
-- Intentional differences: packed branch deletion and force deletion with `-D`
-  are not implemented yet.
+- Intentional differences: packed branch deletion is not implemented yet.
 - Repository mutation: branch create/delete writes or removes refs.
 - Risk: low for explicit local refs; create uses lock/rename.
 
