@@ -301,6 +301,9 @@ Completion criteria:
     - [x] Relative pathspecs are resolved from the command invocation
       directory for `add`, `restore`, and `reset`, while top magic remains
       repository-root relative.
+    - [x] Incompatible `:(literal,glob)` pathspec magic is rejected with
+      Git-compatible fatal output before `add`, `restore`, or `reset` mutate
+      repository state.
     - [ ] Full Git pathspec-file edge cases and advanced glob parity.
 - [x] Hook execution for commit.
   - [x] `pre-commit`, `prepare-commit-msg`, and `commit-msg` can block the
@@ -364,6 +367,7 @@ Completion criteria:
 - [x] Attributes parser.
 - [x] Pathspec magic.
   - [x] Positive `:(literal)`, `:(glob)`, `:(top)`, and `:/` forms.
+  - [x] Incompatible `:(literal,glob)` magic combinations are rejected.
   - [x] Case-insensitive `:(icase)` pathspec magic.
   - [x] Exclude `:!`, `:^`, and `:(exclude)` pathspec magic.
   - [x] Attr pathspec magic for root `.gitattributes` set/unset/value/

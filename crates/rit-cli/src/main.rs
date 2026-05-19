@@ -5804,6 +5804,16 @@ fn write_command_error(stderr: &mut dyn Write, error: rit_core::RitError) -> io:
             )?;
             return Ok(ExitCode::from(1));
         }
+        if let Some(pathspec) =
+            message.strip_prefix("pathspec magic literal and glob are incompatible: ")
+        {
+            writeln!(
+                stderr,
+                "fatal: {}: 'literal' and 'glob' are incompatible",
+                git_error_pathspec(pathspec)
+            )?;
+            return Ok(ExitCode::from(128));
+        }
     }
     writeln!(stderr, "rit: {error}")?;
     Ok(ExitCode::from(1))

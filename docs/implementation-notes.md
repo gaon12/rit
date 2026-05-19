@@ -55,6 +55,10 @@
   `git status -h`, `git diff -h`, and direct Git comparisons for `:(glob)`
   patterns where `**` appears inside one path component instead of in Git's
   special `**/` or trailing `**` forms.
+- 2026-05-19 literal/glob conflict pathspec slice checked Git
+  2.52.0.windows.1 with `git --version`, `git help -a`, `git add -h`,
+  `git restore -h`, `git reset -h`, and direct Git comparisons showing
+  `:(literal,glob)` is rejected before write-command mutation.
 - 2026-05-16 diff `-z` summary slice checked `git diff -h` and direct Git
   byte-shape comparisons for `--name-only`, `--name-status`, and `--numstat`,
   including rename output fields.
@@ -663,6 +667,9 @@
 - Refined `:(glob)` double-star matching so `**/` and trailing `**` can cross
   directories, while component-local forms such as `**base.txt` behave like
   ordinary stars and do not cross `/`, matching Git.
+- Rejected incompatible `:(literal,glob)` magic combinations before
+  write-command mutation, with Git-compatible fatal output for `add`,
+  `restore`, and `reset`.
 - Added `git diff -z` compatible NUL-terminated output for `--name-only`,
   `--name-status`, and `--numstat`, including rename/copy field splitting.
 - Added positive pathspec magic support for `:(literal)`, `:(glob)`,

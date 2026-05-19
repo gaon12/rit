@@ -521,6 +521,8 @@ fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
             )));
         };
         let mut mode = PathspecMatchMode::Default;
+        let mut has_literal = false;
+        let mut has_glob = false;
         let mut top = false;
         let mut ignore_case = false;
         let mut exclude = false;
@@ -528,8 +530,14 @@ fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
         for word in magic.split(',').filter(|word| !word.is_empty()) {
             match word {
                 "top" => top = true,
-                "literal" => mode = PathspecMatchMode::Literal,
-                "glob" => mode = PathspecMatchMode::Glob,
+                "literal" => {
+                    has_literal = true;
+                    mode = PathspecMatchMode::Literal;
+                }
+                "glob" => {
+                    has_glob = true;
+                    mode = PathspecMatchMode::Glob;
+                }
                 "icase" => ignore_case = true,
                 "exclude" => exclude = true,
                 word if word.starts_with("attr:") => {
@@ -544,6 +552,11 @@ fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
                     )));
                 }
             }
+        }
+        if has_literal && has_glob {
+            return Err(RitError::invalid_input(format!(
+                "pathspec magic literal and glob are incompatible: {pathspec}"
+            )));
         }
 
         return Ok(PathspecPattern {
@@ -802,6 +815,17 @@ mod tests {
 
         assert!(pathspec.matches("nested/base.txt"));
         assert!(!pathspec.matches("nested/deep/base.txt"));
+    }
+
+    #[test]
+    fn literal_and_glob_magic_are_rejected_together() {
+        let error = PathspecSet::from_args(&[":(literal,glob)*.txt".to_owned()])
+            .expect_err("literal and glob magic should be incompatible");
+
+        assert_eq!(
+            error.to_string(),
+            "pathspec magic literal and glob are incompatible: :(literal,glob)*.txt"
+        );
     }
 
     #[test]
