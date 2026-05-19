@@ -138,6 +138,9 @@ Completion criteria:
   - [x] Ordinary literal path filters for `show --no-patch`.
   - [x] Simple `*` and `?` wildcard pathspec filters for first-parent `log`
     and `show --no-patch`.
+  - [x] Relative pathspecs are resolved from the command invocation directory
+    for `status`, `diff`, `ls-files`, `ls-tree`, `log`, and `show`, while top
+    magic remains repository-root relative.
 - [~] Rename detection.
   - [x] Exact staged rename detection for `diff --cached -M` summary and
     patch output.

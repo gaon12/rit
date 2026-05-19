@@ -2654,7 +2654,10 @@ fn ls_tree_command(
         return Ok(ExitCode::from(1));
     }
 
-    let pathspecs = match rit_core::PathspecSet::from_args(&pathspec_args) {
+    let pathspecs = match rit_core::PathspecSet::from_args_with_prefix(
+        &pathspec_args,
+        repository.path_prefix(),
+    ) {
         Ok(pathspecs) => pathspecs,
         Err(error) => {
             writeln!(stderr, "rit: {error}")?;
@@ -2662,7 +2665,34 @@ fn ls_tree_command(
         }
     };
     if pathspecs.is_all() {
-        print_tree_entries(&object.data, name_only, object_only, stdout)?;
+        if repository.path_prefix().is_empty() {
+            print_tree_entries(&object.data, name_only, object_only, stdout)?;
+        } else {
+            match find_tree_entry_by_path(&repository, object_id, repository.path_prefix()) {
+                Ok(Some(entry)) if entry.kind == rit_core::ObjectKind::Tree => {
+                    let object = match repository.read_object(entry.object_id) {
+                        Ok(object) => object,
+                        Err(error) => {
+                            writeln!(stderr, "rit: {error}")?;
+                            return Ok(ExitCode::from(1));
+                        }
+                    };
+                    print_tree_entries(&object.data, name_only, object_only, stdout)?;
+                }
+                Ok(Some(entry)) => print_tree_entry_with_prefix(
+                    &entry,
+                    repository.path_prefix(),
+                    name_only,
+                    object_only,
+                    stdout,
+                )?,
+                Ok(None) => {}
+                Err(error) => {
+                    writeln!(stderr, "rit: {error}")?;
+                    return Ok(ExitCode::from(1));
+                }
+            }
+        }
     } else {
         for pathspec in pathspecs.patterns() {
             if pathspec.is_exclude()
@@ -2672,7 +2702,13 @@ fn ls_tree_command(
                 continue;
             }
             match find_tree_entry_by_path(&repository, object_id, pathspec.pattern()) {
-                Ok(Some(entry)) => print_tree_entry(&entry, name_only, object_only, stdout)?,
+                Ok(Some(entry)) => print_tree_entry_with_prefix(
+                    &entry,
+                    repository.path_prefix(),
+                    name_only,
+                    object_only,
+                    stdout,
+                )?,
                 Ok(None) => {}
                 Err(error) => {
                     writeln!(stderr, "rit: {error}")?;
@@ -2692,7 +2728,14 @@ fn status_command(
     let Some(status_args) = parse_status_args(args, stderr)? else {
         return Ok(ExitCode::from(129));
     };
-    let pathspecs = match rit_core::PathspecSet::from_args(&status_args.pathspecs) {
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    let pathspecs = match rit_core::PathspecSet::from_args_with_prefix(
+        &status_args.pathspecs,
+        repository.path_prefix(),
+    ) {
         Ok(pathspecs) => pathspecs,
         Err(error) => {
             writeln!(stderr, "rit: {error}")?;
@@ -2700,10 +2743,6 @@ fn status_command(
         }
     };
 
-    let repository = match discover_repository(stderr)? {
-        Some(repository) => repository,
-        None => return Ok(ExitCode::from(128)),
-    };
     if let Some(path) = status_args.explain_path {
         return match repository.explain_status_path(&path) {
             Ok(explanation) => {
@@ -2946,7 +2985,14 @@ fn diff_command(
     }
 
     let output_mode = output_mode.unwrap_or("--patch");
-    let pathspecs = match rit_core::PathspecSet::from_args(&pathspec_args) {
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    let pathspecs = match rit_core::PathspecSet::from_args_with_prefix(
+        &pathspec_args,
+        repository.path_prefix(),
+    ) {
         Ok(pathspecs) => pathspecs,
         Err(error) => {
             writeln!(stderr, "rit: {error}")?;
@@ -2954,10 +3000,6 @@ fn diff_command(
         }
     };
 
-    let repository = match discover_repository(stderr)? {
-        Some(repository) => repository,
-        None => return Ok(ExitCode::from(128)),
-    };
     let diff_options = rit_core::DiffOptions {
         find_renames,
         find_copies,
@@ -3149,7 +3191,14 @@ fn log_command(
     let Some((oneline, pathspec_args)) = parse_log_args(args, stderr)? else {
         return Ok(ExitCode::from(129));
     };
-    let pathspecs = match rit_core::PathspecSet::from_args(&pathspec_args) {
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    let pathspecs = match rit_core::PathspecSet::from_args_with_prefix(
+        &pathspec_args,
+        repository.path_prefix(),
+    ) {
         Ok(pathspecs) => pathspecs,
         Err(error) => {
             writeln!(stderr, "rit: {error}")?;
@@ -3157,10 +3206,6 @@ fn log_command(
         }
     };
 
-    let repository = match discover_repository(stderr)? {
-        Some(repository) => repository,
-        None => return Ok(ExitCode::from(128)),
-    };
     let entries = match repository.log_first_parent_with_pathspecs(&pathspecs) {
         Ok(entries) => entries,
         Err(error) => {
@@ -3221,16 +3266,19 @@ fn show_command(
     let Some((revision, pathspec_args)) = parse_show_args(args, stderr)? else {
         return Ok(ExitCode::from(129));
     };
-    let pathspecs = match rit_core::PathspecSet::from_args(&pathspec_args) {
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    let pathspecs = match rit_core::PathspecSet::from_args_with_prefix(
+        &pathspec_args,
+        repository.path_prefix(),
+    ) {
         Ok(pathspecs) => pathspecs,
         Err(error) => {
             writeln!(stderr, "rit: {error}")?;
             return Ok(ExitCode::from(129));
         }
-    };
-    let repository = match discover_repository(stderr)? {
-        Some(repository) => repository,
-        None => return Ok(ExitCode::from(128)),
     };
     let object_id = match repository.resolve_revision(&revision) {
         Ok(object_id) => object_id,
@@ -3317,16 +3365,19 @@ fn ls_files_command(
     let Some((stage, pathspec_args)) = parse_ls_files_args(args, stderr)? else {
         return Ok(ExitCode::from(129));
     };
-    let pathspecs = match rit_core::PathspecSet::from_args(&pathspec_args) {
+    let repository = match discover_repository(stderr)? {
+        Some(repository) => repository,
+        None => return Ok(ExitCode::from(128)),
+    };
+    let pathspecs = match rit_core::PathspecSet::from_args_with_prefix(
+        &pathspec_args,
+        repository.path_prefix(),
+    ) {
         Ok(pathspecs) => pathspecs,
         Err(error) => {
             writeln!(stderr, "rit: {error}")?;
             return Ok(ExitCode::from(129));
         }
-    };
-    let repository = match discover_repository(stderr)? {
-        Some(repository) => repository,
-        None => return Ok(ExitCode::from(128)),
     };
     let index = match rit_core::Index::read(&repository.git_dir().join("index")) {
         Ok(index) => index,
@@ -3343,17 +3394,24 @@ fn ls_files_command(
         }
     };
     for entry in index.entries {
+        if pathspecs.is_all()
+            && !repository.path_prefix().is_empty()
+            && !path_is_inside_prefix(&entry.path, repository.path_prefix())
+        {
+            continue;
+        }
         if !pathspecs.matches_with_attributes(&entry.path, Some(&attributes)) {
             continue;
         }
+        let displayed_path = display_path_from_prefix(&entry.path, repository.path_prefix());
         if stage {
             writeln!(
                 stdout,
                 "{:06o} {} {}\t{}",
-                entry.mode, entry.object_id, entry.stage, entry.path
+                entry.mode, entry.object_id, entry.stage, displayed_path
             )?;
         } else {
-            writeln!(stdout, "{}", entry.path)?;
+            writeln!(stdout, "{displayed_path}")?;
         }
     }
     Ok(ExitCode::SUCCESS)
@@ -6037,14 +6095,26 @@ fn find_tree_entry_by_path(
     Ok(None)
 }
 
-fn print_tree_entry(
+fn print_tree_entry_with_prefix(
     entry: &PrintableTreeEntry,
+    prefix: &str,
+    name_only: bool,
+    object_only: bool,
+    stdout: &mut dyn Write,
+) -> io::Result<()> {
+    let displayed_path = display_path_from_prefix(&entry.path, prefix);
+    print_tree_entry_with_path(entry, &displayed_path, name_only, object_only, stdout)
+}
+
+fn print_tree_entry_with_path(
+    entry: &PrintableTreeEntry,
+    path: &str,
     name_only: bool,
     object_only: bool,
     stdout: &mut dyn Write,
 ) -> io::Result<()> {
     if name_only {
-        writeln!(stdout, "{}", entry.path)
+        writeln!(stdout, "{path}")
     } else if object_only {
         writeln!(stdout, "{}", entry.object_id)
     } else {
@@ -6056,9 +6126,29 @@ fn print_tree_entry(
         writeln!(
             stdout,
             "{} {} {}\t{}",
-            printed_mode, entry.kind, entry.object_id, entry.path
+            printed_mode, entry.kind, entry.object_id, path
         )
     }
+}
+
+fn display_path_from_prefix(path: &str, prefix: &str) -> String {
+    let prefix = prefix.trim_matches('/');
+    if prefix.is_empty() {
+        return path.to_owned();
+    }
+    if path == prefix {
+        return ".".to_owned();
+    }
+    if let Some(stripped) = path.strip_prefix(&format!("{prefix}/")) {
+        return stripped.to_owned();
+    }
+    let parent_prefix = "../".repeat(prefix.split('/').filter(|part| !part.is_empty()).count());
+    format!("{parent_prefix}{path}")
+}
+
+fn path_is_inside_prefix(path: &str, prefix: &str) -> bool {
+    let prefix = prefix.trim_matches('/');
+    prefix.is_empty() || path == prefix || path.starts_with(&format!("{prefix}/"))
 }
 
 #[cfg(test)]

@@ -1335,6 +1335,45 @@ fn ls_tree_pathspec_outputs_match_git() {
 }
 
 #[test]
+fn read_only_pathspecs_resolve_relative_to_subdirectory_like_git() {
+    let fixture = DiffFixture::new("subdirectory-read-only-pathspec");
+    for args in [
+        vec!["status", "--porcelain=v1", "--", "base.txt"],
+        vec!["diff", "--name-only", "--", "base.txt"],
+        vec!["diff", "--cached", "--name-status", "--", "base.txt"],
+        vec!["ls-files", "--", "base.txt"],
+        vec!["ls-files", "--stage", "--", ":/nested/base.txt"],
+        vec!["ls-tree", "--name-only", "HEAD"],
+        vec!["ls-tree", "--name-only", "HEAD", "base.txt"],
+        vec!["ls-tree", "--name-only", "HEAD", ":/nested/base.txt"],
+    ] {
+        let (git_stdout, git_stderr) =
+            run_capture_words("git", &args, &fixture.path().join("nested"));
+        let (rit_stdout, rit_stderr) =
+            run_capture_words(rit_binary(), &args, &fixture.path().join("nested"));
+
+        assert_eq!(rit_stdout, git_stdout, "{args:?} stdout");
+        assert_eq!(rit_stderr, git_stderr, "{args:?} stderr");
+    }
+
+    let log_fixture = LogPathFixture::new("subdirectory-read-only-history-pathspec");
+    for args in [
+        vec!["log", "--oneline", "--", "base.txt"],
+        vec!["log", "--oneline", "--", ":(top)nested/base.txt"],
+        vec!["show", "--no-patch", "--", "base.txt"],
+        vec!["show", "--no-patch", "HEAD", "--", ":(top)nested/base.txt"],
+    ] {
+        let (git_stdout, git_stderr) =
+            run_capture_words("git", &args, &log_fixture.path().join("nested"));
+        let (rit_stdout, rit_stderr) =
+            run_capture_words(rit_binary(), &args, &log_fixture.path().join("nested"));
+
+        assert_eq!(rit_stdout, git_stdout, "{args:?} stdout");
+        assert_eq!(rit_stderr, git_stderr, "{args:?} stderr");
+    }
+}
+
+#[test]
 fn log_pathspec_outputs_match_git() {
     let fixture = LogPathFixture::new("pathspec-log");
 
@@ -2704,6 +2743,11 @@ fn run_capture_args(program: impl AsRef<OsStr>, args: &[OsString], cwd: &Path) -
         String::from_utf8_lossy(&output.stdout).into_owned(),
         String::from_utf8_lossy(&output.stderr).into_owned(),
     )
+}
+
+fn run_capture_words(program: impl AsRef<OsStr>, args: &[&str], cwd: &Path) -> (String, String) {
+    let args = args.iter().map(OsString::from).collect::<Vec<_>>();
+    run_capture_args(program, &args, cwd)
 }
 
 fn verify_pack_has_delta(path: &Path) -> bool {

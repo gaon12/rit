@@ -519,6 +519,10 @@
   with `git --version`, `git help -a`, `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `add`, `restore`, and
   `reset` from a subdirectory.
+- 2026-05-19 read-only pathspec cwd-relative slice checked Git
+  2.52.0.windows.1 with `git --version`, `git help -a`, `git status -h`,
+  `git diff -h`, `git log -h`, `git show -h`, `git ls-files -h`, and
+  `git ls-tree -h`, plus direct Git comparisons from a subdirectory.
 - 2026-05-18 tag list pattern slice checked Git 2.52.0.windows.1 with
   `git --version`, `git help -a`, `git tag -h`, and direct Git comparisons
   for `tag -l`/`tag --list [<pattern>...]` using simple tag-name wildcard
@@ -1226,6 +1230,9 @@
 - Unsupported options: recursion, long output, custom format, abbreviation,
   glob/exclude/attr/icase pathspec magic.
 - Git-compatible behavior: tree entry parsing and default `<mode> <type> <object>\t<path>` output.
+- Git-compatible behavior: pathspecs and default tree listing from a
+  subdirectory are resolved relative to that invocation directory; displayed
+  paths are relative to the invocation directory like Git.
 - Intentional differences: advanced pathspec forms are not implemented yet.
 - Repository mutation: no
 - Risk: none
@@ -1261,6 +1268,8 @@
   directory-only, anchored, `*`, `?`, bracket-class, `**`, last-match-wins
   negation, and `.git/info/exclude` rules. `-uno` hides ignored entries,
   matching Git 2.52 behavior.
+- Git-compatible behavior: pathspecs from a subdirectory are resolved relative
+  to that invocation directory unless they use top magic.
 - Intentional differences: ignore matching is still rooted at repository-level
   ignore files; nested per-directory `.gitignore` files are not loaded yet.
 - Repository mutation: no
@@ -1292,6 +1301,8 @@
   full rename limits, and many advanced patch formatting options.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files.
 - Git-compatible behavior: cached diff scope compares the index against `HEAD`.
+- Git-compatible behavior: pathspecs from a subdirectory are resolved relative
+  to that invocation directory unless they use top magic.
 - Intentional differences: advanced patch formatting and custom diff drivers
   are not implemented yet.
 - Repository mutation: no
@@ -1308,6 +1319,8 @@
   controls, diff output.
 - Git-compatible behavior: reads commits from `HEAD`, follows the first parent,
   prints default author/date/message layout and 7-character oneline IDs.
+- Git-compatible behavior: pathspecs from a subdirectory are resolved relative
+  to that invocation directory unless they use top magic.
 - Intentional differences: merge traversal is first-parent only until revision
   walking is implemented; rename-aware history simplification is not
   implemented.
@@ -2042,6 +2055,9 @@
 - Unsupported options: commit diffs, revision ranges, decorations, formatting
   controls, attr pathspec magic and bracket globs.
 - Git-compatible behavior: commit no-patch layout, tree pretty printing, blob contents.
+- Git-compatible behavior: no-patch commit pathspec filters from a
+  subdirectory are resolved relative to that invocation directory unless they
+  use top magic.
 - Intentional differences: commit diffs are not emitted yet.
 - Repository mutation: no.
 
@@ -2056,6 +2072,9 @@
   attr magic, bracket globs, EOL/debug/format output,
   sparse/submodule modes.
 - Git-compatible behavior: lists index paths and stage records as `<mode> <object> 0<TAB><path>`.
+- Git-compatible behavior: pathspecs and displayed paths from a subdirectory
+  are resolved relative to that invocation directory, including `..` prefixes
+  for top-magic paths outside the directory.
 - Repository mutation: no.
 
 ## Object Database
