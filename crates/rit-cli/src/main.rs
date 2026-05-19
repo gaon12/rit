@@ -4066,7 +4066,7 @@ fn reset_command(
         return Ok(ExitCode::from(exit_code));
     }
     let reset_paths = if reset_args.paths.is_empty() && reset_args.from_pathspec_file {
-        vec![".".to_owned()]
+        vec![":(top).".to_owned()]
     } else {
         reset_args.paths
     };

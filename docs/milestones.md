@@ -295,6 +295,9 @@ Completion criteria:
       trailing NUL terminator remains allowed.
     - [x] Badly quoted pathspec-file entries are rejected with Git-compatible
       fatal output for `add`, `restore`, and `reset`.
+    - [x] Relative pathspecs are resolved from the command invocation
+      directory for `add`, `restore`, and `reset`, while top magic remains
+      repository-root relative.
     - [ ] Full Git pathspec-file edge cases and advanced glob parity.
 - [x] Hook execution for commit.
   - [x] `pre-commit`, `prepare-commit-msg`, and `commit-msg` can block the

@@ -729,6 +729,49 @@ fn write_glob_magic_double_star_component_matches_git_status() {
 }
 
 #[test]
+fn write_commands_resolve_pathspecs_relative_to_subdirectory_like_git() {
+    for command in ["add", "restore", "reset"] {
+        let fixture = LocalWriteFixture::new(
+            &format!("{command}-subdirectory-relative-pathspec"),
+            LocalWriteFixtureKind::NestedTracked,
+        )
+        .expect("fixture should build");
+        fs::write(
+            fixture.path().join("nested").join("tracked.txt"),
+            "changed\n",
+        )
+        .expect("tracked file should be modified");
+        if command == "reset" {
+            run_git(fixture.path(), ["add", "nested/tracked.txt"]);
+        }
+
+        let workspace = temp_path(&format!("{command}-subdirectory-pathspec-compare"));
+        let git_repo = workspace.join("git");
+        let rit_repo = workspace.join("rit");
+        copy_directory(fixture.path(), &git_repo);
+        copy_directory(fixture.path(), &rit_repo);
+
+        let git_output = run_command(
+            &command_words("git", [command, "tracked.txt"]),
+            &git_repo.join("nested"),
+        );
+        let rit_output = run_command(
+            &command_words(rit_binary(), [command, "tracked.txt"]),
+            &rit_repo.join("nested"),
+        );
+
+        assert_eq!(rit_output.0, git_output.0, "{command} stdout");
+        assert_eq!(rit_output.1, git_output.1, "{command} stderr");
+        assert_eq!(
+            run_capture("git", ["status", "--porcelain=v1"], &git_repo).0,
+            run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).0,
+            "{command} status"
+        );
+        let _ = fs::remove_dir_all(workspace);
+    }
+}
+
+#[test]
 fn add_pathspec_from_file_matches_git_status() {
     let fixture = LocalWriteFixture::new("add-pathspec-file", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");

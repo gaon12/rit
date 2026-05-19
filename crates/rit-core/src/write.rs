@@ -715,7 +715,7 @@ impl Repository {
         if paths.is_empty() {
             return Err(RitError::invalid_input("add requires at least one path"));
         }
-        let pathspecs = PathspecSet::from_args(paths)?;
+        let pathspecs = PathspecSet::from_args_with_prefix(paths, self.path_prefix())?;
         let index = Index::read(&self.git_dir().join("index"))?;
         let entries = index
             .entries
@@ -853,7 +853,7 @@ impl Repository {
             ));
         }
         let index = Index::read(&self.git_dir().join("index"))?;
-        let pathspecs = PathspecSet::from_args(paths)?;
+        let pathspecs = PathspecSet::from_args_with_prefix(paths, self.path_prefix())?;
         let symlinks_enabled = self.core_symlinks_enabled()?;
         let attributes = self.root_attributes()?;
         let entries = index
@@ -971,7 +971,7 @@ impl Repository {
         if paths.is_empty() {
             return Err(RitError::invalid_input("reset requires at least one path"));
         }
-        let pathspecs = PathspecSet::from_args(paths)?;
+        let pathspecs = PathspecSet::from_args_with_prefix(paths, self.path_prefix())?;
         let attributes = self.root_attributes()?;
         let ignore_case = self.core_ignorecase_enabled()?;
         let index = Index::read(&self.git_dir().join("index"))?;

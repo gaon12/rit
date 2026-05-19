@@ -1,3 +1,4 @@
+use crate::index::relative_slash_path;
 use crate::object::parse_tree_entries;
 use crate::{
     BlockingSmartHttpClient, ConfiguredProcessSshServiceExecutor, FetchRefSpec, GitAttributes,
@@ -189,6 +190,7 @@ pub struct Repository {
     worktree: Option<PathBuf>,
     git_dir: PathBuf,
     common_dir: PathBuf,
+    path_prefix: String,
     bare: bool,
 }
 
@@ -223,7 +225,8 @@ impl Repository {
             let dot_git = current.join(".git");
             if dot_git.is_dir() {
                 let git_dir = canonicalize_existing_path(&dot_git)?;
-                return Self::from_paths(Some(current), git_dir, false);
+                let path_prefix = worktree_path_prefix(&current, &start_path)?;
+                return Self::from_paths(Some(current), git_dir, path_prefix, false);
             }
 
             if dot_git.is_file() {
@@ -234,12 +237,13 @@ impl Repository {
                     current.join(git_dir)
                 };
                 let git_dir = canonicalize_existing_path(&resolved_git_dir)?;
-                return Self::from_paths(Some(current), git_dir, false);
+                let path_prefix = worktree_path_prefix(&current, &start_path)?;
+                return Self::from_paths(Some(current), git_dir, path_prefix, false);
             }
 
             if looks_like_bare_repository(&current) {
                 let git_dir = canonicalize_existing_path(&current)?;
-                return Self::from_paths(None, git_dir, true);
+                return Self::from_paths(None, git_dir, String::new(), true);
             }
 
             if !current.pop() {
@@ -282,7 +286,12 @@ impl Repository {
             default_config(options.bare).as_bytes(),
         )?;
 
-        Self::from_paths((!options.bare).then_some(target), git_dir, options.bare)
+        Self::from_paths(
+            (!options.bare).then_some(target),
+            git_dir,
+            String::new(),
+            options.bare,
+        )
     }
 
     /// Clones a local repository by copying objects and local refs.
@@ -799,6 +808,11 @@ impl Repository {
         self.worktree.as_deref()
     }
 
+    /// Returns the command invocation path relative to the working tree root.
+    pub fn path_prefix(&self) -> &str {
+        &self.path_prefix
+    }
+
     /// Returns whether the repository is bare.
     pub fn is_bare(&self) -> bool {
         self.bare
@@ -818,12 +832,18 @@ impl Repository {
         }
     }
 
-    fn from_paths(worktree: Option<PathBuf>, git_dir: PathBuf, bare: bool) -> Result<Self> {
+    fn from_paths(
+        worktree: Option<PathBuf>,
+        git_dir: PathBuf,
+        path_prefix: String,
+        bare: bool,
+    ) -> Result<Self> {
         let common_dir = resolve_common_dir(&git_dir)?;
         let repository = Self {
             worktree,
             git_dir,
             common_dir,
+            path_prefix,
             bare,
         };
         repository.ensure_supported_format()?;
@@ -1164,6 +1184,15 @@ fn resolve_common_dir(git_dir: &Path) -> Result<PathBuf> {
 
 fn looks_like_bare_repository(path: &Path) -> bool {
     path.join("HEAD").is_file() && path.join("objects").is_dir() && path.join("refs").is_dir()
+}
+
+fn worktree_path_prefix(worktree: &Path, start_path: &Path) -> Result<String> {
+    let start_directory = if start_path.is_file() {
+        start_path.parent().unwrap_or(start_path)
+    } else {
+        start_path
+    };
+    relative_slash_path(worktree, start_directory)
 }
 
 fn canonicalize_existing_path(path: &Path) -> Result<PathBuf> {

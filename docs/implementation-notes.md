@@ -515,6 +515,10 @@
 - 2026-05-18 branch force-delete slice checked Git 2.52.0.windows.1 with
   `git --version`, `git help -a`, `git branch -h`, and direct Git comparison
   for `branch -D <branch-name>...` on an unmerged local branch.
+- 2026-05-19 write pathspec cwd-relative slice checked Git 2.52.0.windows.1
+  with `git --version`, `git help -a`, `git add -h`, `git restore -h`,
+  `git reset -h`, and direct Git comparisons for `add`, `restore`, and
+  `reset` from a subdirectory.
 - 2026-05-18 tag list pattern slice checked Git 2.52.0.windows.1 with
   `git --version`, `git help -a`, `git tag -h`, and direct Git comparisons
   for `tag -l`/`tag --list [<pattern>...]` using simple tag-name wildcard
@@ -1334,6 +1338,8 @@
   files and committed trees preserve `100644`/`100755` modes.
 - Git-compatible behavior: existing index modes are preserved when content is
   refreshed without an explicit `--chmod` override.
+- Git-compatible behavior: pathspecs from a subdirectory are resolved relative
+  to that invocation directory unless they use top magic.
 - Git-compatible behavior: symlinks are indexed as `120000` blobs containing
   the link target text.
 - Git-compatible behavior: when `core.symlinks=false`, `rit add` records a
@@ -1423,6 +1429,8 @@
   `pathspec ... did not match any file(s) known to git`.
 - Git-compatible behavior: symlink index entries are restored as symlinks on
   Unix and as link-target text files on platforms without Unix symlink support.
+- Git-compatible behavior: pathspecs from a subdirectory are resolved relative
+  to that invocation directory unless they use top magic.
 - Git-compatible behavior: when `core.symlinks=false`, restore and checkout
   materialize `120000` entries as plain `100644` files containing the link
   target text, and status treats that plain file as clean.
@@ -1452,6 +1460,8 @@
   behavior.
 - Git-compatible behavior: clean tracked paths refresh cached index stat
   metadata during `status --porcelain=v1`.
+- Git-compatible behavior: pathspecs from a subdirectory are resolved relative
+  to that invocation directory unless they use top magic.
 - rit-specific behavior: `--plan` prints which index entries would be restored
   from `HEAD` or removed because they do not exist in `HEAD` without writing
   `.git/index`.

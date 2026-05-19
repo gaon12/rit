@@ -80,6 +80,18 @@ impl PathspecSet {
         Ok(Self { patterns })
     }
 
+    /// Builds a pathspec set for a command invoked below the worktree root.
+    pub fn from_args_with_prefix(pathspecs: &[String], prefix: &str) -> Result<Self> {
+        if prefix.is_empty() {
+            return Self::from_args(pathspecs);
+        }
+        let prefixed = pathspecs
+            .iter()
+            .map(|pathspec| prefix_pathspec(pathspec, prefix))
+            .collect::<Vec<_>>();
+        Self::from_args(&prefixed)
+    }
+
     /// Builds an empty pathspec set that matches every path.
     pub fn all() -> Self {
         Self {
@@ -558,6 +570,54 @@ fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
     })
 }
 
+fn prefix_pathspec(pathspec: &str, prefix: &str) -> String {
+    let prefix = prefix.trim_matches('/');
+    if prefix.is_empty() {
+        return pathspec.to_owned();
+    }
+    if pathspec.strip_prefix(":/").is_some() {
+        return pathspec.to_owned();
+    }
+    if let Some(pattern) = pathspec.strip_prefix(":!") {
+        return prefix_short_magic_pathspec(":!", prefix, pattern);
+    }
+    if let Some(pattern) = pathspec.strip_prefix(":^") {
+        return prefix_short_magic_pathspec(":^", prefix, pattern);
+    }
+    if let Some(rest) = pathspec.strip_prefix(":(")
+        && let Some((magic, pattern)) = rest.split_once(')')
+    {
+        if magic.split(',').any(|word| word == "top") {
+            return pathspec.to_owned();
+        }
+        return format!(":({magic}){}", prefix_pattern(prefix, pattern));
+    }
+    if pathspec.starts_with(':') {
+        return pathspec.to_owned();
+    }
+    prefix_pattern(prefix, pathspec)
+}
+
+fn prefix_short_magic_pathspec(magic: &str, prefix: &str, pattern: &str) -> String {
+    if pattern.starts_with('/') {
+        format!("{magic}{pattern}")
+    } else {
+        format!("{magic}{}", prefix_pattern(prefix, pattern))
+    }
+}
+
+fn prefix_pattern(prefix: &str, pattern: &str) -> String {
+    let mut pattern = pattern;
+    while let Some(stripped) = pattern.strip_prefix("./") {
+        pattern = stripped;
+    }
+    if pattern.is_empty() || pattern == "." {
+        prefix.to_owned()
+    } else {
+        format!("{prefix}/{pattern}")
+    }
+}
+
 fn parse_attribute_requirements(
     requirements: &str,
     pathspec: &str,
@@ -755,6 +815,27 @@ mod tests {
             .expect("valid short top pathspec");
 
         assert!(pathspec.matches("nested/a.txt"));
+    }
+
+    #[test]
+    fn prefixed_pathspecs_resolve_relative_to_invocation_directory() {
+        let pathspec = PathspecSet::from_args_with_prefix(&["tracked.txt".to_owned()], "nested")
+            .expect("valid prefixed pathspec");
+
+        assert!(pathspec.matches("nested/tracked.txt"));
+        assert!(!pathspec.matches("tracked.txt"));
+
+        let pathspec = PathspecSet::from_args_with_prefix(&[":(glob)*.txt".to_owned()], "nested")
+            .expect("valid prefixed glob pathspec");
+
+        assert!(pathspec.matches("nested/tracked.txt"));
+        assert!(!pathspec.matches("tracked.txt"));
+
+        let pathspec = PathspecSet::from_args_with_prefix(&[":/tracked.txt".to_owned()], "nested")
+            .expect("valid top pathspec");
+
+        assert!(pathspec.matches("tracked.txt"));
+        assert!(!pathspec.matches("nested/tracked.txt"));
     }
 
     #[test]
