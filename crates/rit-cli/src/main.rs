@@ -4654,13 +4654,15 @@ fn merge_command(
         };
     }
     let before = capture_operation_snapshot(&repository, stderr)?;
-    let merge_result = if merge_args.ff_only {
+    let merge_result = if merge_args.ff_only && merge_args.strategy != rit_core::MergeStrategy::Ours
+    {
         repository.merge_ff_only(target)
     } else {
         repository.merge_with_options(
             target,
             &rit_core::MergeOptions {
                 verify: merge_args.verify,
+                strategy: merge_args.strategy,
             },
         )
     };
@@ -5344,6 +5346,7 @@ struct ParsedMergeArgs {
     quit: bool,
     continue_merge: bool,
     verify: bool,
+    strategy: rit_core::MergeStrategy,
 }
 
 fn parse_merge_args(
@@ -5357,6 +5360,7 @@ fn parse_merge_args(
     let mut quit = false;
     let mut continue_merge = false;
     let mut verify = true;
+    let mut strategy = rit_core::MergeStrategy::Default;
     let mut target = None;
     let mut index = 0;
     while index < args.len() {
@@ -5375,6 +5379,24 @@ fn parse_merge_args(
             verify = false;
         } else if arg == "--verify" {
             verify = true;
+        } else if arg == "-s" || arg == "--strategy" {
+            index += 1;
+            let Some(value) = args.get(index) else {
+                writeln!(stderr, "rit: merge strategy requires a value")?;
+                return Ok(None);
+            };
+            let Some(parsed_strategy) = parse_merge_strategy(value, stderr)? else {
+                return Ok(None);
+            };
+            strategy = parsed_strategy;
+        } else if let Some(value) = arg
+            .strip_prefix("--strategy=")
+            .or_else(|| arg.strip_prefix("-s"))
+        {
+            let Some(parsed_strategy) = parse_merge_strategy(value, stderr)? else {
+                return Ok(None);
+            };
+            strategy = parsed_strategy;
         } else if arg == "explain" && target.is_none() {
             explain = true;
             index += 1;
@@ -5439,7 +5461,26 @@ fn parse_merge_args(
         quit,
         continue_merge,
         verify,
+        strategy,
     }))
+}
+
+fn parse_merge_strategy(
+    value: &str,
+    stderr: &mut dyn Write,
+) -> io::Result<Option<rit_core::MergeStrategy>> {
+    match value {
+        "ort" | "recursive" => Ok(Some(rit_core::MergeStrategy::Default)),
+        "ours" => Ok(Some(rit_core::MergeStrategy::Ours)),
+        "" => {
+            writeln!(stderr, "rit: merge strategy requires a value")?;
+            Ok(None)
+        }
+        _ => {
+            writeln!(stderr, "rit: unsupported merge strategy '{value}'")?;
+            Ok(None)
+        }
+    }
 }
 
 fn op_command(

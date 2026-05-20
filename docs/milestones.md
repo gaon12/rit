@@ -547,6 +547,9 @@ Completion criteria:
     conflicts.
   - [x] Clean merge commits run `pre-merge-commit` hooks and honor
     `--no-verify` for that hook.
+  - [x] `merge -s ours`, `merge --strategy ours`, and compact `-sours`
+    create a merge commit that keeps the current `HEAD` tree while recording
+    the target as the second parent.
   - [ ] Full conflict handling, merge hooks, and strategies.
 - [~] `rit cherry-pick`
   - [x] Clean single-parent cherry-pick applies the picked commit onto `HEAD`,

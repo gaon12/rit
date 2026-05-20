@@ -414,6 +414,8 @@ pub enum CommitHookMode {
 pub struct MergeOptions {
     /// Whether merge verification hooks should run.
     pub verify: bool,
+    /// Merge strategy selected by the user.
+    pub strategy: MergeStrategy,
 }
 
 impl MergeOptions {
@@ -425,8 +427,21 @@ impl MergeOptions {
 
 impl Default for MergeOptions {
     fn default() -> Self {
-        Self { verify: true }
+        Self {
+            verify: true,
+            strategy: MergeStrategy::Default,
+        }
     }
+}
+
+/// Merge strategy selected by the user.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum MergeStrategy {
+    /// Use rit's normal recursive/ort-style three-way merge flow.
+    #[default]
+    Default,
+    /// Keep the current `HEAD` tree while recording the target as a merge parent.
+    Ours,
 }
 
 /// Name and e-mail pair used in a commit signature.
@@ -1110,6 +1125,15 @@ impl Repository {
         if old_id == new_id {
             return Ok(MergeResult::AlreadyUpToDate { commit_id: old_id });
         }
+        if options.strategy == MergeStrategy::Ours {
+            let commit_id =
+                self.create_ours_strategy_merge_commit(target, options, old_id, new_id)?;
+            return Ok(MergeResult::MergeCommit {
+                old_id,
+                target_id: new_id,
+                commit_id,
+            });
+        }
         if !self.commit_is_ancestor(old_id, new_id)? {
             let merge_base = self.find_merge_base(old_id, new_id)?;
             let head_entries = self.commit_index_entries(old_id)?;
@@ -1157,6 +1181,36 @@ impl Repository {
         self.update_head(new_id)?;
         self.refresh_indexdb_after_git_write();
         Ok(MergeResult::FastForward { old_id, new_id })
+    }
+
+    fn create_ours_strategy_merge_commit(
+        &self,
+        target: &str,
+        options: &MergeOptions,
+        old_id: ObjectId,
+        target_id: ObjectId,
+    ) -> Result<ObjectId> {
+        write_text_atomically(&self.git_dir().join("ORIG_HEAD"), &format!("{}\n", old_id))?;
+        let message = format!("Merge branch '{target}'");
+        write_text_atomically(
+            &self.git_dir().join("MERGE_HEAD"),
+            &format!("{}\n", target_id),
+        )?;
+        write_text_atomically(&self.git_dir().join("MERGE_MSG"), &format!("{message}\n"))?;
+        let result = self.commit_index_with_parents(
+            &message,
+            &CommitOptions {
+                verify: options.verify,
+                hook_mode: CommitHookMode::Merge,
+                ..CommitOptions::default()
+            },
+            &[old_id, target_id],
+            true,
+        )?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_HEAD"))?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))?;
+        remove_file_if_exists(&self.git_dir().join("MERGE_MODE"))?;
+        Ok(result.commit_id)
     }
 
     fn create_clean_merge_commit(&self, input: CleanMergeCommitInput<'_>) -> Result<ObjectId> {
@@ -5505,6 +5559,88 @@ mod tests {
             "master\n"
         );
         assert!(!repository.git_dir().join("MERGE_HEAD").exists());
+        assert_eq!(
+            repository
+                .status_porcelain_v1()
+                .expect("status should read")
+                .to_porcelain_v1(),
+            ""
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn merge_ours_strategy_records_target_parent_and_keeps_head_tree() {
+        let temp = temp_path("merge-ours-strategy");
+        let repository = committed_nested_repository(&temp);
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "topic\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("topic add should work");
+        let topic = repository
+            .commit_index("topic")
+            .expect("topic commit should work")
+            .commit_id;
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(temp.join("nested").join("b.txt"), "master\n").expect("file should be written");
+        repository
+            .add_paths(&["nested/b.txt".to_owned()])
+            .expect("master add should work");
+        let master = repository
+            .commit_index("master")
+            .expect("master commit should work")
+            .commit_id;
+        let master_entries = repository
+            .commit_index_entries(master)
+            .expect("master tree should read");
+
+        let result = repository
+            .merge_with_options(
+                "topic",
+                &super::MergeOptions {
+                    strategy: super::MergeStrategy::Ours,
+                    ..super::MergeOptions::default()
+                },
+            )
+            .expect("ours strategy merge should commit");
+
+        let super::MergeResult::MergeCommit {
+            old_id,
+            target_id,
+            commit_id,
+        } = result
+        else {
+            panic!("expected ours strategy merge commit result");
+        };
+        assert_eq!(old_id, master);
+        assert_eq!(target_id, topic);
+        let object = repository
+            .read_object(commit_id)
+            .expect("merge commit should read");
+        let commit = parse_commit(&object.data).expect("merge commit should parse");
+        assert_eq!(commit.parents, vec![master, topic]);
+        assert_eq!(commit.message, "Merge branch 'topic'\n");
+        assert_eq!(
+            repository
+                .commit_index_entries(commit_id)
+                .expect("ours merge tree should read"),
+            master_entries
+        );
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
+            "base\n"
+        );
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("b.txt")).expect("file should read"),
+            "master\n"
+        );
+        assert!(!repository.git_dir().join("MERGE_HEAD").exists());
+        assert!(!repository.git_dir().join("MERGE_MSG").exists());
         assert_eq!(
             repository
                 .status_porcelain_v1()

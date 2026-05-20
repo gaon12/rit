@@ -171,7 +171,7 @@ pub use write::{
     AddOptions, AddPlan, CherryPickContinueResult, CherryPickOptions, CherryPickResult,
     CommitHookMode, CommitOptions, CommitPlan, CommitResult, FileModeOverride, MergeConflictKind,
     MergeConflictReport, MergeConflictSide, MergeConflictStageEntry, MergeConflictStagePlan,
-    MergeOptions, MergePlan, MergeResult, RebaseContinueResult, RebaseCurrentPatch,
+    MergeOptions, MergePlan, MergeResult, MergeStrategy, RebaseContinueResult, RebaseCurrentPatch,
     RebaseSkipResult, RebaseStartResult, ResetPlan, SignatureIdentity, SignatureTime,
 };
 pub use write_plan::{

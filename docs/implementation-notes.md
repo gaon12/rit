@@ -368,6 +368,11 @@
   `git cherry-pick -h`, `git rebase -h`, and `git stash -h`.
 - 2026-05-13 fast-forward merge slice checked `git merge -h`; implemented
   `rit merge [--ff-only] <target>` for clean fast-forward-only updates.
+- 2026-05-20 merge ours strategy slice checked Git 2.54.0.windows.1 with
+  `git --version`, `git help -a`, `git merge -h`, and direct comparisons for
+  `git merge -s ours topic`; implemented `-s ours`, `--strategy ours`,
+  `--strategy=ours`, and compact `-sours` as a strategy that records the
+  target parent while keeping the current `HEAD` tree.
 - 2026-05-13 operation journal slice checked `git --version` and
   `git help -a`; this feature is rit-specific metadata under `.git/rit/` and
   does not use Git command output as a compatibility target.
@@ -845,6 +850,10 @@
 - Clean non-fast-forward merges without conflict candidates now materialize the
   merged index/worktree and create a merge commit with `HEAD` and the target as
   parents.
+- `rit merge -s ours <target>` and the equivalent `--strategy ours` forms now
+  create a merge commit with the current `HEAD` tree and the target as the
+  second parent, matching Git's ours strategy for the covered clean-worktree
+  slice.
 - Delete/modify conflicts now leave the modified side in the working tree for
   both `HEAD`-deleted and target-deleted cases while preserving the relevant
   conflict stage entries. Merge results carry structured conflict reports so

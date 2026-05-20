@@ -4167,6 +4167,75 @@ fn merge_creates_clean_non_fast_forward_commit() {
 }
 
 #[test]
+fn merge_ours_strategy_matches_git_tree_and_parents() {
+    let fixture = temp_path("merge-ours-strategy-fixture");
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    fs::write(fixture.join("tracked.txt"), "base\n").expect("base file should be written");
+    run_git(&fixture, ["add", "tracked.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    run_git(&fixture, ["checkout", "--quiet", "-b", "topic"]);
+    fs::write(fixture.join("topic.txt"), "topic\n").expect("topic file should be written");
+    run_git(&fixture, ["add", "topic.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "topic"]);
+    run_git(&fixture, ["checkout", "--quiet", "master"]);
+    fs::write(fixture.join("head.txt"), "head\n").expect("head file should be written");
+    run_git(&fixture, ["add", "head.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "head"]);
+
+    for args in [
+        vec!["merge", "-s", "ours", "topic"],
+        vec!["merge", "--strategy", "ours", "topic"],
+        vec!["merge", "--strategy=ours", "topic"],
+        vec!["merge", "-sours", "topic"],
+    ] {
+        let outcome = compare_after_command(
+            &fixture,
+            command_words_vec("git", &args),
+            command_words_vec(rit_binary(), &args),
+        );
+
+        assert_eq!(outcome.git_status, outcome.rit_status);
+        assert_eq!(
+            run_capture(
+                "git",
+                ["show", "--no-patch", "--pretty=%P", "HEAD"],
+                &outcome.git_repo,
+            )
+            .0,
+            run_capture(
+                "git",
+                ["show", "--no-patch", "--pretty=%P", "HEAD"],
+                &outcome.rit_repo,
+            )
+            .0,
+        );
+        assert_eq!(
+            run_capture(
+                "git",
+                ["show", "--no-patch", "--pretty=%T", "HEAD"],
+                &outcome.git_repo,
+            )
+            .0,
+            run_capture(
+                "git",
+                ["show", "--no-patch", "--pretty=%T", "HEAD"],
+                &outcome.rit_repo,
+            )
+            .0,
+        );
+        assert_eq!(
+            run_capture("git", ["ls-tree", "--name-only", "HEAD"], &outcome.rit_repo).0,
+            "head.txt\ntracked.txt\n"
+        );
+    }
+    let _ = fs::remove_dir_all(fixture);
+}
+
+#[test]
 fn merge_combines_mode_only_and_content_only_changes_cleanly() {
     let fixture = temp_path("merge-mode-content-clean-fixture");
     fs::create_dir_all(&fixture).expect("fixture should be created");
@@ -4728,6 +4797,16 @@ fn command_words<const N: usize>(program: impl Into<OsString>, args: [&str; N]) 
     CommandSpec {
         program,
         args: args.into_iter().map(OsString::from).collect(),
+        env: Vec::new(),
+        stdin: None,
+    }
+}
+
+fn command_words_vec(program: impl Into<OsString>, args: &[&str]) -> CommandSpec {
+    let program = normalize_test_program(program.into());
+    CommandSpec {
+        program,
+        args: args.iter().map(OsString::from).collect(),
         env: Vec::new(),
         stdin: None,
     }
