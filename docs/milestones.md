@@ -553,6 +553,9 @@ Completion criteria:
   - [x] `merge --no-ff` forces a merge commit for fast-forwardable targets,
     and `--ff`/`--no-ff` option order follows Git for the covered branch-target
     forms.
+  - [x] `merge --no-commit` stops clean non-fast-forward merges before commit
+    with Git-shaped merge state, honors `--commit`/`--no-commit` option order,
+    and still fast-forwards when Git would.
   - [ ] Full conflict handling, merge hooks, and strategies.
 - [~] `rit cherry-pick`
   - [x] Clean single-parent cherry-pick applies the picked commit onto `HEAD`,

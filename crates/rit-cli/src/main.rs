@@ -4665,6 +4665,7 @@ fn merge_command(
                 verify: merge_args.verify,
                 strategy: merge_args.strategy,
                 no_fast_forward: merge_args.fast_forward == MergeFastForwardMode::NoFf,
+                commit: merge_args.commit,
             },
         )
     };
@@ -4718,6 +4719,21 @@ fn merge_command(
                 &old_id.to_hex()[..7],
                 &target_id.to_hex()[..7],
                 &commit_id.to_hex()[..7]
+            )?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Ok(rit_core::MergeResult::StoppedBeforeCommit { .. }) => {
+            record_operation(
+                &repository,
+                "merge",
+                &format!("merge without commit {target}"),
+                before,
+                Vec::new(),
+                stderr,
+            )?;
+            writeln!(
+                stdout,
+                "Automatic merge went well; stopped before committing as requested"
             )?;
             Ok(ExitCode::SUCCESS)
         }
@@ -5349,6 +5365,7 @@ struct ParsedMergeArgs {
     continue_merge: bool,
     verify: bool,
     strategy: rit_core::MergeStrategy,
+    commit: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -5370,6 +5387,7 @@ fn parse_merge_args(
     let mut continue_merge = false;
     let mut verify = true;
     let mut strategy = rit_core::MergeStrategy::Default;
+    let mut commit = true;
     let mut target = None;
     let mut index = 0;
     while index < args.len() {
@@ -5392,6 +5410,10 @@ fn parse_merge_args(
             verify = false;
         } else if arg == "--verify" {
             verify = true;
+        } else if arg == "--no-commit" {
+            commit = false;
+        } else if arg == "--commit" {
+            commit = true;
         } else if arg == "-s" || arg == "--strategy" {
             index += 1;
             let Some(value) = args.get(index) else {
@@ -5475,6 +5497,7 @@ fn parse_merge_args(
         continue_merge,
         verify,
         strategy,
+        commit,
     }))
 }
 

@@ -3532,6 +3532,171 @@ fn merge_no_ff_option_order_matches_git_head_shape() {
 }
 
 #[test]
+fn merge_no_commit_matches_git_state_and_option_order() {
+    let fixture = temp_path("merge-no-commit-fixture");
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    fs::write(fixture.join("base.txt"), "base\n").expect("base file should be written");
+    run_git(&fixture, ["add", "base.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    run_git(&fixture, ["checkout", "--quiet", "-b", "topic"]);
+    fs::write(fixture.join("topic.txt"), "topic\n").expect("topic file should be written");
+    run_git(&fixture, ["add", "topic.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "topic"]);
+    run_git(&fixture, ["checkout", "--quiet", "master"]);
+    fs::write(fixture.join("head.txt"), "head\n").expect("head file should be written");
+    run_git(&fixture, ["add", "head.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "head"]);
+
+    for args in [
+        vec!["merge", "--no-commit", "topic"],
+        vec!["merge", "--commit", "--no-commit", "topic"],
+    ] {
+        let outcome = compare_after_command(
+            &fixture,
+            command_words_vec("git", &args),
+            command_words_vec(rit_binary(), &args),
+        );
+
+        assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+        assert_eq!(outcome.git_status, outcome.rit_status);
+        assert_eq!(
+            run_capture("git", ["rev-parse", "HEAD"], &outcome.git_repo).0,
+            run_capture("git", ["rev-parse", "HEAD"], &outcome.rit_repo).0,
+        );
+        assert_eq!(
+            run_capture("git", ["ls-files", "--stage"], &outcome.git_repo).0,
+            run_capture(rit_binary(), ["ls-files", "--stage"], &outcome.rit_repo).0,
+        );
+        assert_eq!(
+            read_repo_git_file(&outcome.git_repo, "MERGE_HEAD"),
+            read_repo_git_file(&outcome.rit_repo, "MERGE_HEAD"),
+        );
+        assert_eq!(
+            read_repo_git_file(&outcome.git_repo, "MERGE_MSG"),
+            read_repo_git_file(&outcome.rit_repo, "MERGE_MSG"),
+        );
+        assert_eq!(
+            read_repo_git_file(&outcome.git_repo, "MERGE_MODE"),
+            read_repo_git_file(&outcome.rit_repo, "MERGE_MODE"),
+        );
+    }
+
+    let committed_outcome = compare_after_command(
+        &fixture,
+        command_words("git", ["merge", "--no-commit", "--commit", "topic"]),
+        command_words(rit_binary(), ["merge", "--no-commit", "--commit", "topic"]),
+    );
+    assert_eq!(committed_outcome.git_status, committed_outcome.rit_status);
+    assert_eq!(
+        read_repo_git_file(&committed_outcome.git_repo, "MERGE_HEAD"),
+        read_repo_git_file(&committed_outcome.rit_repo, "MERGE_HEAD"),
+    );
+    assert_eq!(
+        run_capture(
+            "git",
+            ["show", "--no-patch", "--pretty=%P", "HEAD"],
+            &committed_outcome.git_repo,
+        )
+        .0
+        .split_whitespace()
+        .count(),
+        run_capture(
+            "git",
+            ["show", "--no-patch", "--pretty=%P", "HEAD"],
+            &committed_outcome.rit_repo,
+        )
+        .0
+        .split_whitespace()
+        .count(),
+    );
+    assert_eq!(
+        run_capture(
+            "git",
+            ["show", "--no-patch", "--pretty=%T", "HEAD"],
+            &committed_outcome.git_repo,
+        )
+        .0,
+        run_capture(
+            "git",
+            ["show", "--no-patch", "--pretty=%T", "HEAD"],
+            &committed_outcome.rit_repo,
+        )
+        .0,
+    );
+
+    let fast_forward_fixture = temp_path("merge-no-commit-fast-forward-fixture");
+    fs::create_dir_all(&fast_forward_fixture).expect("fixture should be created");
+    run_git(&fast_forward_fixture, ["init", "--quiet"]);
+    run_git(&fast_forward_fixture, ["config", "user.name", "Rit Test"]);
+    run_git(
+        &fast_forward_fixture,
+        ["config", "user.email", "rit@example.test"],
+    );
+    run_git(&fast_forward_fixture, ["config", "core.autocrlf", "false"]);
+    fs::write(fast_forward_fixture.join("base.txt"), "base\n")
+        .expect("base file should be written");
+    run_git(&fast_forward_fixture, ["add", "base.txt"]);
+    run_git(&fast_forward_fixture, ["commit", "--quiet", "-m", "base"]);
+    run_git(
+        &fast_forward_fixture,
+        ["checkout", "--quiet", "-b", "topic"],
+    );
+    fs::write(fast_forward_fixture.join("topic.txt"), "topic\n")
+        .expect("topic file should be written");
+    run_git(&fast_forward_fixture, ["add", "topic.txt"]);
+    run_git(&fast_forward_fixture, ["commit", "--quiet", "-m", "topic"]);
+    run_git(&fast_forward_fixture, ["checkout", "--quiet", "master"]);
+
+    let fast_forward_outcome = compare_after_command(
+        &fast_forward_fixture,
+        command_words("git", ["merge", "--no-commit", "topic"]),
+        command_words(rit_binary(), ["merge", "--no-commit", "topic"]),
+    );
+    assert_eq!(
+        fast_forward_outcome.git_status,
+        fast_forward_outcome.rit_status
+    );
+    assert_eq!(
+        read_repo_git_file(&fast_forward_outcome.git_repo, "MERGE_HEAD"),
+        read_repo_git_file(&fast_forward_outcome.rit_repo, "MERGE_HEAD"),
+    );
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &fast_forward_outcome.git_repo).0,
+        run_capture("git", ["rev-parse", "HEAD"], &fast_forward_outcome.rit_repo).0,
+    );
+
+    let forced_outcome = compare_after_command(
+        &fast_forward_fixture,
+        command_words("git", ["merge", "--no-ff", "--no-commit", "topic"]),
+        command_words(rit_binary(), ["merge", "--no-ff", "--no-commit", "topic"]),
+    );
+    assert_eq!(
+        forced_outcome.git_command_stdout,
+        forced_outcome.rit_command_stdout
+    );
+    assert_eq!(forced_outcome.git_status, forced_outcome.rit_status);
+    assert_eq!(
+        read_repo_git_file(&forced_outcome.git_repo, "MERGE_HEAD"),
+        read_repo_git_file(&forced_outcome.rit_repo, "MERGE_HEAD"),
+    );
+    assert_eq!(
+        read_repo_git_file(&forced_outcome.git_repo, "MERGE_MSG"),
+        read_repo_git_file(&forced_outcome.rit_repo, "MERGE_MSG"),
+    );
+    assert_eq!(
+        read_repo_git_file(&forced_outcome.git_repo, "MERGE_MODE"),
+        read_repo_git_file(&forced_outcome.rit_repo, "MERGE_MODE"),
+    );
+
+    let _ = fs::remove_dir_all(fixture);
+    let _ = fs::remove_dir_all(fast_forward_fixture);
+}
+
+#[test]
 fn merge_plan_prints_fast_forward_without_changing_head() {
     let fixture = temp_path("merge-plan-fixture");
     fs::create_dir_all(&fixture).expect("fixture should be created");
@@ -4870,6 +5035,10 @@ fn command_words_vec(program: impl Into<OsString>, args: &[&str]) -> CommandSpec
         env: Vec::new(),
         stdin: None,
     }
+}
+
+fn read_repo_git_file(repo: &Path, path: &str) -> Option<String> {
+    fs::read_to_string(repo.join(".git").join(path)).ok()
 }
 
 fn command_words_with_stdin<const N: usize>(

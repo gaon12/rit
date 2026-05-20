@@ -378,6 +378,12 @@
   `git merge --no-ff topic`, `--ff --no-ff`, and `--no-ff --ff`; implemented
   Git-style option order for `--ff`/`--no-ff` and forced merge commits for
   fast-forwardable branch targets.
+- 2026-05-20 merge no-commit slice checked Git 2.54.0.windows.1 with
+  `git --version`, `git help -a`, `git merge -h`, and direct comparisons for
+  `git merge --no-commit topic`, `--no-ff --no-commit`, fast-forward
+  `--no-commit`, and `-s ours --no-commit`; implemented clean merge
+  stop-before-commit state with Git-shaped `MERGE_HEAD`, `MERGE_MSG`, and
+  `MERGE_MODE` for covered branch-target forms.
 - 2026-05-13 operation journal slice checked `git --version` and
   `git help -a`; this feature is rit-specific metadata under `.git/rit/` and
   does not use Git command output as a compatibility target.
@@ -862,6 +868,11 @@
 - `rit merge --no-ff <target>` now creates a merge commit for fast-forwardable
   targets, materializes the target tree, and lets later `--ff` reset the
   selection back to the default fast-forward behavior.
+- `rit merge --no-commit <target>` now leaves clean non-fast-forward merge
+  results staged with `MERGE_HEAD`, `MERGE_MSG`, and `MERGE_MODE` while leaving
+  `HEAD` unchanged. A plain fast-forward still fast-forwards, matching Git, and
+  `--commit`/`--no-commit` option order is honored for covered branch-target
+  forms.
 - Delete/modify conflicts now leave the modified side in the working tree for
   both `HEAD`-deleted and target-deleted cases while preserving the relevant
   conflict stage entries. Merge results carry structured conflict reports so

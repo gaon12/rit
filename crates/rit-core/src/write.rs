@@ -129,6 +129,14 @@ pub enum MergeResult {
         /// Newly written merge commit.
         commit_id: ObjectId,
     },
+    /// A clean merge updated the index and working tree but stopped before
+    /// creating the merge commit.
+    StoppedBeforeCommit {
+        /// Current `HEAD` commit, left unchanged.
+        old_id: ObjectId,
+        /// Target commit requested by the user.
+        target_id: ObjectId,
+    },
     /// A non-fast-forward merge started and left conflict stages in the index.
     Conflicts {
         /// Target commit requested by the user.
@@ -418,6 +426,8 @@ pub struct MergeOptions {
     pub strategy: MergeStrategy,
     /// Force a merge commit even when the target could be fast-forwarded.
     pub no_fast_forward: bool,
+    /// Whether to create the merge commit after a clean merge result.
+    pub commit: bool,
 }
 
 impl MergeOptions {
@@ -433,6 +443,7 @@ impl Default for MergeOptions {
             verify: true,
             strategy: MergeStrategy::Default,
             no_fast_forward: false,
+            commit: true,
         }
     }
 }
@@ -1129,6 +1140,14 @@ impl Repository {
             return Ok(MergeResult::AlreadyUpToDate { commit_id: old_id });
         }
         if options.strategy == MergeStrategy::Ours {
+            if !options.commit {
+                self.start_ours_strategy_merge_without_commit(target, old_id, new_id)?;
+                self.refresh_indexdb_after_git_write();
+                return Ok(MergeResult::StoppedBeforeCommit {
+                    old_id,
+                    target_id: new_id,
+                });
+            }
             let commit_id =
                 self.create_ours_strategy_merge_commit(target, options, old_id, new_id)?;
             return Ok(MergeResult::MergeCommit {
@@ -1140,6 +1159,22 @@ impl Repository {
         if options.no_fast_forward && self.commit_is_ancestor(old_id, new_id)? {
             let head_entries = self.commit_index_entries(old_id)?;
             let target_entries = self.commit_index_entries(new_id)?;
+            if !options.commit {
+                self.start_clean_merge_without_commit(CleanMergeCommitInput {
+                    target,
+                    options,
+                    old_id,
+                    target_id: new_id,
+                    base_entries: &head_entries,
+                    head_entries: &head_entries,
+                    target_entries: &target_entries,
+                })?;
+                self.refresh_indexdb_after_git_write();
+                return Ok(MergeResult::StoppedBeforeCommit {
+                    old_id,
+                    target_id: new_id,
+                });
+            }
             let commit_id = self.create_clean_merge_commit(CleanMergeCommitInput {
                 target,
                 options,
@@ -1166,6 +1201,22 @@ impl Repository {
             let merge_workflow =
                 non_fast_forward_merge_workflow_plan(&base_entries, &head_entries, &target_entries);
             if merge_workflow.conflict_stages.is_empty() {
+                if !options.commit {
+                    self.start_clean_merge_without_commit(CleanMergeCommitInput {
+                        target,
+                        options,
+                        old_id,
+                        target_id: new_id,
+                        base_entries: &base_entries,
+                        head_entries: &head_entries,
+                        target_entries: &target_entries,
+                    })?;
+                    self.refresh_indexdb_after_git_write();
+                    return Ok(MergeResult::StoppedBeforeCommit {
+                        old_id,
+                        target_id: new_id,
+                    });
+                }
                 let commit_id = self.create_clean_merge_commit(CleanMergeCommitInput {
                     target,
                     options,
@@ -1204,6 +1255,24 @@ impl Repository {
         Ok(MergeResult::FastForward { old_id, new_id })
     }
 
+    fn start_ours_strategy_merge_without_commit(
+        &self,
+        target: &str,
+        old_id: ObjectId,
+        target_id: ObjectId,
+    ) -> Result<()> {
+        write_text_atomically(&self.git_dir().join("ORIG_HEAD"), &format!("{}\n", old_id))?;
+        write_text_atomically(
+            &self.git_dir().join("MERGE_HEAD"),
+            &format!("{}\n", target_id),
+        )?;
+        write_text_atomically(
+            &self.git_dir().join("MERGE_MSG"),
+            &format!("{}\n", merge_commit_message(target)),
+        )?;
+        write_text_atomically(&self.git_dir().join("MERGE_MODE"), "no-ff")
+    }
+
     fn create_ours_strategy_merge_commit(
         &self,
         target: &str,
@@ -1212,7 +1281,7 @@ impl Repository {
         target_id: ObjectId,
     ) -> Result<ObjectId> {
         write_text_atomically(&self.git_dir().join("ORIG_HEAD"), &format!("{}\n", old_id))?;
-        let message = format!("Merge branch '{target}'");
+        let message = merge_commit_message(target);
         write_text_atomically(
             &self.git_dir().join("MERGE_HEAD"),
             &format!("{}\n", target_id),
@@ -1232,6 +1301,54 @@ impl Repository {
         remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))?;
         remove_file_if_exists(&self.git_dir().join("MERGE_MODE"))?;
         Ok(result.commit_id)
+    }
+
+    fn start_clean_merge_without_commit(&self, input: CleanMergeCommitInput<'_>) -> Result<()> {
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "merge must be run in a repository with a working tree",
+            ));
+        };
+        let symlinks_enabled = self.core_symlinks_enabled()?;
+        let merged_entries = self.non_fast_forward_merge_index_entries(
+            input.base_entries,
+            input.head_entries,
+            input.target_entries,
+            &[],
+            input.target,
+        )?;
+        let conflict_paths = BTreeSet::new();
+        write_non_conflicting_merge_worktree_changes(
+            self,
+            worktree,
+            input.head_entries,
+            &merged_entries,
+            &conflict_paths,
+            symlinks_enabled,
+        )?;
+        write_text_atomically(
+            &self.git_dir().join("ORIG_HEAD"),
+            &format!("{}\n", input.old_id),
+        )?;
+        Index {
+            entries: merged_entries,
+            extensions: Vec::new(),
+        }
+        .write(&self.git_dir().join("index"))?;
+        write_text_atomically(
+            &self.git_dir().join("MERGE_HEAD"),
+            &format!("{}\n", input.target_id),
+        )?;
+        write_text_atomically(
+            &self.git_dir().join("MERGE_MSG"),
+            &format!("{}\n", merge_commit_message(input.target)),
+        )?;
+        let merge_mode = if input.options.no_fast_forward {
+            "no-ff"
+        } else {
+            ""
+        };
+        write_text_atomically(&self.git_dir().join("MERGE_MODE"), merge_mode)
     }
 
     fn create_clean_merge_commit(&self, input: CleanMergeCommitInput<'_>) -> Result<ObjectId> {
@@ -1266,7 +1383,7 @@ impl Repository {
             extensions: Vec::new(),
         }
         .write(&self.git_dir().join("index"))?;
-        let message = format!("Merge commit '{}'", input.target);
+        let message = merge_commit_message(input.target);
         write_text_atomically(
             &self.git_dir().join("MERGE_HEAD"),
             &format!("{}\n", input.target_id),
@@ -3668,8 +3785,12 @@ fn write_non_conflicting_merge_worktree_changes(
     Ok(())
 }
 
+fn merge_commit_message(target: &str) -> String {
+    format!("Merge branch '{target}'")
+}
+
 fn merge_message_with_conflicts(target: &str, conflict_paths: &BTreeSet<&str>) -> String {
-    let mut message = format!("Merge commit '{target}'\n\nConflicts:\n");
+    let mut message = format!("{}\n\nConflicts:\n", merge_commit_message(target));
     for path in conflict_paths {
         message.push('\t');
         message.push_str(path);
@@ -5652,6 +5773,92 @@ mod tests {
         );
         assert!(!repository.git_dir().join("MERGE_HEAD").exists());
         assert!(!repository.git_dir().join("MERGE_MSG").exists());
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn merge_no_commit_leaves_clean_merge_state_for_continue() {
+        let temp = temp_path("merge-no-commit");
+        let repository = committed_nested_repository(&temp);
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "topic\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("topic add should work");
+        let topic = repository
+            .commit_index("topic")
+            .expect("topic commit should work")
+            .commit_id;
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(temp.join("nested").join("b.txt"), "master\n").expect("file should be written");
+        repository
+            .add_paths(&["nested/b.txt".to_owned()])
+            .expect("master add should work");
+        let master = repository
+            .commit_index("master")
+            .expect("master commit should work")
+            .commit_id;
+
+        let result = repository
+            .merge_with_options(
+                "topic",
+                &super::MergeOptions {
+                    commit: false,
+                    ..super::MergeOptions::default()
+                },
+            )
+            .expect("no-commit merge should stop before commit");
+
+        assert_eq!(
+            result,
+            super::MergeResult::StoppedBeforeCommit {
+                old_id: master,
+                target_id: topic,
+            }
+        );
+        assert_eq!(
+            repository
+                .resolve_head()
+                .expect("HEAD should resolve")
+                .expect("HEAD should exist"),
+            master
+        );
+        assert_eq!(
+            fs::read_to_string(repository.git_dir().join("MERGE_HEAD"))
+                .expect("MERGE_HEAD should read"),
+            format!("{topic}\n")
+        );
+        assert_eq!(
+            fs::read_to_string(repository.git_dir().join("MERGE_MSG"))
+                .expect("MERGE_MSG should read"),
+            "Merge branch 'topic'\n"
+        );
+        assert_eq!(
+            fs::read_to_string(repository.git_dir().join("MERGE_MODE"))
+                .expect("MERGE_MODE should read"),
+            ""
+        );
+        assert_eq!(
+            repository
+                .status_porcelain_v1()
+                .expect("status should read")
+                .to_porcelain_v1(),
+            "M  nested/a.txt\n"
+        );
+
+        let continue_result = repository
+            .continue_merge(&super::CommitOptions::default())
+            .expect("merge continue should create commit");
+        let object = repository
+            .read_object(continue_result.commit_id)
+            .expect("merge commit should read");
+        let commit = parse_commit(&object.data).expect("merge commit should parse");
+        assert_eq!(commit.parents, vec![master, topic]);
+        assert!(!repository.git_dir().join("MERGE_HEAD").exists());
         remove_dir_all(&temp);
     }
 
