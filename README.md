@@ -70,6 +70,17 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
+## Continuous Integration
+
+The full compatibility test suite is currently pinned to the checked Windows
+Git baseline recorded in `docs/compatibility.md`, so CI runs formatting,
+clippy, and `cargo test --workspace` on `windows-latest`.
+
+Linux and macOS are still guarded in CI through the release-build matrix for
+both `rit-min` and `rit-full`. Expanding the full test matrix to Linux and
+macOS is tracked as a compatibility-baseline task once platform-specific Git
+output and file-mode differences are normalized.
+
 ## Release Builds
 
 `rit-min` is the default single-binary release profile:

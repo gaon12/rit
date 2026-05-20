@@ -14,8 +14,8 @@ drift.
 
 ## Current Baseline
 
-- Date: 2026-05-17
-- Reference Git: `git version 2.52.0.windows.1`
+- Date: 2026-05-20
+- Reference Git: `git version 2.54.0.windows.1`
 - Required recurring checks:
   - `git --version`
   - `git help -a`
@@ -49,6 +49,22 @@ Verified on 2026-05-13 before continuing implementation:
   accurately checked. The earliest real implementation gap remains M3 rename
   detection beyond cached diff. This pass added the first worktree rename/copy
   slice for default `diff` when Git's index contains intent-to-add entries.
+- 2026-05-20 verification refreshed the local Git baseline to
+  `git version 2.54.0.windows.1`, re-ran `git help -a`, confirmed production
+  `git` execution is still limited to allowed helper/transport surfaces rather
+  than Git-wrapper command implementations, and found the earliest tracked
+  implementation gaps remain the existing `[~]` items rather than a falsely
+  completed M0-M2 item.
+- 2026-05-20 GitHub Actions analysis found every run from #1 through #43 had
+  the same shape: `test (windows-latest)` passed, Ubuntu/macOS test jobs failed
+  in `cargo test --workspace`, and all release builds passed. CI now keeps the
+  full compatibility suite on the checked Windows Git baseline while retaining
+  Ubuntu/macOS release builds for portability until Unix compatibility output
+  is normalized.
+- 2026-05-20 CLI readability pass split stash and workspace command handling
+  out of `rit-cli/src/main.rs`. The entrypoint dropped from roughly 6400 lines
+  to roughly 4360 lines; further command-module splits remain a standing
+  maintainability task.
 
 ## M0: Baseline And Rules
 
@@ -1119,9 +1135,11 @@ Completion criteria:
 
 ## Active Queue
 
-1. Continue M8 merge with binary/delete/mode conflict handling,
+1. Normalize Unix/macOS compatibility-test baselines so the full
+   `cargo test --workspace` oracle can safely expand beyond Windows.
+2. Continue M8 merge with binary/delete/mode conflict handling,
    abort/continue, and merge-commit workflow planning.
-2. Keep M6 case-sensitivity parity under verification as new path lookup
+3. Keep M6 case-sensitivity parity under verification as new path lookup
    surfaces are added.
 
 ## Implementation Notes

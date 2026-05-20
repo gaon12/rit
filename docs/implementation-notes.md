@@ -2,7 +2,7 @@
 
 ## Baseline Git Check
 
-- Checked Git version: `git version 2.52.0.windows.1`
+- Checked Git version: `git version 2.54.0.windows.1`
 - Checked command list: `git help -a`
 - `git help <command>` opened the local manual pager in this environment and timed out, so command-specific checks used `git <command> -h`.
 - 2026-05-09 baseline refresh checked: `git status -h`, `git add -h`, `git commit -h`, `git diff -h`, and `git log -h`.
@@ -59,6 +59,14 @@
   2.52.0.windows.1 with `git --version`, `git help -a`, `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons showing
   `:(literal,glob)` is rejected before write-command mutation.
+- 2026-05-20 milestone/CI verification checked Git 2.54.0.windows.1 with
+  `git --version` and `git help -a`. The local quality baseline passed
+  `cargo fmt --all -- --check` and `cargo test --workspace` before new edits.
+  GitHub Actions run history #1-#43 was inspected through the GitHub REST API:
+  Windows test jobs passed, Ubuntu/macOS test jobs failed in
+  `cargo test --workspace`, and all release builds passed. CI is scoped to run
+  the full compatibility suite on the checked Windows baseline while keeping
+  Ubuntu/macOS release builds until Unix compatibility fixtures are normalized.
 - 2026-05-16 diff `-z` summary slice checked `git diff -h` and direct Git
   byte-shape comparisons for `--name-only`, `--name-status`, and `--numstat`,
   including rename output fields.
@@ -2185,6 +2193,21 @@
 - Behavior change: none intended; this keeps remote command parsing and
   dispatch together while reducing the CLI entrypoint after the plain HTTP push
   workflow landed.
+
+### CLI stash module
+
+- 2026-05-20 hygiene pass: `crates/rit-cli/src/main.rs` had grown beyond 6400
+  lines. Moved stash command parsing, formatting, and stash-specific helper
+  types into `crates/rit-cli/src/stash.rs`.
+- Behavior change: none intended; this keeps the CLI entrypoint focused on
+  top-level dispatch while preserving the existing stash command API and tests.
+
+### CLI workspace module
+
+- 2026-05-20 hygiene follow-up: moved workspace recommendation, prefetch, and
+  explain command formatting into `crates/rit-cli/src/workspace.rs`.
+- Behavior change: none intended; this keeps workspace-specific output and
+  argument handling out of the top-level CLI dispatcher.
 
 ### Auth explain
 

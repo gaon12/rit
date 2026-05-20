@@ -6,13 +6,27 @@ and implementation notes may use Git as the reference implementation.
 
 ## Checked Baseline
 
-- Date checked: 2026-05-15
-- Git version: `git version 2.52.0.windows.1`
+- Date checked: 2026-05-20
+- Git version: `git version 2.54.0.windows.1`
 - Command list checked with: `git help -a`
 - Command help checked with: `git <command> -h`
 
 `git help <command>` may open a pager or local manual viewer on Windows, so
 short help output is used for repeatable baseline capture in this workspace.
+
+## CI Baseline Scope
+
+The full `cargo test --workspace` compatibility suite currently runs against
+the Windows Git baseline above. GitHub Actions runs that suite on
+`windows-latest`, where the checked baseline and local validation match.
+
+GitHub Actions release builds still compile `rit-min` and `rit-full` on
+Ubuntu, macOS, and Windows. Earlier CI runs showed a stable pattern from run
+1 through run 43: Windows tests passed, all release builds passed, and the
+Ubuntu/macOS test jobs failed in `cargo test --workspace`. Until the test
+fixtures normalize platform-specific Git output, file-mode, symlink, and
+line-ending differences, Linux/macOS are treated as build-portability targets
+rather than full compatibility-oracle targets.
 
 ## Current Implemented Surface
 
