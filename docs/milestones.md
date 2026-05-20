@@ -550,6 +550,9 @@ Completion criteria:
   - [x] `merge -s ours`, `merge --strategy ours`, and compact `-sours`
     create a merge commit that keeps the current `HEAD` tree while recording
     the target as the second parent.
+  - [x] `merge --no-ff` forces a merge commit for fast-forwardable targets,
+    and `--ff`/`--no-ff` option order follows Git for the covered branch-target
+    forms.
   - [ ] Full conflict handling, merge hooks, and strategies.
 - [~] `rit cherry-pick`
   - [x] Clean single-parent cherry-pick applies the picked commit onto `HEAD`,

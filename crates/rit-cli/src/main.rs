@@ -4654,7 +4654,8 @@ fn merge_command(
         };
     }
     let before = capture_operation_snapshot(&repository, stderr)?;
-    let merge_result = if merge_args.ff_only && merge_args.strategy != rit_core::MergeStrategy::Ours
+    let merge_result = if merge_args.fast_forward == MergeFastForwardMode::FfOnly
+        && merge_args.strategy != rit_core::MergeStrategy::Ours
     {
         repository.merge_ff_only(target)
     } else {
@@ -4663,6 +4664,7 @@ fn merge_command(
             &rit_core::MergeOptions {
                 verify: merge_args.verify,
                 strategy: merge_args.strategy,
+                no_fast_forward: merge_args.fast_forward == MergeFastForwardMode::NoFf,
             },
         )
     };
@@ -5341,12 +5343,19 @@ struct ParsedMergeArgs {
     target: Option<String>,
     plan: bool,
     explain: bool,
-    ff_only: bool,
+    fast_forward: MergeFastForwardMode,
     abort: bool,
     quit: bool,
     continue_merge: bool,
     verify: bool,
     strategy: rit_core::MergeStrategy,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MergeFastForwardMode {
+    Default,
+    FfOnly,
+    NoFf,
 }
 
 fn parse_merge_args(
@@ -5355,7 +5364,7 @@ fn parse_merge_args(
 ) -> io::Result<Option<ParsedMergeArgs>> {
     let mut plan = false;
     let mut explain = false;
-    let mut ff_only = false;
+    let mut fast_forward = MergeFastForwardMode::Default;
     let mut abort = false;
     let mut quit = false;
     let mut continue_merge = false;
@@ -5368,7 +5377,11 @@ fn parse_merge_args(
         if arg == "--plan" {
             plan = true;
         } else if arg == "--ff-only" {
-            ff_only = true;
+            fast_forward = MergeFastForwardMode::FfOnly;
+        } else if arg == "--no-ff" {
+            fast_forward = MergeFastForwardMode::NoFf;
+        } else if arg == "--ff" {
+            fast_forward = MergeFastForwardMode::Default;
         } else if arg == "--abort" {
             abort = true;
         } else if arg == "--quit" {
@@ -5456,7 +5469,7 @@ fn parse_merge_args(
         target,
         plan,
         explain,
-        ff_only,
+        fast_forward,
         abort,
         quit,
         continue_merge,

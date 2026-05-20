@@ -416,6 +416,8 @@ pub struct MergeOptions {
     pub verify: bool,
     /// Merge strategy selected by the user.
     pub strategy: MergeStrategy,
+    /// Force a merge commit even when the target could be fast-forwarded.
+    pub no_fast_forward: bool,
 }
 
 impl MergeOptions {
@@ -430,6 +432,7 @@ impl Default for MergeOptions {
         Self {
             verify: true,
             strategy: MergeStrategy::Default,
+            no_fast_forward: false,
         }
     }
 }
@@ -1128,6 +1131,24 @@ impl Repository {
         if options.strategy == MergeStrategy::Ours {
             let commit_id =
                 self.create_ours_strategy_merge_commit(target, options, old_id, new_id)?;
+            return Ok(MergeResult::MergeCommit {
+                old_id,
+                target_id: new_id,
+                commit_id,
+            });
+        }
+        if options.no_fast_forward && self.commit_is_ancestor(old_id, new_id)? {
+            let head_entries = self.commit_index_entries(old_id)?;
+            let target_entries = self.commit_index_entries(new_id)?;
+            let commit_id = self.create_clean_merge_commit(CleanMergeCommitInput {
+                target,
+                options,
+                old_id,
+                target_id: new_id,
+                base_entries: &head_entries,
+                head_entries: &head_entries,
+                target_entries: &target_entries,
+            })?;
             return Ok(MergeResult::MergeCommit {
                 old_id,
                 target_id: new_id,
@@ -5566,6 +5587,71 @@ mod tests {
                 .to_porcelain_v1(),
             ""
         );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn merge_no_fast_forward_creates_merge_commit_for_fast_forward_target() {
+        let temp = temp_path("merge-no-ff");
+        let repository = committed_nested_repository(&temp);
+        let master = repository
+            .resolve_head()
+            .expect("HEAD should resolve")
+            .expect("HEAD should exist");
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "topic\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("topic add should work");
+        let topic = repository
+            .commit_index("topic")
+            .expect("topic commit should work")
+            .commit_id;
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+
+        let result = repository
+            .merge_with_options(
+                "topic",
+                &super::MergeOptions {
+                    no_fast_forward: true,
+                    ..super::MergeOptions::default()
+                },
+            )
+            .expect("no-ff merge should commit");
+
+        let super::MergeResult::MergeCommit {
+            old_id,
+            target_id,
+            commit_id,
+        } = result
+        else {
+            panic!("expected no-ff merge commit result");
+        };
+        assert_eq!(old_id, master);
+        assert_eq!(target_id, topic);
+        let object = repository
+            .read_object(commit_id)
+            .expect("merge commit should read");
+        let commit = parse_commit(&object.data).expect("merge commit should parse");
+        assert_eq!(commit.parents, vec![master, topic]);
+        assert_eq!(
+            repository
+                .commit_index_entries(commit_id)
+                .expect("merge tree should read"),
+            repository
+                .commit_index_entries(topic)
+                .expect("topic tree should read")
+        );
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
+            "topic\n"
+        );
+        assert!(!repository.git_dir().join("MERGE_HEAD").exists());
+        assert!(!repository.git_dir().join("MERGE_MSG").exists());
         remove_dir_all(&temp);
     }
 

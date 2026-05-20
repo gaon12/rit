@@ -373,6 +373,11 @@
   `git merge -s ours topic`; implemented `-s ours`, `--strategy ours`,
   `--strategy=ours`, and compact `-sours` as a strategy that records the
   target parent while keeping the current `HEAD` tree.
+- 2026-05-20 merge no-ff slice checked Git 2.54.0.windows.1 with
+  `git --version`, `git help -a`, `git merge -h`, and direct comparisons for
+  `git merge --no-ff topic`, `--ff --no-ff`, and `--no-ff --ff`; implemented
+  Git-style option order for `--ff`/`--no-ff` and forced merge commits for
+  fast-forwardable branch targets.
 - 2026-05-13 operation journal slice checked `git --version` and
   `git help -a`; this feature is rit-specific metadata under `.git/rit/` and
   does not use Git command output as a compatibility target.
@@ -854,6 +859,9 @@
   create a merge commit with the current `HEAD` tree and the target as the
   second parent, matching Git's ours strategy for the covered clean-worktree
   slice.
+- `rit merge --no-ff <target>` now creates a merge commit for fast-forwardable
+  targets, materializes the target tree, and lets later `--ff` reset the
+  selection back to the default fast-forward behavior.
 - Delete/modify conflicts now leave the modified side in the working tree for
   both `HEAD`-deleted and target-deleted cases while preserving the relevant
   conflict stage entries. Merge results carry structured conflict reports so
