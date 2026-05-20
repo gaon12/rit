@@ -76,6 +76,10 @@ The full compatibility test suite is currently pinned to the checked Windows
 Git baseline recorded in `docs/compatibility.md`, so CI runs formatting,
 clippy, and `cargo test --workspace` on `windows-latest`.
 
+CI runs for pull requests and for pushes to feature branches as well as the
+default branch, so branch pushes can be used to verify milestone work before a
+PR is opened.
+
 Linux and macOS are still guarded in CI through the release-build matrix for
 both `rit-min` and `rit-full`. Expanding the full test matrix to Linux and
 macOS is tracked as a compatibility-baseline task once platform-specific Git

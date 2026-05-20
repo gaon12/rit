@@ -65,6 +65,10 @@ Verified on 2026-05-13 before continuing implementation:
   out of `rit-cli/src/main.rs`. The entrypoint dropped from roughly 6400 lines
   to roughly 4360 lines; further command-module splits remain a standing
   maintainability task.
+- 2026-05-20 CI trigger pass opened the workflow `push` trigger to all
+  branches so milestone branches run GitHub Actions before a pull request is
+  opened. The full compatibility oracle remains pinned to `windows-latest`
+  until Unix/macOS baselines are normalized.
 
 ## M0: Baseline And Rules
 

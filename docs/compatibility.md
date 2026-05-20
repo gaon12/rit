@@ -20,6 +20,10 @@ The full `cargo test --workspace` compatibility suite currently runs against
 the Windows Git baseline above. GitHub Actions runs that suite on
 `windows-latest`, where the checked baseline and local validation match.
 
+The CI workflow is triggered for pull requests and for all branch pushes. This
+keeps milestone branches observable in GitHub Actions before a PR exists,
+instead of waiting for a main/master push.
+
 GitHub Actions release builds still compile `rit-min` and `rit-full` on
 Ubuntu, macOS, and Windows. Earlier CI runs showed a stable pattern from run
 1 through run 43: Windows tests passed, all release builds passed, and the
