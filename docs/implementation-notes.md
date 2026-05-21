@@ -220,6 +220,13 @@
   `rebase --no-verify <upstream>` hook skipping. The follow-up failure slice
   compared a non-zero `pre-rebase` hook, confirming Git-compatible stderr, exit
   code 1, unchanged `HEAD`, clean status, and no rebase state files.
+- 2026-05-22 rebase post-rewrite hook slice checked Git 2.54.0.windows.1 with
+  `git --version`, `git help -a`, `git help rebase`, `git rebase -h`,
+  `git help hooks`, and direct Git comparisons for clean replay completion and
+  final `rebase --continue` completion. Git runs `post-rewrite rebase` only
+  after the covered rebase successfully finishes, feeds rewritten commit pairs
+  on stdin, relays hook stdout/stderr to rebase stderr before the success
+  message, and ignores a non-zero hook exit status.
 - 2026-05-17 stash push no pathspec-file-nul slice checked `git stash -h` and
   direct Git comparisons for `stash push --pathspec-file-nul
   --no-pathspec-file-nul`, verifying the shared pathspec-file parser returns
@@ -1794,8 +1801,9 @@
   `rit rebase --abort`, `rit rebase --continue`,
   `rit rebase --show-current-patch`, `rit rebase --skip`, `rit rebase --quit`
 - Unsupported options: `--edit-todo`, interactive mode, autostash,
-  apply/merge backend selection, remaining hooks, strategy options, and todo
-  editing.
+  apply/merge backend selection, remaining hooks beyond the covered
+  `pre-rebase` and successful `post-rewrite rebase` paths, strategy options,
+  and todo editing.
 - Git-compatible behavior: `rit rebase <upstream>` resolves a local branch or
   revision. When that upstream is already an ancestor of `HEAD`, it prints
   Git's up-to-date message without mutating the repository and without running
@@ -1808,8 +1816,11 @@
   detached `HEAD`, and prints Git's success message. For clean linear commits,
   it applies each commit's tree changes onto upstream in order, writes new
   commits with the original authors/messages, updates the current branch, and
-  prints Git-shaped rebase progress and success messages. Those replay commits
-  use Git's covered automatic commit hook shape: `prepare-commit-msg` and
+  prints Git-shaped rebase progress and success messages. On covered successful
+  clean replay completion, rit runs `post-rewrite rebase` with old/new commit
+  pairs on stdin, relays hook output to stderr before the success message, and
+  ignores the hook exit status like Git. Those replay commits use Git's covered
+  automatic commit hook shape: `prepare-commit-msg` and
   `post-commit` run, but `pre-commit` and `commit-msg` are skipped. If the
   final replayed commit
   conflicts, it leaves `HEAD` detached at the current rebased base, preserves
@@ -1827,10 +1838,12 @@
   resolved stopped todo entry by committing the current index with the original
   author/message, replaying remaining clean linear todo entries, updating
   `head-name`, removing rebase state, and printing Git-shaped commit, progress,
-  and success output. If a later remaining todo entry conflicts while
-  continuing, rit keeps the newly created resolved commit, writes
-  Git-compatible rebase metadata for the later stopped commit, and prints
-  Git-shaped conflict output/advice with exit code 1. `rit rebase --skip`
+  and success output. On covered successful final continue completion, rit also
+  runs `post-rewrite rebase` for the continued commit and any clean remaining
+  replay commits. If a later remaining todo entry conflicts while continuing,
+  rit keeps the newly created resolved commit, writes Git-compatible rebase
+  metadata for the later stopped commit, and prints Git-shaped conflict
+  output/advice with exit code 1. `rit rebase --skip`
   supports a stopped todo entry by
   restoring the current `HEAD` tree, replaying remaining clean linear todo
   entries, updating `head-name`, removing rebase state, and printing Git's

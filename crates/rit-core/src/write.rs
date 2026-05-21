@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Options that affect how `add` records files in the index.
@@ -633,6 +633,8 @@ pub struct RebaseSkipResult {
     pub conflict_reports: Vec<MergeConflictReport>,
     /// Target label for conflict messages from a later stopped replay.
     pub conflict_target_label: Option<String>,
+    /// Output produced by a successful `post-rewrite rebase` hook.
+    pub post_rewrite_output: String,
 }
 
 /// Result of continuing a resolved in-progress rebase.
@@ -664,6 +666,8 @@ pub struct RebaseContinueResult {
     pub conflict_reports: Vec<MergeConflictReport>,
     /// Target label for conflict messages from a later stopped replay.
     pub conflict_target_label: Option<String>,
+    /// Output produced by a successful `post-rewrite rebase` hook.
+    pub post_rewrite_output: String,
 }
 
 /// Result of starting a rebase that is already up to date.
@@ -689,6 +693,8 @@ pub struct RebaseStartResult {
     pub stopped_message_summary: Option<String>,
     /// Structured conflict output for porcelain formatting.
     pub conflict_reports: Vec<MergeConflictReport>,
+    /// Output produced by a successful `post-rewrite rebase` hook.
+    pub post_rewrite_output: String,
 }
 
 impl Repository {
@@ -2320,6 +2326,7 @@ impl Repository {
                 stopped_commit_id: None,
                 stopped_message_summary: None,
                 conflict_reports: Vec::new(),
+                post_rewrite_output: String::new(),
             });
         }
         if options.verify {
@@ -2342,6 +2349,7 @@ impl Repository {
                 stopped_commit_id: None,
                 stopped_message_summary: None,
                 conflict_reports: Vec::new(),
+                post_rewrite_output: String::new(),
             });
         }
 
@@ -2446,6 +2454,7 @@ impl Repository {
         let replayed_count = replay_steps.len();
         let mut new_head_id = upstream_id;
         let mut done_todo_entries = Vec::new();
+        let mut rewritten_commits = Vec::new();
         for step in replay_steps {
             write_non_conflicting_merge_worktree_changes(
                 self,
@@ -2480,6 +2489,7 @@ impl Repository {
             parent_id = result.commit_id;
             new_head_id = result.commit_id;
             previous_entries = step.merged_entries;
+            rewritten_commits.push((step.commit_id, result.commit_id));
             done_todo_entries.push((step.commit_id, rebase_todo_subject(&step.commit.message)));
         }
         if let Some(conflict) = replay_conflict {
@@ -2527,9 +2537,11 @@ impl Repository {
                         .to_owned(),
                 ),
                 conflict_reports: conflict.conflict_reports,
+                post_rewrite_output: String::new(),
             });
         }
         self.restore_rebase_head(new_head_id, rebase_head_name.as_deref())?;
+        let post_rewrite_output = run_post_rewrite_hook(self, "rebase", &rewritten_commits);
         self.refresh_indexdb_after_git_write();
         Ok(RebaseStartResult {
             old_head_id: head_id,
@@ -2542,6 +2554,7 @@ impl Repository {
             stopped_commit_id: None,
             stopped_message_summary: None,
             conflict_reports: Vec::new(),
+            post_rewrite_output,
         })
     }
 
@@ -2715,6 +2728,7 @@ impl Repository {
                 stopped_current_step: Some(conflict.current_step),
                 conflict_reports: conflict.conflict_reports,
                 conflict_target_label: Some(target_label),
+                post_rewrite_output: String::new(),
             });
         }
         self.restore_rebase_head(final_head_id, rebase.head_name.as_deref())?;
@@ -2735,6 +2749,7 @@ impl Repository {
             stopped_current_step: None,
             conflict_reports: Vec::new(),
             conflict_target_label: None,
+            post_rewrite_output: String::new(),
         })
     }
 
@@ -2813,6 +2828,7 @@ impl Repository {
         let replayed_remaining_count = replay_plan.clean_steps.len();
         let mut final_head_id = commit.commit_id;
         let mut done_todo_entries = read_rebase_todo_entries(&rebase.directory.join("done"))?;
+        let mut rewritten_commits = vec![(current_patch.commit_id, commit.commit_id)];
         for step in replay_plan.clean_steps {
             write_non_conflicting_merge_worktree_changes(
                 self,
@@ -2847,6 +2863,7 @@ impl Repository {
             replay_parent_id = replayed.commit_id;
             final_head_id = replayed.commit_id;
             previous_entries = step.merged_entries;
+            rewritten_commits.push((step.commit_id, replayed.commit_id));
             done_todo_entries.push((step.commit_id, rebase_todo_subject(&step.commit.message)));
         }
         if let Some(conflict) = replay_plan.conflict {
@@ -2896,6 +2913,7 @@ impl Repository {
                 stopped_current_step: Some(conflict.current_step),
                 conflict_reports: conflict.conflict_reports,
                 conflict_target_label: Some(target_label),
+                post_rewrite_output: String::new(),
             });
         }
         self.restore_rebase_head(final_head_id, rebase.head_name.as_deref())?;
@@ -2906,6 +2924,7 @@ impl Repository {
         remove_file_if_exists(&self.git_dir().join("AUTO_MERGE"))?;
         let diff =
             self.diff_commits_with_pathspecs(parent_id, commit.commit_id, &PathspecSet::all())?;
+        let post_rewrite_output = run_post_rewrite_hook(self, "rebase", &rewritten_commits);
         self.refresh_indexdb_after_git_write();
         Ok(RebaseContinueResult {
             commit,
@@ -2921,6 +2940,7 @@ impl Repository {
             stopped_current_step: None,
             conflict_reports: Vec::new(),
             conflict_target_label: None,
+            post_rewrite_output,
         })
     }
 
@@ -4415,6 +4435,53 @@ fn run_pre_rebase_hook(repository: &Repository, upstream: &str) -> Result<()> {
     Err(RitError::invalid_input(format!(
         "pre-rebase hook refused to rebase\n{hook_output}"
     )))
+}
+
+fn run_post_rewrite_hook(
+    repository: &Repository,
+    command_name: &str,
+    rewritten_commits: &[(ObjectId, ObjectId)],
+) -> String {
+    if rewritten_commits.is_empty() {
+        return String::new();
+    }
+    let hook_path = repository.common_dir().join("hooks").join("post-rewrite");
+    if !matches!(hook_should_run(&hook_path), Ok(true)) {
+        return String::new();
+    }
+    let Ok(mut command) = hook_command(&hook_path) else {
+        return String::new();
+    };
+    let current_dir = child_path(repository.worktree().unwrap_or(repository.common_dir()));
+    let spawn_result = command
+        .arg(command_name)
+        .current_dir(current_dir)
+        .env("GIT_DIR", child_path(repository.git_dir()))
+        .env(
+            "GIT_INDEX_FILE",
+            child_path(&repository.git_dir().join("index")),
+        )
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn();
+    let Ok(mut child) = spawn_result else {
+        return String::new();
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        for (old_commit_id, new_commit_id) in rewritten_commits {
+            if writeln!(stdin, "{old_commit_id} {new_commit_id}").is_err() {
+                break;
+            }
+        }
+    }
+    let Ok(output) = child.wait_with_output() else {
+        return String::new();
+    };
+    let mut hook_output = String::new();
+    hook_output.push_str(&String::from_utf8_lossy(&output.stdout));
+    hook_output.push_str(&String::from_utf8_lossy(&output.stderr));
+    hook_output
 }
 
 fn run_hook(repository: &Repository, name: &str, args: &[PathBuf]) -> Result<()> {

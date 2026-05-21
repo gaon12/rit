@@ -241,6 +241,9 @@ fn rebase_continue_final_resolved_commit_matches_git() {
     fs::write(rit_repo.join("tracked.txt"), "resolved\n").expect("rit resolution should write");
     run_git(&git_repo, ["add", "tracked.txt"]);
     run_git(&rit_repo, ["add", "tracked.txt"]);
+    let hook = "#!/bin/sh\necho \"args:$#:$1\" >> post-rewrite.log\ncat >> post-rewrite.log\necho hook-stdout\necho hook-stderr >&2\nexit 7\n";
+    write_hook(&git_repo, "post-rewrite", hook);
+    write_hook(&rit_repo, "post-rewrite", hook);
     let envs = [
         ("GIT_EDITOR", "true"),
         ("GIT_COMMITTER_DATE", "1700000000 +0900"),
@@ -286,6 +289,18 @@ fn rebase_continue_final_resolved_commit_matches_git() {
     );
     assert!(!git_repo.join(".git").join("rebase-merge").exists());
     assert!(!rit_repo.join(".git").join("rebase-merge").exists());
+    assert_eq!(
+        fs::read_to_string(git_repo.join("post-rewrite.log"))
+            .expect("git post-rewrite log should read"),
+        fs::read_to_string(rit_repo.join("post-rewrite.log"))
+            .expect("rit post-rewrite log should read")
+    );
+    assert!(
+        fs::read_to_string(rit_repo.join("post-rewrite.log"))
+            .expect("rit post-rewrite log should read")
+            .starts_with("args:1:rebase\n"),
+        "post-rewrite should receive the rebase command name"
+    );
 
     let _ = fs::remove_dir_all(root);
 }
@@ -604,6 +619,52 @@ fn rebase_pre_rebase_hook_blocks_like_git_without_state() {
         assert!(!git_repo.join(".git").join(path).exists());
         assert!(!rit_repo.join(".git").join(path).exists());
     }
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn rebase_clean_replay_runs_post_rewrite_hook_like_git() {
+    let root = temp_path("start-post-rewrite-hook");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    run_git(&git_repo, ["checkout", "-b", "topic"]);
+    fs::write(git_repo.join("topic.txt"), "topic\n").expect("topic file should write");
+    run_git(&git_repo, ["add", "topic.txt"]);
+    run_git(&git_repo, ["commit", "--quiet", "-m", "topic"]);
+    run_git(&git_repo, ["checkout", "master"]);
+    fs::write(git_repo.join("one.txt"), "one\n").expect("one file should write");
+    run_git(&git_repo, ["add", "one.txt"]);
+    run_git(&git_repo, ["commit", "--quiet", "-m", "one"]);
+    fs::write(git_repo.join("two.txt"), "two\n").expect("two file should write");
+    run_git(&git_repo, ["add", "two.txt"]);
+    run_git(&git_repo, ["commit", "--quiet", "-m", "two"]);
+    copy_directory(&git_repo, &rit_repo);
+    let hook = "#!/bin/sh\necho \"args:$#:$1:$2\" >> post-rewrite.log\ncat >> post-rewrite.log\necho hook-stdout\necho hook-stderr >&2\nexit 7\n";
+    write_hook(&git_repo, "post-rewrite", hook);
+    write_hook(&rit_repo, "post-rewrite", hook);
+    let envs = [("GIT_COMMITTER_DATE", "1700000000 +0900")];
+
+    let git_rebase = run_capture_with_env("git", ["rebase", "topic"], &git_repo, &envs);
+    let rit_rebase = run_capture_with_env(rit_binary(), ["rebase", "topic"], &rit_repo, &envs);
+
+    assert_eq!(git_rebase.exit_code, 0, "git stderr: {}", git_rebase.stderr);
+    assert_eq!(rit_rebase.exit_code, 0, "rit stderr: {}", rit_rebase.stderr);
+    assert_eq!(git_rebase.stdout, rit_rebase.stdout);
+    assert_eq!(git_rebase.stderr, rit_rebase.stderr);
+    assert_eq!(
+        fs::read_to_string(git_repo.join("post-rewrite.log"))
+            .expect("git post-rewrite log should read"),
+        fs::read_to_string(rit_repo.join("post-rewrite.log"))
+            .expect("rit post-rewrite log should read")
+    );
+    assert!(
+        fs::read_to_string(rit_repo.join("post-rewrite.log"))
+            .expect("rit post-rewrite log should read")
+            .starts_with("args:1:rebase:\n"),
+        "post-rewrite should receive the rebase command name"
+    );
 
     let _ = fs::remove_dir_all(root);
 }

@@ -227,7 +227,7 @@ rit rebase --skip
 rit rebase --quit
 rit rebase [--no-verify|--verify] <upstream>
 
-Abort an in-progress rebase by restoring the original branch, index, and working tree, continue a resolved final stopped commit, show the current stopped patch, skip a final stopped commit, clear Git-compatible rebase state while leaving HEAD, the index, and working tree unchanged, or start a rebase for `<upstream>` with Git-compatible `pre-rebase` hook handling.
+Abort an in-progress rebase by restoring the original branch, index, and working tree, continue a resolved final stopped commit, show the current stopped patch, skip a final stopped commit, clear Git-compatible rebase state while leaving HEAD, the index, and working tree unchanged, or start a rebase for `<upstream>` with Git-compatible covered rebase hook handling.
 ";
 
 const STASH_HELP: &str = "\

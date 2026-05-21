@@ -2710,6 +2710,7 @@ fn rebase_command(
                         for step in 1..=result.replayed_count {
                             write!(stderr, "Rebasing ({step}/{})\r", result.replayed_count)?;
                         }
+                        write!(stderr, "{}", result.post_rewrite_output)?;
                         let updated = result
                             .branch_name
                             .map(|branch_name| format!("refs/heads/{branch_name}"))
@@ -2748,6 +2749,7 @@ fn rebase_command(
                     {
                         write!(stderr, "Rebasing ({step}/{})\r", result.total_steps)?;
                     }
+                    write!(stderr, "{}", result.post_rewrite_output)?;
                     let updated = result.head_name.as_deref().unwrap_or("HEAD");
                     writeln!(stderr, "Successfully rebased and updated {updated}.")?;
                     Ok(ExitCode::SUCCESS)
@@ -2780,6 +2782,7 @@ fn rebase_command(
                 {
                     write!(stderr, "Rebasing ({step}/{})\r", result.total_steps)?;
                 }
+                write!(stderr, "{}", result.post_rewrite_output)?;
                 let updated = result.head_name.as_deref().unwrap_or("HEAD");
                 writeln!(stderr, "Successfully rebased and updated {updated}.")?;
                 Ok(ExitCode::SUCCESS)
