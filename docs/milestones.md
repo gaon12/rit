@@ -591,6 +591,9 @@ Completion criteria:
   - [x] Covered merge option parsing keeps `-n` as no-stat rather than
     no-verify for clean merge hooks, and rejects `merge --continue` with
     `--no-verify` or `-n` like Git.
+  - [x] Covered merge state modes reject extra target revisions, recognized
+    options, and mixed `--abort`/`--quit`/`--continue` mode flags with
+    Git-shaped fatal messages before changing merge state.
   - [ ] Full conflict handling, merge hooks, and strategies.
 - [~] `rit cherry-pick`
   - [x] Clean single-parent cherry-pick applies the picked commit onto `HEAD`,

@@ -1703,6 +1703,12 @@
   `merge --continue --no-verify` and `merge --continue -n` during active
   conflicted merges. Git treats `-n` as no-stat rather than no-verify, and
   rejects `--continue` with additional options.
+- 2026-05-22 merge state mode parsing slice checked Git 2.54.0.windows.1 with
+  `git --version`, `git help -a`, `git merge -h`, and direct Git comparisons
+  during active conflicted merges for `merge --continue <target>`,
+  `merge --abort <target>`, `merge --quit <target>`, recognized extra options
+  after `--abort`/`--quit`, and mixed state modes. Git rejects those forms with
+  `fatal: <mode> expects no arguments` before changing merge state.
 - Supported options: default fast-forward shape and explicit `--ff-only` with
   one target branch or revision, conflicted non-fast-forward index-stage
   starts, `--abort`, `--quit`, `--continue`, `-n` as a covered no-stat no-op,
@@ -1751,6 +1757,9 @@
   when `--no-verify` is supplied.
 - Git-compatible behavior: `--continue` rejects additional options such as
   `--no-verify` before reading or changing merge state.
+- Git-compatible behavior: `--abort`, `--quit`, and `--continue` reject extra
+  target revisions, recognized extra options, and mixed state mode flags with
+  Git-shaped fatal messages before reading or changing merge state.
 - Intentional differences: output is simplified and no editor is launched for
   generated merge messages.
 - Repository mutation: yes, updates `HEAD` or the current branch ref for

@@ -496,6 +496,77 @@ fn merge_continue_no_verify_is_rejected_like_git() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn merge_state_modes_reject_extra_arguments_like_git() {
+    let root = temp_path("merge-state-mode-extra-arguments");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_content_conflict(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    assert_eq!(
+        run_capture("git", ["merge", "topic"], &git_repo).exit_code,
+        1
+    );
+    assert_eq!(
+        run_capture(rit_binary(), ["merge", "topic"], &rit_repo).exit_code,
+        1
+    );
+
+    for (args, option) in [
+        (vec!["--continue", "topic"], "--continue"),
+        (vec!["--abort", "topic"], "--abort"),
+        (vec!["--quit", "topic"], "--quit"),
+        (vec!["--abort", "-n"], "--abort"),
+        (vec!["--quit", "--no-verify"], "--quit"),
+        (vec!["--continue", "--abort"], "--abort"),
+        (vec!["--abort", "--quit"], "--abort"),
+    ] {
+        let git_result = run_capture(
+            "git",
+            ["merge"].into_iter().chain(args.iter().copied()),
+            &git_repo,
+        );
+        let rit_result = run_capture(
+            rit_binary(),
+            ["merge"].into_iter().chain(args.iter().copied()),
+            &rit_repo,
+        );
+
+        assert_eq!(
+            git_result.exit_code,
+            rit_result.exit_code,
+            "{} exit code",
+            args.join(" ")
+        );
+        assert!(
+            git_result
+                .stderr
+                .contains(&format!("fatal: {option} expects no arguments")),
+            "{} git stderr: {}",
+            args.join(" "),
+            git_result.stderr
+        );
+        assert!(
+            rit_result
+                .stderr
+                .contains(&format!("fatal: {option} expects no arguments")),
+            "{} rit stderr: {}",
+            args.join(" "),
+            rit_result.stderr
+        );
+        assert!(git_repo.join(".git").join("MERGE_HEAD").exists());
+        assert!(rit_repo.join(".git").join("MERGE_HEAD").exists());
+        assert_eq!(
+            run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+            run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout,
+            "{} status",
+            args.join(" ")
+        );
+    }
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct MergeScenario {
     name: &'static str,
     setup: fn(&Path),

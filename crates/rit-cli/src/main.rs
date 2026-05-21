@@ -3456,14 +3456,16 @@ fn parse_merge_args(
         .into_iter()
         .filter(|selected| *selected)
         .count();
-    if state_option_count > 1 {
-        writeln!(
-            stderr,
-            "rit: merge can use only one of --abort, --quit, and --continue"
-        )?;
-        return Ok(None);
-    }
-    let has_continue_argument = plan
+    let selected_state_option = if abort {
+        Some("--abort")
+    } else if quit {
+        Some("--quit")
+    } else if continue_merge {
+        Some("--continue")
+    } else {
+        None
+    };
+    let has_state_argument = plan
         || explain
         || fast_forward != MergeFastForwardMode::Default
         || no_stat_option_seen
@@ -3471,23 +3473,13 @@ fn parse_merge_args(
         || strategy != rit_core::MergeStrategy::Default
         || strategy_option != rit_core::MergeStrategyOption::None
         || !commit
-        || message.is_some();
-    if continue_merge && has_continue_argument {
-        writeln!(stderr, "fatal: --continue expects no arguments")?;
-        return Ok(None);
-    }
-    if (abort || quit || continue_merge) && target.is_some() {
-        let option = if abort {
-            "--abort"
-        } else if quit {
-            "--quit"
-        } else {
-            "--continue"
-        };
-        writeln!(
-            stderr,
-            "rit: merge {option} does not take a target revision"
-        )?;
+        || message.is_some()
+        || target.is_some()
+        || state_option_count > 1;
+    if let Some(option) = selected_state_option
+        && has_state_argument
+    {
+        writeln!(stderr, "fatal: {option} expects no arguments")?;
         return Ok(None);
     }
     if !(abort || quit || continue_merge) && target.is_none() {
