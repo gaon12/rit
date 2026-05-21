@@ -307,6 +307,7 @@ impl Default for CherryPickOptions {
 
 struct ConflictedMergeStart<'a> {
     target: &'a str,
+    message: String,
     target_id: ObjectId,
     head_id: ObjectId,
     base_entries: &'a [IndexEntry],
@@ -431,6 +432,8 @@ pub struct MergeOptions {
     pub no_fast_forward: bool,
     /// Whether to create the merge commit after a clean merge result.
     pub commit: bool,
+    /// Optional user-provided merge commit message.
+    pub message: Option<String>,
 }
 
 impl MergeOptions {
@@ -448,6 +451,7 @@ impl Default for MergeOptions {
             strategy_option: MergeStrategyOption::None,
             no_fast_forward: false,
             commit: true,
+            message: None,
         }
     }
 }
@@ -1159,7 +1163,7 @@ impl Repository {
         }
         if options.strategy == MergeStrategy::Ours {
             if !options.commit {
-                self.start_ours_strategy_merge_without_commit(target, old_id, new_id)?;
+                self.start_ours_strategy_merge_without_commit(target, options, old_id, new_id)?;
                 self.refresh_indexdb_after_git_write();
                 return Ok(MergeResult::StoppedBeforeCommit {
                     old_id,
@@ -1256,6 +1260,7 @@ impl Repository {
             }
             self.start_conflicted_merge(ConflictedMergeStart {
                 target,
+                message: merge_commit_message_from_options(target, options),
                 target_id: new_id,
                 head_id: old_id,
                 base_entries: &base_entries,
@@ -1285,18 +1290,17 @@ impl Repository {
     fn start_ours_strategy_merge_without_commit(
         &self,
         target: &str,
+        options: &MergeOptions,
         old_id: ObjectId,
         target_id: ObjectId,
     ) -> Result<()> {
+        let message = merge_commit_message_from_options(target, options);
         write_text_atomically(&self.git_dir().join("ORIG_HEAD"), &format!("{}\n", old_id))?;
         write_text_atomically(
             &self.git_dir().join("MERGE_HEAD"),
             &format!("{}\n", target_id),
         )?;
-        write_text_atomically(
-            &self.git_dir().join("MERGE_MSG"),
-            &format!("{}\n", merge_commit_message(target)),
-        )?;
+        write_text_atomically(&self.git_dir().join("MERGE_MSG"), &format!("{message}\n"))?;
         write_text_atomically(&self.git_dir().join("MERGE_MODE"), "no-ff")
     }
 
@@ -1308,7 +1312,7 @@ impl Repository {
         target_id: ObjectId,
     ) -> Result<ObjectId> {
         write_text_atomically(&self.git_dir().join("ORIG_HEAD"), &format!("{}\n", old_id))?;
-        let message = merge_commit_message(target);
+        let message = merge_commit_message_from_options(target, options);
         write_text_atomically(
             &self.git_dir().join("MERGE_HEAD"),
             &format!("{}\n", target_id),
@@ -1369,7 +1373,10 @@ impl Repository {
         )?;
         write_text_atomically(
             &self.git_dir().join("MERGE_MSG"),
-            &format!("{}\n", merge_commit_message(input.target)),
+            &format!(
+                "{}\n",
+                merge_commit_message_from_options(input.target, input.options)
+            ),
         )?;
         let merge_mode = if input.options.no_fast_forward {
             "no-ff"
@@ -1412,7 +1419,7 @@ impl Repository {
             extensions: Vec::new(),
         }
         .write(&self.git_dir().join("index"))?;
-        let message = merge_commit_message(input.target);
+        let message = merge_commit_message_from_options(input.target, input.options);
         write_text_atomically(
             &self.git_dir().join("MERGE_HEAD"),
             &format!("{}\n", input.target_id),
@@ -2165,7 +2172,7 @@ impl Repository {
         )?;
         write_text_atomically(
             &self.git_dir().join("MERGE_MSG"),
-            &merge_message_with_conflicts(input.target, &conflict_paths),
+            &merge_message_with_conflicts(&input.message, &conflict_paths),
         )
     }
 
@@ -3892,8 +3899,15 @@ fn merge_commit_message(target: &str) -> String {
     format!("Merge branch '{target}'")
 }
 
-fn merge_message_with_conflicts(target: &str, conflict_paths: &BTreeSet<&str>) -> String {
-    let mut message = format!("{}\n\nConflicts:\n", merge_commit_message(target));
+fn merge_commit_message_from_options(target: &str, options: &MergeOptions) -> String {
+    options
+        .message
+        .clone()
+        .unwrap_or_else(|| merge_commit_message(target))
+}
+
+fn merge_message_with_conflicts(base_message: &str, conflict_paths: &BTreeSet<&str>) -> String {
+    let mut message = format!("{}\n\nConflicts:\n", base_message.trim_end_matches('\n'));
     for path in conflict_paths {
         message.push('\t');
         message.push_str(path);

@@ -2545,6 +2545,7 @@ fn merge_command(
                 strategy_option: merge_args.strategy_option,
                 no_fast_forward: merge_args.fast_forward == MergeFastForwardMode::NoFf,
                 commit: merge_args.commit,
+                message: merge_args.message.clone(),
             },
         )
     };
@@ -2635,7 +2636,7 @@ fn merge_command(
             }
             writeln!(
                 stdout,
-                "Automatic merge failed; fix conflicts and then commit the result."
+                "rit: merge stopped because some files need your help. Fix each listed file, run `rit add <path>`, then run `rit merge --continue`."
             )?;
             Ok(ExitCode::from(1))
         }
@@ -3246,6 +3247,7 @@ struct ParsedMergeArgs {
     strategy: rit_core::MergeStrategy,
     strategy_option: rit_core::MergeStrategyOption,
     commit: bool,
+    message: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -3269,6 +3271,7 @@ fn parse_merge_args(
     let mut strategy = rit_core::MergeStrategy::Default;
     let mut strategy_option = rit_core::MergeStrategyOption::None;
     let mut commit = true;
+    let mut message = None;
     let mut target = None;
     let mut index = 0;
     while index < args.len() {
@@ -3295,6 +3298,29 @@ fn parse_merge_args(
             commit = false;
         } else if arg == "--commit" {
             commit = true;
+        } else if arg == "-m" || arg == "--message" {
+            index += 1;
+            let Some(value) = args.get(index) else {
+                writeln!(
+                    stderr,
+                    "rit: merge message option needs text after it, for example -m \"Merge topic\""
+                )?;
+                return Ok(None);
+            };
+            message = Some(value.clone());
+        } else if let Some(value) = arg.strip_prefix("--message=") {
+            message = Some(value.to_owned());
+        } else if let Some(value) = arg.strip_prefix("-m") {
+            if value.is_empty() {
+                writeln!(
+                    stderr,
+                    "rit: merge message option needs text after it, for example -m \"Merge topic\""
+                )?;
+                return Ok(None);
+            }
+            message = Some(value.to_owned());
+        } else if arg == "--no-message" {
+            message = None;
         } else if arg == "-s" || arg == "--strategy" {
             index += 1;
             let Some(value) = args.get(index) else {
@@ -3398,6 +3424,7 @@ fn parse_merge_args(
         strategy,
         strategy_option,
         commit,
+        message,
     }))
 }
 
@@ -3715,37 +3742,32 @@ fn write_merge_conflict_report(
 ) -> io::Result<()> {
     match report.kind {
         rit_core::MergeConflictKind::Content => {
-            writeln!(stdout, "Auto-merging {}", report.path)?;
+            writeln!(stdout, "rit: merge conflict in {}", report.path)?;
             writeln!(
                 stdout,
-                "CONFLICT (content): Merge conflict in {}",
+                "  Both branches changed this file. Choose the final contents, then mark it resolved with `rit add {}`.",
                 report.path
             )
         }
         rit_core::MergeConflictKind::BinaryContent => {
+            writeln!(stdout, "rit: binary merge conflict in {}", report.path)?;
             writeln!(
                 stdout,
-                "warning: Cannot merge binary files: {} (HEAD vs. {target})",
-                report.path
-            )?;
-            writeln!(stdout, "Auto-merging {}", report.path)?;
-            writeln!(
-                stdout,
-                "CONFLICT (content): Merge conflict in {}",
+                "  rit cannot combine binary files safely. Keep the right version yourself, then run `rit add {}`.",
                 report.path
             )
         }
         rit_core::MergeConflictKind::AddAdd => {
-            writeln!(stdout, "Auto-merging {}", report.path)?;
+            writeln!(stdout, "rit: both branches added {}", report.path)?;
             writeln!(
                 stdout,
-                "CONFLICT (add/add): Merge conflict in {}",
+                "  Pick the final file contents, then mark it resolved with `rit add {}`.",
                 report.path
             )
         }
         rit_core::MergeConflictKind::DistinctTypes => writeln!(
             stdout,
-            "CONFLICT (distinct types): {} had different types on each side; renamed one of them so each can be recorded somewhere.",
+            "rit: {} has different file types on each side. rit kept both versions with separate names so you can choose the final shape.",
             report.path
         ),
         rit_core::MergeConflictKind::ModifyDelete {
@@ -3754,12 +3776,11 @@ fn write_merge_conflict_report(
             worktree_side,
         } => writeln!(
             stdout,
-            "CONFLICT (modify/delete): {} deleted in {} and modified in {}.  Version {} of {} left in tree.",
+            "rit: {} was deleted on {} but changed on {}. rit left the {} version in your working tree so you can decide whether to keep or remove it.",
             report.path,
             format_merge_side(deleted_side, target),
             format_merge_side(modified_side, target),
-            format_merge_side(worktree_side, target),
-            report.path
+            format_merge_side(worktree_side, target)
         ),
     }
 }

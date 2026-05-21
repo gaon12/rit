@@ -398,6 +398,12 @@
   implemented `-X ours`, `-Xours`, `--strategy-option ours`, and
   `--strategy-option=ours` forms for same-path content conflicts by choosing
   the requested side while still creating the normal merge commit.
+- 2026-05-21 merge message slice checked Git 2.54.0.windows.1 with
+  `git --version`, `git help -a`, `git merge -h`, and direct comparisons for
+  `git merge -m <message> topic` plus `git merge --no-commit -m <message>
+  topic`; implemented `-m`, compact `-m<message>`, `--message <message>`,
+  `--message=<message>`, and `--no-message` option order for covered
+  branch-target merge forms.
 - 2026-05-13 operation journal slice checked `git --version` and
   `git help -a`; this feature is rit-specific metadata under `.git/rit/` and
   does not use Git command output as a compatibility target.
@@ -890,33 +896,37 @@
 - Delete/modify conflicts now leave the modified side in the working tree for
   both `HEAD`-deleted and target-deleted cases while preserving the relevant
   conflict stage entries. Merge results carry structured conflict reports so
-  the CLI can print Git-shaped `modify/delete` messages instead of treating
+  the CLI can print clear `modify/delete` guidance instead of treating
   every conflict as content-only.
 - Binary content conflicts now leave the `HEAD` version in the working tree,
-  preserve conflict stages, and print a Git-shaped binary merge warning.
+  preserve conflict stages, and print clear rit-specific guidance.
 - Add/add conflicts now carry a structured conflict kind and print a
-  Git-shaped `add/add` conflict result message.
+  rit-specific result message.
 - Clean non-fast-forward merges now combine mode-only changes on one side with
   content-only changes on the other side, producing a regular merge commit with
   the content-side blob and the mode-side file mode.
 - Regular-file/symlink distinct-type conflicts now follow Git's split-path
   shape in both directions: the non-regular side stays at the original path,
   the regular side is written to a suffixed path such as `~HEAD` or
-  `~<target>`, and the CLI prints a `CONFLICT (distinct types)` message.
+  `~<target>`, and the CLI explains that both versions were kept.
 - Content conflicts that also change file mode now preserve Git-shaped stage
-  modes, for example stage 3 can keep `100755` while the conflict is reported
-  as a regular `CONFLICT (content)`.
-- Content, binary, and add/add conflicts now print Git-shaped `Auto-merging`
-  lines, and conflicted merge output no longer includes rit-only pre-merge
-  target debug text.
+  modes, for example stage 3 can keep `100755` while rit reports the conflict
+  in plain language.
+- Content, binary, and add/add conflicts now print rit-specific guidance, and
+  conflicted merge output no longer includes pre-merge target debug text.
 - Merge `-X ours`/`-X theirs` now resolves supported same-path conflicts by
   selecting the requested side as a regular stage-0 index entry, materializing
   that side in the working tree, and completing the merge commit instead of
   leaving conflict stages.
-- Added exact Git-vs-rit compatibility coverage for supported merge conflict
-  result output across content, modify/delete, binary, add/add, and
+- Merge `-m/--message` now carries the selected text into clean merge commits,
+  `-s ours` merge commits, and stopped clean/conflicted merge state. New
+  user-facing rit error text for missing option values is intentionally
+  explanatory rather than copied from Git prose.
+- Added Git-vs-rit compatibility coverage for supported merge conflict result
+  behavior across content, modify/delete, binary, add/add, and
   regular-file/symlink distinct-type conflicts. The comparison includes exit
-  code, stdout, stderr, porcelain status, and `ls-files --stage`.
+  code, porcelain status, `ls-files --stage`, and the presence of clear
+  rit-specific conflict guidance rather than copied Git human prose.
 - Clean non-fast-forward merge commits now use the merge hook shape: they run
   `pre-merge-commit`, pass `merge` to `prepare-commit-msg`, leave `MERGE_HEAD`
   and `MERGE_MSG` when a verification hook blocks the commit, and honor
@@ -1651,7 +1661,8 @@
 - Supported options: default fast-forward shape and explicit `--ff-only` with
   one target branch or revision, conflicted non-fast-forward index-stage
   starts, `--abort`, `--quit`, `--continue`, `--no-verify` for clean merge
-  commits, plus rit-specific `--plan` and `merge explain <target>`.
+  commits, `-m/--message` for clean and stopped merge messages, plus
+  rit-specific `--plan` and `merge explain <target>`.
 - Unsupported options: remaining advanced mode/symlink conflict edge cases,
   remaining full conflict message parity, strategies, stat output, remaining
   hook parity, squash, autostash, signing, and other verification options.

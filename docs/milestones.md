@@ -579,6 +579,8 @@ Completion criteria:
   - [x] `merge -X ours/theirs` and `--strategy-option=ours/theirs` resolve
     supported same-path text conflicts by choosing the requested side while
     still creating a normal merge commit.
+  - [x] `merge -m/--message` uses the selected merge message for clean merge
+    commits and stopped merge state in covered branch-target forms.
   - [ ] Full conflict handling, merge hooks, and strategies.
 - [~] `rit cherry-pick`
   - [x] Clean single-parent cherry-pick applies the picked commit onto `HEAD`,
@@ -865,25 +867,27 @@ Completion criteria:
     contents.
     - [x] Delete/modify conflicts leave the modified side in the working tree
       for both `HEAD`-deleted and target-deleted cases.
-    - [x] Delete/modify conflicts print Git-shaped `modify/delete` conflict
-      result messages for both directions.
+    - [x] Delete/modify conflicts print clear rit-specific conflict guidance
+      for both directions.
     - [x] Binary content conflicts leave the `HEAD` version in the working tree
-      and print a Git-shaped binary merge warning.
-    - [x] Add/add conflicts print a Git-shaped `add/add` conflict result
-      message.
+      and print clear rit-specific guidance.
+    - [x] Add/add conflicts print clear rit-specific guidance.
     - [x] Mode-only changes combine cleanly with content-only changes instead
       of creating false conflicts.
     - [x] Regular-file/symlink distinct-type conflicts split both directions
-      into Git-shaped index/worktree paths and print `distinct types` messages.
+      into Git-shaped index/worktree paths and explain that both versions were
+      kept.
     - [x] Content conflicts with mode changes preserve Git-shaped stage modes.
-    - [x] Content, binary, and add/add conflicts print Git-shaped
-      `Auto-merging` lines and omit rit-only pre-merge debug output.
+    - [x] Content, binary, and add/add conflicts print rit-specific guidance
+      and omit pre-merge debug output.
     - [x] Strategy-option `ours`/`theirs` removes supported same-path content
       conflicts from the unmerged index by selecting the requested side.
-    - [x] Supported conflict result messages have exact Git-vs-rit stdout,
-      stderr, exit-code, status, and index-stage compatibility coverage.
-    - [ ] Remaining full conflict result message parity for unsupported merge
-      strategies and conflict variants.
+    - [x] Supported conflict result behavior has Git-vs-rit coverage for
+      exit-code, status, index stages, and rit-specific explanatory output;
+      new prose should remain clear unless exact text is required by a stable
+      machine-readable interface.
+    - [ ] Remaining conflict result coverage for unsupported merge strategies
+      and conflict variants.
 
 Completion criteria:
 - Interrupted operations leave clear state and can be continued, aborted, or

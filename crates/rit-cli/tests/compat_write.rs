@@ -3697,6 +3697,90 @@ fn merge_no_commit_matches_git_state_and_option_order() {
 }
 
 #[test]
+fn merge_message_option_matches_git_commit_message_and_tree() {
+    let fixture = merge_clean_non_fast_forward_fixture("merge-message-option-fixture");
+
+    let outcome = compare_after_command(
+        &fixture,
+        command_words("git", ["merge", "-m", "Explain this merge", "topic"]),
+        command_words(rit_binary(), ["merge", "-m", "Explain this merge", "topic"]),
+    );
+
+    assert_eq!(outcome.git_status, outcome.rit_status);
+    assert_eq!(
+        run_capture(
+            "git",
+            ["show", "--no-patch", "--pretty=%B", "HEAD"],
+            &outcome.git_repo
+        )
+        .0,
+        run_capture(
+            "git",
+            ["show", "--no-patch", "--pretty=%B", "HEAD"],
+            &outcome.rit_repo
+        )
+        .0
+    );
+    assert_eq!(
+        run_capture(
+            "git",
+            ["show", "--no-patch", "--pretty=%T", "HEAD"],
+            &outcome.git_repo
+        )
+        .0,
+        run_capture(
+            "git",
+            ["show", "--no-patch", "--pretty=%T", "HEAD"],
+            &outcome.rit_repo
+        )
+        .0
+    );
+    assert_eq!(
+        run_capture(
+            "git",
+            ["show", "--no-patch", "--pretty=%P", "HEAD"],
+            &outcome.git_repo
+        )
+        .0,
+        run_capture(
+            "git",
+            ["show", "--no-patch", "--pretty=%P", "HEAD"],
+            &outcome.rit_repo
+        )
+        .0
+    );
+    let _ = fs::remove_dir_all(fixture);
+}
+
+#[test]
+fn merge_message_option_writes_stopped_merge_message() {
+    let fixture = merge_clean_non_fast_forward_fixture("merge-message-no-commit-fixture");
+
+    let outcome = compare_after_command(
+        &fixture,
+        command_words(
+            "git",
+            ["merge", "--no-commit", "-m", "Stop and explain", "topic"],
+        ),
+        command_words(
+            rit_binary(),
+            ["merge", "--no-commit", "-m", "Stop and explain", "topic"],
+        ),
+    );
+
+    assert_eq!(outcome.git_status, outcome.rit_status);
+    assert_eq!(
+        read_repo_git_file(&outcome.git_repo, "MERGE_MSG"),
+        read_repo_git_file(&outcome.rit_repo, "MERGE_MSG")
+    );
+    assert_eq!(
+        read_repo_git_file(&outcome.rit_repo, "MERGE_MSG"),
+        Some("Stop and explain\n".to_owned())
+    );
+    let _ = fs::remove_dir_all(fixture);
+}
+
+#[test]
 fn merge_plan_prints_fast_forward_without_changing_head() {
     let fixture = temp_path("merge-plan-fixture");
     fs::create_dir_all(&fixture).expect("fixture should be created");
@@ -3806,9 +3890,8 @@ fn merge_conflict_writes_index_stages_and_operation_record() {
 
     assert!(!output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Auto-merging tracked.txt\n"));
-    assert!(stdout.contains("CONFLICT (content): Merge conflict in tracked.txt\n"));
-    assert!(stdout.contains("Automatic merge failed; fix conflicts and then commit the result.\n"));
+    assert_rit_content_conflict_output(&stdout, "tracked.txt");
+    assert!(stdout.contains("rit: merge stopped because some files need your help."));
     assert!(!stdout.contains("Recorded pre-merge target"));
     assert!(fixture.join(".git").join("MERGE_HEAD").exists());
     let ls_files = run_capture(rit_binary(), ["ls-files", "--stage"], &fixture).0;
@@ -3833,6 +3916,17 @@ fn merge_conflict_writes_index_stages_and_operation_record() {
         ""
     );
     let _ = fs::remove_dir_all(fixture);
+}
+
+fn assert_rit_content_conflict_output(stdout: &str, path: &str) {
+    assert!(
+        stdout.contains(&format!("rit: merge conflict in {path}\n")),
+        "stdout should name the conflicted path in rit's own words:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Both branches changed this file"),
+        "stdout should explain why the user must resolve the file:\n{stdout}"
+    );
 }
 
 #[test]
@@ -3944,7 +4038,7 @@ fn merge_delete_modify_conflict_leaves_target_file_when_head_deleted() {
     assert!(!merge.status.success());
     let stdout = String::from_utf8_lossy(&merge.stdout);
     assert!(stdout.contains(
-        "CONFLICT (modify/delete): a.txt deleted in HEAD and modified in topic.  Version topic of a.txt left in tree.\n"
+        "rit: a.txt was deleted on HEAD but changed on topic. rit left the topic version in your working tree so you can decide whether to keep or remove it.\n"
     ));
     assert!(!stdout.contains("Auto-merging a.txt\n"));
     assert!(!stdout.contains("Recorded pre-merge target"));
@@ -3988,7 +4082,7 @@ fn merge_delete_modify_conflict_leaves_head_file_when_target_deleted() {
     assert!(!merge.status.success());
     let stdout = String::from_utf8_lossy(&merge.stdout);
     assert!(stdout.contains(
-        "CONFLICT (modify/delete): a.txt deleted in topic and modified in HEAD.  Version HEAD of a.txt left in tree.\n"
+        "rit: a.txt was deleted on topic but changed on HEAD. rit left the HEAD version in your working tree so you can decide whether to keep or remove it.\n"
     ));
     assert!(!stdout.contains("Auto-merging a.txt\n"));
     assert!(!stdout.contains("Recorded pre-merge target"));
@@ -4031,9 +4125,8 @@ fn merge_binary_conflict_reports_warning_and_keeps_head_file() {
 
     assert!(!merge.status.success());
     let stdout = String::from_utf8_lossy(&merge.stdout);
-    assert!(stdout.contains("warning: Cannot merge binary files: blob.bin (HEAD vs. topic)\n"));
-    assert!(stdout.contains("Auto-merging blob.bin\n"));
-    assert!(stdout.contains("CONFLICT (content): Merge conflict in blob.bin\n"));
+    assert!(stdout.contains("rit: binary merge conflict in blob.bin\n"));
+    assert!(stdout.contains("rit cannot combine binary files safely"));
     assert!(!stdout.contains("Recorded pre-merge target"));
     assert_eq!(
         fs::read(fixture.join("blob.bin")).expect("head blob should exist"),
@@ -4076,8 +4169,7 @@ fn merge_content_conflict_preserves_mode_stage_entries() {
 
     assert!(!merge.status.success());
     let stdout = String::from_utf8_lossy(&merge.stdout);
-    assert!(stdout.contains("Auto-merging a.sh\n"));
-    assert!(stdout.contains("CONFLICT (content): Merge conflict in a.sh\n"));
+    assert_rit_content_conflict_output(&stdout, "a.sh");
     assert!(!stdout.contains("Recorded pre-merge target"));
     assert_eq!(
         run_capture(rit_binary(), ["status", "--porcelain=v1"], &fixture).0,
@@ -4124,8 +4216,8 @@ fn merge_add_add_conflict_reports_add_add_message() {
 
     assert!(!merge.status.success());
     let stdout = String::from_utf8_lossy(&merge.stdout);
-    assert!(stdout.contains("Auto-merging a.txt\n"));
-    assert!(stdout.contains("CONFLICT (add/add): Merge conflict in a.txt\n"));
+    assert!(stdout.contains("rit: both branches added a.txt\n"));
+    assert!(stdout.contains("Pick the final file contents"));
     assert!(!stdout.contains("Recorded pre-merge target"));
     assert_eq!(
         run_capture(rit_binary(), ["status", "--porcelain=v1"], &fixture).0,
@@ -4248,7 +4340,7 @@ fn merge_distinct_type_conflict_splits_regular_file_and_symlink_paths() {
     assert!(!merge.status.success());
     let stdout = String::from_utf8_lossy(&merge.stdout);
     assert!(stdout.contains(
-        "CONFLICT (distinct types): a.txt had different types on each side; renamed one of them so each can be recorded somewhere.\n"
+        "rit: a.txt has different file types on each side. rit kept both versions with separate names so you can choose the final shape.\n"
     ));
     assert!(!stdout.contains("Auto-merging a.txt\n"));
     assert!(!stdout.contains("Recorded pre-merge target"));
@@ -4309,7 +4401,7 @@ fn merge_distinct_type_conflict_splits_symlink_head_and_regular_target_paths() {
     assert!(!merge.status.success());
     let stdout = String::from_utf8_lossy(&merge.stdout);
     assert!(stdout.contains(
-        "CONFLICT (distinct types): a.txt had different types on each side; renamed one of them so each can be recorded somewhere.\n"
+        "rit: a.txt has different file types on each side. rit kept both versions with separate names so you can choose the final shape.\n"
     ));
     assert!(!stdout.contains("Auto-merging a.txt\n"));
     assert!(!stdout.contains("Recorded pre-merge target"));
@@ -5104,6 +5196,27 @@ fn merge_text_conflict_fixture(name: &str) -> PathBuf {
     run_git(&fixture, ["checkout", "--quiet", "master"]);
     fs::write(fixture.join("a.txt"), "head\n").expect("head file should be written");
     run_git(&fixture, ["add", "a.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "head"]);
+    fixture
+}
+
+fn merge_clean_non_fast_forward_fixture(name: &str) -> PathBuf {
+    let fixture = temp_path(name);
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    fs::write(fixture.join("base.txt"), "base\n").expect("base file should be written");
+    run_git(&fixture, ["add", "base.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    run_git(&fixture, ["checkout", "--quiet", "-b", "topic"]);
+    fs::write(fixture.join("topic.txt"), "topic\n").expect("topic file should be written");
+    run_git(&fixture, ["add", "topic.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "topic"]);
+    run_git(&fixture, ["checkout", "--quiet", "master"]);
+    fs::write(fixture.join("head.txt"), "head\n").expect("head file should be written");
+    run_git(&fixture, ["add", "head.txt"]);
     run_git(&fixture, ["commit", "--quiet", "-m", "head"]);
     fixture
 }

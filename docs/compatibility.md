@@ -120,6 +120,10 @@ The current codebase implements an early local Git subset:
   `docs/implementation-notes.md`.
 - Unknown repository formats must be read-only or rejected with a clear error
   before any write operation.
+- User-facing prose should be clear, educational, and `rit`-specific when the
+  exact Git wording is not required for a stable machine-readable contract.
+  Compatibility tests should prefer repository state, exit code, and structured
+  output checks over copying Git's human help or advice text verbatim.
 
 ## Priority Command Help Checked
 

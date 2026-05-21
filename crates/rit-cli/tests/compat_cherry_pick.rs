@@ -594,7 +594,6 @@ fn multi_commit_cherry_pick_continue_stops_on_later_conflict_like_git() {
     assert_ne!(git_continue.exit_code, 0);
     assert_ne!(rit_continue.exit_code, 0);
     assert!(git_continue.stdout.contains("Auto-merging three.txt\n"));
-    assert!(rit_continue.stdout.contains("Auto-merging three.txt\n"));
     assert!(
         git_continue
             .stdout
@@ -603,7 +602,12 @@ fn multi_commit_cherry_pick_continue_stops_on_later_conflict_like_git() {
     assert!(
         rit_continue
             .stdout
-            .contains("CONFLICT (content): Merge conflict in three.txt\n")
+            .contains("rit: merge conflict in three.txt\n")
+    );
+    assert!(
+        rit_continue
+            .stdout
+            .contains("Both branches changed this file")
     );
     assert!(rit_continue.stderr.contains("error: could not apply "));
     assert!(rit_continue.stderr.contains("pick three"));

@@ -546,7 +546,7 @@ fn rebase_stops_on_single_conflict_like_git() {
 
     assert_eq!(git_rebase.exit_code, 1, "git stderr: {}", git_rebase.stderr);
     assert_eq!(rit_rebase.exit_code, 1, "rit stderr: {}", rit_rebase.stderr);
-    assert_eq!(git_rebase.stdout, rit_rebase.stdout);
+    assert_rit_conflict_output(&rit_rebase.stdout, "tracked.txt");
     assert_eq!(git_rebase.stderr, rit_rebase.stderr);
     assert_eq!(
         fs::read_to_string(git_repo.join("tracked.txt")).expect("git tracked file should read"),
@@ -611,7 +611,7 @@ fn rebase_stops_on_final_conflict_after_clean_replay_like_git() {
 
     assert_eq!(git_rebase.exit_code, 1, "git stderr: {}", git_rebase.stderr);
     assert_eq!(rit_rebase.exit_code, 1, "rit stderr: {}", rit_rebase.stderr);
-    assert_eq!(git_rebase.stdout, rit_rebase.stdout);
+    assert_rit_conflict_output(&rit_rebase.stdout, "tracked.txt");
     assert_eq!(git_rebase.stderr, rit_rebase.stderr);
     for path in [
         "HEAD",
@@ -666,7 +666,7 @@ fn rebase_stops_on_conflict_with_remaining_todo_like_git() {
 
     assert_eq!(git_rebase.exit_code, 1, "git stderr: {}", git_rebase.stderr);
     assert_eq!(rit_rebase.exit_code, 1, "rit stderr: {}", rit_rebase.stderr);
-    assert_eq!(git_rebase.stdout, rit_rebase.stdout);
+    assert_rit_conflict_output(&rit_rebase.stdout, "tracked.txt");
     assert_eq!(git_rebase.stderr, rit_rebase.stderr);
     for path in [
         "HEAD",
@@ -869,7 +869,7 @@ fn rebase_continue_stops_on_later_conflict_like_git() {
         "rit stderr: {}",
         rit_continue.stderr
     );
-    assert_eq!(git_continue.stdout, rit_continue.stdout);
+    assert_rit_conflict_output(&rit_continue.stdout, "second.txt");
     assert_eq!(git_continue.stderr, rit_continue.stderr);
     assert_rebase_later_conflict_state_matches(&git_repo, &rit_repo);
     assert_eq!(
@@ -902,7 +902,7 @@ fn rebase_skip_stops_on_later_conflict_like_git() {
 
     assert_eq!(git_skip.exit_code, 1, "git stderr: {}", git_skip.stderr);
     assert_eq!(rit_skip.exit_code, 1, "rit stderr: {}", rit_skip.stderr);
-    assert_eq!(git_skip.stdout, rit_skip.stdout);
+    assert_rit_conflict_output(&rit_skip.stdout, "second.txt");
     assert_eq!(git_skip.stderr, rit_skip.stderr);
     assert_rebase_later_conflict_state_matches(&git_repo, &rit_repo);
 
@@ -913,6 +913,17 @@ struct CapturedCommand {
     exit_code: i32,
     stdout: String,
     stderr: String,
+}
+
+fn assert_rit_conflict_output(stdout: &str, path: &str) {
+    assert!(
+        stdout.contains(&format!("rit: merge conflict in {path}\n")),
+        "stdout should name the conflicted path in rit's own words:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("Both branches changed this file"),
+        "stdout should explain why the user must resolve the file:\n{stdout}"
+    );
 }
 
 fn init_repo(repo: &Path) {
