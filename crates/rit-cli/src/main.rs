@@ -2911,6 +2911,7 @@ fn cherry_pick_command(
     let mut append_origin = false;
     let mut fast_forward = false;
     let mut signoff = false;
+    let mut strategy_option = rit_core::MergeStrategyOption::None;
     let mut targets = Vec::new();
     let mut index = 0;
     while index < args.len() {
@@ -2929,6 +2930,31 @@ fn cherry_pick_command(
             fast_forward = true;
         } else if arg == "--no-ff" {
             fast_forward = false;
+        } else if arg == "-X" || arg == "--strategy-option" {
+            index += 1;
+            let Some(value) = args.get(index) else {
+                writeln!(
+                    stderr,
+                    "rit: cherry-pick {arg} needs a strategy option, for example -X ours"
+                )?;
+                return Ok(ExitCode::from(129));
+            };
+            let Some(parsed_strategy_option) = parse_merge_strategy_option(value, stderr)? else {
+                return Ok(ExitCode::from(129));
+            };
+            strategy_option = parsed_strategy_option;
+        } else if let Some(value) = arg.strip_prefix("-X").filter(|value| !value.is_empty()) {
+            let Some(parsed_strategy_option) = parse_merge_strategy_option(value, stderr)? else {
+                return Ok(ExitCode::from(129));
+            };
+            strategy_option = parsed_strategy_option;
+        } else if let Some(value) = arg.strip_prefix("--strategy-option=") {
+            let Some(parsed_strategy_option) = parse_merge_strategy_option(value, stderr)? else {
+                return Ok(ExitCode::from(129));
+            };
+            strategy_option = parsed_strategy_option;
+        } else if arg == "--no-strategy-option" {
+            strategy_option = rit_core::MergeStrategyOption::None;
         } else if arg == "-m" || arg == "--mainline" {
             index += 1;
             let Some(value) = args.get(index) else {
@@ -3124,6 +3150,7 @@ fn cherry_pick_command(
         append_origin,
         fast_forward,
         signoff,
+        strategy_option,
     };
     if !commit && targets.len() > 1 {
         return match repository.cherry_pick_no_commit_many(&targets, &options) {

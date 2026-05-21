@@ -1708,14 +1708,16 @@
 - Supported options: one or more target commits for clean committing picks,
   clean `-n`/`--no-commit` picks, `--commit`, `-m`/`--mainline` for clean
   merge commits, `-x` for clean committing picks, `--ff` for direct-parent
-  fast-forwards, `-s`/`--signoff` for clean committing picks, Git-shaped
-  sequencer metadata for multi-target picks that stop on a conflict,
-  `--continue` replay of remaining clean todo entries and later-conflict
-  state/output, `--abort`, and `--quit`/`--skip` for the supported conflict
-  state.
+  fast-forwards, `-s`/`--signoff` for clean committing picks,
+  `-X ours/theirs`, `-Xours`/`-Xtheirs`, and
+  `--strategy-option=ours/theirs` for supported same-path text conflicts,
+  Git-shaped sequencer metadata for multi-target picks that stop on a
+  conflict, `--continue` replay of remaining clean todo entries and
+  later-conflict state/output, `--abort`, and `--quit`/`--skip` for the
+  supported conflict state.
 - Unsupported options: exact full later-conflict commit summary/hint parity,
-  signing, strategy options, empty-commit handling, conflict continuation for
-  merge commits, and full sequencer/editor/hook parity.
+  signing, broader strategy options, empty-commit handling, conflict
+  continuation for merge commits, and full sequencer/editor/hook parity.
 - Git-compatible behavior: clean single-parent picks apply the picked commit's
   parent-to-commit tree change onto `HEAD`, create a new one-parent commit, and
   preserve the picked author and commit message. With `-n`/`--no-commit`, the
@@ -1732,6 +1734,11 @@
   `(cherry picked from commit <object-id>)` to the commit message. Clean
   `--ff` picks update `HEAD` directly when the picked commit is a direct child
   of `HEAD`. Clean signoff picks append `Signed-off-by: <committer>`.
+  `-X ours/theirs` and `--strategy-option=ours/theirs` choose the current
+  `HEAD` side or picked-commit side for supported same-path text conflicts
+  while preserving non-conflicting picked changes; this slice was checked
+  against Git 2.54.0.windows.1 using `git --version`, `git help -a`,
+  `git cherry-pick -h`, and direct Git-vs-rit fixture comparisons.
   Multi-target no-commit picks use the index/worktree result from the previous
   pick as the base for the next target. Multi-target committing picks that
   stop on a later conflict write `.git/sequencer` metadata matching Git's

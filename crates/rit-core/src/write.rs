@@ -275,6 +275,8 @@ pub struct CherryPickOptions {
     pub fast_forward: bool,
     /// Whether to append a Signed-off-by trailer for the committer.
     pub signoff: bool,
+    /// Same-path conflict side preference for supported content conflicts.
+    pub strategy_option: MergeStrategyOption,
 }
 
 /// One item in a Git-compatible cherry-pick sequencer todo file.
@@ -301,6 +303,7 @@ impl Default for CherryPickOptions {
             append_origin: false,
             fast_forward: false,
             signoff: false,
+            strategy_option: MergeStrategyOption::None,
         }
     }
 }
@@ -336,6 +339,7 @@ struct ConflictedCherryPickStart<'a> {
     head_entries: &'a [IndexEntry],
     picked_entries: &'a [IndexEntry],
     conflict_stages: &'a [MergeConflictStagePlan],
+    strategy_option: MergeStrategyOption,
 }
 
 struct ConflictedRebaseStart<'a> {
@@ -1587,7 +1591,11 @@ impl Repository {
         let picked_entries = self.commit_index_entries(picked_id)?;
         let plan =
             non_fast_forward_merge_workflow_plan(&base_entries, &head_entries, &picked_entries);
-        if !plan.conflict_stages.is_empty() {
+        let conflict_stages = merge_conflict_stages_after_strategy_option(
+            &plan.conflict_stages,
+            options.strategy_option,
+        );
+        if !conflict_stages.is_empty() {
             let target_label = cherry_pick_conflict_label(picked_id, &picked_commit.message);
             self.start_conflicted_cherry_pick(ConflictedCherryPickStart {
                 target_label: &target_label,
@@ -1597,14 +1605,19 @@ impl Repository {
                 base_entries: &base_entries,
                 head_entries: &head_entries,
                 picked_entries: &picked_entries,
-                conflict_stages: &plan.conflict_stages,
+                conflict_stages: &conflict_stages,
+                strategy_option: options.strategy_option,
             })?;
             self.refresh_indexdb_after_git_write();
+            let conflict_paths = conflict_stages
+                .iter()
+                .map(|stage| stage.path.clone())
+                .collect();
             return Ok(CherryPickResult {
                 picked_id,
                 commit_id: None,
-                conflict_paths: plan.conflict_paths,
-                conflict_reports: self.merge_conflict_reports(&plan.conflict_stages)?,
+                conflict_paths,
+                conflict_reports: self.merge_conflict_reports(&conflict_stages)?,
             });
         }
 
@@ -1620,7 +1633,7 @@ impl Repository {
             &picked_entries,
             &[],
             target,
-            MergeStrategyOption::None,
+            options.strategy_option,
         )?;
         let conflict_paths = BTreeSet::new();
         write_non_conflicting_merge_worktree_changes(
@@ -1699,7 +1712,7 @@ impl Repository {
             input.picked_entries,
             input.conflict_stages,
             input.target_label,
-            MergeStrategyOption::None,
+            input.strategy_option,
         )?;
         let conflict_paths = input
             .conflict_stages

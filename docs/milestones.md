@@ -622,8 +622,11 @@ Completion criteria:
     output when a later remaining todo commit conflicts.
   - [x] `cherry-pick --skip` drops the stopped pick and replays additional
     remaining clean sequencer todo entries.
-  - [ ] Exact full later-conflict commit summary/hint parity, strategy options,
-    conflict continuation for merge commits, and editor/hook parity.
+  - [x] `cherry-pick -X ours/theirs` and `--strategy-option=ours/theirs`
+    resolve supported same-path text conflicts by choosing the requested side
+    while still applying non-conflicting picked changes.
+  - [ ] Exact full later-conflict commit summary/hint parity, broader strategy
+    options, conflict continuation for merge commits, and editor/hook parity.
 - [~] `rit rebase`
   - [x] `rit rebase <upstream>` reports Git-compatible up-to-date status when
     the upstream is already an ancestor of `HEAD`.

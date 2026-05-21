@@ -210,13 +210,13 @@ Fast-forward the current branch to a local branch or revision, create a clean me
 ";
 
 const CHERRY_PICK_HELP: &str = "\
-rit cherry-pick [-n|--no-commit] [--ff] [-s] [-x] [-m <parent-number>] <commit>...
+rit cherry-pick [-n|--no-commit] [--ff] [-s] [-x] [-m <parent-number>] [-X ours|theirs] <commit>...
 rit cherry-pick --abort
 rit cherry-pick --continue
 rit cherry-pick --skip
 rit cherry-pick --quit
 
-Apply one non-merge commit onto the current HEAD, or manage an in-progress conflicted cherry-pick.
+Apply one commit onto the current HEAD, optionally choosing a side for simple conflicts, or manage an in-progress conflicted cherry-pick.
 ";
 
 const REBASE_HELP: &str = "\

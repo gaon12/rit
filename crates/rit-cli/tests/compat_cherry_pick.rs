@@ -148,6 +148,50 @@ fn clean_cherry_pick_signoff_appends_trailer_like_git() {
 }
 
 #[test]
+fn cherry_pick_strategy_option_ours_resolves_text_conflict_like_git_state() {
+    let root = temp_path("strategy-option-ours");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_conflicting_cherry_pick_with_picked_file(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_pick = run_capture("git", ["cherry-pick", "-Xours", "topic"], &git_repo);
+    let rit_pick = run_capture(rit_binary(), ["cherry-pick", "-Xours", "topic"], &rit_repo);
+
+    assert_eq!(git_pick.exit_code, 0, "git stderr: {}", git_pick.stderr);
+    assert_eq!(rit_pick.exit_code, 0, "rit stderr: {}", rit_pick.stderr);
+    assert_strategy_option_cherry_pick_state(&git_repo, &rit_repo, "head\n");
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn cherry_pick_strategy_option_theirs_resolves_text_conflict_like_git_state() {
+    let root = temp_path("strategy-option-theirs");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_conflicting_cherry_pick_with_picked_file(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_pick = run_capture(
+        "git",
+        ["cherry-pick", "--strategy-option=theirs", "topic"],
+        &git_repo,
+    );
+    let rit_pick = run_capture(
+        rit_binary(),
+        ["cherry-pick", "--strategy-option=theirs", "topic"],
+        &rit_repo,
+    );
+
+    assert_eq!(git_pick.exit_code, 0, "git stderr: {}", git_pick.stderr);
+    assert_eq!(rit_pick.exit_code, 0, "rit stderr: {}", rit_pick.stderr);
+    assert_strategy_option_cherry_pick_state(&git_repo, &rit_repo, "topic\n");
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn clean_cherry_pick_ff_fast_forwards_like_git() {
     let root = temp_path("ff");
     let git_repo = root.join("git");
@@ -894,6 +938,37 @@ struct CapturedCommand {
     stderr: String,
 }
 
+fn assert_strategy_option_cherry_pick_state(
+    git_repo: &Path,
+    rit_repo: &Path,
+    expected_conflict_file: &str,
+) {
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], rit_repo).stdout
+    );
+    assert_eq!(
+        fs::read_to_string(git_repo.join("a.txt")).expect("git conflict file should read"),
+        fs::read_to_string(rit_repo.join("a.txt")).expect("rit conflict file should read")
+    );
+    assert_eq!(
+        fs::read_to_string(rit_repo.join("a.txt")).expect("rit conflict file should read"),
+        expected_conflict_file
+    );
+    assert_eq!(
+        fs::read_to_string(git_repo.join("picked.txt")).expect("git picked file should read"),
+        fs::read_to_string(rit_repo.join("picked.txt")).expect("rit picked file should read")
+    );
+    assert_eq!(
+        run_capture("git", ["log", "-1", "--format=%P%n%B"], git_repo).stdout,
+        run_capture("git", ["log", "-1", "--format=%P%n%B"], rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["ls-files"], git_repo).stdout,
+        run_capture(rit_binary(), ["ls-files"], rit_repo).stdout
+    );
+}
+
 fn setup_clean_cherry_pick(repo: &Path) {
     init_repo(repo);
     commit_text(repo, "base.txt", "base\n", "base");
@@ -916,6 +991,18 @@ fn setup_conflicting_cherry_pick(repo: &Path) {
     commit_text(repo, "a.txt", "base\n", "base");
     run_git(repo, ["checkout", "--quiet", "-b", "topic"]);
     commit_text(repo, "a.txt", "topic\n", "pick me");
+    run_git(repo, ["checkout", "--quiet", "master"]);
+    commit_text(repo, "a.txt", "head\n", "head");
+}
+
+fn setup_conflicting_cherry_pick_with_picked_file(repo: &Path) {
+    init_repo(repo);
+    commit_text(repo, "a.txt", "base\n", "base");
+    run_git(repo, ["checkout", "--quiet", "-b", "topic"]);
+    fs::write(repo.join("a.txt"), "topic\n").expect("topic conflict file should write");
+    fs::write(repo.join("picked.txt"), "picked\n").expect("picked file should write");
+    run_git(repo, ["add", "a.txt", "picked.txt"]);
+    run_git(repo, ["commit", "--quiet", "-m", "pick both"]);
     run_git(repo, ["checkout", "--quiet", "master"]);
     commit_text(repo, "a.txt", "head\n", "head");
 }
