@@ -171,6 +171,128 @@ fn clean_merge_no_verify_bypasses_pre_merge_commit_hook() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn fast_forward_merge_runs_post_merge_hook_like_git() {
+    let root = temp_path("post-merge-fast-forward");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_fast_forward_merge(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    let hook = "#!/bin/sh\necho \"args:$#:$1:$2\" >> post-merge.log\necho hook-stdout\necho hook-stderr >&2\nexit 7\n";
+    write_hook(&git_repo, "post-merge", hook);
+    write_hook(&rit_repo, "post-merge", hook);
+
+    let git_merge = run_capture("git", ["merge", "topic"], &git_repo);
+    let rit_merge = run_capture(rit_binary(), ["merge", "topic"], &rit_repo);
+
+    assert_eq!(git_merge.exit_code, 0, "git stderr: {}", git_merge.stderr);
+    assert_eq!(rit_merge.exit_code, 0, "rit stderr: {}", rit_merge.stderr);
+    assert_eq!(git_merge.stderr, rit_merge.stderr);
+    assert_eq!(
+        fs::read_to_string(git_repo.join("post-merge.log"))
+            .expect("git post-merge log should read"),
+        fs::read_to_string(rit_repo.join("post-merge.log"))
+            .expect("rit post-merge log should read")
+    );
+    assert_eq!(
+        fs::read_to_string(rit_repo.join("post-merge.log"))
+            .expect("rit post-merge log should read"),
+        "args:1:0:\n"
+    );
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &git_repo).stdout,
+        run_capture(rit_binary(), ["rev-parse", "HEAD"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn clean_merge_commit_runs_post_merge_hook_like_git() {
+    let root = temp_path("post-merge-clean-commit");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_clean_merge(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    let hook = "#!/bin/sh\necho \"args:$#:$1:$2\" >> post-merge.log\necho hook-stdout\necho hook-stderr >&2\nexit 7\n";
+    write_hook(&git_repo, "post-merge", hook);
+    write_hook(&rit_repo, "post-merge", hook);
+
+    let git_merge = run_capture("git", ["merge", "topic"], &git_repo);
+    let rit_merge = run_capture(rit_binary(), ["merge", "topic"], &rit_repo);
+
+    assert_eq!(git_merge.exit_code, 0, "git stderr: {}", git_merge.stderr);
+    assert_eq!(rit_merge.exit_code, 0, "rit stderr: {}", rit_merge.stderr);
+    assert_eq!(git_merge.stderr, rit_merge.stderr);
+    assert_eq!(
+        fs::read_to_string(git_repo.join("post-merge.log"))
+            .expect("git post-merge log should read"),
+        fs::read_to_string(rit_repo.join("post-merge.log"))
+            .expect("rit post-merge log should read")
+    );
+    assert_eq!(
+        fs::read_to_string(rit_repo.join("post-merge.log"))
+            .expect("rit post-merge log should read"),
+        "args:1:0:\n"
+    );
+    assert_eq!(
+        run_capture(
+            "git",
+            ["rev-list", "--parents", "-n", "1", "HEAD"],
+            &git_repo
+        )
+        .stdout
+        .split_whitespace()
+        .count(),
+        run_capture(
+            "git",
+            ["rev-list", "--parents", "-n", "1", "HEAD"],
+            &rit_repo
+        )
+        .stdout
+        .split_whitespace()
+        .count()
+    );
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn clean_no_commit_merge_does_not_run_post_merge_hook_like_git() {
+    let root = temp_path("post-merge-no-commit");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_clean_merge(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    let hook = "#!/bin/sh\necho \"args:$#:$1:$2\" >> post-merge.log\necho hook-stdout\necho hook-stderr >&2\nexit 7\n";
+    write_hook(&git_repo, "post-merge", hook);
+    write_hook(&rit_repo, "post-merge", hook);
+
+    let git_merge = run_capture("git", ["merge", "--no-commit", "topic"], &git_repo);
+    let rit_merge = run_capture(rit_binary(), ["merge", "--no-commit", "topic"], &rit_repo);
+
+    assert_eq!(git_merge.exit_code, 0, "git stderr: {}", git_merge.stderr);
+    assert_eq!(rit_merge.exit_code, 0, "rit stderr: {}", rit_merge.stderr);
+    assert!(!git_repo.join("post-merge.log").exists());
+    assert!(!rit_repo.join("post-merge.log").exists());
+    assert!(git_repo.join(".git").join("MERGE_HEAD").exists());
+    assert!(rit_repo.join(".git").join("MERGE_HEAD").exists());
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct MergeScenario {
     name: &'static str,
     setup: fn(&Path),
@@ -251,6 +373,14 @@ fn setup_clean_merge(repo: &Path) {
     commit_text(repo, "topic.txt", "topic\n", "topic");
     run_git(repo, ["checkout", "--quiet", "master"]);
     commit_text(repo, "head.txt", "head\n", "head");
+}
+
+fn setup_fast_forward_merge(repo: &Path) {
+    init_repo(repo);
+    commit_text(repo, "base.txt", "base\n", "base");
+    run_git(repo, ["checkout", "--quiet", "-b", "topic"]);
+    commit_text(repo, "topic.txt", "topic\n", "topic");
+    run_git(repo, ["checkout", "--quiet", "master"]);
 }
 
 fn init_repo(repo: &Path) {

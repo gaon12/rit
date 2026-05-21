@@ -581,6 +581,10 @@ Completion criteria:
     still creating a normal merge commit.
   - [x] `merge -m/--message` uses the selected merge message for clean merge
     commits and stopped merge state in covered branch-target forms.
+  - [x] Covered successful fast-forward merges and automatic clean merge
+    commits run `post-merge 0` like Git, relay hook output to stderr, ignore
+    non-zero hook exits, and clean `--no-commit` merge stops do not run the
+    hook.
   - [ ] Full conflict handling, merge hooks, and strategies.
 - [~] `rit cherry-pick`
   - [x] Clean single-parent cherry-pick applies the picked commit onto `HEAD`,

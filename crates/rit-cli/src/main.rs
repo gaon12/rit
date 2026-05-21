@@ -2562,7 +2562,11 @@ fn merge_command(
             writeln!(stdout, "Already up to date.")?;
             Ok(ExitCode::SUCCESS)
         }
-        Ok(rit_core::MergeResult::FastForward { old_id, new_id }) => {
+        Ok(rit_core::MergeResult::FastForward {
+            old_id,
+            new_id,
+            post_merge_output,
+        }) => {
             record_operation(
                 &repository,
                 "merge",
@@ -2578,12 +2582,14 @@ fn merge_command(
                 &new_id.to_hex()[..7]
             )?;
             writeln!(stdout, "Fast-forward")?;
+            write!(stderr, "{post_merge_output}")?;
             Ok(ExitCode::SUCCESS)
         }
         Ok(rit_core::MergeResult::MergeCommit {
             old_id,
             target_id,
             commit_id,
+            post_merge_output,
         }) => {
             record_operation(
                 &repository,
@@ -2600,6 +2606,7 @@ fn merge_command(
                 &target_id.to_hex()[..7],
                 &commit_id.to_hex()[..7]
             )?;
+            write!(stderr, "{post_merge_output}")?;
             Ok(ExitCode::SUCCESS)
         }
         Ok(rit_core::MergeResult::StoppedBeforeCommit { .. }) => {

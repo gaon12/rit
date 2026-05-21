@@ -119,7 +119,12 @@ pub enum MergeResult {
     /// HEAD already points at the requested commit.
     AlreadyUpToDate { commit_id: ObjectId },
     /// HEAD moved forward without creating a merge commit.
-    FastForward { old_id: ObjectId, new_id: ObjectId },
+    FastForward {
+        old_id: ObjectId,
+        new_id: ObjectId,
+        /// Output produced by a successful `post-merge` hook.
+        post_merge_output: String,
+    },
     /// A non-fast-forward merge completed by creating a merge commit.
     MergeCommit {
         /// Previous `HEAD` commit.
@@ -128,6 +133,8 @@ pub enum MergeResult {
         target_id: ObjectId,
         /// Newly written merge commit.
         commit_id: ObjectId,
+        /// Output produced by a successful `post-merge` hook.
+        post_merge_output: String,
     },
     /// A clean merge updated the index and working tree but stopped before
     /// creating the merge commit.
@@ -1204,10 +1211,12 @@ impl Repository {
             }
             let commit_id =
                 self.create_ours_strategy_merge_commit(target, options, old_id, new_id)?;
+            let post_merge_output = run_post_merge_hook(self, false);
             return Ok(MergeResult::MergeCommit {
                 old_id,
                 target_id: new_id,
                 commit_id,
+                post_merge_output,
             });
         }
         if options.no_fast_forward && self.commit_is_ancestor(old_id, new_id)? {
@@ -1238,10 +1247,12 @@ impl Repository {
                 head_entries: &head_entries,
                 target_entries: &target_entries,
             })?;
+            let post_merge_output = run_post_merge_hook(self, false);
             return Ok(MergeResult::MergeCommit {
                 old_id,
                 target_id: new_id,
                 commit_id,
+                post_merge_output,
             });
         }
         if !self.commit_is_ancestor(old_id, new_id)? {
@@ -1284,10 +1295,12 @@ impl Repository {
                     head_entries: &head_entries,
                     target_entries: &target_entries,
                 })?;
+                let post_merge_output = run_post_merge_hook(self, false);
                 return Ok(MergeResult::MergeCommit {
                     old_id,
                     target_id: new_id,
                     commit_id,
+                    post_merge_output,
                 });
             }
             self.start_conflicted_merge(ConflictedMergeStart {
@@ -1315,8 +1328,13 @@ impl Repository {
 
         self.checkout_commit_tree(new_id)?;
         self.update_head(new_id)?;
+        let post_merge_output = run_post_merge_hook(self, false);
         self.refresh_indexdb_after_git_write();
-        Ok(MergeResult::FastForward { old_id, new_id })
+        Ok(MergeResult::FastForward {
+            old_id,
+            new_id,
+            post_merge_output,
+        })
     }
 
     fn start_ours_strategy_merge_without_commit(
@@ -1491,8 +1509,13 @@ impl Repository {
 
         self.checkout_commit_tree(new_id)?;
         self.update_head(new_id)?;
+        let post_merge_output = run_post_merge_hook(self, false);
         self.refresh_indexdb_after_git_write();
-        Ok(MergeResult::FastForward { old_id, new_id })
+        Ok(MergeResult::FastForward {
+            old_id,
+            new_id,
+            post_merge_output,
+        })
     }
 
     /// Applies a single commit onto the current `HEAD` when it merges cleanly.
@@ -4487,6 +4510,34 @@ fn run_post_rewrite_hook(
     hook_output
 }
 
+fn run_post_merge_hook(repository: &Repository, squash: bool) -> String {
+    let hook_path = repository.common_dir().join("hooks").join("post-merge");
+    if !matches!(hook_should_run(&hook_path), Ok(true)) {
+        return String::new();
+    }
+    let Ok(mut command) = hook_command(&hook_path) else {
+        return String::new();
+    };
+    let squash_arg = if squash { "1" } else { "0" };
+    let current_dir = child_path(repository.worktree().unwrap_or(repository.common_dir()));
+    let Ok(output) = command
+        .arg(squash_arg)
+        .current_dir(current_dir)
+        .env("GIT_DIR", child_path(repository.git_dir()))
+        .env(
+            "GIT_INDEX_FILE",
+            child_path(&repository.git_dir().join("index")),
+        )
+        .output()
+    else {
+        return String::new();
+    };
+    let mut hook_output = String::new();
+    hook_output.push_str(&String::from_utf8_lossy(&output.stdout));
+    hook_output.push_str(&String::from_utf8_lossy(&output.stderr));
+    hook_output
+}
+
 fn run_hook(repository: &Repository, name: &str, args: &[PathBuf]) -> Result<()> {
     let hook_path = repository.common_dir().join("hooks").join(name);
     if !hook_should_run(&hook_path)? {
@@ -5998,6 +6049,7 @@ mod tests {
             old_id,
             target_id,
             commit_id,
+            ..
         } = result
         else {
             panic!("expected clean merge commit result");
@@ -6065,6 +6117,7 @@ mod tests {
             old_id,
             target_id,
             commit_id,
+            ..
         } = result
         else {
             panic!("expected no-ff merge commit result");
@@ -6223,6 +6276,7 @@ mod tests {
             old_id,
             target_id,
             commit_id,
+            ..
         } = result
         else {
             panic!("expected ours strategy merge commit result");
@@ -6300,6 +6354,7 @@ mod tests {
             old_id,
             target_id,
             commit_id,
+            ..
         } = result
         else {
             panic!("expected clean merge commit result");

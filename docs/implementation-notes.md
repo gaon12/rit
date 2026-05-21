@@ -1684,6 +1684,13 @@
 ### `rit merge`
 
 - Baseline command checked: `git merge -h`
+- 2026-05-22 merge post-merge hook slice checked Git 2.54.0.windows.1 with
+  `git --version`, `git help -a`, `git merge -h`, `git help hooks`, and direct
+  Git comparisons for fast-forward merges, clean automatic merge commits, and
+  clean `merge --no-commit`. Git runs `post-merge 0` after covered successful
+  fast-forward and merge-commit completions, relays hook stdout/stderr to
+  stderr, ignores a non-zero hook exit status, and does not run the hook for
+  clean `--no-commit` stops.
 - Supported options: default fast-forward shape and explicit `--ff-only` with
   one target branch or revision, conflicted non-fast-forward index-stage
   starts, `--abort`, `--quit`, `--continue`, `--no-verify` for clean merge
@@ -1694,6 +1701,10 @@
   hook parity, squash, autostash, signing, and other verification options.
 - Git-compatible behavior: fast-forward final `HEAD`, index, and worktree state
   match Git for simple clean repositories.
+- Git-compatible behavior: covered successful fast-forward merges and automatic
+  clean merge commits run `post-merge 0`, relay hook output to stderr, and
+  ignore the hook exit status. Covered clean `--no-commit` merge stops do not
+  run `post-merge`.
 - rit-specific behavior: `--plan` prints whether the merge would be already
   up-to-date, fast-forward, or non-fast-forward. Fast-forward plans include
   paths that would be updated or removed; non-fast-forward plans include
