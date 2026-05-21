@@ -421,6 +421,8 @@ pub enum CommitHookMode {
     Commit,
     /// Automatic clean merge commit hook order.
     Merge,
+    /// Resolved `git cherry-pick --continue` hook order.
+    CherryPickContinue,
 }
 
 /// Options that affect merge execution without changing merge selection.
@@ -1687,6 +1689,7 @@ impl Repository {
                     timestamp: picked_commit.author.timestamp,
                     offset: picked_commit.author.offset,
                 }),
+                verify: false,
                 ..CommitOptions::default()
             },
             &[head_id],
@@ -2039,6 +2042,7 @@ impl Repository {
                     timestamp: picked_commit.author.timestamp,
                     offset: picked_commit.author.offset,
                 }),
+                hook_mode: CommitHookMode::CherryPickContinue,
                 ..options.clone()
             },
             &[head_id],
@@ -4313,16 +4317,14 @@ fn run_commit_hooks(
         &format!("{}\n", message.trim_end_matches('\n')),
     )?;
     let prepare_source = match options.hook_mode {
-        CommitHookMode::Commit => "message",
-        CommitHookMode::Merge => "merge",
+        CommitHookMode::Commit => Some("message"),
+        CommitHookMode::Merge => Some("merge"),
+        CommitHookMode::CherryPickContinue => Some("merge"),
     };
+    let prepare_args = prepare_commit_msg_args(&message_path, prepare_source);
 
     if !options.verify {
-        run_hook(
-            repository,
-            "prepare-commit-msg",
-            &[message_path.clone(), PathBuf::from(prepare_source)],
-        )?;
+        run_hook(repository, "prepare-commit-msg", &prepare_args)?;
         *message = fs::read_to_string(&message_path)
             .map_err(|source| RitError::io(&message_path, source))?;
         return Ok(());
@@ -4331,13 +4333,10 @@ fn run_commit_hooks(
     let first_hook = match options.hook_mode {
         CommitHookMode::Commit => "pre-commit",
         CommitHookMode::Merge => "pre-merge-commit",
+        CommitHookMode::CherryPickContinue => "pre-commit",
     };
     run_hook(repository, first_hook, &[])?;
-    run_hook(
-        repository,
-        "prepare-commit-msg",
-        &[message_path.clone(), PathBuf::from(prepare_source)],
-    )?;
+    run_hook(repository, "prepare-commit-msg", &prepare_args)?;
     run_hook(
         repository,
         "commit-msg",
@@ -4346,6 +4345,14 @@ fn run_commit_hooks(
     *message =
         fs::read_to_string(&message_path).map_err(|source| RitError::io(&message_path, source))?;
     Ok(())
+}
+
+fn prepare_commit_msg_args(message_path: &Path, source: Option<&str>) -> Vec<PathBuf> {
+    let mut args = vec![message_path.to_path_buf()];
+    if let Some(source) = source {
+        args.push(PathBuf::from(source));
+    }
+    args
 }
 
 fn run_hook(repository: &Repository, name: &str, args: &[PathBuf]) -> Result<()> {

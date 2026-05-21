@@ -630,8 +630,12 @@ Completion criteria:
     side for remaining todo entries.
   - [x] Conflicting merge-commit cherry-pick with `-m`/`--mainline` can be
     resolved and continued, creating the same one-parent commit state as Git.
+  - [x] Cherry-pick commit hooks now match the covered Git paths: clean picks
+    run `prepare-commit-msg` and `post-commit` without `commit-msg`, while
+    resolved `--continue` runs commit verification hooks with merge-source
+    prepared messages.
   - [ ] Exact full later-conflict commit summary/hint parity, broader strategy
-    options, and editor/hook parity.
+    options, and remaining editor/hook parity.
 - [~] `rit rebase`
   - [x] `rit rebase <upstream>` reports Git-compatible up-to-date status when
     the upstream is already an ancestor of `HEAD`.

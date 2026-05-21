@@ -979,8 +979,14 @@
   `Signed-off-by` trailer using the resolved committer identity.
 - Clean multi-target `rit cherry-pick --no-commit <commit>...` now applies
   each target in order to the current index/worktree without advancing `HEAD`.
-- Still unsupported: remaining full conflict result message parity, strategies,
-  full merge hook/editor parity, full `cherry-pick`, `rebase`, and `stash`.
+- Clean committing `rit cherry-pick <commit>` now follows Git's covered hook
+  shape by running `prepare-commit-msg` with source `message` and
+  `post-commit`, while skipping `pre-commit`/`commit-msg`. Resolved
+  `rit cherry-pick --continue` now runs the commit verification hooks and
+  passes `merge` as the `prepare-commit-msg` source.
+- Still unsupported: remaining full conflict result message parity, broader
+  strategies, full editor parity, and full `cherry-pick`, `rebase`, and
+  `stash`.
 
 ### M16: Operation journal and universal undo
 
@@ -1714,11 +1720,11 @@
   `--strategy-option=ours/theirs` for supported same-path text conflicts,
   Git-shaped sequencer metadata, including strategy options, for multi-target
   picks that stop on a conflict, `--continue` replay of remaining clean todo
-  entries and later-conflict state/output, `--abort`, and `--quit`/`--skip`
-  for the supported conflict state.
+  entries, later-conflict state/output, and covered commit hook behavior,
+  `--abort`, and `--quit`/`--skip` for the supported conflict state.
 - Unsupported options: exact full later-conflict commit summary/hint parity,
   signing, broader strategy options, empty-commit handling, and full
-  sequencer/editor/hook parity.
+  sequencer/editor parity plus remaining hook edge cases.
 - Git-compatible behavior: clean single-parent picks apply the picked commit's
   parent-to-commit tree change onto `HEAD`, create a new one-parent commit, and
   preserve the picked author and commit message. With `-n`/`--no-commit`, the
@@ -1738,6 +1744,10 @@
   `(cherry picked from commit <object-id>)` to the commit message. Clean
   `--ff` picks update `HEAD` directly when the picked commit is a direct child
   of `HEAD`. Clean signoff picks append `Signed-off-by: <committer>`.
+  Covered hook behavior now matches Git for clean committing picks by running
+  `prepare-commit-msg` with source `message` and `post-commit`, while skipping
+  `pre-commit` and `commit-msg`; resolved `--continue` runs commit
+  verification hooks and uses source `merge` for `prepare-commit-msg`.
   `-X ours/theirs` and `--strategy-option=ours/theirs` choose the current
   `HEAD` side or picked-commit side for supported same-path text conflicts
   while preserving non-conflicting picked changes; this slice was checked

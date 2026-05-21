@@ -148,6 +148,51 @@ fn clean_cherry_pick_signoff_appends_trailer_like_git() {
 }
 
 #[test]
+fn clean_cherry_pick_runs_prepare_and_post_hooks_like_git() {
+    let root = temp_path("clean-hooks");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_clean_cherry_pick(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    let prepare_hook =
+        "#!/bin/sh\nprintf '\\nPrepared-source:%s third:%s\\n' \"$2\" \"$3\" >> \"$1\"\n";
+    let commit_msg_hook = "#!/bin/sh\nprintf '\\nCommit-msg-ran: yes\\n' >> \"$1\"\n";
+    let post_commit_hook = "#!/bin/sh\nprintf done > post.txt\n";
+    for repo in [&git_repo, &rit_repo] {
+        write_hook(repo, "prepare-commit-msg", prepare_hook);
+        write_hook(repo, "commit-msg", commit_msg_hook);
+        write_hook(repo, "post-commit", post_commit_hook);
+    }
+
+    let git_pick = run_capture("git", ["cherry-pick", "topic"], &git_repo);
+    let rit_pick = run_capture(rit_binary(), ["cherry-pick", "topic"], &rit_repo);
+
+    assert_eq!(git_pick.exit_code, 0, "git stderr: {}", git_pick.stderr);
+    assert_eq!(rit_pick.exit_code, 0, "rit stderr: {}", rit_pick.stderr);
+    let git_message = run_capture(
+        "git",
+        ["show", "--pretty=format:%B", "--no-patch"],
+        &git_repo,
+    )
+    .stdout;
+    let rit_message = run_capture(
+        "git",
+        ["show", "--pretty=format:%B", "--no-patch"],
+        &rit_repo,
+    )
+    .stdout;
+    assert_eq!(git_message, rit_message);
+    assert!(git_message.contains("Prepared-source:message third:"));
+    assert!(!git_message.contains("Commit-msg-ran"));
+    assert_eq!(
+        fs::read_to_string(git_repo.join("post.txt")).expect("git post hook should write marker"),
+        fs::read_to_string(rit_repo.join("post.txt")).expect("rit post hook should write marker")
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn cherry_pick_strategy_option_ours_resolves_text_conflict_like_git_state() {
     let root = temp_path("strategy-option-ours");
     let git_repo = root.join("git");
@@ -1025,8 +1070,10 @@ fn conflicting_cherry_pick_continue_commits_resolved_index() {
     setup_conflicting_cherry_pick(&git_repo);
     copy_directory(&git_repo, &rit_repo);
 
-    run_capture("git", ["cherry-pick", "topic"], &git_repo);
-    run_capture(rit_binary(), ["cherry-pick", "topic"], &rit_repo);
+    let git_pick = run_capture("git", ["cherry-pick", "topic"], &git_repo);
+    let rit_pick = run_capture(rit_binary(), ["cherry-pick", "topic"], &rit_repo);
+    assert_ne!(git_pick.exit_code, 0);
+    assert_ne!(rit_pick.exit_code, 0);
     fs::write(git_repo.join("a.txt"), "resolved\n").expect("git resolution should write");
     fs::write(rit_repo.join("a.txt"), "resolved\n").expect("rit resolution should write");
     run_git(&git_repo, ["add", "a.txt"]);
@@ -1075,6 +1122,60 @@ fn conflicting_cherry_pick_continue_commits_resolved_index() {
     );
     assert!(!git_repo.join(".git").join("CHERRY_PICK_HEAD").exists());
     assert!(!rit_repo.join(".git").join("CHERRY_PICK_HEAD").exists());
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn conflicting_cherry_pick_continue_runs_commit_hooks_like_git() {
+    let root = temp_path("continue-hooks");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_conflicting_cherry_pick(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    let prepare_hook =
+        "#!/bin/sh\nprintf '\\nPrepared-source:%s third:%s\\n' \"$2\" \"$3\" >> \"$1\"\n";
+    let commit_msg_hook = "#!/bin/sh\nprintf '\\nCommit-msg-ran: yes\\n' >> \"$1\"\n";
+    for repo in [&git_repo, &rit_repo] {
+        write_hook(repo, "prepare-commit-msg", prepare_hook);
+        write_hook(repo, "commit-msg", commit_msg_hook);
+    }
+
+    run_capture("git", ["cherry-pick", "topic"], &git_repo);
+    run_capture(rit_binary(), ["cherry-pick", "topic"], &rit_repo);
+    fs::write(git_repo.join("a.txt"), "resolved\n").expect("git conflict resolution");
+    fs::write(rit_repo.join("a.txt"), "resolved\n").expect("rit conflict resolution");
+    run_git(&git_repo, ["add", "a.txt"]);
+    run_git(&rit_repo, ["add", "a.txt"]);
+
+    let git_continue = run_capture("git", ["cherry-pick", "--continue"], &git_repo);
+    let rit_continue = run_capture(rit_binary(), ["cherry-pick", "--continue"], &rit_repo);
+
+    assert_eq!(
+        git_continue.exit_code, 0,
+        "git stderr: {}",
+        git_continue.stderr
+    );
+    assert_eq!(
+        rit_continue.exit_code, 0,
+        "rit stderr: {}",
+        rit_continue.stderr
+    );
+    let git_message = run_capture(
+        "git",
+        ["show", "--pretty=format:%B", "--no-patch"],
+        &git_repo,
+    )
+    .stdout;
+    let rit_message = run_capture(
+        "git",
+        ["show", "--pretty=format:%B", "--no-patch"],
+        &rit_repo,
+    )
+    .stdout;
+    assert_eq!(git_message, rit_message);
+    assert!(git_message.contains("Prepared-source:merge third:"));
+    assert!(git_message.contains("Commit-msg-ran: yes"));
 
     let _ = fs::remove_dir_all(root);
 }
@@ -1413,6 +1514,26 @@ fn copy_directory(from: &Path, to: &Path) {
         }
     }
 }
+
+fn write_hook(repo: &Path, name: &str, contents: &str) {
+    let path = repo.join(".git").join("hooks").join(name);
+    fs::write(&path, contents).expect("hook should be written");
+    make_hook_executable(&path);
+}
+
+#[cfg(unix)]
+fn make_hook_executable(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut permissions = fs::metadata(path)
+        .expect("hook metadata should read")
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions).expect("hook permissions should be set");
+}
+
+#[cfg(not(unix))]
+fn make_hook_executable(_path: &Path) {}
 
 fn rit_binary() -> OsString {
     std::env::var_os("CARGO_BIN_EXE_rit").unwrap_or_else(|| {
