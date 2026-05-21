@@ -227,6 +227,13 @@
   after the covered rebase successfully finishes, feeds rewritten commit pairs
   on stdin, relays hook stdout/stderr to rebase stderr before the success
   message, and ignores a non-zero hook exit status.
+- 2026-05-22 rebase skip post-rewrite follow-up checked Git 2.54.0.windows.1
+  with `git --version`, `git help -a`, `git help rebase`, `git rebase -h`,
+  `git help hooks`, and direct Git comparisons for final `rebase --skip`
+  completion plus skip-with-remaining-clean-replay completion. Git includes the
+  skipped commit in the `post-rewrite rebase` stdin mapping, then appends any
+  rewritten remaining todo commits before relaying hook output and ignoring the
+  hook status.
 - 2026-05-17 stash push no pathspec-file-nul slice checked `git stash -h` and
   direct Git comparisons for `stash push --pathspec-file-nul
   --no-pathspec-file-nul`, verifying the shared pathspec-file parser returns
@@ -1850,7 +1857,9 @@
   progress and success messages to stderr. If a later remaining todo entry
   conflicts while skipping, rit writes Git-compatible rebase metadata for the
   later stopped commit and prints Git-shaped conflict output/advice with exit
-  code 1. `rit rebase --quit` removes
+  code 1. On covered successful skip completion, rit runs `post-rewrite rebase`
+  for the skipped commit and any clean remaining replay commits. `rit rebase
+  --quit` removes
   `.git/rebase-apply` and
   `.git/rebase-merge` without changing `HEAD`, the index, or the working tree.
   When no rebase state exists state-management commands print `fatal: no rebase

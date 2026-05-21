@@ -173,6 +173,9 @@ fn rebase_skip_final_stopped_commit_matches_git() {
     init_repo(&git_repo);
     create_conflicting_rebase_state(&git_repo);
     copy_directory(&git_repo, &rit_repo);
+    let hook = "#!/bin/sh\necho \"args:$#:$1\" >> post-rewrite.log\ncat >> post-rewrite.log\necho hook-stdout\necho hook-stderr >&2\nexit 7\n";
+    write_hook(&git_repo, "post-rewrite", hook);
+    write_hook(&rit_repo, "post-rewrite", hook);
 
     let git_skip = run_capture("git", ["rebase", "--skip"], &git_repo);
     let rit_skip = run_capture(rit_binary(), ["rebase", "--skip"], &rit_repo);
@@ -206,6 +209,18 @@ fn rebase_skip_final_stopped_commit_matches_git() {
     assert_eq!(
         fs::read_to_string(git_repo.join("tracked.txt")).expect("git file should read"),
         fs::read_to_string(rit_repo.join("tracked.txt")).expect("rit file should read")
+    );
+    assert_eq!(
+        fs::read_to_string(git_repo.join("post-rewrite.log"))
+            .expect("git post-rewrite log should read"),
+        fs::read_to_string(rit_repo.join("post-rewrite.log"))
+            .expect("rit post-rewrite log should read")
+    );
+    assert!(
+        fs::read_to_string(rit_repo.join("post-rewrite.log"))
+            .expect("rit post-rewrite log should read")
+            .starts_with("args:1:rebase\n"),
+        "post-rewrite should receive the rebase command name"
     );
 
     let _ = fs::remove_dir_all(root);
@@ -985,6 +1000,9 @@ fn rebase_skip_replays_remaining_clean_todo_like_git() {
         run_capture(rit_binary(), ["rebase", "topic"], &rit_repo).exit_code,
         1
     );
+    let hook = "#!/bin/sh\necho \"args:$#:$1\" >> post-rewrite.log\ncat >> post-rewrite.log\necho hook-stdout\necho hook-stderr >&2\nexit 7\n";
+    write_hook(&git_repo, "post-rewrite", hook);
+    write_hook(&rit_repo, "post-rewrite", hook);
     let envs = [("GIT_COMMITTER_DATE", "1700000000 +0900")];
 
     let git_skip = run_capture_with_env("git", ["rebase", "--skip"], &git_repo, &envs);
@@ -1013,6 +1031,18 @@ fn rebase_skip_replays_remaining_clean_todo_like_git() {
     assert_eq!(
         run_capture("git", ["ls-files"], &git_repo).stdout,
         run_capture(rit_binary(), ["ls-files"], &rit_repo).stdout
+    );
+    assert_eq!(
+        fs::read_to_string(git_repo.join("post-rewrite.log"))
+            .expect("git post-rewrite log should read"),
+        fs::read_to_string(rit_repo.join("post-rewrite.log"))
+            .expect("rit post-rewrite log should read")
+    );
+    assert!(
+        fs::read_to_string(rit_repo.join("post-rewrite.log"))
+            .expect("rit post-rewrite log should read")
+            .starts_with("args:1:rebase\n"),
+        "post-rewrite should receive the rebase command name"
     );
 
     let _ = fs::remove_dir_all(root);

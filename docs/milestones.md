@@ -678,10 +678,11 @@ Completion criteria:
     not run it, mutating rebases run it before changing repository state, and
     `--no-verify` skips it. A failing `pre-rebase` hook prints Git-compatible
     stderr and leaves rebase state untouched.
-  - [x] `rit rebase <upstream>` and covered successful `rit rebase --continue`
-    completions run `post-rewrite rebase` like Git: rewritten commit pairs are
-    passed on stdin, hook output is relayed to stderr before the success
-    message, and non-zero hook exits do not fail the rebase.
+  - [x] `rit rebase <upstream>`, covered successful `rit rebase --continue`
+    completions, and covered successful `rit rebase --skip` completions run
+    `post-rewrite rebase` like Git: rewritten commit pairs are passed on stdin,
+    hook output is relayed to stderr before the success message, and non-zero
+    hook exits do not fail the rebase.
   - [ ] Todo editing, autostash, remaining hooks, apply/merge backends, and
     strategy options.
 - [~] `rit stash`

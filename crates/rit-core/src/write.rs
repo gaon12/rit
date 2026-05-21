@@ -2650,6 +2650,7 @@ impl Repository {
         let replayed_remaining_count = replay_plan.clean_steps.len();
         let mut final_head_id = head_id;
         let mut done_todo_entries = read_rebase_todo_entries(&rebase.directory.join("done"))?;
+        let mut rewritten_commits = vec![(current_patch.commit_id, head_id)];
         for step in replay_plan.clean_steps {
             write_non_conflicting_merge_worktree_changes(
                 self,
@@ -2684,6 +2685,7 @@ impl Repository {
             replay_parent_id = replayed.commit_id;
             final_head_id = replayed.commit_id;
             previous_entries = step.merged_entries;
+            rewritten_commits.push((step.commit_id, replayed.commit_id));
             done_todo_entries.push((step.commit_id, rebase_todo_subject(&step.commit.message)));
         }
         if let Some(conflict) = replay_plan.conflict {
@@ -2737,6 +2739,7 @@ impl Repository {
         remove_file_if_exists(&self.git_dir().join("REBASE_HEAD"))?;
         remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))?;
         remove_file_if_exists(&self.git_dir().join("AUTO_MERGE"))?;
+        let post_rewrite_output = run_post_rewrite_hook(self, "rebase", &rewritten_commits);
         self.refresh_indexdb_after_git_write();
         Ok(RebaseSkipResult {
             head_id: final_head_id,
@@ -2749,7 +2752,7 @@ impl Repository {
             stopped_current_step: None,
             conflict_reports: Vec::new(),
             conflict_target_label: None,
-            post_rewrite_output: String::new(),
+            post_rewrite_output,
         })
     }
 
