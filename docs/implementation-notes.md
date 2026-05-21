@@ -217,7 +217,9 @@
 - 2026-05-22 rebase pre-rebase hook slice checked Git 2.54.0.windows.1 with
   `git --version`, `git help -a`, `git help rebase`, `git rebase -h`, and
   direct Git comparisons for clean rebase start hook execution plus
-  `rebase --no-verify <upstream>` hook skipping.
+  `rebase --no-verify <upstream>` hook skipping. The follow-up failure slice
+  compared a non-zero `pre-rebase` hook, confirming Git-compatible stderr, exit
+  code 1, unchanged `HEAD`, clean status, and no rebase state files.
 - 2026-05-17 stash push no pathspec-file-nul slice checked `git stash -h` and
   direct Git comparisons for `stash push --pathspec-file-nul
   --no-pathspec-file-nul`, verifying the shared pathspec-file parser returns
@@ -1799,14 +1801,17 @@
   Git's up-to-date message without mutating the repository and without running
   `pre-rebase`. Mutating start paths run `pre-rebase <upstream>` before
   changing repository state unless `--no-verify` is passed; `--verify` keeps
-  the default. When `HEAD` is an ancestor of upstream, it checks out the
-  upstream tree, updates the current branch or detached `HEAD`, and prints
-  Git's success message. For clean linear commits, it applies each commit's
-  tree changes onto upstream in order, writes new commits with the original
-  authors/messages, updates the current branch, and prints Git-shaped rebase
-  progress and success messages. Those replay commits use Git's covered
-  automatic commit hook shape: `prepare-commit-msg` and `post-commit` run, but
-  `pre-commit` and `commit-msg` are skipped. If the final replayed commit
+  the default. If `pre-rebase` exits non-zero, rit relays the hook output to
+  stderr, prints Git's refusal message, exits 1, and leaves `HEAD`, the index,
+  worktree status, and rebase state files unchanged. When `HEAD` is an ancestor
+  of upstream, it checks out the upstream tree, updates the current branch or
+  detached `HEAD`, and prints Git's success message. For clean linear commits,
+  it applies each commit's tree changes onto upstream in order, writes new
+  commits with the original authors/messages, updates the current branch, and
+  prints Git-shaped rebase progress and success messages. Those replay commits
+  use Git's covered automatic commit hook shape: `prepare-commit-msg` and
+  `post-commit` run, but `pre-commit` and `commit-msg` are skipped. If the
+  final replayed commit
   conflicts, it leaves `HEAD` detached at the current rebased base, preserves
   the original branch ref, writes Git-compatible unmerged index stages,
   worktree conflict markers, `REBASE_HEAD`, `MERGE_MSG`, and

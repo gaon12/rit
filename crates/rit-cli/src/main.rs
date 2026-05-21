@@ -2910,6 +2910,13 @@ fn write_rebase_error(stderr: &mut dyn Write, error: rit_core::RitError) -> io::
         writeln!(stderr, "fatal: no rebase in progress")?;
         return Ok(ExitCode::from(128));
     }
+    if let rit_core::RitError::InvalidInput { message } = &error
+        && let Some(hook_output) = message.strip_prefix("pre-rebase hook refused to rebase\n")
+    {
+        write!(stderr, "{hook_output}")?;
+        writeln!(stderr, "error: The pre-rebase hook refused to rebase.")?;
+        return Ok(ExitCode::from(1));
+    }
     write_command_error(stderr, error)
 }
 

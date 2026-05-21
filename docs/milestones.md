@@ -676,7 +676,8 @@ Completion criteria:
   - [x] `rit rebase [--no-verify|--verify] <upstream>` handles the
     `pre-rebase` hook like Git for covered start paths: up-to-date rebases do
     not run it, mutating rebases run it before changing repository state, and
-    `--no-verify` skips it.
+    `--no-verify` skips it. A failing `pre-rebase` hook prints Git-compatible
+    stderr and leaves rebase state untouched.
   - [ ] Todo editing, autostash, remaining hooks, apply/merge backends, and
     strategy options.
 - [~] `rit stash`

@@ -4388,7 +4388,33 @@ fn prepare_commit_msg_args(message_path: &Path, source: Option<&str>) -> Vec<Pat
 }
 
 fn run_pre_rebase_hook(repository: &Repository, upstream: &str) -> Result<()> {
-    run_hook(repository, "pre-rebase", &[PathBuf::from(upstream)])
+    let hook_path = repository.common_dir().join("hooks").join("pre-rebase");
+    if !hook_should_run(&hook_path)? {
+        return Ok(());
+    }
+
+    let mut command = hook_command(&hook_path)?;
+    let current_dir = child_path(repository.worktree().unwrap_or(repository.common_dir()));
+    let output = command
+        .arg(child_path(&PathBuf::from(upstream)))
+        .current_dir(current_dir)
+        .env("GIT_DIR", child_path(repository.git_dir()))
+        .env(
+            "GIT_INDEX_FILE",
+            child_path(&repository.git_dir().join("index")),
+        )
+        .output()
+        .map_err(|source| RitError::io(&hook_path, source))?;
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let mut hook_output = String::new();
+    hook_output.push_str(&String::from_utf8_lossy(&output.stdout));
+    hook_output.push_str(&String::from_utf8_lossy(&output.stderr));
+    Err(RitError::invalid_input(format!(
+        "pre-rebase hook refused to rebase\n{hook_output}"
+    )))
 }
 
 fn run_hook(repository: &Repository, name: &str, args: &[PathBuf]) -> Result<()> {

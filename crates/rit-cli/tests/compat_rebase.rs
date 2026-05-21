@@ -567,6 +567,48 @@ fn rebase_no_verify_skips_pre_rebase_hook_like_git() {
 }
 
 #[test]
+fn rebase_pre_rebase_hook_blocks_like_git_without_state() {
+    let root = temp_path("start-pre-rebase-hook-blocks");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    run_git(&git_repo, ["checkout", "-b", "topic"]);
+    fs::write(git_repo.join("topic.txt"), "topic\n").expect("topic file should write");
+    run_git(&git_repo, ["add", "topic.txt"]);
+    run_git(&git_repo, ["commit", "--quiet", "-m", "topic"]);
+    run_git(&git_repo, ["checkout", "master"]);
+    fs::write(git_repo.join("master.txt"), "master\n").expect("master file should write");
+    run_git(&git_repo, ["add", "master.txt"]);
+    run_git(&git_repo, ["commit", "--quiet", "-m", "master"]);
+    copy_directory(&git_repo, &rit_repo);
+    let hook = "#!/bin/sh\necho hook-out\necho hook-err >&2\nexit 7\n";
+    write_hook(&git_repo, "pre-rebase", hook);
+    write_hook(&rit_repo, "pre-rebase", hook);
+
+    let git_rebase = run_capture("git", ["rebase", "topic"], &git_repo);
+    let rit_rebase = run_capture(rit_binary(), ["rebase", "topic"], &rit_repo);
+
+    assert_eq!(git_rebase.exit_code, 1, "git stderr: {}", git_rebase.stderr);
+    assert_eq!(rit_rebase.exit_code, 1, "rit stderr: {}", rit_rebase.stderr);
+    assert_eq!(git_rebase.stdout, rit_rebase.stdout);
+    assert_eq!(git_rebase.stderr, rit_rebase.stderr);
+    assert_eq!(
+        run_capture("git", ["rev-parse", "HEAD"], &git_repo).stdout,
+        run_capture(rit_binary(), ["rev-parse", "HEAD"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    for path in ["rebase-merge", "rebase-apply", "REBASE_HEAD", "MERGE_MSG"] {
+        assert!(!git_repo.join(".git").join(path).exists());
+        assert!(!rit_repo.join(".git").join(path).exists());
+    }
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn rebase_replays_two_clean_commits_like_git() {
     let root = temp_path("start-two-clean-replay");
     let git_repo = root.join("git");
