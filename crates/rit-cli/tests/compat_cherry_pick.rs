@@ -497,6 +497,115 @@ fn clean_merge_commit_cherry_pick_with_mainline_matches_git_state() {
 }
 
 #[test]
+fn conflicting_merge_commit_cherry_pick_continue_with_mainline_matches_git_state() {
+    let root = temp_path("mainline-conflict-continue");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_conflicting_merge_commit_cherry_pick(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+
+    let git_pick = run_capture("git", ["cherry-pick", "-m", "1", "merge-topic"], &git_repo);
+    let rit_pick = run_capture(
+        rit_binary(),
+        ["cherry-pick", "-m", "1", "merge-topic"],
+        &rit_repo,
+    );
+
+    assert_ne!(git_pick.exit_code, 0);
+    assert_ne!(rit_pick.exit_code, 0);
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        read_optional_file(&git_repo.join(".git").join("CHERRY_PICK_HEAD")),
+        read_optional_file(&rit_repo.join(".git").join("CHERRY_PICK_HEAD"))
+    );
+    assert_eq!(
+        fs::read_to_string(git_repo.join("side.txt")).expect("git side should read"),
+        fs::read_to_string(rit_repo.join("side.txt")).expect("rit side should read")
+    );
+
+    fs::write(git_repo.join("conflict.txt"), "resolved\n").expect("git conflict should resolve");
+    fs::write(rit_repo.join("conflict.txt"), "resolved\n").expect("rit conflict should resolve");
+    run_git(&git_repo, ["add", "conflict.txt"]);
+    run_capture(rit_binary(), ["add", "conflict.txt"], &rit_repo);
+
+    let git_continue = run_capture("git", ["cherry-pick", "--continue"], &git_repo);
+    let rit_continue = run_capture(rit_binary(), ["cherry-pick", "--continue"], &rit_repo);
+
+    assert_eq!(
+        git_continue.exit_code, 0,
+        "git stderr: {}",
+        git_continue.stderr
+    );
+    assert_eq!(
+        rit_continue.exit_code, 0,
+        "rit stderr: {}",
+        rit_continue.stderr
+    );
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+    assert_eq!(
+        run_capture(
+            "git",
+            ["show", "--pretty=format:", "--name-only", "HEAD"],
+            &git_repo
+        )
+        .stdout,
+        run_capture(
+            "git",
+            ["show", "--pretty=format:", "--name-only", "HEAD"],
+            &rit_repo
+        )
+        .stdout
+    );
+    assert_eq!(
+        run_capture(
+            "git",
+            [
+                "show",
+                "--pretty=format:%an <%ae>%n%s",
+                "--no-patch",
+                "HEAD"
+            ],
+            &git_repo,
+        )
+        .stdout,
+        run_capture(
+            "git",
+            [
+                "show",
+                "--pretty=format:%an <%ae>%n%s",
+                "--no-patch",
+                "HEAD"
+            ],
+            &rit_repo,
+        )
+        .stdout
+    );
+    assert_eq!(
+        run_capture(
+            "git",
+            ["rev-list", "--parents", "-n", "1", "HEAD"],
+            &rit_repo
+        )
+        .stdout
+        .split_whitespace()
+        .count(),
+        2
+    );
+    assert_eq!(
+        read_optional_file(&rit_repo.join(".git").join("CHERRY_PICK_HEAD")),
+        None
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn clean_multi_commit_cherry_pick_matches_git_state() {
     let root = temp_path("multi-clean");
     let git_repo = root.join("git");
@@ -1136,6 +1245,31 @@ fn setup_merge_commit_cherry_pick(repo: &Path) {
     );
     run_git(repo, ["branch", "merge-topic"]);
     run_git(repo, ["checkout", "--quiet", "-b", "replay", "HEAD~1"]);
+}
+
+fn setup_conflicting_merge_commit_cherry_pick(repo: &Path) {
+    init_repo(repo);
+    commit_text(repo, "conflict.txt", "base\n", "base");
+    run_git(repo, ["checkout", "--quiet", "-b", "side"]);
+    fs::write(repo.join("conflict.txt"), "side\n").expect("side conflict should write");
+    fs::write(repo.join("side.txt"), "side\n").expect("side file should write");
+    run_git(repo, ["add", "conflict.txt", "side.txt"]);
+    run_git(repo, ["commit", "--quiet", "-m", "side"]);
+    run_git(repo, ["checkout", "--quiet", "master"]);
+    commit_text(repo, "conflict.txt", "main\n", "main");
+
+    let merge = run_capture(
+        "git",
+        ["merge", "--no-ff", "side", "-m", "merge side"],
+        repo,
+    );
+    assert_ne!(merge.exit_code, 0);
+    fs::write(repo.join("conflict.txt"), "merged\n").expect("merge resolution should write");
+    run_git(repo, ["add", "conflict.txt"]);
+    run_git(repo, ["commit", "--quiet", "--no-edit"]);
+    run_git(repo, ["branch", "merge-topic"]);
+    run_git(repo, ["checkout", "--quiet", "-b", "replay", "HEAD~1"]);
+    commit_text(repo, "conflict.txt", "replay\n", "replay");
 }
 
 fn setup_multi_commit_cherry_pick(repo: &Path) {

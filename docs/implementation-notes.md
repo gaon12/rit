@@ -1707,8 +1707,9 @@
 - Baseline command checked: `git cherry-pick -h`
 - Supported options: one or more target commits for clean committing picks,
   clean `-n`/`--no-commit` picks, `--commit`, `-m`/`--mainline` for clean
-  merge commits, `-x` for clean committing picks, `--ff` for direct-parent
-  fast-forwards, `-s`/`--signoff` for clean committing picks,
+  merge commits and covered conflicted merge-commit continuations, `-x` for
+  clean committing picks, `--ff` for direct-parent fast-forwards,
+  `-s`/`--signoff` for clean committing picks,
   `-X ours/theirs`, `-Xours`/`-Xtheirs`, and
   `--strategy-option=ours/theirs` for supported same-path text conflicts,
   Git-shaped sequencer metadata, including strategy options, for multi-target
@@ -1716,8 +1717,8 @@
   entries and later-conflict state/output, `--abort`, and `--quit`/`--skip`
   for the supported conflict state.
 - Unsupported options: exact full later-conflict commit summary/hint parity,
-  signing, broader strategy options, empty-commit handling, conflict
-  continuation for merge commits, and full sequencer/editor/hook parity.
+  signing, broader strategy options, empty-commit handling, and full
+  sequencer/editor/hook parity.
 - Git-compatible behavior: clean single-parent picks apply the picked commit's
   parent-to-commit tree change onto `HEAD`, create a new one-parent commit, and
   preserve the picked author and commit message. With `-n`/`--no-commit`, the
@@ -1729,6 +1730,9 @@
   `--skip` restores `ORIG_HEAD` for the current single conflicted pick.
   Clean merge-commit picks with `--mainline` use the selected parent tree as
   the base and still create a one-parent commit on top of the current `HEAD`.
+  If a supported merge-commit pick conflicts, resolving the index and running
+  `--continue` creates the same one-parent commit shape as Git, preserving the
+  merge commit's author and message while clearing `CHERRY_PICK_HEAD`.
   Clean multi-target picks are applied one at a time, so each created commit
   becomes the `HEAD` base for the next target. Clean `-x` picks append
   `(cherry picked from commit <object-id>)` to the commit message. Clean

@@ -628,8 +628,10 @@ Completion criteria:
   - [x] Multi-target `cherry-pick -X ours/theirs` writes and rereads
     `.git/sequencer/opts`, so `--continue` and `--skip` reuse the selected
     side for remaining todo entries.
+  - [x] Conflicting merge-commit cherry-pick with `-m`/`--mainline` can be
+    resolved and continued, creating the same one-parent commit state as Git.
   - [ ] Exact full later-conflict commit summary/hint parity, broader strategy
-    options, conflict continuation for merge commits, and editor/hook parity.
+    options, and editor/hook parity.
 - [~] `rit rebase`
   - [x] `rit rebase <upstream>` reports Git-compatible up-to-date status when
     the upstream is already an ancestor of `HEAD`.
