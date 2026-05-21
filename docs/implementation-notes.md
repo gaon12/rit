@@ -1691,6 +1691,12 @@
   fast-forward and merge-commit completions, relays hook stdout/stderr to
   stderr, ignores a non-zero hook exit status, and does not run the hook for
   clean `--no-commit` stops.
+- 2026-05-22 merge continue hook slice checked Git 2.54.0.windows.1 with
+  `git --version`, `git merge -h`, `git help hooks`, and direct Git
+  comparisons for resolved `merge --continue` success plus a blocking
+  `pre-commit` hook. Git runs `pre-commit`, `prepare-commit-msg` with source
+  `merge`, `commit-msg`, and `post-commit`; a blocking `pre-commit` leaves
+  merge state intact.
 - Supported options: default fast-forward shape and explicit `--ff-only` with
   one target branch or revision, conflicted non-fast-forward index-stage
   starts, `--abort`, `--quit`, `--continue`, `--no-verify` for clean merge
@@ -1725,6 +1731,9 @@
 - Git-compatible behavior: `--quit` removes merge state files without changing
   unmerged index stages or working tree conflict contents, and succeeds with no
   output when no merge is active.
+- Git-compatible behavior: covered resolved `--continue` commits run
+  `pre-commit`, `prepare-commit-msg` with source `merge`, `commit-msg`, and
+  `post-commit`; a blocking `pre-commit` leaves merge state intact.
 - rit-specific behavior: `--continue` creates a merge commit from the current
   resolved index and existing merge message without launching an editor.
 - rit-specific behavior: clean non-fast-forward merges create a merge commit

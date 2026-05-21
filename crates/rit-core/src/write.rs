@@ -428,6 +428,8 @@ pub enum CommitHookMode {
     Commit,
     /// Automatic clean merge commit hook order.
     Merge,
+    /// Resolved `git merge --continue` hook order.
+    MergeContinue,
     /// Resolved `git cherry-pick --continue` hook order.
     CherryPickContinue,
 }
@@ -3073,7 +3075,15 @@ impl Repository {
         };
         let mut parents = vec![head_id];
         parents.extend(state.merge_heads);
-        let result = self.commit_index_with_parents(message, options, &parents, true)?;
+        let result = self.commit_index_with_parents(
+            message,
+            &CommitOptions {
+                hook_mode: CommitHookMode::MergeContinue,
+                ..options.clone()
+            },
+            &parents,
+            true,
+        )?;
         remove_file_if_exists(&self.git_dir().join("MERGE_HEAD"))?;
         remove_file_if_exists(&self.git_dir().join("MERGE_MSG"))?;
         remove_file_if_exists(&self.git_dir().join("MERGE_MODE"))?;
@@ -4397,6 +4407,7 @@ fn run_commit_hooks(
     let prepare_source = match options.hook_mode {
         CommitHookMode::Commit => Some("message"),
         CommitHookMode::Merge => Some("merge"),
+        CommitHookMode::MergeContinue => Some("merge"),
         CommitHookMode::CherryPickContinue => Some("merge"),
     };
     let prepare_args = prepare_commit_msg_args(&message_path, prepare_source);
@@ -4411,6 +4422,7 @@ fn run_commit_hooks(
     let first_hook = match options.hook_mode {
         CommitHookMode::Commit => "pre-commit",
         CommitHookMode::Merge => "pre-merge-commit",
+        CommitHookMode::MergeContinue => "pre-commit",
         CommitHookMode::CherryPickContinue => "pre-commit",
     };
     run_hook(repository, first_hook, &[])?;

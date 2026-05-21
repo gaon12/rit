@@ -293,6 +293,119 @@ fn clean_no_commit_merge_does_not_run_post_merge_hook_like_git() {
     let _ = fs::remove_dir_all(root);
 }
 
+#[test]
+fn merge_continue_runs_commit_hooks_like_git() {
+    let root = temp_path("merge-continue-hooks");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_content_conflict(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    assert_eq!(
+        run_capture("git", ["merge", "topic"], &git_repo).exit_code,
+        1
+    );
+    assert_eq!(
+        run_capture(rit_binary(), ["merge", "topic"], &rit_repo).exit_code,
+        1
+    );
+    fs::write(git_repo.join("tracked.txt"), "master\ntopic\n")
+        .expect("git resolution should write");
+    fs::write(rit_repo.join("tracked.txt"), "master\ntopic\n")
+        .expect("rit resolution should write");
+    run_git(&git_repo, ["add", "tracked.txt"]);
+    run_git(&rit_repo, ["add", "tracked.txt"]);
+    let prepare_hook =
+        "#!/bin/sh\necho \"prepare:$#:$2:$3\" >> hook.log\necho prepared >> \"$1\"\n";
+    let commit_msg_hook =
+        "#!/bin/sh\necho \"commit-msg:$#\" >> hook.log\necho msg-hook >> \"$1\"\n";
+    let pre_commit_hook = "#!/bin/sh\necho pre-commit >> hook.log\n";
+    let post_commit_hook = "#!/bin/sh\necho post-commit >> hook.log\n";
+    for repo in [&git_repo, &rit_repo] {
+        write_hook(repo, "pre-commit", pre_commit_hook);
+        write_hook(repo, "prepare-commit-msg", prepare_hook);
+        write_hook(repo, "commit-msg", commit_msg_hook);
+        write_hook(repo, "post-commit", post_commit_hook);
+    }
+    let envs = [("GIT_EDITOR", "true")];
+
+    let git_continue = run_capture_with_env("git", ["merge", "--continue"], &git_repo, &envs);
+    let rit_continue =
+        run_capture_with_env(rit_binary(), ["merge", "--continue"], &rit_repo, &envs);
+
+    assert_eq!(
+        git_continue.exit_code, 0,
+        "git stderr: {}",
+        git_continue.stderr
+    );
+    assert_eq!(
+        rit_continue.exit_code, 0,
+        "rit stderr: {}",
+        rit_continue.stderr
+    );
+    assert_eq!(
+        fs::read_to_string(git_repo.join("hook.log")).expect("git hook log should read"),
+        fs::read_to_string(rit_repo.join("hook.log")).expect("rit hook log should read")
+    );
+    assert_eq!(
+        fs::read_to_string(rit_repo.join("hook.log")).expect("rit hook log should read"),
+        "pre-commit\nprepare:2:merge:\ncommit-msg:1\npost-commit\n"
+    );
+    assert!(!git_repo.join(".git").join("MERGE_HEAD").exists());
+    assert!(!rit_repo.join(".git").join("MERGE_HEAD").exists());
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn merge_continue_pre_commit_hook_blocks_like_git_state() {
+    let root = temp_path("merge-continue-pre-commit-block");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_content_conflict(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    assert_eq!(
+        run_capture("git", ["merge", "topic"], &git_repo).exit_code,
+        1
+    );
+    assert_eq!(
+        run_capture(rit_binary(), ["merge", "topic"], &rit_repo).exit_code,
+        1
+    );
+    fs::write(git_repo.join("tracked.txt"), "master\ntopic\n")
+        .expect("git resolution should write");
+    fs::write(rit_repo.join("tracked.txt"), "master\ntopic\n")
+        .expect("rit resolution should write");
+    run_git(&git_repo, ["add", "tracked.txt"]);
+    run_git(&rit_repo, ["add", "tracked.txt"]);
+    let pre_commit_hook = "#!/bin/sh\necho pre-commit >> hook.log\necho blocked >&2\nexit 7\n";
+    write_hook(&git_repo, "pre-commit", pre_commit_hook);
+    write_hook(&rit_repo, "pre-commit", pre_commit_hook);
+    let envs = [("GIT_EDITOR", "true")];
+
+    let git_continue = run_capture_with_env("git", ["merge", "--continue"], &git_repo, &envs);
+    let rit_continue =
+        run_capture_with_env(rit_binary(), ["merge", "--continue"], &rit_repo, &envs);
+
+    assert_ne!(git_continue.exit_code, 0);
+    assert_ne!(rit_continue.exit_code, 0);
+    assert_eq!(
+        fs::read_to_string(git_repo.join("hook.log")).expect("git hook log should read"),
+        fs::read_to_string(rit_repo.join("hook.log")).expect("rit hook log should read")
+    );
+    assert!(git_repo.join(".git").join("MERGE_HEAD").exists());
+    assert!(rit_repo.join(".git").join("MERGE_HEAD").exists());
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
 struct MergeScenario {
     name: &'static str,
     setup: fn(&Path),
@@ -478,6 +591,29 @@ where
         .current_dir(cwd)
         .output()
         .expect("command should start");
+    CapturedCommand {
+        exit_code: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    }
+}
+
+fn run_capture_with_env<I, S>(
+    program: impl AsRef<OsStr>,
+    args: I,
+    cwd: &Path,
+    envs: &[(&str, &str)],
+) -> CapturedCommand
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let mut command = Command::new(program);
+    command.args(args).current_dir(cwd);
+    for (name, value) in envs {
+        command.env(name, value);
+    }
+    let output = command.output().expect("command should start");
     CapturedCommand {
         exit_code: output.status.code().unwrap_or(-1),
         stdout: String::from_utf8_lossy(&output.stdout).into_owned(),

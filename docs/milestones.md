@@ -585,6 +585,9 @@ Completion criteria:
     commits run `post-merge 0` like Git, relay hook output to stderr, ignore
     non-zero hook exits, and clean `--no-commit` merge stops do not run the
     hook.
+  - [x] Covered resolved `merge --continue` runs commit hooks like Git:
+    `pre-commit`, `prepare-commit-msg` with source `merge`, `commit-msg`, and
+    `post-commit`; blocking `pre-commit` keeps merge state intact.
   - [ ] Full conflict handling, merge hooks, and strategies.
 - [~] `rit cherry-pick`
   - [x] Clean single-parent cherry-pick applies the picked commit onto `HEAD`,
