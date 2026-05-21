@@ -481,6 +481,92 @@ fn rebase_replays_one_clean_commit_like_git() {
 }
 
 #[test]
+fn rebase_start_runs_pre_rebase_hook_like_git() {
+    let root = temp_path("start-pre-rebase-hook");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    run_git(&git_repo, ["checkout", "-b", "topic"]);
+    fs::write(git_repo.join("topic.txt"), "topic\n").expect("topic file should write");
+    run_git(&git_repo, ["add", "topic.txt"]);
+    run_git(&git_repo, ["commit", "--quiet", "-m", "topic"]);
+    run_git(&git_repo, ["checkout", "master"]);
+    fs::write(git_repo.join("master.txt"), "master\n").expect("master file should write");
+    run_git(&git_repo, ["add", "master.txt"]);
+    run_git(&git_repo, ["commit", "--quiet", "-m", "master"]);
+    copy_directory(&git_repo, &rit_repo);
+    let hook = "#!/bin/sh\necho pre-rebase:$#:$1:$2:$3 >> hook.log\n";
+    write_hook(&git_repo, "pre-rebase", hook);
+    write_hook(&rit_repo, "pre-rebase", hook);
+    let envs = [("GIT_COMMITTER_DATE", "1700000000 +0900")];
+
+    let git_rebase = run_capture_with_env("git", ["rebase", "topic"], &git_repo, &envs);
+    let rit_rebase = run_capture_with_env(rit_binary(), ["rebase", "topic"], &rit_repo, &envs);
+
+    assert_eq!(git_rebase.exit_code, 0, "git stderr: {}", git_rebase.stderr);
+    assert_eq!(rit_rebase.exit_code, 0, "rit stderr: {}", rit_rebase.stderr);
+    assert_eq!(git_rebase.stdout, rit_rebase.stdout);
+    assert_eq!(git_rebase.stderr, rit_rebase.stderr);
+    assert_eq!(
+        fs::read_to_string(git_repo.join("hook.log")).expect("git hook log should read"),
+        fs::read_to_string(rit_repo.join("hook.log")).expect("rit hook log should read")
+    );
+    assert_eq!(
+        fs::read_to_string(rit_repo.join("hook.log")).expect("rit hook log should read"),
+        "pre-rebase:1:topic::\n"
+    );
+    assert_eq!(
+        run_capture("git", ["log", "-1", "--format=%P%n%B"], &git_repo).stdout,
+        run_capture("git", ["log", "-1", "--format=%P%n%B"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn rebase_no_verify_skips_pre_rebase_hook_like_git() {
+    let root = temp_path("start-no-verify-pre-rebase");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    init_repo(&git_repo);
+    run_git(&git_repo, ["checkout", "-b", "topic"]);
+    fs::write(git_repo.join("topic.txt"), "topic\n").expect("topic file should write");
+    run_git(&git_repo, ["add", "topic.txt"]);
+    run_git(&git_repo, ["commit", "--quiet", "-m", "topic"]);
+    run_git(&git_repo, ["checkout", "master"]);
+    fs::write(git_repo.join("master.txt"), "master\n").expect("master file should write");
+    run_git(&git_repo, ["add", "master.txt"]);
+    run_git(&git_repo, ["commit", "--quiet", "-m", "master"]);
+    copy_directory(&git_repo, &rit_repo);
+    let hook = "#!/bin/sh\necho pre-rebase-ran >> hook.log\nexit 1\n";
+    write_hook(&git_repo, "pre-rebase", hook);
+    write_hook(&rit_repo, "pre-rebase", hook);
+    let envs = [("GIT_COMMITTER_DATE", "1700000000 +0900")];
+
+    let git_rebase =
+        run_capture_with_env("git", ["rebase", "--no-verify", "topic"], &git_repo, &envs);
+    let rit_rebase = run_capture_with_env(
+        rit_binary(),
+        ["rebase", "--no-verify", "topic"],
+        &rit_repo,
+        &envs,
+    );
+
+    assert_eq!(git_rebase.exit_code, 0, "git stderr: {}", git_rebase.stderr);
+    assert_eq!(rit_rebase.exit_code, 0, "rit stderr: {}", rit_rebase.stderr);
+    assert_eq!(git_rebase.stdout, rit_rebase.stdout);
+    assert_eq!(git_rebase.stderr, rit_rebase.stderr);
+    assert!(!git_repo.join("hook.log").exists());
+    assert!(!rit_repo.join("hook.log").exists());
+    assert_eq!(
+        run_capture("git", ["log", "-1", "--format=%P%n%B"], &git_repo).stdout,
+        run_capture("git", ["log", "-1", "--format=%P%n%B"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn rebase_replays_two_clean_commits_like_git() {
     let root = temp_path("start-two-clean-replay");
     let git_repo = root.join("git");
@@ -1091,6 +1177,26 @@ fn copy_directory(from: &Path, to: &Path) {
         }
     }
 }
+
+fn write_hook(repo: &Path, name: &str, contents: &str) {
+    let path = repo.join(".git").join("hooks").join(name);
+    fs::write(&path, contents).expect("hook should be written");
+    make_hook_executable(&path);
+}
+
+#[cfg(unix)]
+fn make_hook_executable(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let mut permissions = fs::metadata(path)
+        .expect("hook metadata should read")
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions).expect("hook permissions should be set");
+}
+
+#[cfg(not(unix))]
+fn make_hook_executable(_path: &Path) {}
 
 fn rit_binary() -> OsString {
     std::env::var_os("CARGO_BIN_EXE_rit").unwrap_or_else(|| {

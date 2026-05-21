@@ -673,8 +673,12 @@ Completion criteria:
     later remaining todo commit conflicts after the resolved commit is created.
   - [x] `rit rebase --skip` stops with Git-compatible state/output when a
     later remaining todo commit conflicts after the skipped commit is dropped.
-  - [ ] Todo editing, autostash, hooks, apply/merge backends, and strategy
-    options.
+  - [x] `rit rebase [--no-verify|--verify] <upstream>` handles the
+    `pre-rebase` hook like Git for covered start paths: up-to-date rebases do
+    not run it, mutating rebases run it before changing repository state, and
+    `--no-verify` skips it.
+  - [ ] Todo editing, autostash, remaining hooks, apply/merge backends, and
+    strategy options.
 - [~] `rit stash`
   - [x] `rit stash list` reads the Git-compatible `refs/stash` reflog and
     prints entries in newest-first order.

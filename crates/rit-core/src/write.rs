@@ -425,6 +425,26 @@ pub enum CommitHookMode {
     CherryPickContinue,
 }
 
+/// Options that affect rebase execution without changing the replay selection.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RebaseOptions {
+    /// Whether the `pre-rebase` hook should run before changing repository state.
+    pub verify: bool,
+}
+
+impl RebaseOptions {
+    /// Builds default rebase options with hook verification enabled.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl Default for RebaseOptions {
+    fn default() -> Self {
+        Self { verify: true }
+    }
+}
+
 /// Options that affect merge execution without changing merge selection.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MergeOptions {
@@ -2272,8 +2292,17 @@ impl Repository {
         Ok(())
     }
 
-    /// Starts a rebase for the currently supported no-op and fast-forward cases.
+    /// Starts a rebase using Git-compatible default options.
     pub fn start_rebase(&self, upstream: &str) -> Result<RebaseStartResult> {
+        self.start_rebase_with_options(upstream, &RebaseOptions::default())
+    }
+
+    /// Starts a rebase for the currently supported no-op, fast-forward, and clean replay cases.
+    pub fn start_rebase_with_options(
+        &self,
+        upstream: &str,
+        options: &RebaseOptions,
+    ) -> Result<RebaseStartResult> {
         let head_id = self
             .resolve_head()?
             .ok_or_else(|| RitError::invalid_input("rebase requires an existing HEAD"))?;
@@ -2292,6 +2321,9 @@ impl Repository {
                 stopped_message_summary: None,
                 conflict_reports: Vec::new(),
             });
+        }
+        if options.verify {
+            run_pre_rebase_hook(self, upstream)?;
         }
         if self.commit_is_ancestor(head_id, upstream_id)? {
             ensure_clean_for_checkout(self)?;
@@ -4353,6 +4385,10 @@ fn prepare_commit_msg_args(message_path: &Path, source: Option<&str>) -> Vec<Pat
         args.push(PathBuf::from(source));
     }
     args
+}
+
+fn run_pre_rebase_hook(repository: &Repository, upstream: &str) -> Result<()> {
+    run_hook(repository, "pre-rebase", &[PathBuf::from(upstream)])
 }
 
 fn run_hook(repository: &Repository, name: &str, args: &[PathBuf]) -> Result<()> {

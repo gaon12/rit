@@ -214,6 +214,10 @@
   remaining todo commit conflicts. The comparison covers stdout, stderr, exit
   code, rebase state files, index stages, status, worktree conflict contents,
   and the resolved commit history for continue.
+- 2026-05-22 rebase pre-rebase hook slice checked Git 2.54.0.windows.1 with
+  `git --version`, `git help -a`, `git help rebase`, `git rebase -h`, and
+  direct Git comparisons for clean rebase start hook execution plus
+  `rebase --no-verify <upstream>` hook skipping.
 - 2026-05-17 stash push no pathspec-file-nul slice checked `git stash -h` and
   direct Git comparisons for `stash push --pathspec-file-nul
   --no-pathspec-file-nul`, verifying the shared pathspec-file parser returns
@@ -1780,25 +1784,32 @@
 ### `rit rebase`
 
 - Baseline command checked: `git rebase -h`
-- Supported options: `rit rebase <upstream>` for already up-to-date branches,
-  fast-forward rebases, clean linear commit replay, replay conflicts that leave
-  remaining todo entries, final replay conflicts, and later conflicts while
-  continuing or skipping remaining todo entries,
+- Supported options: `rit rebase [--no-verify|--verify] <upstream>` for
+  already up-to-date branches, fast-forward rebases, clean linear commit
+  replay, replay conflicts that leave remaining todo entries, final replay
+  conflicts, and later conflicts while continuing or skipping remaining todo
+  entries,
   `rit rebase --abort`, `rit rebase --continue`,
   `rit rebase --show-current-patch`, `rit rebase --skip`, `rit rebase --quit`
 - Unsupported options: `--edit-todo`, interactive mode, autostash,
-  apply/merge backend selection, hooks, strategy options, and todo editing.
+  apply/merge backend selection, remaining hooks, strategy options, and todo
+  editing.
 - Git-compatible behavior: `rit rebase <upstream>` resolves a local branch or
   revision. When that upstream is already an ancestor of `HEAD`, it prints
-  Git's up-to-date message without mutating the repository. When `HEAD` is an
-  ancestor of upstream, it checks out the upstream tree, updates the current
-  branch or detached `HEAD`, and prints Git's success message. For clean linear
-  commits, it applies each commit's tree changes onto upstream in order, writes
-  new commits with the original authors/messages, updates the current branch,
-  and prints Git-shaped rebase progress and success messages. If the final
-  replayed commit conflicts, it leaves `HEAD` detached at the current rebased
-  base, preserves the original branch ref, writes Git-compatible unmerged index
-  stages, worktree conflict markers, `REBASE_HEAD`, `MERGE_MSG`, and
+  Git's up-to-date message without mutating the repository and without running
+  `pre-rebase`. Mutating start paths run `pre-rebase <upstream>` before
+  changing repository state unless `--no-verify` is passed; `--verify` keeps
+  the default. When `HEAD` is an ancestor of upstream, it checks out the
+  upstream tree, updates the current branch or detached `HEAD`, and prints
+  Git's success message. For clean linear commits, it applies each commit's
+  tree changes onto upstream in order, writes new commits with the original
+  authors/messages, updates the current branch, and prints Git-shaped rebase
+  progress and success messages. Those replay commits use Git's covered
+  automatic commit hook shape: `prepare-commit-msg` and `post-commit` run, but
+  `pre-commit` and `commit-msg` are skipped. If the final replayed commit
+  conflicts, it leaves `HEAD` detached at the current rebased base, preserves
+  the original branch ref, writes Git-compatible unmerged index stages,
+  worktree conflict markers, `REBASE_HEAD`, `MERGE_MSG`, and
   `.git/rebase-merge` metadata including completed `done` todo entries for any
   earlier clean replayed commits plus any remaining `git-rebase-todo` entries,
   then prints Git-shaped conflict output and advice. `rit rebase --abort` reads

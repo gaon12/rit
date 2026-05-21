@@ -2657,11 +2657,22 @@ fn rebase_command(
         [flag] if flag == "--show-current-patch" => RebaseAction::ShowCurrentPatch,
         [upstream] if !upstream.starts_with('-') => RebaseAction::Start {
             upstream: upstream.clone(),
+            options: rit_core::RebaseOptions::default(),
         },
+        [flag, upstream]
+            if (flag == "--no-verify" || flag == "--verify") && !upstream.starts_with('-') =>
+        {
+            RebaseAction::Start {
+                upstream: upstream.clone(),
+                options: rit_core::RebaseOptions {
+                    verify: flag == "--verify",
+                },
+            }
+        }
         [] => {
             writeln!(
                 stderr,
-                "rit: rebase currently supports only <upstream>, --abort, --continue, --quit, --skip, and --show-current-patch"
+                "rit: rebase currently supports only [--no-verify|--verify] <upstream>, --abort, --continue, --quit, --skip, and --show-current-patch"
             )?;
             return Ok(ExitCode::from(129));
         }
@@ -2680,38 +2691,40 @@ fn rebase_command(
             Ok(_) => Ok(ExitCode::SUCCESS),
             Err(error) => write_rebase_error(stderr, error),
         },
-        RebaseAction::Start { upstream } => match repository.start_rebase(&upstream) {
-            Ok(result) => {
-                if !result.conflict_reports.is_empty() {
-                    for report in &result.conflict_reports {
-                        write_merge_conflict_report(stdout, report, &upstream)?;
+        RebaseAction::Start { upstream, options } => {
+            match repository.start_rebase_with_options(&upstream, &options) {
+                Ok(result) => {
+                    if !result.conflict_reports.is_empty() {
+                        for report in &result.conflict_reports {
+                            write_merge_conflict_report(stdout, report, &upstream)?;
+                        }
+                        write_rebase_start_conflict_advice(stderr, &result)?;
+                        return Ok(ExitCode::from(1));
+                    } else if result.fast_forwarded {
+                        let updated = result
+                            .branch_name
+                            .map(|branch_name| format!("refs/heads/{branch_name}"))
+                            .unwrap_or_else(|| "detached HEAD".to_owned());
+                        writeln!(stderr, "Successfully rebased and updated {updated}.")?;
+                    } else if result.replayed_count > 0 {
+                        for step in 1..=result.replayed_count {
+                            write!(stderr, "Rebasing ({step}/{})\r", result.replayed_count)?;
+                        }
+                        let updated = result
+                            .branch_name
+                            .map(|branch_name| format!("refs/heads/{branch_name}"))
+                            .unwrap_or_else(|| "detached HEAD".to_owned());
+                        writeln!(stderr, "Successfully rebased and updated {updated}.")?;
+                    } else if let Some(branch_name) = result.branch_name {
+                        writeln!(stdout, "Current branch {branch_name} is up to date.")?;
+                    } else {
+                        writeln!(stdout, "HEAD is up to date.")?;
                     }
-                    write_rebase_start_conflict_advice(stderr, &result)?;
-                    return Ok(ExitCode::from(1));
-                } else if result.fast_forwarded {
-                    let updated = result
-                        .branch_name
-                        .map(|branch_name| format!("refs/heads/{branch_name}"))
-                        .unwrap_or_else(|| "detached HEAD".to_owned());
-                    writeln!(stderr, "Successfully rebased and updated {updated}.")?;
-                } else if result.replayed_count > 0 {
-                    for step in 1..=result.replayed_count {
-                        write!(stderr, "Rebasing ({step}/{})\r", result.replayed_count)?;
-                    }
-                    let updated = result
-                        .branch_name
-                        .map(|branch_name| format!("refs/heads/{branch_name}"))
-                        .unwrap_or_else(|| "detached HEAD".to_owned());
-                    writeln!(stderr, "Successfully rebased and updated {updated}.")?;
-                } else if let Some(branch_name) = result.branch_name {
-                    writeln!(stdout, "Current branch {branch_name} is up to date.")?;
-                } else {
-                    writeln!(stdout, "HEAD is up to date.")?;
+                    Ok(ExitCode::SUCCESS)
                 }
-                Ok(ExitCode::SUCCESS)
+                Err(error) => write_rebase_error(stderr, error),
             }
-            Err(error) => write_rebase_error(stderr, error),
-        },
+        }
         RebaseAction::Continue => {
             match repository.continue_rebase(&rit_core::CommitOptions::default()) {
                 Ok(result) => {
@@ -2844,7 +2857,10 @@ fn write_rebase_conflict_advice(
 
 enum RebaseAction {
     Abort,
-    Start { upstream: String },
+    Start {
+        upstream: String,
+        options: rit_core::RebaseOptions,
+    },
     Continue,
     Quit,
     Skip,
@@ -4499,7 +4515,7 @@ mod tests {
         assert!(stdout.contains("rit rebase --show-current-patch"));
         assert!(stdout.contains("rit rebase --skip"));
         assert!(stdout.contains("rit rebase --quit"));
-        assert!(stdout.contains("rit rebase <upstream>"));
+        assert!(stdout.contains("rit rebase [--no-verify|--verify] <upstream>"));
         assert_eq!(stderr, "");
     }
 

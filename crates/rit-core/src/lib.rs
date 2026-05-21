@@ -172,8 +172,8 @@ pub use write::{
     CommitHookMode, CommitOptions, CommitPlan, CommitResult, FileModeOverride, MergeConflictKind,
     MergeConflictReport, MergeConflictSide, MergeConflictStageEntry, MergeConflictStagePlan,
     MergeOptions, MergePlan, MergeResult, MergeStrategy, MergeStrategyOption, RebaseContinueResult,
-    RebaseCurrentPatch, RebaseSkipResult, RebaseStartResult, ResetPlan, SignatureIdentity,
-    SignatureTime,
+    RebaseCurrentPatch, RebaseOptions, RebaseSkipResult, RebaseStartResult, ResetPlan,
+    SignatureIdentity, SignatureTime,
 };
 pub use write_plan::{
     PlannedHook, PlannedObjectWrite, PlannedPathAction, PlannedPathChange, PlannedPolicyCheck,
