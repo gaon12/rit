@@ -1711,10 +1711,10 @@
   fast-forwards, `-s`/`--signoff` for clean committing picks,
   `-X ours/theirs`, `-Xours`/`-Xtheirs`, and
   `--strategy-option=ours/theirs` for supported same-path text conflicts,
-  Git-shaped sequencer metadata for multi-target picks that stop on a
-  conflict, `--continue` replay of remaining clean todo entries and
-  later-conflict state/output, `--abort`, and `--quit`/`--skip` for the
-  supported conflict state.
+  Git-shaped sequencer metadata, including strategy options, for multi-target
+  picks that stop on a conflict, `--continue` replay of remaining clean todo
+  entries and later-conflict state/output, `--abort`, and `--quit`/`--skip`
+  for the supported conflict state.
 - Unsupported options: exact full later-conflict commit summary/hint parity,
   signing, broader strategy options, empty-commit handling, conflict
   continuation for merge commits, and full sequencer/editor/hook parity.
@@ -1738,7 +1738,11 @@
   `HEAD` side or picked-commit side for supported same-path text conflicts
   while preserving non-conflicting picked changes; this slice was checked
   against Git 2.54.0.windows.1 using `git --version`, `git help -a`,
-  `git cherry-pick -h`, and direct Git-vs-rit fixture comparisons.
+  `git help cherry-pick`, `git cherry-pick -h`, and direct Git-vs-rit fixture
+  comparisons. For multi-target picks that stop before a later same-path
+  conflict, rit writes Git-shaped `.git/sequencer/opts` entries such as
+  `strategy-option = theirs`, rereads them during `--continue` and `--skip`,
+  and reuses the selected side for the remaining todo entries.
   Multi-target no-commit picks use the index/worktree result from the previous
   pick as the base for the next target. Multi-target committing picks that
   stop on a later conflict write `.git/sequencer` metadata matching Git's

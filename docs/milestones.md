@@ -625,6 +625,9 @@ Completion criteria:
   - [x] `cherry-pick -X ours/theirs` and `--strategy-option=ours/theirs`
     resolve supported same-path text conflicts by choosing the requested side
     while still applying non-conflicting picked changes.
+  - [x] Multi-target `cherry-pick -X ours/theirs` writes and rereads
+    `.git/sequencer/opts`, so `--continue` and `--skip` reuse the selected
+    side for remaining todo entries.
   - [ ] Exact full later-conflict commit summary/hint parity, broader strategy
     options, conflict continuation for merge commits, and editor/hook parity.
 - [~] `rit rebase`

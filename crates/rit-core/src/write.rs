@@ -1534,6 +1534,7 @@ impl Repository {
                     original_head,
                     current_head,
                     &todo_items[target_index..],
+                    options,
                 )?;
                 break;
             }
@@ -1778,6 +1779,7 @@ impl Repository {
         original_head: ObjectId,
         abort_safety_head: ObjectId,
         todo_items: &[CherryPickTodoItem],
+        options: &CherryPickOptions,
     ) -> Result<()> {
         let sequencer_dir = self.git_dir().join("sequencer");
         remove_dir_if_exists(&sequencer_dir)?;
@@ -1793,7 +1795,12 @@ impl Repository {
             let short_id = item.commit_id.to_hex();
             todo_text.push_str(&format!("pick {} {}\n", &short_id[..7], item.subject));
         }
-        write_text_atomically(&sequencer_dir.join("todo"), &todo_text)
+        write_text_atomically(&sequencer_dir.join("todo"), &todo_text)?;
+        if let Some(strategy_option) = merge_strategy_option_name(options.strategy_option) {
+            let opts_text = format!("[options]\n\tstrategy-option = {strategy_option}\n");
+            write_text_atomically(&sequencer_dir.join("opts"), &opts_text)?;
+        }
+        Ok(())
     }
 
     fn start_conflicted_rebase(&self, input: ConflictedRebaseStart<'_>) -> Result<()> {
@@ -1936,7 +1943,7 @@ impl Repository {
             sequencer_todo
         };
         let sequencer_head = self.read_cherry_pick_sequencer_head()?;
-        let replay_options = CherryPickOptions::default();
+        let replay_options = self.read_cherry_pick_sequencer_options()?;
         for (todo_index, item) in remaining_todo.iter().enumerate() {
             let target = item.commit_id.to_hex();
             let replay_result =
@@ -1950,6 +1957,7 @@ impl Repository {
                     original_head,
                     current_head,
                     &remaining_todo[todo_index..],
+                    &replay_options,
                 )?;
                 return Err(RitError::invalid_input(
                     "cherry-pick skip stopped on a later conflict",
@@ -2048,7 +2056,7 @@ impl Repository {
         } else {
             sequencer_todo
         };
-        let replay_options = CherryPickOptions::default();
+        let replay_options = self.read_cherry_pick_sequencer_options()?;
         let mut replayed_remaining_count = 0;
         for (todo_index, item) in remaining_todo.iter().enumerate() {
             let target = item.commit_id.to_hex();
@@ -2063,6 +2071,7 @@ impl Repository {
                     original_head,
                     current_head,
                     &remaining_todo[todo_index..],
+                    &replay_options,
                 )?;
                 let picked_object = self.read_object(item.commit_id)?;
                 let picked_commit = parse_commit(&picked_object.data)?;
@@ -2099,6 +2108,37 @@ impl Repository {
         }
         let text = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
         Ok(Some(ObjectId::from_hex(text.trim())?))
+    }
+
+    fn read_cherry_pick_sequencer_options(&self) -> Result<CherryPickOptions> {
+        let path = self.git_dir().join("sequencer").join("opts");
+        if !path.exists() {
+            return Ok(CherryPickOptions::default());
+        }
+        let text = fs::read_to_string(&path).map_err(|source| RitError::io(&path, source))?;
+        let mut options = CherryPickOptions::default();
+        for line in text.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') || trimmed == "[options]" {
+                continue;
+            }
+            let Some((key, value)) = trimmed.split_once('=') else {
+                continue;
+            };
+            if key.trim() != "strategy-option" {
+                continue;
+            }
+            options.strategy_option = match value.trim() {
+                "ours" => MergeStrategyOption::Ours,
+                "theirs" => MergeStrategyOption::Theirs,
+                unsupported => {
+                    return Err(RitError::invalid_input(format!(
+                        "unsupported cherry-pick sequencer strategy option: {unsupported}"
+                    )));
+                }
+            };
+        }
+        Ok(options)
     }
 
     fn read_cherry_pick_sequencer_todo(&self) -> Result<Vec<CherryPickTodoItem>> {
@@ -3717,6 +3757,14 @@ fn merge_conflict_stages_after_strategy_option(
         .filter(|stage| !strategy_option_resolves_conflict_stage(stage, strategy_option))
         .cloned()
         .collect()
+}
+
+fn merge_strategy_option_name(strategy_option: MergeStrategyOption) -> Option<&'static str> {
+    match strategy_option {
+        MergeStrategyOption::None => None,
+        MergeStrategyOption::Ours => Some("ours"),
+        MergeStrategyOption::Theirs => Some("theirs"),
+    }
 }
 
 fn strategy_option_resolves_conflict_stage(
