@@ -392,6 +392,12 @@
   `--no-commit`, and `-s ours --no-commit`; implemented clean merge
   stop-before-commit state with Git-shaped `MERGE_HEAD`, `MERGE_MSG`, and
   `MERGE_MODE` for covered branch-target forms.
+- 2026-05-21 merge strategy-option slice checked Git 2.54.0.windows.1 with
+  `git --version`, `git help -a`, `git merge -h`, and direct comparisons for
+  `git merge -Xtheirs topic` and `git merge --strategy-option=ours topic`;
+  implemented `-X ours`, `-Xours`, `--strategy-option ours`, and
+  `--strategy-option=ours` forms for same-path content conflicts by choosing
+  the requested side while still creating the normal merge commit.
 - 2026-05-13 operation journal slice checked `git --version` and
   `git help -a`; this feature is rit-specific metadata under `.git/rit/` and
   does not use Git command output as a compatibility target.
@@ -903,6 +909,10 @@
 - Content, binary, and add/add conflicts now print Git-shaped `Auto-merging`
   lines, and conflicted merge output no longer includes rit-only pre-merge
   target debug text.
+- Merge `-X ours`/`-X theirs` now resolves supported same-path conflicts by
+  selecting the requested side as a regular stage-0 index entry, materializing
+  that side in the working tree, and completing the merge commit instead of
+  leaving conflict stages.
 - Added exact Git-vs-rit compatibility coverage for supported merge conflict
   result output across content, modify/delete, binary, add/add, and
   regular-file/symlink distinct-type conflicts. The comparison includes exit

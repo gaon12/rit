@@ -4137,6 +4137,82 @@ fn merge_add_add_conflict_reports_add_add_message() {
 }
 
 #[test]
+fn merge_strategy_option_theirs_resolves_text_conflict_like_git() {
+    let fixture = merge_text_conflict_fixture("merge-strategy-option-theirs");
+
+    let outcome = compare_after_command(
+        &fixture,
+        command_words("git", ["merge", "-Xtheirs", "topic"]),
+        command_words(rit_binary(), ["merge", "-Xtheirs", "topic"]),
+    );
+
+    assert_eq!(outcome.git_status, outcome.rit_status);
+    assert_eq!(outcome.rit_status, "");
+    assert_eq!(
+        fs::read_to_string(outcome.git_repo.join("a.txt")).expect("git file should read"),
+        fs::read_to_string(outcome.rit_repo.join("a.txt")).expect("rit file should read")
+    );
+    assert_eq!(
+        fs::read_to_string(outcome.rit_repo.join("a.txt")).expect("rit file should read"),
+        "topic\n"
+    );
+    assert_eq!(
+        run_capture(
+            "git",
+            ["show", "--no-patch", "--pretty=%P", "HEAD"],
+            &outcome.git_repo
+        )
+        .0,
+        run_capture(
+            "git",
+            ["show", "--no-patch", "--pretty=%P", "HEAD"],
+            &outcome.rit_repo
+        )
+        .0
+    );
+    assert!(!outcome.rit_repo.join(".git").join("MERGE_HEAD").exists());
+    let _ = fs::remove_dir_all(fixture);
+}
+
+#[test]
+fn merge_strategy_option_ours_resolves_text_conflict_like_git() {
+    let fixture = merge_text_conflict_fixture("merge-strategy-option-ours");
+
+    let outcome = compare_after_command(
+        &fixture,
+        command_words("git", ["merge", "--strategy-option=ours", "topic"]),
+        command_words(rit_binary(), ["merge", "--strategy-option=ours", "topic"]),
+    );
+
+    assert_eq!(outcome.git_status, outcome.rit_status);
+    assert_eq!(outcome.rit_status, "");
+    assert_eq!(
+        fs::read_to_string(outcome.git_repo.join("a.txt")).expect("git file should read"),
+        fs::read_to_string(outcome.rit_repo.join("a.txt")).expect("rit file should read")
+    );
+    assert_eq!(
+        fs::read_to_string(outcome.rit_repo.join("a.txt")).expect("rit file should read"),
+        "head\n"
+    );
+    assert_eq!(
+        run_capture(
+            "git",
+            ["show", "--no-patch", "--pretty=%P", "HEAD"],
+            &outcome.git_repo
+        )
+        .0,
+        run_capture(
+            "git",
+            ["show", "--no-patch", "--pretty=%P", "HEAD"],
+            &outcome.rit_repo
+        )
+        .0
+    );
+    assert!(!outcome.rit_repo.join(".git").join("MERGE_HEAD").exists());
+    let _ = fs::remove_dir_all(fixture);
+}
+
+#[test]
 fn merge_distinct_type_conflict_splits_regular_file_and_symlink_paths() {
     let fixture = temp_path("merge-distinct-type-conflict-fixture");
     fs::create_dir_all(&fixture).expect("fixture should be created");
@@ -5009,6 +5085,27 @@ fn compare_after_command(fixture: &Path, git: CommandSpec, rit: CommandSpec) -> 
         git_status,
         rit_status,
     }
+}
+
+fn merge_text_conflict_fixture(name: &str) -> PathBuf {
+    let fixture = temp_path(name);
+    fs::create_dir_all(&fixture).expect("fixture should be created");
+    run_git(&fixture, ["init", "--quiet"]);
+    run_git(&fixture, ["config", "user.name", "Rit Test"]);
+    run_git(&fixture, ["config", "user.email", "rit@example.test"]);
+    run_git(&fixture, ["config", "core.autocrlf", "false"]);
+    fs::write(fixture.join("a.txt"), "base\n").expect("base file should be written");
+    run_git(&fixture, ["add", "a.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "base"]);
+    run_git(&fixture, ["checkout", "--quiet", "-b", "topic"]);
+    fs::write(fixture.join("a.txt"), "topic\n").expect("topic file should be written");
+    run_git(&fixture, ["add", "a.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "topic"]);
+    run_git(&fixture, ["checkout", "--quiet", "master"]);
+    fs::write(fixture.join("a.txt"), "head\n").expect("head file should be written");
+    run_git(&fixture, ["add", "a.txt"]);
+    run_git(&fixture, ["commit", "--quiet", "-m", "head"]);
+    fixture
 }
 
 impl Drop for CommandOutcome {

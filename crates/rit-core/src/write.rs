@@ -313,6 +313,7 @@ struct ConflictedMergeStart<'a> {
     head_entries: &'a [IndexEntry],
     target_entries: &'a [IndexEntry],
     conflict_stages: &'a [MergeConflictStagePlan],
+    strategy_option: MergeStrategyOption,
 }
 
 struct CleanMergeCommitInput<'a> {
@@ -424,6 +425,8 @@ pub struct MergeOptions {
     pub verify: bool,
     /// Merge strategy selected by the user.
     pub strategy: MergeStrategy,
+    /// Recursive/ort-style strategy option selected by the user.
+    pub strategy_option: MergeStrategyOption,
     /// Force a merge commit even when the target could be fast-forwarded.
     pub no_fast_forward: bool,
     /// Whether to create the merge commit after a clean merge result.
@@ -442,6 +445,7 @@ impl Default for MergeOptions {
         Self {
             verify: true,
             strategy: MergeStrategy::Default,
+            strategy_option: MergeStrategyOption::None,
             no_fast_forward: false,
             commit: true,
         }
@@ -456,6 +460,20 @@ pub enum MergeStrategy {
     Default,
     /// Keep the current `HEAD` tree while recording the target as a merge parent.
     Ours,
+}
+
+/// Recursive/ort-style merge strategy option.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum MergeStrategyOption {
+    /// Do not prefer either side for conflicting hunks.
+    #[default]
+    None,
+    /// Prefer the current `HEAD` side when a same-path conflict can be
+    /// auto-resolved by choosing one side.
+    Ours,
+    /// Prefer the target side when a same-path conflict can be auto-resolved by
+    /// choosing one side.
+    Theirs,
 }
 
 /// Name and e-mail pair used in a commit signature.
@@ -1200,7 +1218,11 @@ impl Repository {
             };
             let merge_workflow =
                 non_fast_forward_merge_workflow_plan(&base_entries, &head_entries, &target_entries);
-            if merge_workflow.conflict_stages.is_empty() {
+            let conflict_stages = merge_conflict_stages_after_strategy_option(
+                &merge_workflow.conflict_stages,
+                options.strategy_option,
+            );
+            if conflict_stages.is_empty() {
                 if !options.commit {
                     self.start_clean_merge_without_commit(CleanMergeCommitInput {
                         target,
@@ -1239,13 +1261,18 @@ impl Repository {
                 base_entries: &base_entries,
                 head_entries: &head_entries,
                 target_entries: &target_entries,
-                conflict_stages: &merge_workflow.conflict_stages,
+                conflict_stages: &conflict_stages,
+                strategy_option: options.strategy_option,
             })?;
             self.refresh_indexdb_after_git_write();
+            let conflict_paths = conflict_stages
+                .iter()
+                .map(|stage| stage.path.clone())
+                .collect::<Vec<_>>();
             return Ok(MergeResult::Conflicts {
                 target_id: new_id,
-                conflict_paths: merge_workflow.conflict_paths,
-                conflict_reports: self.merge_conflict_reports(&merge_workflow.conflict_stages)?,
+                conflict_paths,
+                conflict_reports: self.merge_conflict_reports(&conflict_stages)?,
             });
         }
 
@@ -1316,6 +1343,7 @@ impl Repository {
             input.target_entries,
             &[],
             input.target,
+            input.options.strategy_option,
         )?;
         let conflict_paths = BTreeSet::new();
         write_non_conflicting_merge_worktree_changes(
@@ -1364,6 +1392,7 @@ impl Repository {
             input.target_entries,
             &[],
             input.target,
+            input.options.strategy_option,
         )?;
         let conflict_paths = BTreeSet::new();
         write_non_conflicting_merge_worktree_changes(
@@ -1584,6 +1613,7 @@ impl Repository {
             &picked_entries,
             &[],
             target,
+            MergeStrategyOption::None,
         )?;
         let conflict_paths = BTreeSet::new();
         write_non_conflicting_merge_worktree_changes(
@@ -1662,6 +1692,7 @@ impl Repository {
             input.picked_entries,
             input.conflict_stages,
             input.target_label,
+            MergeStrategyOption::None,
         )?;
         let conflict_paths = input
             .conflict_stages
@@ -1758,6 +1789,7 @@ impl Repository {
             input.picked_entries,
             input.conflict_stages,
             input.target_label,
+            MergeStrategyOption::None,
         )?;
         let conflict_paths = input
             .conflict_stages
@@ -2095,6 +2127,7 @@ impl Repository {
             input.target_entries,
             input.conflict_stages,
             input.target,
+            input.strategy_option,
         )?;
         let conflict_paths = input
             .conflict_stages
@@ -2287,6 +2320,7 @@ impl Repository {
                 &picked_entries,
                 &[],
                 upstream,
+                MergeStrategyOption::None,
             )?;
             current_entries = merged_entries.clone();
             expected_parent = picked_id;
@@ -2867,6 +2901,7 @@ impl Repository {
                 &picked_entries,
                 &[],
                 &picked_id.to_hex(),
+                MergeStrategyOption::None,
             )?;
             current_entries = merged_entries.clone();
             expected_parent = *picked_id;
@@ -2911,6 +2946,7 @@ impl Repository {
         target_entries: &[IndexEntry],
         conflict_stages: &[MergeConflictStagePlan],
         target_label: &str,
+        strategy_option: MergeStrategyOption,
     ) -> Result<Vec<IndexEntry>> {
         let base_by_path = index_entries_by_path(base_entries);
         let head_by_path = index_entries_by_path(head_entries);
@@ -2936,6 +2972,10 @@ impl Repository {
             let target_entry = target_by_path.get(path).copied();
             let selected = if let Some(entry) =
                 clean_mode_content_merge_entry(base_entry, head_entry, target_entry)
+            {
+                Some(entry)
+            } else if let Some(entry) =
+                strategy_option_merge_entry(base_entry, head_entry, target_entry, strategy_option)
             {
                 Some(entry)
             } else if tree_entries_equal(head_entry, target_entry) {
@@ -3646,6 +3686,69 @@ fn tree_entries_equal(left: Option<&IndexEntry>, right: Option<&IndexEntry>) -> 
         (None, None) => true,
         (Some(_), None) | (None, Some(_)) => false,
     }
+}
+
+fn merge_conflict_stages_after_strategy_option(
+    conflict_stages: &[MergeConflictStagePlan],
+    strategy_option: MergeStrategyOption,
+) -> Vec<MergeConflictStagePlan> {
+    conflict_stages
+        .iter()
+        .filter(|stage| !strategy_option_resolves_conflict_stage(stage, strategy_option))
+        .cloned()
+        .collect()
+}
+
+fn strategy_option_resolves_conflict_stage(
+    stage: &MergeConflictStagePlan,
+    strategy_option: MergeStrategyOption,
+) -> bool {
+    if strategy_option == MergeStrategyOption::None {
+        return false;
+    }
+    let (Some(head), Some(target)) = (stage.head, stage.target) else {
+        return false;
+    };
+    same_supported_strategy_option_file_type(head.mode, target.mode)
+}
+
+fn strategy_option_merge_entry(
+    base: Option<&IndexEntry>,
+    head: Option<&IndexEntry>,
+    target: Option<&IndexEntry>,
+    strategy_option: MergeStrategyOption,
+) -> Option<IndexEntry> {
+    if strategy_option == MergeStrategyOption::None {
+        return None;
+    }
+    let (Some(head), Some(target)) = (head, target) else {
+        return None;
+    };
+    if !tree_entry_changed(base, Some(head))
+        || !tree_entry_changed(base, Some(target))
+        || tree_entries_equal(Some(head), Some(target))
+        || !same_supported_strategy_option_file_type(head.mode, target.mode)
+    {
+        return None;
+    }
+
+    let selected = match strategy_option {
+        MergeStrategyOption::None => return None,
+        MergeStrategyOption::Ours => head,
+        MergeStrategyOption::Theirs => target,
+    };
+    let mut entry = selected.clone();
+    entry.stage = 0;
+    Some(entry)
+}
+
+fn same_supported_strategy_option_file_type(left_mode: u32, right_mode: u32) -> bool {
+    let left_type = file_type_from_mode(left_mode);
+    left_type == file_type_from_mode(right_mode)
+        && matches!(
+            left_type,
+            FileTypeFromMode::Regular | FileTypeFromMode::Symlink
+        )
 }
 
 fn entry_modes_have_distinct_file_types(left_mode: u32, right_mode: u32) -> bool {

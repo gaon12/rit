@@ -576,6 +576,9 @@ Completion criteria:
   - [x] `merge --no-commit` stops clean non-fast-forward merges before commit
     with Git-shaped merge state, honors `--commit`/`--no-commit` option order,
     and still fast-forwards when Git would.
+  - [x] `merge -X ours/theirs` and `--strategy-option=ours/theirs` resolve
+    supported same-path text conflicts by choosing the requested side while
+    still creating a normal merge commit.
   - [ ] Full conflict handling, merge hooks, and strategies.
 - [~] `rit cherry-pick`
   - [x] Clean single-parent cherry-pick applies the picked commit onto `HEAD`,
@@ -875,6 +878,8 @@ Completion criteria:
     - [x] Content conflicts with mode changes preserve Git-shaped stage modes.
     - [x] Content, binary, and add/add conflicts print Git-shaped
       `Auto-merging` lines and omit rit-only pre-merge debug output.
+    - [x] Strategy-option `ours`/`theirs` removes supported same-path content
+      conflicts from the unmerged index by selecting the requested side.
     - [x] Supported conflict result messages have exact Git-vs-rit stdout,
       stderr, exit-code, status, and index-stage compatibility coverage.
     - [ ] Remaining full conflict result message parity for unsupported merge
