@@ -1697,10 +1697,17 @@
   `pre-commit` hook. Git runs `pre-commit`, `prepare-commit-msg` with source
   `merge`, `commit-msg`, and `post-commit`; a blocking `pre-commit` leaves
   merge state intact.
+- 2026-05-22 merge option parsing hook slice checked Git 2.54.0.windows.1 with
+  `git --version`, `git merge -h`, and direct Git comparisons for
+  `merge -n <target>` with a blocking `pre-merge-commit` hook plus
+  `merge --continue --no-verify` and `merge --continue -n` during active
+  conflicted merges. Git treats `-n` as no-stat rather than no-verify, and
+  rejects `--continue` with additional options.
 - Supported options: default fast-forward shape and explicit `--ff-only` with
   one target branch or revision, conflicted non-fast-forward index-stage
-  starts, `--abort`, `--quit`, `--continue`, `--no-verify` for clean merge
-  commits, `-m/--message` for clean and stopped merge messages, plus
+  starts, `--abort`, `--quit`, `--continue`, `-n` as a covered no-stat no-op,
+  `--no-verify` for clean merge commits, `-m/--message` for clean and stopped
+  merge messages, plus
   rit-specific `--plan` and `merge explain <target>`.
 - Unsupported options: remaining advanced mode/symlink conflict edge cases,
   remaining full conflict message parity, strategies, stat output, remaining
@@ -1740,7 +1747,10 @@
   immediately when the simple tree merge has no conflict candidates.
 - Git-compatible behavior: clean non-fast-forward merge commits run the
   `pre-merge-commit` hook, leave merge state for manual commit when that hook
-  blocks, and bypass that hook when `--no-verify` is supplied.
+  blocks, treat `-n` as no-stat rather than no-verify, and bypass that hook
+  when `--no-verify` is supplied.
+- Git-compatible behavior: `--continue` rejects additional options such as
+  `--no-verify` before reading or changing merge state.
 - Intentional differences: output is simplified and no editor is launched for
   generated merge messages.
 - Repository mutation: yes, updates `HEAD` or the current branch ref for

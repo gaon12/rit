@@ -588,6 +588,9 @@ Completion criteria:
   - [x] Covered resolved `merge --continue` runs commit hooks like Git:
     `pre-commit`, `prepare-commit-msg` with source `merge`, `commit-msg`, and
     `post-commit`; blocking `pre-commit` keeps merge state intact.
+  - [x] Covered merge option parsing keeps `-n` as no-stat rather than
+    no-verify for clean merge hooks, and rejects `merge --continue` with
+    `--no-verify` or `-n` like Git.
   - [ ] Full conflict handling, merge hooks, and strategies.
 - [~] `rit cherry-pick`
   - [x] Clean single-parent cherry-pick applies the picked commit onto `HEAD`,

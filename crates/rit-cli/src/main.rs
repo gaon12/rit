@@ -3328,6 +3328,8 @@ fn parse_merge_args(
     let mut quit = false;
     let mut continue_merge = false;
     let mut verify = true;
+    let mut no_stat_option_seen = false;
+    let mut verify_option_seen = false;
     let mut strategy = rit_core::MergeStrategy::Default;
     let mut strategy_option = rit_core::MergeStrategyOption::None;
     let mut commit = true;
@@ -3350,10 +3352,17 @@ fn parse_merge_args(
             quit = true;
         } else if arg == "--continue" {
             continue_merge = true;
-        } else if arg == "-n" || arg == "--no-verify" {
+        } else if arg == "-n" {
+            // Git uses -n for "no diffstat". rit does not print merge
+            // diffstats yet, so accepting it as a no-op is closer than
+            // treating it as --no-verify.
+            no_stat_option_seen = true;
+        } else if arg == "--no-verify" {
             verify = false;
+            verify_option_seen = true;
         } else if arg == "--verify" {
             verify = true;
+            verify_option_seen = true;
         } else if arg == "--no-commit" {
             commit = false;
         } else if arg == "--commit" {
@@ -3452,6 +3461,19 @@ fn parse_merge_args(
             stderr,
             "rit: merge can use only one of --abort, --quit, and --continue"
         )?;
+        return Ok(None);
+    }
+    let has_continue_argument = plan
+        || explain
+        || fast_forward != MergeFastForwardMode::Default
+        || no_stat_option_seen
+        || verify_option_seen
+        || strategy != rit_core::MergeStrategy::Default
+        || strategy_option != rit_core::MergeStrategyOption::None
+        || !commit
+        || message.is_some();
+    if continue_merge && has_continue_argument {
+        writeln!(stderr, "fatal: --continue expects no arguments")?;
         return Ok(None);
     }
     if (abort || quit || continue_merge) && target.is_some() {

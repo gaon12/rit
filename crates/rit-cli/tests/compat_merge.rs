@@ -172,6 +172,52 @@ fn clean_merge_no_verify_bypasses_pre_merge_commit_hook() {
 }
 
 #[test]
+fn clean_merge_short_n_does_not_bypass_pre_merge_commit_hook() {
+    let root = temp_path("pre-merge-commit-short-n");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_clean_merge(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    let hook = "#!/bin/sh\necho blocked >&2\nexit 1\n";
+    write_hook(&git_repo, "pre-merge-commit", hook);
+    write_hook(&rit_repo, "pre-merge-commit", hook);
+
+    let git_merge = run_capture("git", ["merge", "-n", "topic"], &git_repo);
+    let rit_merge = run_capture(rit_binary(), ["merge", "-n", "topic"], &rit_repo);
+
+    assert_ne!(git_merge.exit_code, 0);
+    assert_ne!(rit_merge.exit_code, 0);
+    assert!(git_repo.join(".git").join("MERGE_HEAD").exists());
+    assert!(rit_repo.join(".git").join("MERGE_HEAD").exists());
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+
+    let git_continue_short_n = run_capture("git", ["merge", "--continue", "-n"], &git_repo);
+    let rit_continue_short_n = run_capture(rit_binary(), ["merge", "--continue", "-n"], &rit_repo);
+
+    assert_eq!(
+        git_continue_short_n.exit_code,
+        rit_continue_short_n.exit_code
+    );
+    assert!(
+        git_continue_short_n
+            .stderr
+            .contains("--continue expects no arguments")
+    );
+    assert!(
+        rit_continue_short_n
+            .stderr
+            .contains("--continue expects no arguments")
+    );
+    assert!(git_repo.join(".git").join("MERGE_HEAD").exists());
+    assert!(rit_repo.join(".git").join("MERGE_HEAD").exists());
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn fast_forward_merge_runs_post_merge_hook_like_git() {
     let root = temp_path("post-merge-fast-forward");
     let git_repo = root.join("git");
@@ -395,6 +441,50 @@ fn merge_continue_pre_commit_hook_blocks_like_git_state() {
     assert_eq!(
         fs::read_to_string(git_repo.join("hook.log")).expect("git hook log should read"),
         fs::read_to_string(rit_repo.join("hook.log")).expect("rit hook log should read")
+    );
+    assert!(git_repo.join(".git").join("MERGE_HEAD").exists());
+    assert!(rit_repo.join(".git").join("MERGE_HEAD").exists());
+    assert_eq!(
+        run_capture("git", ["status", "--porcelain=v1"], &git_repo).stdout,
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).stdout
+    );
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn merge_continue_no_verify_is_rejected_like_git() {
+    let root = temp_path("merge-continue-no-verify-rejected");
+    let git_repo = root.join("git");
+    let rit_repo = root.join("rit");
+    setup_content_conflict(&git_repo);
+    copy_directory(&git_repo, &rit_repo);
+    assert_eq!(
+        run_capture("git", ["merge", "topic"], &git_repo).exit_code,
+        1
+    );
+    assert_eq!(
+        run_capture(rit_binary(), ["merge", "topic"], &rit_repo).exit_code,
+        1
+    );
+
+    let git_continue = run_capture("git", ["merge", "--continue", "--no-verify"], &git_repo);
+    let rit_continue = run_capture(
+        rit_binary(),
+        ["merge", "--continue", "--no-verify"],
+        &rit_repo,
+    );
+
+    assert_eq!(git_continue.exit_code, rit_continue.exit_code);
+    assert!(
+        git_continue
+            .stderr
+            .contains("--continue expects no arguments")
+    );
+    assert!(
+        rit_continue
+            .stderr
+            .contains("--continue expects no arguments")
     );
     assert!(git_repo.join(".git").join("MERGE_HEAD").exists());
     assert!(rit_repo.join(".git").join("MERGE_HEAD").exists());
