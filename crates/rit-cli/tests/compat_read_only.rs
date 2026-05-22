@@ -606,6 +606,29 @@ fn diff_worktree_copy_limit_warning_outputs_match_git() {
 }
 
 #[test]
+fn diff_worktree_zero_rename_limit_config_keeps_copy_detection_unlimited_like_git() {
+    let fixture = WorktreeIntentCopyFixture::new("worktree-zero-copy-limit-config");
+    run_git(fixture.path(), ["config", "diff.renameLimit", "0"]);
+
+    for args in [vec!["diff", "-C", "--name-status"], vec!["diff", "-C"]] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree zero copy limit config {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_cached_copy_outputs_match_git() {
     let fixture = CopyFixture::new("cached-copy");
 
@@ -626,6 +649,31 @@ fn diff_cached_copy_outputs_match_git() {
         assert!(
             outcome.is_match(),
             "cached copy {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
+fn diff_cached_zero_rename_limit_config_keeps_copy_detection_unlimited_like_git() {
+    let fixture = CopyFixture::new("cached-zero-copy-limit-config");
+    run_git(fixture.path(), ["config", "diff.renameLimit", "0"]);
+
+    for args in [
+        vec!["diff", "--cached", "-C", "--name-status"],
+        vec!["diff", "--cached", "-C"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached zero copy limit config {:?}\n{}",
             args,
             outcome.report()
         );
