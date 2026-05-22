@@ -1577,8 +1577,8 @@
 - Supported options: default worktree restore from index, `--staged`/`-S`
   restore index from `HEAD`, with ordinary literal file, directory, `.`, simple
   `*`, `?`, and bracket-class wildcard pathspecs plus positive `:(literal)`,
-  `:(glob)`, `:(top)`, `:/`, `:(icase)`, and `:(attr:...)` pathspec magic,
-  plus
+  `:(glob)`, `:(top)`, `:/`, `:(icase)`, exclude, and `:(attr:...)`
+  pathspec magic, plus
   `--pathspec-from-file`, `--pathspec-from-file=-`,
   `--pathspec-file-nul`, and `--no-pathspec-file-nul`.
 - Unsupported options: source revisions, patch mode, merge conflict modes,
@@ -1603,8 +1603,8 @@
 - Baseline command checked: `git reset -h`
 - Supported options: ordinary literal file, directory, `.`, simple `*`, `?`,
   and bracket-class wildcard pathspecs plus positive `:(literal)`, `:(glob)`,
-  `:(top)`, `:/`, `:(icase)`, and `:(attr:...)` pathspec magic, equivalent to
-  unstaging matching paths from `HEAD`, plus `--pathspec-from-file`,
+  `:(top)`, `:/`, `:(icase)`, exclude, and `:(attr:...)` pathspec magic,
+  equivalent to unstaging matching paths from `HEAD`, plus `--pathspec-from-file`,
   `--pathspec-from-file=-`,
   `--pathspec-file-nul`, `--no-pathspec-file-nul`, deprecated
   `--stdin [-z]`, and `--plan`.
@@ -2473,6 +2473,12 @@
   repository.
 - `undo`/`op restore` can now restore worktree-only changes for commands that
   captured path sidecars, including `rit restore <path>`.
+
+### Write-command pathspec follow-up
+
+- 2026-05-23 M4/M6 follow-up: direct Git-vs-rit write-command comparisons now
+  explicitly cover `restore` and `reset` for `:(icase)` and exclude pathspec
+  magic, not just `add`.
 
 ### Case-sensitive path lookup
 

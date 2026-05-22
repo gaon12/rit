@@ -166,8 +166,9 @@ filters and simple `*`, `?`, and bracket-class wildcard filters for
 cached/staged output, and first-parent `log` plus `show --no-patch`.
 Positive `:(literal)`, `:(glob)`, `:(top)`, and `:/` pathspec magic is
 covered for status, diff, ls-files, log, show, and add.
-`:(icase)` is covered for status, diff, and add. Exclude `:!`, `:^`, and
-`:(exclude)` is covered for status, diff, ls-files, and add. Attr magic is
+`:(icase)` is covered for status, diff, add, restore, and reset. Exclude
+`:!`, `:^`, and `:(exclude)` is covered for status, diff, ls-files, add,
+restore, and reset. Attr magic is
 covered for root `.gitattributes` set/unset/value/unspecified requirements in
 status, diff, ls-files, first-parent `log`, and `show --no-patch`.
 Pathspec-file input is covered for `add`, `restore`, and `reset`, including
@@ -198,8 +199,8 @@ literal and directory ignore rules, glob ignore rules, negation, and
 `.git/info/exclude`, including pathspec and NUL-terminated forms.
 Pathspec compatibility tests cover positive `:(literal)`, `:(glob)`,
 `:(top)`, and `:/` magic for status, diff, ls-files, log, show, add, restore,
-and reset. They also cover `:(icase)` for status, diff, and add, and exclude
-magic for status, diff, ls-files, and add.
+and reset. They also cover `:(icase)` for status, diff, add, restore, and
+reset, and exclude magic for status, diff, ls-files, add, restore, and reset.
 One status compatibility test covers index stat refresh: stdout/stderr/exit
 code and final `.git/index` state must match Git after a clean tracked file's
 mtime changes.

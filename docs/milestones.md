@@ -301,6 +301,10 @@ Completion criteria:
       pathspec glob matching.
     - [x] POSIX bracket write-command coverage is verified against Git for
       `add`, `restore`, and `reset`.
+    - [x] `:(icase)` write-command coverage is verified against Git for `add`,
+      `restore`, and `reset`.
+    - [x] Exclude write-command coverage is verified against Git for `add`,
+      `restore`, and `reset`.
     - [x] `:(glob)` double-star matching crosses slashes only in Git's special
       `**/` and trailing `**` forms; other `**` pairs stay within one path
       component.
