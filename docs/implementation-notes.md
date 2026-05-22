@@ -324,6 +324,10 @@
 - 2026-05-15 diff.renameLimit config slice checked `git diff -h` and direct
   Git comparisons for cached and worktree `diff -M` stdout/stderr when
   `diff.renameLimit=1` skips exhaustive rename detection.
+- 2026-05-22 zero diff.renameLimit config slice checked `git diff -h` and
+  direct Git-vs-rit comparisons for cached and worktree `diff -M` when
+  `diff.renameLimit=0`, confirming that config `0` keeps rename detection
+  unlimited like explicit `-l0`.
 - 2026-05-16 invalid diff.renameLimit config slice checked `git diff -h` and
   direct Git comparisons for cached `diff -M` fatal output and exit code when
   `diff.renameLimit` is not numeric.

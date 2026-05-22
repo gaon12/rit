@@ -460,6 +460,31 @@ fn diff_cached_rename_limit_config_outputs_match_git() {
 }
 
 #[test]
+fn diff_cached_zero_rename_limit_config_is_unlimited_like_git() {
+    let fixture = SimilarityRenameFixture::new("cached-zero-rename-limit-config");
+    run_git(fixture.path(), ["config", "diff.renameLimit", "0"]);
+
+    for args in [
+        vec!["diff", "--cached", "-M", "--name-status"],
+        vec!["diff", "--cached", "-M"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached zero rename limit config {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_bad_rename_limit_config_error_matches_git() {
     let fixture = RenameLimitFixture::new("bad-rename-limit-config");
     run_git(fixture.path(), ["config", "diff.renameLimit", "bad"]);
@@ -526,6 +551,29 @@ fn diff_worktree_rename_limit_config_outputs_match_git() {
         assert!(
             outcome.is_match(),
             "worktree rename limit config {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
+fn diff_worktree_zero_rename_limit_config_is_unlimited_like_git() {
+    let fixture = WorktreeIntentRenameFixture::new("worktree-zero-rename-limit-config");
+    run_git(fixture.path(), ["config", "diff.renameLimit", "0"]);
+
+    for args in [vec!["diff", "-M", "--name-status"], vec!["diff", "-M"]] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree zero rename limit config {:?}\n{}",
             args,
             outcome.report()
         );

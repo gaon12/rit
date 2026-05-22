@@ -87,6 +87,8 @@ The current codebase implements an early local Git subset:
   that same worktree intent-to-add slice. Plain untracked worktree renames and
   copies stay outside default diff scope like Git, so they remain a delete or
   stay ignored rather than being promoted into rename/copy output.
+- `diff.renameLimit=0` now has explicit compatibility coverage for cached and
+  default worktree rename detection, matching Git's unlimited behavior.
 - Ordinary literal file and directory pathspec filtering is supported for
   `status --porcelain=v1` and the supported `diff` summary modes.
 - Ordinary literal file and directory pathspec filtering is supported for
