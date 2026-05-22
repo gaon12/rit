@@ -304,6 +304,58 @@ fn diff_worktree_find_copies_harder_outputs_match_git() {
 }
 
 #[test]
+fn diff_worktree_plain_untracked_rename_stays_delete_like_git() {
+    let fixture = WorktreeUntrackedRenameFixture::new("worktree-untracked-rename");
+
+    for args in [
+        vec!["diff", "-M", "--name-status"],
+        vec!["diff", "-M", "--stat"],
+        vec!["diff", "-M"],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree plain untracked rename {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
+fn diff_worktree_plain_untracked_copy_stays_ignored_like_git() {
+    let fixture = WorktreeUntrackedCopyFixture::new("worktree-untracked-copy");
+
+    for args in [
+        vec!["diff", "-C", "--name-status"],
+        vec!["diff", "-C", "--find-copies-harder", "--name-status"],
+        vec!["diff", "-C", "--find-copies-harder"],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree plain untracked copy {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_cached_similarity_rename_outputs_match_git() {
     let fixture = SimilarityRenameFixture::new("cached-similarity-rename");
 
@@ -1805,6 +1857,72 @@ impl WorktreeIntentHardCopyFixture {
 }
 
 impl Drop for WorktreeIntentHardCopyFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct WorktreeUntrackedRenameFixture {
+    path: PathBuf,
+}
+
+impl WorktreeUntrackedRenameFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("old.txt"), "one\ntwo\nthree\n").expect("base file should be written");
+        run_git(&path, ["add", "old.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+        fs::rename(path.join("old.txt"), path.join("new.txt"))
+            .expect("plain worktree file should be renamed");
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for WorktreeUntrackedRenameFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct WorktreeUntrackedCopyFixture {
+    path: PathBuf,
+}
+
+impl WorktreeUntrackedCopyFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("old.txt"), "one\ntwo\nthree\n").expect("base file should be written");
+        run_git(&path, ["add", "old.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+        fs::write(path.join("copy.txt"), "one\ntwo\nthree\n")
+            .expect("plain worktree copy should be written");
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for WorktreeUntrackedCopyFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

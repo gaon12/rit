@@ -323,6 +323,12 @@
   direct Git comparisons for cached `-M5`, `-M05`, `--find-renames=5`,
   `--find-renames=05`, `-C5`, `-C05`, `--find-copies=5`,
   `--find-copies=05`, and thresholds above 100%.
+- 2026-05-22 ordinary worktree rename/copy verification checked `git diff -h`
+  and direct Git comparisons for default `diff -M` and
+  `diff -C --find-copies-harder` with plain untracked worktree paths. Git
+  keeps the rename case as a delete and ignores the ordinary copy case, so
+  `rit` already matched the checked behavior without needing extra worktree
+  diffcore support.
 - 2026-05-17 no-renames option slice checked `git --version`,
   `git help -a`, `git diff -h`, and direct Git comparisons for cached
   `-M --no-renames`, `--no-renames -M`, and `-C --no-renames` option order.
@@ -853,8 +859,7 @@
   final trailing NUL terminator valid like Git.
 - Added Git-compatible rejection for badly quoted pathspec-file entries before
   any `add`, `restore`, or `reset` mutation is applied.
-- Still unsupported: full Git pathspec-file edge cases, broader worktree
-  rename/copy diffcore parity beyond intent-to-add entries, full rename
+- Still unsupported: full Git pathspec-file edge cases, full rename
   limits/advanced diffcore parity, and `show` path filtering for patch output.
 
 ### M7: Remote transport foundation
@@ -1401,9 +1406,9 @@
   Default worktree diff supports `-M[<n>]` and `-C[<n>]` when the added
   worktree path is represented by Git's intent-to-add index state;
   `--find-copies-harder` can also use unchanged index files as worktree copy
-  sources for that intent-to-add slice.
+  sources for that intent-to-add slice. Plain untracked worktree renames and
+  copies stay outside default diff scope like Git.
 - Unsupported options: commit/tree/blob arguments, pathspec files,
-  broader worktree rename/copy diffcore parity beyond intent-to-add entries,
   full rename limits, and many advanced patch formatting options.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files.
 - Git-compatible behavior: cached diff scope compares the index against `HEAD`.

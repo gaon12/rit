@@ -88,6 +88,11 @@ Verified on 2026-05-13 before continuing implementation:
   requirements through the same shared matcher. This pass added explicit
   compatibility coverage and corrected the stale implementation notes that
   still marked that surface unsupported.
+- 2026-05-22 diff verification also confirmed that plain untracked worktree
+  renames and copies stay outside default `git diff` rename/copy detection.
+  Git still shows a delete for the rename case and ignores the ordinary copy
+  case, and `rit` already matched that behavior. The older milestone wording
+  overstated that slice as a missing implementation gap.
 
 ## M0: Baseline And Rules
 
@@ -225,8 +230,7 @@ Completion criteria:
     detection.
   - [x] Invalid `diff.renames` values fail with Git-compatible fatal output
     and exit code.
-  - [ ] Broader worktree rename/copy detection, full rename limits, and
-    advanced Git diffcore parity.
+  - [ ] Full rename limits and advanced Git diffcore parity.
 - [x] Binary diff accounting for summary modes.
 
 Completion criteria:

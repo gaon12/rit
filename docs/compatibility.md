@@ -84,7 +84,9 @@ The current codebase implements an early local Git subset:
   `-C[<n>]` for the Git-compatible intent-to-add slice, where added worktree
   paths are already represented in the index by `git add -N`.
   `--find-copies-harder` can use unchanged index entries as copy sources in
-  that same worktree intent-to-add slice.
+  that same worktree intent-to-add slice. Plain untracked worktree renames and
+  copies stay outside default diff scope like Git, so they remain a delete or
+  stay ignored rather than being promoted into rename/copy output.
 - Ordinary literal file and directory pathspec filtering is supported for
   `status --porcelain=v1` and the supported `diff` summary modes.
 - Ordinary literal file and directory pathspec filtering is supported for
@@ -214,7 +216,8 @@ differ` placeholders.
 Patch compatibility tests cover splitting distant changes into multiple hunks.
 Worktree rename/copy compatibility tests cover default `diff -M/-C` summary
 and patch output when Git intent-to-add entries make added worktree paths part
-of the index.
+of the index. Separate checks also pin Git's default treatment of ordinary
+untracked worktree renames and copies, which stay outside diff scope.
 Binary diff compatibility tests cover `--name-only`, `--name-status`,
 `--numstat`, and `--stat` summary output.
 Packed object compatibility tests cover reading a delta-compressed packed blob
