@@ -331,6 +331,9 @@
 - 2026-05-16 invalid diff.renameLimit config slice checked `git diff -h` and
   direct Git comparisons for cached `diff -M` fatal output and exit code when
   `diff.renameLimit` is not numeric.
+- 2026-05-22 worktree invalid diff.renameLimit config slice extended that same
+  fatal-output compatibility coverage to default worktree `diff -M`
+  `--name-status` and patch forms.
 - 2026-05-15 fractional rename/copy threshold slice checked `git diff -h` and
   direct Git comparisons for cached `-M5`, `-M05`, `--find-renames=5`,
   `--find-renames=05`, `-C5`, `-C05`, `--find-copies=5`,

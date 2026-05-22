@@ -510,6 +510,29 @@ fn diff_bad_rename_limit_config_error_matches_git() {
 }
 
 #[test]
+fn diff_worktree_bad_rename_limit_config_error_matches_git() {
+    let fixture = WorktreeIntentRenameLimitFixture::new("worktree-bad-rename-limit-config");
+    run_git(fixture.path(), ["config", "diff.renameLimit", "bad"]);
+
+    for args in [vec!["diff", "-M", "--name-status"], vec!["diff", "-M"]] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree bad rename limit config {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_worktree_rename_limit_warning_outputs_match_git() {
     let fixture = WorktreeIntentRenameLimitFixture::new("worktree-rename-limit");
 
