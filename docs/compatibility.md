@@ -158,9 +158,10 @@ compares final `.git/index` state against Git.
 
 Pathspec compatibility tests currently cover ordinary literal file/directory
 filters and simple `*`, `?`, and bracket-class wildcard filters for
-`status --porcelain=v1` and supported `diff` summary outputs, plus `ls-files`
-cached and staged output. Positive `:(literal)`, `:(glob)`, `:(top)`, and
-`:/` pathspec magic is covered for status, diff, ls-files, log, show, and add.
+`status --porcelain=v1`, supported `diff` summary outputs, `ls-files`
+cached/staged output, and first-parent `log` plus `show --no-patch`.
+Positive `:(literal)`, `:(glob)`, `:(top)`, and `:/` pathspec magic is
+covered for status, diff, ls-files, log, show, and add.
 `:(icase)` is covered for status, diff, and add. Exclude `:!`, `:^`, and
 `:(exclude)` is covered for status, diff, ls-files, and add. Attr magic is
 covered for root `.gitattributes` set/unset/value/unspecified requirements in
@@ -197,10 +198,11 @@ mtime changes.
 default, `--name-only`, and `--object-only` output.
 
 `log` compatibility tests cover `--oneline -- <pathspec>` on simple
-first-parent histories, including simple wildcard pathspecs.
+first-parent histories, including simple wildcard and bracket-class pathspecs.
 
 `show` compatibility tests cover `--no-patch -- <pathspec>` for commits that
-do and do not touch the requested path, including simple wildcard pathspecs.
+do and do not touch the requested path, including simple wildcard and
+bracket-class pathspecs.
 
 Patch compatibility tests cover default and cached text patches for small files.
 Patch compatibility tests also cover missing trailing newline markers for

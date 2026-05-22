@@ -78,6 +78,11 @@ Verified on 2026-05-13 before continuing implementation:
   the checked merge surface as fast-forward-only. This pass corrected those
   notes and made the preserve-changes undo result output explicitly say that
   staged and working-tree content was kept.
+- 2026-05-22 read-only pathspec verification also confirmed `ls-files`, first-
+  parent `log`, and `show --no-patch` already supported simple bracket-class
+  wildcard pathspecs through the shared matcher. The code was ahead of the
+  milestone text, so compatibility coverage and documentation were updated
+  instead of changing the implementation.
 
 ## M0: Baseline And Rules
 
@@ -162,10 +167,13 @@ Completion criteria:
     `status --porcelain=v1` and `diff` summary modes.
   - [x] Ordinary literal pathspec filters for `ls-files`.
   - [x] Simple `*` and `?` wildcard pathspec filters for `ls-files`.
+  - [x] Simple bracket-class wildcard pathspec filters for `ls-files`.
   - [x] Ordinary literal path lookup for `ls-tree`.
   - [x] Ordinary literal path filters for first-parent `log`.
   - [x] Ordinary literal path filters for `show --no-patch`.
   - [x] Simple `*` and `?` wildcard pathspec filters for first-parent `log`
+    and `show --no-patch`.
+  - [x] Simple bracket-class wildcard pathspec filters for first-parent `log`
     and `show --no-patch`.
   - [x] Relative pathspecs are resolved from the command invocation directory
     for `status`, `diff`, `ls-files`, `ls-tree`, `log`, and `show`, while top

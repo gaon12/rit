@@ -67,6 +67,13 @@
   `cargo test --workspace`, and all release builds passed. CI is scoped to run
   the full compatibility suite on the checked Windows baseline while keeping
   Ubuntu/macOS release builds until Unix compatibility fixtures are normalized.
+- 2026-05-22 read-only bracket pathspec verification checked Git
+  2.54.0.windows.1 with `git ls-files -h`, `git log -h`, and `git show -h`,
+  plus direct Git-vs-rit comparisons for bracket-class pathspecs in `ls-files`,
+  first-parent `log`, and `show --no-patch`. The shared matcher was already
+  carrying those commands, so this slice added explicit compatibility coverage
+  and corrected the stale documentation that still listed bracket globs as
+  unsupported there.
 - 2026-05-16 diff `-z` summary slice checked `git diff -h` and direct Git
   byte-shape comparisons for `--name-only`, `--name-status`, and `--numstat`,
   including rename output fields.
@@ -1404,8 +1411,9 @@
 
 - Baseline command checked: `git log -h`
 - Supported options: default output, `--oneline`, and ordinary literal plus
-  simple `*`/`?` wildcard file or directory path filters and positive
-  `:(literal)`, `:(glob)`, `:(top)`, `:/`, and `:(icase)` pathspec magic.
+  simple `*`/`?` and bracket-class wildcard file or directory path filters
+  and positive `:(literal)`, `:(glob)`, `:(top)`, `:/`, and `:(icase)`
+  pathspec magic.
 - Unsupported options: revision ranges, decoration, graph, pathspec attr magic,
   advanced path history simplification, grep, ordering
   controls, diff output.
@@ -2219,11 +2227,12 @@
 
 - Baseline command checked: `git show -h`
 - Supported options: default object display and `--no-patch`/`-s` for commits,
-  optional revision, and ordinary literal plus simple `*`/`?` wildcard path
-  filters plus positive `:(literal)`, `:(glob)`, `:(top)`, and `:/` pathspec
-  magic plus `:(icase)` for no-patch commit display.
+  optional revision, and ordinary literal plus simple `*`/`?` and
+  bracket-class wildcard path filters plus positive `:(literal)`, `:(glob)`,
+  `:(top)`, and `:/` pathspec magic plus `:(icase)` for no-patch commit
+  display.
 - Unsupported options: commit diffs, revision ranges, decorations, formatting
-  controls, attr pathspec magic and bracket globs.
+  controls, attr pathspec magic.
 - Git-compatible behavior: commit no-patch layout, tree pretty printing, blob contents.
 - Git-compatible behavior: no-patch commit pathspec filters from a
   subdirectory are resolved relative to that invocation directory unless they
@@ -2235,12 +2244,12 @@
 
 - Baseline command checked: `git ls-files -h`
 - Supported options: default cached file listing, `--stage`/`-s`, and ordinary
-  literal file or directory pathspec filters plus simple `*`/`?` wildcard
-  pathspec filters plus positive `:(literal)`, `:(glob)`, `:(top)`, and `:/`
-  pathspec magic plus `:(icase)` and exclude pathspec magic.
+  literal file or directory pathspec filters plus simple `*`/`?` and
+  bracket-class wildcard pathspec filters plus positive `:(literal)`,
+  `:(glob)`, `:(top)`, and `:/` pathspec magic plus `:(icase)` and exclude
+  pathspec magic.
 - Unsupported options: deleted/modified/others/ignored filters, pathspec
-  attr magic, bracket globs, EOL/debug/format output,
-  sparse/submodule modes.
+  attr magic, EOL/debug/format output, sparse/submodule modes.
 - Git-compatible behavior: lists index paths and stage records as `<mode> <object> 0<TAB><path>`.
 - Git-compatible behavior: pathspecs and displayed paths from a subdirectory
   are resolved relative to that invocation directory, including `..` prefixes
