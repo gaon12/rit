@@ -303,6 +303,8 @@ Completion criteria:
       `reset`.
     - [x] `--pathspec-from-file=- --pathspec-file-nul` stdin NUL pathspecs
       for `add`, `restore`, and `reset`.
+    - [x] CRLF line endings in text pathspec files are parsed like Git for
+      `add`, `restore`, and `reset`, including quoted entries.
     - [x] Deprecated `git reset --stdin` and `git reset --stdin -z` aliases
       reuse the shared stdin pathspec parser with Git-compatible warning and
       status behavior.

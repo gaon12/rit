@@ -803,6 +803,43 @@ fn add_pathspec_from_file_matches_git_status() {
 }
 
 #[test]
+fn crlf_pathspec_from_file_matches_git_status() {
+    for command in ["add", "restore", "reset"] {
+        let fixture = LocalWriteFixture::new(
+            &format!("{command}-crlf-pathspec-file"),
+            LocalWriteFixtureKind::NestedTracked,
+        )
+        .expect("fixture should build");
+        fs::write(
+            fixture.path().join("nested").join("tracked.txt"),
+            "changed\n",
+        )
+        .expect("tracked file should be modified");
+        fs::write(
+            fixture.path().join("pathspecs.txt"),
+            b"nested/tracked.txt\r\n",
+        )
+        .expect("pathspec file should be written");
+        if command == "reset" {
+            run_git(fixture.path(), ["add", "nested/tracked.txt"]);
+        }
+
+        let outcome = compare_after_command(
+            fixture.path(),
+            command_words("git", [command, "--pathspec-from-file", "pathspecs.txt"]),
+            command_words(
+                rit_binary(),
+                [command, "--pathspec-from-file", "pathspecs.txt"],
+            ),
+        );
+
+        assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+        assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+        assert_eq!(outcome.git_status, outcome.rit_status);
+    }
+}
+
+#[test]
 fn add_pathspec_from_stdin_matches_git_status() {
     let fixture =
         LocalWriteFixture::new("add-pathspec-stdin", LocalWriteFixtureKind::NestedTracked)
@@ -825,6 +862,44 @@ fn add_pathspec_from_stdin_matches_git_status() {
     assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
     assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
     assert_eq!(outcome.git_status, outcome.rit_status);
+}
+
+#[test]
+fn quoted_crlf_pathspec_from_file_matches_git_status() {
+    for command in ["add", "restore", "reset"] {
+        let fixture = LocalWriteFixture::new(
+            &format!("{command}-quoted-crlf-pathspec-file"),
+            LocalWriteFixtureKind::NestedTracked,
+        )
+        .expect("fixture should build");
+        fs::write(fixture.path().join("space name.txt"), "base\n")
+            .expect("space file should be written");
+        run_git(fixture.path(), ["add", "space name.txt"]);
+        run_git(fixture.path(), ["commit", "--quiet", "-m", "space"]);
+        fs::write(fixture.path().join("space name.txt"), "changed\n")
+            .expect("space file should be modified");
+        fs::write(
+            fixture.path().join("pathspecs.txt"),
+            b"\"space name.txt\"\r\n",
+        )
+        .expect("pathspec file should be written");
+        if command == "reset" {
+            run_git(fixture.path(), ["add", "space name.txt"]);
+        }
+
+        let outcome = compare_after_command(
+            fixture.path(),
+            command_words("git", [command, "--pathspec-from-file", "pathspecs.txt"]),
+            command_words(
+                rit_binary(),
+                [command, "--pathspec-from-file", "pathspecs.txt"],
+            ),
+        );
+
+        assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+        assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+        assert_eq!(outcome.git_status, outcome.rit_status);
+    }
 }
 
 #[test]

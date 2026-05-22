@@ -391,6 +391,9 @@
 - 2026-05-12 stdin NUL pathspec-file slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   `--pathspec-from-file=- --pathspec-file-nul`.
+- 2026-05-22 CRLF pathspec-file slice checked `git add -h`, `git restore -h`,
+  and `git reset -h` plus direct Git comparisons for CRLF-separated text
+  pathspec files, including quoted entries with spaces.
 - 2026-05-17 deprecated reset stdin pathspec slice checked `git reset -h`
   and direct Git comparisons for `git reset --stdin` and
   `git reset --stdin -z`.
@@ -848,6 +851,8 @@
   `could not open ... for reading` message and exit code before any mutation.
 - Non-UTF-8 bytes in text pathspec files are decoded lossily so unmatched
   pathspec behavior follows Git instead of failing as an input encoding error.
+- CRLF line endings in text pathspec files are normalized like Git before
+  normal quoted/unquoted pathspec parsing.
 - NUL bytes inside text pathspec-file lines truncate that line before normal
   empty-entry and quoted-entry parsing, matching Git's non-NUL mode behavior.
 - Lone carriage-return bytes are preserved as pathspec characters; CRLF line
