@@ -329,6 +329,10 @@
   keeps the rename case as a delete and ignores the ordinary copy case, so
   `rit` already matched the checked behavior without needing extra worktree
   diffcore support.
+- 2026-05-22 write-command attr pathspec verification checked `git add -h`,
+  `git restore -h`, and `git reset -h` plus direct Git comparisons for
+  `:(attr:text)`, `:(attr:-text)`, `:(attr:diff=markdown)`, and
+  `:(attr:!diff)` on `add`, `restore`, and `reset`.
 - 2026-05-17 no-renames option slice checked `git --version`,
   `git help -a`, `git diff -h`, and direct Git comparisons for cached
   `-M --no-renames`, `--no-renames -M`, and `-C --no-renames` option order.
@@ -1443,7 +1447,8 @@
 - Baseline command checked: `git add -h`
 - Supported options: `--plan`, ordinary literal file, directory, `.`, simple `*`, `?`,
   and bracket-class wildcard pathspecs, positive `:(literal)`, `:(glob)`,
-  `:(top)`, `:/`, and `:(icase)` pathspec magic, plus `--chmod=+x`, `--chmod=-x`,
+  `:(top)`, `:/`, `:(icase)`, and `:(attr:...)` pathspec magic, plus
+  `--chmod=+x`, `--chmod=-x`,
   `--chmod +x`, `--chmod -x`, `--pathspec-from-file`,
   `--pathspec-from-file=-`, `--pathspec-file-nul`, and
   `--no-pathspec-file-nul`.
@@ -1542,7 +1547,8 @@
 - Supported options: default worktree restore from index, `--staged`/`-S`
   restore index from `HEAD`, with ordinary literal file, directory, `.`, simple
   `*`, `?`, and bracket-class wildcard pathspecs plus positive `:(literal)`,
-  `:(glob)`, `:(top)`, `:/`, and `:(icase)` pathspec magic, plus
+  `:(glob)`, `:(top)`, `:/`, `:(icase)`, and `:(attr:...)` pathspec magic,
+  plus
   `--pathspec-from-file`, `--pathspec-from-file=-`,
   `--pathspec-file-nul`, and `--no-pathspec-file-nul`.
 - Unsupported options: source revisions, patch mode, merge conflict modes,
@@ -1567,8 +1573,9 @@
 - Baseline command checked: `git reset -h`
 - Supported options: ordinary literal file, directory, `.`, simple `*`, `?`,
   and bracket-class wildcard pathspecs plus positive `:(literal)`, `:(glob)`,
-  `:(top)`, `:/`, and `:(icase)` pathspec magic, equivalent to unstaging matching paths
-  from `HEAD`, plus `--pathspec-from-file`, `--pathspec-from-file=-`,
+  `:(top)`, `:/`, `:(icase)`, and `:(attr:...)` pathspec magic, equivalent to
+  unstaging matching paths from `HEAD`, plus `--pathspec-from-file`,
+  `--pathspec-from-file=-`,
   `--pathspec-file-nul`, `--no-pathspec-file-nul`, deprecated
   `--stdin [-z]`, and `--plan`.
 - Unsupported options: commit-moving resets, soft/mixed/hard/merge/keep modes,

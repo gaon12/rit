@@ -2089,6 +2089,30 @@ fn add_attr_pathspec_matches_git_status() {
 }
 
 #[test]
+fn restore_attr_pathspec_matches_git_status() {
+    for (name, pathspec) in [
+        ("set", ":(attr:text)*"),
+        ("unset", ":(attr:-text)*"),
+        ("value", ":(attr:diff=markdown)*"),
+        ("unspecified", ":(attr:!diff)*"),
+    ] {
+        assert_write_attr_pathspec_matches_git("restore", name, pathspec, false);
+    }
+}
+
+#[test]
+fn reset_attr_pathspec_matches_git_status() {
+    for (name, pathspec) in [
+        ("set", ":(attr:text)*"),
+        ("unset", ":(attr:-text)*"),
+        ("value", ":(attr:diff=markdown)*"),
+        ("unspecified", ":(attr:!diff)*"),
+    ] {
+        assert_write_attr_pathspec_matches_git("reset", name, pathspec, true);
+    }
+}
+
+#[test]
 fn add_honors_core_ignorecase_for_mismatched_case_pathspec() {
     let fixture = temp_path("add-core-ignorecase-fixture");
     fs::create_dir_all(&fixture).expect("fixture should be created");
@@ -5141,6 +5165,31 @@ impl Drop for AttrPathspecWriteFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }
+}
+
+fn assert_write_attr_pathspec_matches_git(
+    command: &str,
+    name: &str,
+    pathspec: &str,
+    stage_before_compare: bool,
+) {
+    let fixture = AttrPathspecWriteFixture::new(&format!("{command}-attr-{name}"));
+    if stage_before_compare {
+        run_git(
+            fixture.path(),
+            ["add", "main.rs", "image.bin", "docs/readme.md", "plain.txt"],
+        );
+    }
+
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words("git", [command, pathspec]),
+        command_words(rit_binary(), [command, pathspec]),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
 }
 
 struct CommandOutcome {

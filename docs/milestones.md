@@ -93,6 +93,11 @@ Verified on 2026-05-13 before continuing implementation:
   Git still shows a delete for the rename case and ignores the ordinary copy
   case, and `rit` already matched that behavior. The older milestone wording
   overstated that slice as a missing implementation gap.
+- 2026-05-22 write-command attr-pathspec verification confirmed that the
+  already-checked M6 attr support also holds for `restore` and `reset`, not
+  just `add`. This pass added explicit Git-vs-rit compatibility coverage and
+  corrected the implementation notes that had underspecified those supported
+  options.
 
 ## M0: Baseline And Rules
 
