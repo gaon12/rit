@@ -165,8 +165,9 @@ covered for status, diff, ls-files, log, show, and add.
 `:(icase)` is covered for status, diff, and add. Exclude `:!`, `:^`, and
 `:(exclude)` is covered for status, diff, ls-files, and add. Attr magic is
 covered for root `.gitattributes` set/unset/value/unspecified requirements in
-status, diff, ls-files, and add. Pathspec-file input is covered for `add`,
-`restore`, and `reset`, including stdin and NUL-separated input.
+status, diff, ls-files, first-parent `log`, and `show --no-patch`.
+Pathspec-file input is covered for `add`, `restore`, and `reset`, including
+stdin and NUL-separated input.
 Line-delimited pathspec-file input also covers Git-compatible rejection of
 empty and badly quoted pathspec entries before repository mutation.
 Local write compatibility tests cover `core.ignorecase=true` for a
@@ -198,11 +199,12 @@ mtime changes.
 default, `--name-only`, and `--object-only` output.
 
 `log` compatibility tests cover `--oneline -- <pathspec>` on simple
-first-parent histories, including simple wildcard and bracket-class pathspecs.
+first-parent histories, including simple wildcard, bracket-class, and attr
+pathspecs.
 
 `show` compatibility tests cover `--no-patch -- <pathspec>` for commits that
-do and do not touch the requested path, including simple wildcard and
-bracket-class pathspecs.
+do and do not touch the requested path, including simple wildcard,
+bracket-class, and attr pathspecs.
 
 Patch compatibility tests cover default and cached text patches for small files.
 Patch compatibility tests also cover missing trailing newline markers for

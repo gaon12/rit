@@ -74,6 +74,13 @@
   carrying those commands, so this slice added explicit compatibility coverage
   and corrected the stale documentation that still listed bracket globs as
   unsupported there.
+- 2026-05-22 read-only attr pathspec verification checked the same Git
+  baseline with direct Git-vs-rit comparisons for `:(attr:text)`,
+  `:(attr:-text)`, `:(attr:diff=markdown)`, and `:(attr:!diff)` in first-parent
+  `log` and `show --no-patch`. Those commands were already using the shared
+  attributes-aware pathspec matcher, so this slice added compatibility tests
+  and corrected the stale notes that still called attr pathspecs unsupported
+  there.
 - 2026-05-16 diff `-z` summary slice checked `git diff -h` and direct Git
   byte-shape comparisons for `--name-only`, `--name-status`, and `--numstat`,
   including rename output fields.
@@ -1412,11 +1419,10 @@
 - Baseline command checked: `git log -h`
 - Supported options: default output, `--oneline`, and ordinary literal plus
   simple `*`/`?` and bracket-class wildcard file or directory path filters
-  and positive `:(literal)`, `:(glob)`, `:(top)`, `:/`, and `:(icase)`
-  pathspec magic.
-- Unsupported options: revision ranges, decoration, graph, pathspec attr magic,
-  advanced path history simplification, grep, ordering
-  controls, diff output.
+  and positive `:(literal)`, `:(glob)`, `:(top)`, `:/`, `:(icase)`, and
+  `:(attr:...)` pathspec magic.
+- Unsupported options: revision ranges, decoration, graph, advanced path
+  history simplification, grep, ordering controls, diff output.
 - Git-compatible behavior: reads commits from `HEAD`, follows the first parent,
   prints default author/date/message layout and 7-character oneline IDs.
 - Git-compatible behavior: pathspecs from a subdirectory are resolved relative
@@ -2229,10 +2235,10 @@
 - Supported options: default object display and `--no-patch`/`-s` for commits,
   optional revision, and ordinary literal plus simple `*`/`?` and
   bracket-class wildcard path filters plus positive `:(literal)`, `:(glob)`,
-  `:(top)`, and `:/` pathspec magic plus `:(icase)` for no-patch commit
-  display.
+  `:(top)`, and `:/` pathspec magic plus `:(icase)` and `:(attr:...)` for
+  no-patch commit display.
 - Unsupported options: commit diffs, revision ranges, decorations, formatting
-  controls, attr pathspec magic.
+  controls.
 - Git-compatible behavior: commit no-patch layout, tree pretty printing, blob contents.
 - Git-compatible behavior: no-patch commit pathspec filters from a
   subdirectory are resolved relative to that invocation directory unless they

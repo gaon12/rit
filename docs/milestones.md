@@ -83,6 +83,11 @@ Verified on 2026-05-13 before continuing implementation:
   wildcard pathspecs through the shared matcher. The code was ahead of the
   milestone text, so compatibility coverage and documentation were updated
   instead of changing the implementation.
+- 2026-05-22 follow-up verification also confirmed first-parent `log` and
+  `show --no-patch` already supported root `.gitattributes` attr pathspec
+  requirements through the same shared matcher. This pass added explicit
+  compatibility coverage and corrected the stale implementation notes that
+  still marked that surface unsupported.
 
 ## M0: Baseline And Rules
 

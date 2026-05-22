@@ -1312,6 +1312,58 @@ fn ls_files_attr_pathspec_outputs_match_git() {
 }
 
 #[test]
+fn log_attr_pathspec_outputs_match_git() {
+    let fixture = AttrPathspecFixture::new("attr-pathspec-log");
+
+    for args in [
+        vec!["log", "--oneline", "--", ":(attr:text)*"],
+        vec!["log", "--oneline", "--", ":(attr:-text)*"],
+        vec!["log", "--oneline", "--", ":(attr:diff=markdown)*"],
+        vec!["log", "--oneline", "--", ":(attr:!diff)*"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "attr pathspec log {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
+fn show_attr_pathspec_outputs_match_git() {
+    let fixture = AttrPathspecFixture::new("attr-pathspec-show");
+
+    for args in [
+        vec!["show", "--no-patch", "--", ":(attr:text)*"],
+        vec!["show", "--no-patch", "--", ":(attr:-text)*"],
+        vec!["show", "--no-patch", "HEAD", "--", ":(attr:diff=markdown)*"],
+        vec!["show", "--no-patch", "--", ":(attr:!diff)*"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "attr pathspec show {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn ls_tree_pathspec_outputs_match_git() {
     let fixture = DiffFixture::new("pathspec-ls-tree");
 
