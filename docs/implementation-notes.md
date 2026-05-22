@@ -394,6 +394,9 @@
 - 2026-05-22 CRLF pathspec-file slice checked `git add -h`, `git restore -h`,
   and `git reset -h` plus direct Git comparisons for CRLF-separated text
   pathspec files, including quoted entries with spaces.
+- 2026-05-22 write-command glob special-form slice checked `git add -h`,
+  `git restore -h`, and `git reset -h` plus direct Git-vs-rit comparisons for
+  the `:(glob)**/*.txt` and trailing `:(glob)nested/**` forms.
 - 2026-05-17 deprecated reset stdin pathspec slice checked `git reset -h`
   and direct Git comparisons for `git reset --stdin` and
   `git reset --stdin -z`.

@@ -297,6 +297,9 @@ Completion criteria:
     - [x] `:(glob)` double-star matching crosses slashes only in Git's special
       `**/` and trailing `**` forms; other `**` pairs stay within one path
       component.
+    - [x] Git-vs-rit write-command coverage explicitly includes the special
+      `:(glob)**/*.txt` and trailing `:(glob)nested/**` forms for `add`,
+      `restore`, and `reset`.
     - [x] `--pathspec-from-file` and `--pathspec-file-nul` for `add`,
       `restore`, and `reset`.
     - [x] `--pathspec-from-file=-` stdin pathspecs for `add`, `restore`, and

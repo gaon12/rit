@@ -729,6 +729,55 @@ fn write_glob_magic_double_star_component_matches_git_status() {
 }
 
 #[test]
+fn write_glob_magic_special_double_star_forms_match_git_state() {
+    for (case_name, pathspec) in [
+        ("double-star-slash", ":(glob)**/*.txt"),
+        ("trailing-double-star", ":(glob)nested/**"),
+    ] {
+        for command in ["add", "restore", "reset"] {
+            let fixture = build_write_glob_special_form_fixture(&format!("{command}-{case_name}"));
+            if command == "reset" {
+                run_git(fixture.path(), ["add", "top.txt", "nested"]);
+            }
+
+            let outcome = compare_after_command(
+                fixture.path(),
+                command_words("git", [command, pathspec]),
+                command_words(rit_binary(), [command, pathspec]),
+            );
+
+            assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+            assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+            assert_eq!(outcome.git_status, outcome.rit_status);
+            assert_matching_file_contents(
+                &outcome.git_repo.join("top.txt"),
+                &outcome.rit_repo.join("top.txt"),
+            );
+            assert_matching_file_contents(
+                &outcome.git_repo.join("nested").join("tracked.txt"),
+                &outcome.rit_repo.join("nested").join("tracked.txt"),
+            );
+            assert_matching_file_contents(
+                &outcome
+                    .git_repo
+                    .join("nested")
+                    .join("deep")
+                    .join("inner.txt"),
+                &outcome
+                    .rit_repo
+                    .join("nested")
+                    .join("deep")
+                    .join("inner.txt"),
+            );
+            assert_matching_file_contents(
+                &outcome.git_repo.join("nested").join("skip.md"),
+                &outcome.rit_repo.join("nested").join("skip.md"),
+            );
+        }
+    }
+}
+
+#[test]
 fn write_commands_resolve_pathspecs_relative_to_subdirectory_like_git() {
     for command in ["add", "restore", "reset"] {
         let fixture = LocalWriteFixture::new(
@@ -5353,6 +5402,51 @@ fn compare_after_command(fixture: &Path, git: CommandSpec, rit: CommandSpec) -> 
         git_status,
         rit_status,
     }
+}
+
+fn build_write_glob_special_form_fixture(name: &str) -> LocalWriteFixture {
+    let fixture = LocalWriteFixture::new(name, LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
+    fs::write(fixture.path().join("top.txt"), "top base\n").expect("top file should be written");
+    fs::create_dir_all(fixture.path().join("nested").join("deep"))
+        .expect("deep directory should be created");
+    fs::write(
+        fixture.path().join("nested").join("deep").join("inner.txt"),
+        "deep base\n",
+    )
+    .expect("deep file should be written");
+    fs::write(fixture.path().join("nested").join("skip.md"), "skip base\n")
+        .expect("markdown file should be written");
+    run_git(fixture.path(), ["add", "top.txt", "nested"]);
+    run_git(
+        fixture.path(),
+        ["commit", "--quiet", "-m", "expand tracked files"],
+    );
+
+    fs::write(fixture.path().join("top.txt"), "top changed\n").expect("top file should change");
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "tracked changed\n",
+    )
+    .expect("tracked file should change");
+    fs::write(
+        fixture.path().join("nested").join("deep").join("inner.txt"),
+        "deep changed\n",
+    )
+    .expect("deep file should change");
+    fs::write(
+        fixture.path().join("nested").join("skip.md"),
+        "skip changed\n",
+    )
+    .expect("markdown file should change");
+    fixture
+}
+
+fn assert_matching_file_contents(left: &Path, right: &Path) {
+    assert_eq!(
+        fs::read_to_string(left).expect("left file should read"),
+        fs::read_to_string(right).expect("right file should read")
+    );
 }
 
 fn merge_text_conflict_fixture(name: &str) -> PathBuf {
