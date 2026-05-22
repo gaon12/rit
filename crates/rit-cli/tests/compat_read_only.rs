@@ -1483,6 +1483,41 @@ fn read_only_pathspecs_resolve_relative_to_subdirectory_like_git() {
 }
 
 #[test]
+fn read_only_plain_mismatched_case_pathspec_stays_case_sensitive() {
+    for core_ignorecase in [false, true] {
+        let fixture = build_read_only_case_lookup_fixture(
+            &format!("read-only-case-lookup-{core_ignorecase}"),
+            core_ignorecase,
+        );
+
+        for args in [
+            vec!["status", "--porcelain=v1", "--", "camel.txt"],
+            vec!["diff", "--name-only", "--", "camel.txt"],
+            vec!["ls-files", "--", "camel.txt"],
+            vec!["log", "--oneline", "--", "camel.txt"],
+            vec!["show", "--no-patch", "--", "camel.txt"],
+        ] {
+            let mut options = CompareOptions::new(
+                fixture.as_path(),
+                git_command_slice(&args),
+                rit_command_slice(&args),
+            );
+            options.compare_repository_state = false;
+            let outcome = compare(&options).expect("comparison should run");
+
+            assert!(
+                outcome.is_match(),
+                "core.ignorecase={core_ignorecase} read-only mismatched-case {:?}\n{}",
+                args,
+                outcome.report()
+            );
+        }
+
+        let _ = fs::remove_dir_all(fixture);
+    }
+}
+
+#[test]
 fn log_pathspec_outputs_match_git() {
     let fixture = LogPathFixture::new("pathspec-log");
 
@@ -2874,6 +2909,28 @@ fn rit_binary() -> OsString {
         path.push(format!("rit{}", std::env::consts::EXE_SUFFIX));
         path.into_os_string()
     })
+}
+
+fn build_read_only_case_lookup_fixture(name: &str, core_ignorecase: bool) -> PathBuf {
+    let path = temp_path(name);
+    fs::create_dir_all(&path).expect("fixture directory should be created");
+    run_git(&path, ["init", "--quiet"]);
+    run_git(&path, ["config", "user.name", "Rit Test"]);
+    run_git(&path, ["config", "user.email", "rit@example.test"]);
+    run_git(&path, ["config", "core.autocrlf", "false"]);
+    run_git(
+        &path,
+        [
+            "config",
+            "core.ignorecase",
+            if core_ignorecase { "true" } else { "false" },
+        ],
+    );
+    fs::write(path.join("Camel.txt"), "base\n").expect("case file should be written");
+    run_git(&path, ["add", "Camel.txt"]);
+    run_git(&path, ["commit", "--quiet", "-m", "base"]);
+    fs::write(path.join("Camel.txt"), "changed\n").expect("case file should be changed");
+    path
 }
 
 fn run_git<const N: usize>(cwd: &Path, args: [&str; N]) {

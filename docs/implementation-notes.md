@@ -2479,6 +2479,11 @@
   still behaves like a no-op for tracked paths even when `core.ignorecase=false`,
   while `git restore <mismatched-case-path>` continues to reject the same
   pathspec.
+- 2026-05-22 read-only case-sensitive lookup slice checked the same Git
+  baseline with direct Git-vs-rit comparisons for `status`, `diff`,
+  `ls-files`, `log`, and `show` using plain tracked pathspec `camel.txt`
+  against committed `Camel.txt`. Those read-only commands stayed
+  case-sensitive regardless of `core.ignorecase`.
 - `rit reset` now mirrors that no-op acceptance for non-wildcard tracked
   pathspecs with mismatched case. Wildcard and advanced pathspec parity remain
   tracked separately in M4/M6.

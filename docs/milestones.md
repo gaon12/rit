@@ -453,6 +453,9 @@ Completion criteria:
     mismatched-case tracked pathspecs even when `core.ignorecase=true`.
   - [x] `git restore <pathspec>` also keeps the same rejection behavior when
     `core.ignorecase=false`.
+  - [x] On the current Windows Git baseline, plain read-only tracked path
+    lookup remains case-sensitive regardless of `core.ignorecase` for
+    `status`, `diff`, `ls-files`, `log`, and `show`.
   - [ ] Broader platform/config parity for case-sensitive path lookup.
 
 Completion criteria:
