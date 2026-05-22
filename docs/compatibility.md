@@ -166,9 +166,9 @@ filters and simple `*`, `?`, and bracket-class wildcard filters for
 cached/staged output, and first-parent `log` plus `show --no-patch`.
 Positive `:(literal)`, `:(glob)`, `:(top)`, and `:/` pathspec magic is
 covered for status, diff, ls-files, log, show, and add.
-`:(icase)` is covered for status, diff, add, restore, and reset. Exclude
-`:!`, `:^`, and `:(exclude)` is covered for status, diff, ls-files, add,
-restore, and reset. Attr magic is
+`:(icase)` is covered for status, diff, add, restore, reset, log, and show.
+Exclude `:!`, `:^`, and `:(exclude)` is covered for status, diff, ls-files,
+add, restore, reset, log, and show. Attr magic is
 covered for root `.gitattributes` set/unset/value/unspecified requirements in
 status, diff, ls-files, first-parent `log`, and `show --no-patch`.
 Pathspec-file input is covered for `add`, `restore`, and `reset`, including
@@ -199,8 +199,9 @@ literal and directory ignore rules, glob ignore rules, negation, and
 `.git/info/exclude`, including pathspec and NUL-terminated forms.
 Pathspec compatibility tests cover positive `:(literal)`, `:(glob)`,
 `:(top)`, and `:/` magic for status, diff, ls-files, log, show, add, restore,
-and reset. They also cover `:(icase)` for status, diff, add, restore, and
-reset, and exclude magic for status, diff, ls-files, add, restore, and reset.
+and reset. They also cover `:(icase)` for status, diff, add, restore, reset,
+log, and show, and exclude magic for status, diff, ls-files, add, restore,
+reset, log, and show.
 One status compatibility test covers index stat refresh: stdout/stderr/exit
 code and final `.git/index` state must match Git after a clean tracked file's
 mtime changes.
@@ -213,13 +214,13 @@ and `show` on the current Windows Git baseline, regardless of
 default, `--name-only`, and `--object-only` output.
 
 `log` compatibility tests cover `--oneline -- <pathspec>` on simple
-first-parent histories, including simple wildcard, bracket-class, special
-`:(glob)` double-star forms, component-local non-recursive `:(glob)**base.txt`,
-and attr pathspecs.
+first-parent histories, including simple wildcard, bracket-class, exclude,
+special `:(glob)` double-star forms, component-local non-recursive
+`:(glob)**base.txt`, and attr pathspecs.
 
 `show` compatibility tests cover `--no-patch -- <pathspec>` for commits that
 do and do not touch the requested path, including simple wildcard,
-bracket-class, special `:(glob)` double-star forms, component-local
+bracket-class, exclude, special `:(glob)` double-star forms, component-local
 non-recursive `:(glob)**base.txt`, and attr pathspecs.
 
 Patch compatibility tests cover default and cached text patches for small files.

@@ -1458,8 +1458,8 @@
 - Baseline command checked: `git log -h`
 - Supported options: default output, `--oneline`, and ordinary literal plus
   simple `*`/`?` and bracket-class wildcard file or directory path filters
-  and positive `:(literal)`, `:(glob)`, `:(top)`, `:/`, `:(icase)`, and
-  `:(attr:...)` pathspec magic.
+  and positive `:(literal)`, `:(glob)`, `:(top)`, `:/`, `:(icase)`, exclude,
+  and `:(attr:...)` pathspec magic.
 - Unsupported options: revision ranges, decoration, graph, advanced path
   history simplification, grep, ordering controls, diff output.
 - Git-compatible behavior: reads commits from `HEAD`, follows the first parent,
@@ -2277,8 +2277,8 @@
 - Supported options: default object display and `--no-patch`/`-s` for commits,
   optional revision, and ordinary literal plus simple `*`/`?` and
   bracket-class wildcard path filters plus positive `:(literal)`, `:(glob)`,
-  `:(top)`, and `:/` pathspec magic plus `:(icase)` and `:(attr:...)` for
-  no-patch commit display.
+  `:(top)`, and `:/` pathspec magic plus `:(icase)`, exclude, and
+  `:(attr:...)` for no-patch commit display.
 - Unsupported options: commit diffs, revision ranges, decorations, formatting
   controls.
 - Git-compatible behavior: commit no-patch layout, tree pretty printing, blob contents.
@@ -2479,6 +2479,9 @@
 - 2026-05-23 M4/M6 follow-up: direct Git-vs-rit write-command comparisons now
   explicitly cover `restore` and `reset` for `:(icase)` and exclude pathspec
   magic, not just `add`.
+- 2026-05-23 M3/M6 follow-up: direct Git-vs-rit read-only comparisons now
+  explicitly cover exclude pathspec magic for first-parent `log` and
+  `show --no-patch`, not just status/diff/ls-files and write commands.
 
 ### Case-sensitive path lookup
 

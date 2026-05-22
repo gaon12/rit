@@ -194,6 +194,8 @@ Completion criteria:
     and `show --no-patch`.
   - [x] Simple bracket-class wildcard pathspec filters for first-parent `log`
     and `show --no-patch`.
+  - [x] Exclude pathspec magic is verified against Git for `ls-files`,
+    first-parent `log`, and `show --no-patch`.
   - [x] Special `:(glob)**/*.txt` and trailing `:(glob)nested/**` forms are
     verified against Git for `ls-files`, first-parent `log`, and
     `show --no-patch`.
