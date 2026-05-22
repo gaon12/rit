@@ -6,7 +6,7 @@ and implementation notes may use Git as the reference implementation.
 
 ## Checked Baseline
 
-- Date checked: 2026-05-20
+- Date checked: 2026-05-22
 - Git version: `git version 2.54.0.windows.1`
 - Command list checked with: `git help -a`
 - Command help checked with: `git <command> -h`
@@ -66,7 +66,8 @@ The current codebase implements an early local Git subset:
   `diff --cached --name-only`, `diff --cached --name-status`,
   `diff --cached --numstat`, `diff --cached --stat`, `log`, `add`, `commit`,
   `branch`, `tag`, `restore`, `reset`, `checkout`, `switch`,
-  fast-forward-only `merge`, and `clone --local --no-checkout`, plus
+  fast-forward, clean merge-commit, and conflicted-state `merge` flows,
+  `cherry-pick`, `rebase`, `stash`, and `clone --local --no-checkout`, plus
   local-path, smart HTTP(S), and one-refspec SSH `fetch` and `push`.
 - Small text patch output is supported for default `diff`, `diff -p`, and
   `diff --cached`.

@@ -1015,39 +1015,42 @@
 - Operation records are appended to `.git/rit/ops.log`; this file is never a
   source of truth for Git compatibility and can be deleted without changing the
   underlying repository.
-- The first snapshot model records `HEAD`, the current branch, and a raw index
-  checksum before and after a user operation.
-- `rit commit`, `rit checkout`, `rit switch`, and fast-forward `rit merge`
-  record successful operations from the CLI.
+- The snapshot model records `HEAD`, the current branch, a raw index checksum,
+  optional pre-operation index bytes, and opt-in worktree path snapshots.
+- Successful CLI records now cover `rit commit`, `rit checkout`, `rit switch`,
+  fast-forward/conflicted `rit merge`, `rit merge --abort`,
+  `rit merge --continue`, clean `rit cherry-pick`, `rit add`, `rit restore`,
+  pathspec `rit reset`, local `rit branch`/`rit tag` ref updates, and the
+  covered transport write paths.
 - Added `rit op log` to print operation records newest-first.
-- Added `rit op restore <id>` and `rit undo` for records with a restorable
-  previous `HEAD`; restore updates the previous branch or detached `HEAD`,
-  checks out that commit tree, and rewrites the index from that tree.
-- Operation records now include changed path lists computed by comparing the
-  before/after commit trees. They also include known created object IDs; the
-  first wired caller records the new commit object ID after `rit commit`.
+- Added `rit op restore <id>` and `rit undo` for records with restorable
+  snapshots. HEAD-changing restores reset the previous branch or detached
+  `HEAD`, check out the previous commit tree, and restore the index. Index-only
+  and selected worktree-only restores instead replay the `.git/rit/ops/<id>/`
+  sidecars without guessing unrelated repository state.
+- Operation records include changed path lists and known created object IDs.
 - Malformed operation journal lines are skipped with diagnostics from
   `log_with_warnings`; `rit op log` reports warnings on stderr while preserving
   valid records.
 - `rit op log --json` prints newest-first operation records as structured JSON,
   including before/after snapshots, changed paths, created object IDs, and
   malformed-line warnings in a `warnings` array.
-- Successful `rit add`, `rit restore`, and pathspec `rit reset` operations now
-  append operation records with command-provided changed path metadata, covering
-  the first index-only/worktree-changing journal slice.
-- Successful `rit branch` create/delete and `rit tag` create/delete operations
-  now append operation records for explicit local ref changes.
-- Successful `rit fetch` operations and smart-remote `rit push` success paths
-  now append operation records for explicit transport writes.
-- Index-changing operation records now write a `.git/rit/ops/<id>/before.index`
+- Index-changing operation records write a `.git/rit/ops/<id>/before.index`
   sidecar when the pre-operation index exists. `rit undo` and
   `rit op restore <id>` can use that sidecar to restore index-only operations
   without rewriting the working tree.
+- Selected worktree-changing operations write `.git/rit/ops/<id>/before.worktree`
+  sidecars so `undo` and `op restore` can put back pre-operation file bytes or
+  remove paths that were previously missing.
+- `rit undo --preserve-changes` is the first command-aware undo mode: for
+  supported commit records it moves HEAD back while keeping the committed
+  content staged and present in the working tree.
 - Linked worktree operation journal coverage now asserts that worktrees share
   the same common Git directory but append records to distinct per-worktree
   `.git/rit/ops.log` files under each worktree gitdir.
-- Still unsupported: command-aware undo modes, reversible patches for
-  worktree-only operations and complete object creation inventories.
+- Still unsupported: broader command-aware undo policies, full reversible
+  patches for every worktree-changing command, and complete object creation
+  inventories.
 
 ### M9: Large-file backends
 
@@ -2153,24 +2156,25 @@
 
 - Baseline command checked: rit-specific command, no Git equivalent.
 - Supported options: `rit op log`, `rit op log --json`,
-  `rit op restore <id>`, and `rit undo`.
+  `rit op restore <id>`, `rit undo`, and `rit undo --preserve-changes`.
 - Supported metadata: before/after HEAD snapshots, current branch snapshots,
-  index checksums, changed paths, and known created object IDs.
+  index checksums, optional before-index/worktree sidecars, changed paths, and
+  known created object IDs.
 - Recorded commands: commit, checkout, switch, fast-forward and conflicted
   merge, merge abort, cherry-pick, add, restore, pathspec reset, branch
   create/delete, tag create/delete, fetch, and smart-remote push success paths.
 - Malformed operation journal lines are skipped with warnings and do not block
   reading later valid records.
-- Unsupported options: filtering, complete object creation inventories, and
-  command-aware undo policies.
+- Unsupported options: filtering, broader command-aware undo policies beyond
+  commit preserve-changes, and complete object creation inventories.
 - Git-compatible behavior: metadata is stored under `.git/rit/` and does not
   replace Git refs, objects, index, or working tree state.
 - Intentional differences: this is a rit differentiator, not a Git-compatible
   porcelain command.
 - Repository mutation: `op log` is read-only; `op restore` and `undo` restore
-  a previous `HEAD` snapshot and check out its tree.
-- Risk: moderate; current restore is HEAD/worktree-oriented and does not yet
-  reconstruct index-only operations.
+  a previous HEAD/index/worktree snapshot according to the recorded sidecars.
+- Risk: moderate; restore paths are intentionally conservative and still cover
+  only the recorded operation slices rather than every possible Git mutation.
 
 ### Transport model
 

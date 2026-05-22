@@ -48,8 +48,8 @@ implementation for documentation, compatibility tests, and benchmarks.
 ```text
 crates/
   rit-cli/       CLI entry point and command formatting
-  rit-core/      Git data models and repository operations
-  rit-indexdb/   Planned optional SQLite auxiliary index
+  rit-core/      Git data models, repository operations, and optional
+                 `indexdb` feature-gated support
   rit-testkit/   Git-vs-rit compatibility harness
 
 docs/

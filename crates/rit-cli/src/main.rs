@@ -3650,6 +3650,21 @@ fn write_restore_result(
     prefix: &str,
     result: &rit_core::OperationRestoreResult,
 ) -> io::Result<()> {
+    if result.preserved_changes {
+        if let Some(head) = result.restored_head {
+            return writeln!(
+                stdout,
+                "{prefix} {} and moved HEAD to {} while keeping the staged and working tree changes",
+                result.id,
+                &head.to_hex()[..7]
+            );
+        }
+        return writeln!(
+            stdout,
+            "{prefix} {} while keeping the staged and working tree changes",
+            result.id
+        );
+    }
     match result.restored_head {
         Some(head) if result.restored_worktree => writeln!(
             stdout,

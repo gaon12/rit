@@ -91,6 +91,9 @@ pub struct OperationRestoreResult {
     pub restored_index: bool,
     /// Whether working tree files were restored from a commit tree.
     pub restored_worktree: bool,
+    /// Whether rit intentionally kept the current index and working tree
+    /// content while moving only HEAD back.
+    pub preserved_changes: bool,
 }
 
 /// Options for command-aware undo behavior.
@@ -311,6 +314,7 @@ fn restore_record_with_options(
                 restored_head: record.before.head,
                 restored_index: false,
                 restored_worktree: false,
+                preserved_changes: true,
             });
         }
         return Err(RitError::invalid_input(format!(
@@ -325,6 +329,7 @@ fn restore_record_with_options(
             restored_head: record.before.head,
             restored_index: true,
             restored_worktree: true,
+            preserved_changes: false,
         });
     }
     if record.before.index_checksum != record.after.index_checksum {
@@ -336,6 +341,7 @@ fn restore_record_with_options(
                 restored_head: record.before.head,
                 restored_index: true,
                 restored_worktree: true,
+                preserved_changes: false,
             });
         }
         return Ok(OperationRestoreResult {
@@ -343,6 +349,7 @@ fn restore_record_with_options(
             restored_head: record.before.head,
             restored_index: true,
             restored_worktree: false,
+            preserved_changes: false,
         });
     }
     if before_worktree_exists(repository, record)? {
@@ -352,6 +359,7 @@ fn restore_record_with_options(
             restored_head: record.before.head,
             restored_index: false,
             restored_worktree: true,
+            preserved_changes: false,
         });
     }
     Err(RitError::invalid_input(format!(
@@ -1081,6 +1089,7 @@ mod tests {
         assert_eq!(result.restored_head, Some(base));
         assert!(!result.restored_index);
         assert!(!result.restored_worktree);
+        assert!(result.preserved_changes);
         assert_eq!(
             repository.resolve_head().expect("head should read"),
             Some(base)

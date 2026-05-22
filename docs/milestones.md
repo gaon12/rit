@@ -14,7 +14,7 @@ drift.
 
 ## Current Baseline
 
-- Date: 2026-05-20
+- Date: 2026-05-22
 - Reference Git: `git version 2.54.0.windows.1`
 - Required recurring checks:
   - `git --version`
@@ -69,6 +69,15 @@ Verified on 2026-05-13 before continuing implementation:
   branches so milestone branches run GitHub Actions before a pull request is
   opened. The full compatibility oracle remains pinned to `windows-latest`
   until Unix/macOS baselines are normalized.
+- 2026-05-22 milestone verification found a few stale documentation-only
+  mismatches rather than false implementation claims in core code. The M16
+  operation-journal notes still said command-aware undo was unsupported even
+  though `rit undo --preserve-changes` and its tests already existed, the
+  README repository layout still mentioned a separate `rit-indexdb` crate that
+  is not part of the current workspace, and `docs/compatibility.md` understated
+  the checked merge surface as fast-forward-only. This pass corrected those
+  notes and made the preserve-changes undo result output explicitly say that
+  staged and working-tree content was kept.
 
 ## M0: Baseline And Rules
 

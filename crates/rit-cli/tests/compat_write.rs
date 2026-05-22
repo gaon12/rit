@@ -3261,6 +3261,7 @@ fn undo_preserve_changes_moves_head_back_without_reverting_commit_contents() {
     let undo_output = run_capture(rit_binary(), ["undo", "--preserve-changes"], fixture.path()).0;
 
     assert!(undo_output.contains("moved HEAD"));
+    assert!(undo_output.contains("keeping the staged and working tree changes"));
     assert_eq!(
         run_capture("git", ["rev-parse", "HEAD"], fixture.path()).0,
         base
