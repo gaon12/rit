@@ -401,6 +401,10 @@
   `git --version`, `git help -a`, `git add -h`, and direct Git comparisons for
   `--no-pathspec-from-file <path>` plus option-order probes showing it does
   not clear an earlier `--pathspec-from-file=<file>` selection.
+- 2026-05-22 no pathspec-from-file active-selection compatibility slice
+  expanded that earlier probe into checked Git-vs-rit coverage for `add`,
+  `restore`, and `reset` when `--no-pathspec-from-file` follows an already
+  selected `--pathspec-from-file=<file>`.
 - 2026-05-15 empty pathspec-file entry slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for leading
   empty line entries in `--pathspec-from-file`.
@@ -852,6 +856,9 @@
   `add`, `restore`, or `reset` mutation with Git's fatal dependency message.
 - `--pathspec-from-file` without a following value is rejected before any
   `add`, `restore`, or `reset` mutation with Git's option-value error.
+- `--no-pathspec-from-file` is a Git-compatible no-op even after an earlier
+  `--pathspec-from-file=<file>` selection, so the already chosen pathspec file
+  stays active for `add`, `restore`, and `reset`.
 - Added Git-compatible rejection for empty line-delimited pathspec-file
   entries before any `add`, `restore`, or `reset` mutation is applied.
 - Added Git-compatible rejection for quoted empty pathspec-file entries before

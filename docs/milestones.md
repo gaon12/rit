@@ -98,6 +98,10 @@ Verified on 2026-05-13 before continuing implementation:
   just `add`. This pass added explicit Git-vs-rit compatibility coverage and
   corrected the implementation notes that had underspecified those supported
   options.
+- 2026-05-22 pathspec-file toggle verification also promoted an older
+  option-order probe into explicit Git-vs-rit coverage: for `add`, `restore`,
+  and `reset`, `--no-pathspec-from-file` does not clear an already selected
+  `--pathspec-from-file=<file>` and instead leaves that file selection active.
 
 ## M0: Baseline And Rules
 
@@ -324,6 +328,8 @@ Completion criteria:
     - [x] `--no-pathspec-from-file` is accepted as a Git-compatible no-op
       when no pathspec file selection is active for `add`, `restore`, and
       `reset`.
+    - [x] `--no-pathspec-from-file` keeps an already selected pathspec file
+      active like Git for `add`, `restore`, and `reset`.
     - [x] `--pathspec-from-file` mixed with pathspec arguments is rejected
       with Git-compatible fatal output for `add`, `restore`, and `reset`.
     - [x] Missing `--pathspec-from-file` files are rejected with
