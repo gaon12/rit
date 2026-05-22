@@ -2473,6 +2473,12 @@
   accepts `git reset <mismatched-case-path>` as a no-op for tracked paths when
   `core.ignorecase=true`, while `git restore <mismatched-case-path>` still
   rejects the same pathspec.
+- 2026-05-22 case-sensitive lookup false-config slice checked `git reset -h`,
+  `git restore -h`, and direct Git-vs-rit comparisons on Git
+  `2.54.0.windows.1`. In that baseline, `git reset <mismatched-case-path>`
+  still behaves like a no-op for tracked paths even when `core.ignorecase=false`,
+  while `git restore <mismatched-case-path>` continues to reject the same
+  pathspec.
 - `rit reset` now mirrors that no-op acceptance for non-wildcard tracked
   pathspecs with mismatched case. Wildcard and advanced pathspec parity remain
   tracked separately in M4/M6.

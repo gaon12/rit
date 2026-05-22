@@ -173,7 +173,12 @@ stdin and NUL-separated input.
 Line-delimited pathspec-file input also covers Git-compatible rejection of
 empty and badly quoted pathspec entries before repository mutation.
 Local write compatibility tests cover `core.ignorecase=true` for a
-mismatched-case `add` pathspec that Git accepts as a no-op.
+mismatched-case `add` pathspec that Git accepts as a no-op. They also cover
+Git-matching rejection of mismatched-case tracked pathspecs for `add` and
+`restore` when `core.ignorecase=false`, plus the checked split where
+`reset` accepts and `restore` rejects the same tracked path when
+`core.ignorecase=true`. On the current Windows Git baseline, `reset` also
+keeps that tracked-path no-op behavior when `core.ignorecase=false`.
 
 Status compatibility tests cover Git-like collapsed output for fully untracked
 directories, including directory and exact-file pathspec behavior.
