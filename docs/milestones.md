@@ -197,6 +197,8 @@ Completion criteria:
   - [x] Special `:(glob)**/*.txt` and trailing `:(glob)nested/**` forms are
     verified against Git for `ls-files`, first-parent `log`, and
     `show --no-patch`.
+  - [x] Component-local `:(glob)**base.txt` remains non-recursive like Git for
+    `ls-files`, first-parent `log`, and `show --no-patch`.
   - [x] Relative pathspecs are resolved from the command invocation directory
     for `status`, `diff`, `ls-files`, `ls-tree`, `log`, and `show`, while top
     magic remains repository-root relative.

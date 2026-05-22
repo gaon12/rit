@@ -78,6 +78,10 @@
   baseline with direct Git-vs-rit comparisons for `:(glob)**/*.txt` and
   trailing `:(glob)nested/**` in `ls-files`, first-parent `log`, and
   `show --no-patch`.
+- 2026-05-22 read-only glob component-local verification extended that same
+  coverage to `:(glob)**base.txt`, confirming that non-special `**` stays
+  within one path component for `ls-files`, first-parent `log`, and
+  `show --no-patch`.
 - 2026-05-22 read-only attr pathspec verification checked the same Git
   baseline with direct Git-vs-rit comparisons for `:(attr:text)`,
   `:(attr:-text)`, `:(attr:diff=markdown)`, and `:(attr:!diff)` in first-parent
