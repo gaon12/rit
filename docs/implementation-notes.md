@@ -74,6 +74,10 @@
   carrying those commands, so this slice added explicit compatibility coverage
   and corrected the stale documentation that still listed bracket globs as
   unsupported there.
+- 2026-05-22 read-only glob special-form verification checked the same Git
+  baseline with direct Git-vs-rit comparisons for `:(glob)**/*.txt` and
+  trailing `:(glob)nested/**` in `ls-files`, first-parent `log`, and
+  `show --no-patch`.
 - 2026-05-22 read-only attr pathspec verification checked the same Git
   baseline with direct Git-vs-rit comparisons for `:(attr:text)`,
   `:(attr:-text)`, `:(attr:diff=markdown)`, and `:(attr:!diff)` in first-parent

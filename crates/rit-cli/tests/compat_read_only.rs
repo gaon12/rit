@@ -1317,6 +1317,8 @@ fn ls_files_pathspec_outputs_match_git() {
         vec!["ls-files", "--", "nested/[ab]*.txt"],
         vec!["ls-files", "--stage", "--", "[!b]*.txt"],
         vec!["ls-files", "--", ":(glob)*.txt"],
+        vec!["ls-files", "--", ":(glob)**/*.txt"],
+        vec!["ls-files", "--", ":(glob)nested/**"],
         vec!["ls-files", "--stage", "--", ":(top)nested/base.txt"],
         vec!["ls-files", "--", ":(icase)camel.txt"],
         vec!["ls-files", "--", "*.txt", ":!Camel.txt"],
@@ -1491,6 +1493,8 @@ fn log_pathspec_outputs_match_git() {
         vec!["log", "--oneline", "--", "nested/[ab]*.txt"],
         vec!["log", "--oneline", "--", "[!b]*.txt"],
         vec!["log", "--oneline", "--", ":(glob)*.txt"],
+        vec!["log", "--oneline", "--", ":(glob)**/*.txt"],
+        vec!["log", "--oneline", "--", ":(glob)nested/**"],
         vec!["log", "--oneline", "--", ":(top)nested/base.txt"],
         vec!["log", "--oneline", "--", ":(icase)camel.txt"],
     ] {
@@ -1523,6 +1527,8 @@ fn show_pathspec_outputs_match_git() {
         vec!["show", "--no-patch", "HEAD", "--", "nested/[ab]*.txt"],
         vec!["show", "--no-patch", "--", "[!b]*.txt"],
         vec!["show", "--no-patch", "--", ":(glob)*.txt"],
+        vec!["show", "--no-patch", "--", ":(glob)**/*.txt"],
+        vec!["show", "--no-patch", "--", ":(glob)nested/**"],
         vec!["show", "--no-patch", "HEAD", "--", ":(top)nested/base.txt"],
         vec!["show", "--no-patch", "--", ":(icase)camel.txt"],
     ] {

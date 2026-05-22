@@ -201,12 +201,12 @@ mtime changes.
 default, `--name-only`, and `--object-only` output.
 
 `log` compatibility tests cover `--oneline -- <pathspec>` on simple
-first-parent histories, including simple wildcard, bracket-class, and attr
-pathspecs.
+first-parent histories, including simple wildcard, bracket-class, special
+`:(glob)` double-star forms, and attr pathspecs.
 
 `show` compatibility tests cover `--no-patch -- <pathspec>` for commits that
 do and do not touch the requested path, including simple wildcard,
-bracket-class, and attr pathspecs.
+bracket-class, special `:(glob)` double-star forms, and attr pathspecs.
 
 Patch compatibility tests cover default and cached text patches for small files.
 Patch compatibility tests also cover missing trailing newline markers for
