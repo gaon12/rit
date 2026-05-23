@@ -1793,6 +1793,39 @@ fn show_patch_option_order_matches_git() {
     }
 }
 
+#[test]
+fn show_patch_advanced_pathspec_outputs_match_git() {
+    let fixture = ShowPatchPathspecFixture::new("show-patch-advanced-pathspec");
+
+    for args in [
+        vec!["show", "HEAD", "--", ":(glob)**/*.txt"],
+        vec!["show", "HEAD", "--", ":(glob)**base.txt"],
+        vec!["show", "HEAD", "--", ":(attr:diff=markdown)*"],
+        vec!["show", fixture.root_commit(), "--", ":(glob)**/*.txt"],
+        vec!["show", fixture.root_commit(), "--", ":(glob)**base.txt"],
+        vec![
+            "show",
+            fixture.root_commit(),
+            "--",
+            ":(attr:diff=markdown)*",
+        ],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "show advanced patch {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
 struct DiffFixture {
     path: PathBuf,
 }
@@ -3108,6 +3141,76 @@ impl RootCommitShowFixture {
 }
 
 impl Drop for RootCommitShowFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct ShowPatchPathspecFixture {
+    path: PathBuf,
+    root_commit: String,
+}
+
+impl ShowPatchPathspecFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(path.join("docs")).expect("docs directory should be created");
+        fs::create_dir_all(path.join("nested")).expect("nested directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+        run_git(&path, ["config", "core.eol", "lf"]);
+
+        fs::write(path.join(".gitattributes"), "docs/*.md diff=markdown\n")
+            .expect("attributes file should be written");
+        fs::write(path.join("docs").join("readme.md"), "root doc\n")
+            .expect("markdown file should be written");
+        fs::write(path.join("nested").join("base.txt"), "root nested\n")
+            .expect("nested text file should be written");
+        fs::write(path.join("plain.txt"), "root plain\n").expect("plain file should be written");
+        run_git(
+            &path,
+            [
+                "add",
+                ".gitattributes",
+                "docs/readme.md",
+                "nested/base.txt",
+                "plain.txt",
+            ],
+        );
+        run_git(&path, ["commit", "--quiet", "-m", "root"]);
+        let root_commit = run_capture("git", ["rev-parse", "HEAD"], &path)
+            .0
+            .trim()
+            .to_owned();
+
+        fs::write(
+            path.join("docs").join("readme.md"),
+            "root doc\nsecond line\n",
+        )
+        .expect("markdown file should be modified");
+        fs::write(
+            path.join("nested").join("base.txt"),
+            "root nested\nsecond line\n",
+        )
+        .expect("nested text file should be modified");
+        run_git(&path, ["add", "docs/readme.md", "nested/base.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "update tracked files"]);
+
+        Self { path, root_commit }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn root_commit(&self) -> &str {
+        &self.root_commit
+    }
+}
+
+impl Drop for ShowPatchPathspecFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

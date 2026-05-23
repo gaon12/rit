@@ -155,6 +155,8 @@ Completion criteria:
 - [x] `rit ls-files`
 - [x] `rit show` object display basics.
   - [x] Checked default patch output for root and single-parent commits.
+  - [x] Checked pathspec filtering for default patch output, including special
+    `:(glob)` forms and `:(attr:...)`.
   - [x] `--no-patch` commit display with path filtering.
 - [x] `rit log` first-parent traversal.
 - [x] `rit status --porcelain=v1` basic tracked/untracked state.

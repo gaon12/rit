@@ -2287,7 +2287,9 @@
   contents, and checked patch output for root and single-parent commits.
 - Git-compatible behavior: the checked root/single-parent patch path also
   honors ordinary literal, simple wildcard, bracket-class, `:(top)`,
-  exclude, and `:(icase)` pathspec filters.
+  exclude, and `:(icase)` pathspec filters, plus checked `:(glob)`
+  double-star forms, component-local non-recursive `:(glob)**base.txt`, and
+  `:(attr:...)`.
 - Git-compatible behavior: later `--patch`/`-p` and `--no-patch`/`-s` options
   override earlier ones for the covered `show` forms.
 - Git-compatible behavior: commit pathspec filters from a subdirectory are
