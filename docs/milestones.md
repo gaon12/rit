@@ -250,6 +250,8 @@ Completion criteria:
     re-enables it like Git.
   - [x] Checked `-C --find-copies-harder` copy detection remains active like
     Git even when `--no-renames` appears before or after it.
+  - [x] Plain checked `-C` copy detection follows Git's option order: a later
+    `--no-renames` disables it, while a later `-C` re-enables it.
   - [x] The same `--no-renames` / later `-M` option-order behavior is checked
     for default worktree exact rename detection.
   - [x] Cached diff enables rename detection by default, honors

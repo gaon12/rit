@@ -81,7 +81,9 @@ The current codebase implements an early local Git subset:
   supported exhaustive similarity pass is skipped by `-l<n>`, rit emits the
   Git-shaped warning on stderr. `--no-renames` disables the checked rename
   path, but checked `-C --find-copies-harder` copy detection stays active
-  like Git even when `--no-renames` appears before or after it.
+  like Git even when `--no-renames` appears before or after it. Plain checked
+  `-C` copy detection follows Git's option order there: a later
+  `--no-renames` disables it, while a later `-C` re-enables it.
 - Default worktree diff already performs checked exact rename detection for
   the Git-compatible intent-to-add slice, where added worktree paths are
   already represented in the index by `git add -N`. `diff.renames=false`
@@ -91,6 +93,9 @@ The current codebase implements an early local Git subset:
   `-C[<n>]` cover the checked non-exact rename/copy cases for that same
   intent-to-add slice. Checked `-C --find-copies-harder` copy detection also
   stays active like Git even when `--no-renames` appears before or after it.
+  Plain checked `-C` copy detection likewise follows Git's option order
+  there: a later `--no-renames` disables it, while a later `-C`
+  re-enables it.
   `--find-copies-harder` can use unchanged index entries as copy sources in
   that same worktree intent-to-add slice. Plain untracked worktree renames and
   copies stay outside default diff scope like Git, so they remain a delete or

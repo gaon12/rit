@@ -277,6 +277,32 @@ fn diff_cached_hard_copy_no_renames_option_order_matches_git() {
 }
 
 #[test]
+fn diff_cached_copy_no_renames_option_order_matches_git() {
+    let fixture = CopyFixture::new("cached-copy-no-renames");
+
+    for args in [
+        vec!["diff", "--cached", "-C", "--no-renames", "--name-status"],
+        vec!["diff", "--cached", "--no-renames", "-C", "--name-status"],
+        vec!["diff", "--cached", "-C", "--no-renames"],
+        vec!["diff", "--cached", "--no-renames", "-C"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached copy no-renames {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_worktree_intent_to_add_rename_outputs_match_git() {
     let fixture = WorktreeIntentRenameFixture::new("worktree-intent-rename");
 
@@ -299,6 +325,33 @@ fn diff_worktree_intent_to_add_rename_outputs_match_git() {
         assert!(
             outcome.is_match(),
             "worktree intent rename {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
+fn diff_worktree_copy_no_renames_option_order_matches_git() {
+    let fixture = WorktreeIntentCopyFixture::new("worktree-copy-no-renames");
+
+    for args in [
+        vec!["diff", "-C", "--no-renames", "--name-status"],
+        vec!["diff", "--no-renames", "-C", "--name-status"],
+        vec!["diff", "-C", "--no-renames"],
+        vec!["diff", "--no-renames", "-C"],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree copy no-renames {:?}\n{}",
             args,
             outcome.report()
         );
