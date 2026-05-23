@@ -792,8 +792,6 @@ fn diff_command(
             }
             "--no-renames" if !after_separator => {
                 find_renames = false;
-                find_copies = false;
-                find_copies_harder = false;
                 rename_detection_explicit = true;
             }
             "--find-copies-harder" if !after_separator => {

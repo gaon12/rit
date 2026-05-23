@@ -246,8 +246,10 @@ Completion criteria:
     fractional notation, so `-M5`/`-C5` mean 50% while `-M05`/`-C05` mean 5%.
   - [x] Similarity thresholds above 100% are accepted like Git and simply
     cannot match ordinary rename/copy scores.
-  - [x] `--no-renames` disables prior `-M`/`-C` rename and copy detection,
-    while later `-M`/`-C` options re-enable detection like Git.
+  - [x] `--no-renames` disables checked rename detection, while later `-M`
+    re-enables it like Git.
+  - [x] Checked `-C --find-copies-harder` copy detection remains active like
+    Git even when `--no-renames` appears before or after it.
   - [x] The same `--no-renames` / later `-M` option-order behavior is checked
     for default worktree exact rename detection.
   - [x] Cached diff enables rename detection by default, honors

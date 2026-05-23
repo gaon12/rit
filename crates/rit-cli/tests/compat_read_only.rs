@@ -226,6 +226,57 @@ fn diff_no_renames_option_order_matches_git() {
 }
 
 #[test]
+fn diff_cached_hard_copy_no_renames_option_order_matches_git() {
+    let fixture = HardCopyFixture::new("cached-hard-copy-no-renames");
+
+    for args in [
+        vec![
+            "diff",
+            "--cached",
+            "-C",
+            "--find-copies-harder",
+            "--no-renames",
+            "--name-status",
+        ],
+        vec![
+            "diff",
+            "--cached",
+            "--no-renames",
+            "-C",
+            "--find-copies-harder",
+            "--name-status",
+        ],
+        vec![
+            "diff",
+            "--cached",
+            "-C",
+            "--find-copies-harder",
+            "--no-renames",
+        ],
+        vec![
+            "diff",
+            "--cached",
+            "--no-renames",
+            "-C",
+            "--find-copies-harder",
+        ],
+    ] {
+        let os_args = args.iter().map(OsString::from).collect::<Vec<_>>();
+        let (git_stdout, git_stderr) = run_capture_args("git", &os_args, fixture.path());
+        let (rit_stdout, rit_stderr) = run_capture_args(rit_binary(), &os_args, fixture.path());
+
+        assert_eq!(
+            git_stdout, rit_stdout,
+            "cached hard copy no-renames {args:?}"
+        );
+        assert_eq!(
+            git_stderr, rit_stderr,
+            "cached hard copy no-renames {args:?}"
+        );
+    }
+}
+
+#[test]
 fn diff_worktree_intent_to_add_rename_outputs_match_git() {
     let fixture = WorktreeIntentRenameFixture::new("worktree-intent-rename");
 
@@ -250,6 +301,43 @@ fn diff_worktree_intent_to_add_rename_outputs_match_git() {
             "worktree intent rename {:?}\n{}",
             args,
             outcome.report()
+        );
+    }
+}
+
+#[test]
+fn diff_worktree_hard_copy_no_renames_option_order_matches_git() {
+    let fixture = WorktreeIntentHardCopyFixture::new("worktree-hard-copy-no-renames");
+
+    for args in [
+        vec![
+            "diff",
+            "-C",
+            "--find-copies-harder",
+            "--no-renames",
+            "--name-status",
+        ],
+        vec![
+            "diff",
+            "--no-renames",
+            "-C",
+            "--find-copies-harder",
+            "--name-status",
+        ],
+        vec!["diff", "-C", "--find-copies-harder", "--no-renames"],
+        vec!["diff", "--no-renames", "-C", "--find-copies-harder"],
+    ] {
+        let os_args = args.iter().map(OsString::from).collect::<Vec<_>>();
+        let (git_stdout, git_stderr) = run_capture_args("git", &os_args, fixture.path());
+        let (rit_stdout, rit_stderr) = run_capture_args(rit_binary(), &os_args, fixture.path());
+
+        assert_eq!(
+            git_stdout, rit_stdout,
+            "worktree hard copy no-renames {args:?}"
+        );
+        assert_eq!(
+            git_stderr, rit_stderr,
+            "worktree hard copy no-renames {args:?}"
         );
     }
 }

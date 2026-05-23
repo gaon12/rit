@@ -351,6 +351,10 @@
 - 2026-05-17 no-renames option slice checked `git --version`,
   `git help -a`, `git diff -h`, and direct Git comparisons for cached
   `-M --no-renames`, `--no-renames -M`, and `-C --no-renames` option order.
+- 2026-05-23 hard-copy no-renames slice checked Git 2.54.0.windows.1 with
+  `git diff -h` and direct Git-vs-rit comparisons showing that checked
+  `-C --find-copies-harder` copy detection stays active in cached/worktree
+  diff even when `--no-renames` appears before or after it.
 - 2026-05-17 diff.renames default/config slice checked Git 2.52.0.windows.1
   with `git --version`, `git help -a`, `git diff -h`, and direct Git
   comparisons for cached default rename detection plus `diff.renames=false`
@@ -1438,8 +1442,10 @@
   `diff.renames=copies` enables copy detection by default. `-C[<n>]` and
   `--find-copies[=<n>]` support staged copy detection from modified source
   files. `--find-copies-harder` also considers unchanged HEAD files as staged
-  copy sources. `--no-renames` disables prior `-M`/`-C` detection and later
-  `-M`/`-C` options re-enable detection, matching Git's option-order behavior.
+  copy sources. `--no-renames` disables the checked rename path, later `-M`
+  re-enables rename detection, and checked `-C --find-copies-harder` copy
+  detection remains active even when `--no-renames` appears before or after
+  it, matching Git's option-order behavior.
   Invalid `diff.renames` values use Git-compatible fatal output and exit code.
   Default worktree diff already performs checked exact rename detection when
   the added worktree path is represented by Git's intent-to-add index state,
