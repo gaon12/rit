@@ -1588,6 +1588,8 @@ fn read_only_pathspecs_resolve_relative_to_subdirectory_like_git() {
     for args in [
         vec!["log", "--oneline", "--", "base.txt"],
         vec!["log", "--oneline", "--", ":(top)nested/base.txt"],
+        vec!["show", "HEAD", "--", "base.txt"],
+        vec!["show", "HEAD", "--", ":(top)nested/base.txt"],
         vec!["show", "--no-patch", "--", "base.txt"],
         vec!["show", "--no-patch", "HEAD", "--", ":(top)nested/base.txt"],
     ] {

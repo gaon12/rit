@@ -227,7 +227,8 @@ bracket-class, top-magic, exclude, and `:(icase)` path filters, special
 for commits that do and do not touch the requested path, including simple
 wildcard, bracket-class, exclude, special
 `:(glob)` double-star forms, component-local non-recursive
-`:(glob)**base.txt`, and attr pathspecs.
+`:(glob)**base.txt`, and attr pathspecs. The checked `show` path forms also
+include subdirectory invocation with relative and top-magic pathspecs.
 
 Patch compatibility tests cover default and cached text patches for small files.
 Patch compatibility tests also cover missing trailing newline markers for

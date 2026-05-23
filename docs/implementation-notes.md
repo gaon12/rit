@@ -2293,7 +2293,8 @@
 - Git-compatible behavior: later `--patch`/`-p` and `--no-patch`/`-s` options
   override earlier ones for the covered `show` forms.
 - Git-compatible behavior: commit pathspec filters from a subdirectory are
-  resolved relative to that invocation directory unless they use top magic.
+  resolved relative to that invocation directory unless they use top magic,
+  including checked default patch forms.
 - Intentional differences: merge commit patch output still follows the simpler
   no-patch path until combined diff support exists.
 - Repository mutation: no.
