@@ -356,6 +356,10 @@
   comparisons for cached default rename detection plus `diff.renames=false`
   and `diff.renames=copies`, including invalid `diff.renames` fatal output
   and exit code.
+- 2026-05-23 worktree diff.renames fatal slice checked Git 2.54.0.windows.1
+  with `git --version`, `git diff -h`, and direct Git-vs-rit comparisons for
+  default worktree `diff --name-status` and patch forms when `diff.renames`
+  is invalid.
 - 2026-05-12 pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file` and
   `--pathspec-file-nul`, including a quoted pathspec entry.

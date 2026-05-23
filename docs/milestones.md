@@ -255,6 +255,8 @@ Completion criteria:
     detection.
   - [x] Invalid `diff.renames` values fail with Git-compatible fatal output
     and exit code.
+  - [x] The same invalid `diff.renames` fatal behavior is checked for default
+    worktree diff output.
   - [x] `diff.renameLimit=0` is treated as unlimited like Git for both cached
     and default worktree rename/copy detection.
   - [ ] Full rename limits and advanced Git diffcore parity.

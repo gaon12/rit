@@ -84,8 +84,10 @@ The current codebase implements an early local Git subset:
   the Git-compatible intent-to-add slice, where added worktree paths are
   already represented in the index by `git add -N`. `diff.renames=false`
   disables that default rename detection, and `--no-renames` / later `-M`
-  option order matches Git there. `-M[<n>]` and `-C[<n>]` cover the checked
-  non-exact rename/copy cases for that same intent-to-add slice.
+  option order matches Git there. Invalid `diff.renames` values also fail the
+  checked default worktree diff forms with the same fatal path. `-M[<n>]` and
+  `-C[<n>]` cover the checked non-exact rename/copy cases for that same
+  intent-to-add slice.
   `--find-copies-harder` can use unchanged index entries as copy sources in
   that same worktree intent-to-add slice. Plain untracked worktree renames and
   copies stay outside default diff scope like Git, so they remain a delete or

@@ -178,6 +178,29 @@ fn diff_bad_renames_config_error_matches_git() {
 }
 
 #[test]
+fn diff_worktree_bad_renames_config_error_matches_git() {
+    let fixture = WorktreeIntentRenameFixture::new("worktree-bad-renames-config");
+    run_git(fixture.path(), ["config", "diff.renames", "bad"]);
+
+    for args in [vec!["diff", "--name-status"], vec!["diff"]] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree bad diff.renames config {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_no_renames_option_order_matches_git() {
     let fixture = ExactRenameFixture::new("cached-no-renames");
 
