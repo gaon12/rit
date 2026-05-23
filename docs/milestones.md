@@ -229,6 +229,9 @@ Completion criteria:
     fatal output and exit code.
   - [x] Worktree rename/copy detection for default `diff -M/-C` when added
     paths are represented by Git intent-to-add index entries.
+  - [x] Default worktree diff already performs checked exact rename detection
+    for Git intent-to-add paths, and `diff.renames=false` disables that
+    default rename detection like Git.
   - [x] Worktree non-exact rename similarity thresholds for default `diff -M`
     when added paths are represented by Git intent-to-add index entries.
   - [x] Worktree `-l<n>` exhaustive rename-limit warnings for non-exact
@@ -245,6 +248,8 @@ Completion criteria:
     cannot match ordinary rename/copy scores.
   - [x] `--no-renames` disables prior `-M`/`-C` rename and copy detection,
     while later `-M`/`-C` options re-enable detection like Git.
+  - [x] The same `--no-renames` / later `-M` option-order behavior is checked
+    for default worktree exact rename detection.
   - [x] Cached diff enables rename detection by default, honors
     `diff.renames=false`, and treats `diff.renames=copies` as default copy
     detection.

@@ -232,6 +232,98 @@ fn diff_worktree_intent_to_add_rename_outputs_match_git() {
 }
 
 #[test]
+fn diff_worktree_default_exact_rename_outputs_match_git() {
+    let fixture = WorktreeIntentRenameFixture::new("worktree-default-intent-rename");
+
+    for args in [vec!["diff", "--name-status"], vec!["diff"]] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree default exact rename {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
+fn diff_worktree_renames_config_matches_git() {
+    let true_fixture = WorktreeIntentRenameFixture::new("worktree-renames-config-true");
+    run_git(true_fixture.path(), ["config", "diff.renames", "true"]);
+
+    for args in [vec!["diff", "--name-status"], vec!["diff"]] {
+        let mut options = CompareOptions::new(
+            true_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree diff.renames=true {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+
+    let false_fixture = WorktreeIntentRenameFixture::new("worktree-renames-config-false");
+    run_git(false_fixture.path(), ["config", "diff.renames", "false"]);
+
+    for args in [vec!["diff", "--name-status"], vec!["diff"]] {
+        let mut options = CompareOptions::new(
+            false_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree diff.renames=false {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
+fn diff_worktree_no_renames_option_order_matches_git() {
+    let fixture = WorktreeIntentRenameFixture::new("worktree-no-renames");
+
+    for args in [
+        vec!["diff", "-M", "--no-renames", "--name-status"],
+        vec!["diff", "--no-renames", "-M", "--name-status"],
+        vec!["diff", "-M", "--no-renames"],
+        vec!["diff", "--no-renames", "-M"],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree no-renames option order {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_worktree_intent_to_add_similarity_rename_outputs_match_git() {
     let fixture = WorktreeIntentSimilarityRenameFixture::new("worktree-intent-similarity-rename");
 

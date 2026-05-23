@@ -1437,8 +1437,11 @@
   copy sources. `--no-renames` disables prior `-M`/`-C` detection and later
   `-M`/`-C` options re-enable detection, matching Git's option-order behavior.
   Invalid `diff.renames` values use Git-compatible fatal output and exit code.
-  Default worktree diff supports `-M[<n>]` and `-C[<n>]` when the added
-  worktree path is represented by Git's intent-to-add index state;
+  Default worktree diff already performs checked exact rename detection when
+  the added worktree path is represented by Git's intent-to-add index state,
+  `diff.renames=false` disables that default rename detection, and the same
+  `--no-renames` / later `-M` option-order behavior is checked there. `-M[<n>]`
+  and `-C[<n>]` cover the checked non-exact rename/copy cases for that slice;
   `--find-copies-harder` can also use unchanged index files as worktree copy
   sources for that intent-to-add slice. Plain untracked worktree renames and
   copies stay outside default diff scope like Git.
