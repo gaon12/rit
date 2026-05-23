@@ -1759,6 +1759,32 @@ fn show_patch_outputs_match_git_for_root_commit() {
     }
 }
 
+#[test]
+fn show_patch_option_order_matches_git() {
+    let fixture = LogPathFixture::new("show-patch-option-order");
+
+    for args in [
+        vec!["show", "--no-patch", "--patch", "HEAD"],
+        vec!["show", "--patch", "--no-patch", "HEAD"],
+        vec!["show", "-s", "-p", "HEAD", "--", "nested/base.txt"],
+        vec!["show", "-p", "-s", "HEAD", "--", "nested/base.txt"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "show patch option order {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
 struct DiffFixture {
     path: PathBuf,
 }

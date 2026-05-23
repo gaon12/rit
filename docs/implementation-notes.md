@@ -2275,15 +2275,18 @@
 
 - Baseline command checked: `git show -h`
 - Supported options: default object display plus first-parent commit patch
-  output for root and single-parent commits, `--no-patch`/`-s` for commit
-  headers without diffs, optional revision, and ordinary literal plus simple
-  `*`/`?` and bracket-class wildcard path filters plus positive
+  output for root and single-parent commits, explicit `--patch`/`-p`,
+  `--no-patch`/`-s` for commit headers without diffs, optional revision, and
+  ordinary literal plus simple `*`/`?` and bracket-class wildcard path filters
+  plus positive
   `:(literal)`, `:(glob)`, `:(top)`, and `:/` pathspec magic plus `:(icase)`,
   exclude, and `:(attr:...)`.
 - Unsupported options: combined merge commit diffs, revision ranges,
   decorations, formatting controls.
 - Git-compatible behavior: commit no-patch layout, tree pretty printing, blob
   contents, and checked patch output for root and single-parent commits.
+- Git-compatible behavior: later `--patch`/`-p` and `--no-patch`/`-s` options
+  override earlier ones for the covered `show` forms.
 - Git-compatible behavior: commit pathspec filters from a subdirectory are
   resolved relative to that invocation directory unless they use top magic.
 - Intentional differences: merge commit patch output still follows the simpler
