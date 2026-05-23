@@ -1388,13 +1388,13 @@
 - Supported options: `--porcelain`, `--porcelain=v1`, `-s`, plus ordinary
   literal file/directory pathspecs and simple `*`, `?`, and bracket-class
   wildcard pathspecs after `--`, positive `:(literal)`, `:(glob)`, `:(top)`,
-  `:/`, and `:(icase)` pathspec magic, and
+  `:/`, `:(icase)`, and `:(attr:...)` pathspec magic, and
   `--untracked-files=no|normal|all` / `-uno|-unormal|-uall`, including
   default-all `-u`, Git 2.52's normal-mode `--no-untracked-files`, and `-z`
   NUL-terminated output, plus `-b` / `--branch` branch headers and
   `--ignored` / `--ignored=traditional|matching` for `.gitignore` and
   `.git/info/exclude` rules.
-- Unsupported options: long output, attr pathspec magic, rename
+- Unsupported options: long output, rename
   detection, submodules, sparse checkout.
 - Git-compatible behavior: porcelain v1 entries for staged add/modify/delete, working tree modify/delete, and untracked files.
 - Git-compatible behavior: fully untracked directories are collapsed in the
@@ -2294,10 +2294,10 @@
 - Supported options: default cached file listing, `--stage`/`-s`, and ordinary
   literal file or directory pathspec filters plus simple `*`/`?` and
   bracket-class wildcard pathspec filters plus positive `:(literal)`,
-  `:(glob)`, `:(top)`, and `:/` pathspec magic plus `:(icase)` and exclude
-  pathspec magic.
+  `:(glob)`, `:(top)`, and `:/` pathspec magic plus `:(icase)`, exclude, and
+  `:(attr:...)` pathspec magic.
 - Unsupported options: deleted/modified/others/ignored filters, pathspec
-  attr magic, EOL/debug/format output, sparse/submodule modes.
+  EOL/debug/format output, sparse/submodule modes.
 - Git-compatible behavior: lists index paths and stage records as `<mode> <object> 0<TAB><path>`.
 - Git-compatible behavior: pathspecs and displayed paths from a subdirectory
   are resolved relative to that invocation directory, including `..` prefixes
@@ -2482,6 +2482,9 @@
 - 2026-05-23 M3/M6 follow-up: direct Git-vs-rit read-only comparisons now
   explicitly cover exclude pathspec magic for first-parent `log` and
   `show --no-patch`, not just status/diff/ls-files and write commands.
+- 2026-05-23 implementation-notes cleanup: the command notes for `status` and
+  `ls-files` no longer call root `.gitattributes` attr pathspec magic
+  unsupported, because direct Git-vs-rit coverage already exists for both.
 
 ### Case-sensitive path lookup
 
