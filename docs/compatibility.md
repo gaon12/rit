@@ -219,10 +219,11 @@ special `:(glob)` double-star forms, component-local non-recursive
 `:(glob)**base.txt`, and attr pathspecs.
 
 `show` compatibility tests cover default patch output for checked root and
-single-parent commits, including checked literal, simple wildcard, exclude,
-and `:(icase)` path filters, `--patch`/`--no-patch` option-order toggles, plus
-`--no-patch -- <pathspec>` for commits that do and do not touch the requested
-path, including simple wildcard, bracket-class, exclude, special
+single-parent commits, including checked literal, simple wildcard,
+bracket-class, top-magic, exclude, and `:(icase)` path filters,
+`--patch`/`--no-patch` option-order toggles, plus `--no-patch -- <pathspec>`
+for commits that do and do not touch the requested path, including simple
+wildcard, bracket-class, exclude, special
 `:(glob)` double-star forms, component-local non-recursive
 `:(glob)**base.txt`, and attr pathspecs.
 

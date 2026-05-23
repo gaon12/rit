@@ -1719,6 +1719,8 @@ fn show_patch_outputs_match_git_for_single_parent_commits() {
         vec!["show", "HEAD", "--", "a.txt"],
         vec!["show", "HEAD", "--", "*.txt", ":!a.txt"],
         vec!["show", "HEAD", "--", ":(exclude)a.txt", "*.txt"],
+        vec!["show", "HEAD", "--", "nested/[ab]*.txt"],
+        vec!["show", "HEAD", "--", ":(top)nested/base.txt"],
         vec!["show", "HEAD", "--", ":(icase)A.TXT"],
     ] {
         let outcome = compare(&CompareOptions::new(
@@ -1745,6 +1747,8 @@ fn show_patch_outputs_match_git_for_root_commit() {
         vec!["show", "HEAD"],
         vec!["show", "HEAD", "--", "a.txt"],
         vec!["show", "HEAD", "--", "nested/base.txt"],
+        vec!["show", "HEAD", "--", "nested/[ab]*.txt"],
+        vec!["show", "HEAD", "--", ":(top)nested/base.txt"],
         vec!["show", "HEAD", "--", "*.txt", ":!a.txt"],
     ] {
         let outcome = compare(&CompareOptions::new(

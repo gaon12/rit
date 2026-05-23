@@ -893,8 +893,8 @@
   final trailing NUL terminator valid like Git.
 - Added Git-compatible rejection for badly quoted pathspec-file entries before
   any `add`, `restore`, or `reset` mutation is applied.
-- Still unsupported: full Git pathspec-file edge cases, full rename
-  limits/advanced diffcore parity, and `show` path filtering for patch output.
+- Still unsupported: full Git pathspec-file edge cases and full rename
+  limits/advanced diffcore parity.
 
 ### M7: Remote transport foundation
 
@@ -2286,8 +2286,8 @@
 - Git-compatible behavior: commit no-patch layout, tree pretty printing, blob
   contents, and checked patch output for root and single-parent commits.
 - Git-compatible behavior: the checked root/single-parent patch path also
-  honors ordinary literal, simple wildcard, exclude, and `:(icase)` pathspec
-  filters.
+  honors ordinary literal, simple wildcard, bracket-class, `:(top)`,
+  exclude, and `:(icase)` pathspec filters.
 - Git-compatible behavior: later `--patch`/`-p` and `--no-patch`/`-s` options
   override earlier ones for the covered `show` forms.
 - Git-compatible behavior: commit pathspec filters from a subdirectory are
