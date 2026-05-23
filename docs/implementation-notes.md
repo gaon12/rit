@@ -2285,6 +2285,9 @@
   decorations, formatting controls.
 - Git-compatible behavior: commit no-patch layout, tree pretty printing, blob
   contents, and checked patch output for root and single-parent commits.
+- Git-compatible behavior: the checked root/single-parent patch path also
+  honors ordinary literal, simple wildcard, exclude, and `:(icase)` pathspec
+  filters.
 - Git-compatible behavior: later `--patch`/`-p` and `--no-patch`/`-s` options
   override earlier ones for the covered `show` forms.
 - Git-compatible behavior: commit pathspec filters from a subdirectory are
