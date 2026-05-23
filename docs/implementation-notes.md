@@ -779,9 +779,9 @@
   `--name-status`, and `--numstat`, including rename/copy field splitting.
 - Added positive pathspec magic support for `:(literal)`, `:(glob)`,
   `:(top)`, and `:/` with Git comparison coverage for status, diff, ls-files,
-  first-parent `log`, `show --no-patch`, and `add`.
+  first-parent `log`, `show --no-patch`, `add`, `restore`, and `reset`.
 - Added ASCII case-insensitive `:(icase)` pathspec matching with Git comparison
-  coverage for status, diff, and add.
+  coverage for status, diff, add, restore, and reset.
 - Added exclude pathspec magic for `:!`, `:^`, and `:(exclude)`, including the
   Git behavior where exclude-only pathspecs filter from the full path set.
 - Added patch output for small text files in default and cached diff scopes,

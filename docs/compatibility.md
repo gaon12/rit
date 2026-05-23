@@ -165,7 +165,7 @@ filters and simple `*`, `?`, and bracket-class wildcard filters for
 `status --porcelain=v1`, supported `diff` summary outputs, `ls-files`
 cached/staged output, and first-parent `log` plus `show --no-patch`.
 Positive `:(literal)`, `:(glob)`, `:(top)`, and `:/` pathspec magic is
-covered for status, diff, ls-files, log, show, and add.
+covered for status, diff, ls-files, log, show, add, restore, and reset.
 `:(icase)` is covered for status, diff, add, restore, reset, log, and show.
 Exclude `:!`, `:^`, and `:(exclude)` is covered for status, diff, ls-files,
 add, restore, reset, log, and show. Attr magic is
