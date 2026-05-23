@@ -153,7 +153,9 @@ Completion criteria:
 - [x] `rit cat-file` for objects available in the object database.
 - [x] `rit ls-tree`
 - [x] `rit ls-files`
-- [x] `rit show --no-patch` and object display basics.
+- [x] `rit show` object display basics.
+  - [x] Checked default patch output for root and single-parent commits.
+  - [x] `--no-patch` commit display with path filtering.
 - [x] `rit log` first-parent traversal.
 - [x] `rit status --porcelain=v1` basic tracked/untracked state.
   - [x] Git-like collapse of fully untracked directories in default porcelain

@@ -1224,6 +1224,54 @@ impl Repository {
         Ok(DiffPatch { files, warnings })
     }
 
+    /// Computes patch output between an empty tree and one commit tree.
+    pub fn diff_empty_to_commit_patch_with_options(
+        &self,
+        commit_id: ObjectId,
+        pathspecs: &PathspecSet,
+        options: &DiffOptions,
+    ) -> Result<DiffPatch> {
+        let old_entries = BTreeMap::new();
+        let new_entries = self.commit_diff_entries(commit_id)?;
+        let attributes = self.root_attributes()?;
+        let options = self.diff_options_with_config(options)?;
+        let paths = new_entries.keys().cloned().collect::<BTreeSet<_>>();
+        let mut files = Vec::new();
+
+        for path in paths {
+            if !pathspecs.matches_with_attributes(&path, Some(&attributes)) {
+                continue;
+            }
+            let Some(new_entry) = new_entries.get(&path) else {
+                continue;
+            };
+            let new_object = self.read_blob(new_entry.object_id)?;
+            files.push(DiffPatchFile {
+                status: 'A',
+                old_path: None,
+                path,
+                similarity_score: None,
+                old_object_id: None,
+                new_object_id: Some(new_entry.object_id),
+                mode: new_entry.mode,
+                old_data: Vec::new(),
+                new_data: new_object.data,
+            });
+        }
+
+        let mut warnings = Vec::new();
+        if options.find_copies {
+            warnings.extend(self.detect_patch_copies(
+                &mut files,
+                &old_entries,
+                &new_entries,
+                &options,
+            )?);
+        }
+
+        Ok(DiffPatch { files, warnings })
+    }
+
     /// Computes `git diff --cached` patch output.
     pub fn diff_index_to_head_patch_with_pathspecs(
         &self,

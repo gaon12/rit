@@ -1709,6 +1709,56 @@ fn show_pathspec_outputs_match_git() {
     }
 }
 
+#[test]
+fn show_patch_outputs_match_git_for_single_parent_commits() {
+    let fixture = LogPathFixture::new("show-patch-single-parent");
+
+    for args in [
+        vec!["show", "HEAD"],
+        vec!["show", "HEAD", "--", "nested/base.txt"],
+        vec!["show", "HEAD", "--", "a.txt"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "show patch {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
+fn show_patch_outputs_match_git_for_root_commit() {
+    let fixture = RootCommitShowFixture::new("show-patch-root");
+
+    for args in [
+        vec!["show", "HEAD"],
+        vec!["show", "HEAD", "--", "a.txt"],
+        vec!["show", "HEAD", "--", "nested/base.txt"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "show root patch {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
 struct DiffFixture {
     path: PathBuf,
 }
@@ -2991,6 +3041,39 @@ impl LogPathFixture {
 }
 
 impl Drop for LogPathFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct RootCommitShowFixture {
+    path: PathBuf,
+}
+
+impl RootCommitShowFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(path.join("nested")).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("a.txt"), "base\n").expect("base file should be written");
+        fs::write(path.join("nested").join("base.txt"), "nested base\n")
+            .expect("nested file should be written");
+        run_git(&path, ["add", "a.txt", "nested/base.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "root"]);
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for RootCommitShowFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

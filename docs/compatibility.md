@@ -218,10 +218,11 @@ first-parent histories, including simple wildcard, bracket-class, exclude,
 special `:(glob)` double-star forms, component-local non-recursive
 `:(glob)**base.txt`, and attr pathspecs.
 
-`show` compatibility tests cover `--no-patch -- <pathspec>` for commits that
-do and do not touch the requested path, including simple wildcard,
-bracket-class, exclude, special `:(glob)` double-star forms, component-local
-non-recursive `:(glob)**base.txt`, and attr pathspecs.
+`show` compatibility tests cover default patch output for checked root and
+single-parent commits, plus `--no-patch -- <pathspec>` for commits that do and
+do not touch the requested path, including simple wildcard, bracket-class,
+exclude, special `:(glob)` double-star forms, component-local non-recursive
+`:(glob)**base.txt`, and attr pathspecs.
 
 Patch compatibility tests cover default and cached text patches for small files.
 Patch compatibility tests also cover missing trailing newline markers for

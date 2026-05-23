@@ -1141,7 +1141,7 @@ fn show_command(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> io::Result<ExitCode> {
-    let Some((revision, pathspec_args)) = parse_show_args(args, stderr)? else {
+    let Some((revision, pathspec_args, no_patch)) = parse_show_args(args, stderr)? else {
         return Ok(ExitCode::from(129));
     };
     let repository = match discover_repository(stderr)? {
@@ -1188,6 +1188,40 @@ fn show_command(
                 };
                 if touches_pathspecs {
                     print_commit_no_patch(object_id, &commit, stdout)?;
+                    if !no_patch {
+                        let patch_result = if let Some(parent_id) = commit.parents.first() {
+                            repository.diff_commits_patch_with_options(
+                                *parent_id,
+                                object_id,
+                                &pathspecs,
+                                &rit_core::DiffOptions::default(),
+                            )
+                        } else {
+                            repository.diff_empty_to_commit_patch_with_options(
+                                object_id,
+                                &pathspecs,
+                                &rit_core::DiffOptions::default(),
+                            )
+                        };
+                        match patch_result {
+                            Ok(patch) => match patch.to_patch_text() {
+                                Ok(text) => {
+                                    if !text.is_empty() {
+                                        writeln!(stdout)?;
+                                        write_diff_warnings(stderr, &patch.warnings)?;
+                                        stdout.write_all(text.as_bytes())?;
+                                    }
+                                }
+                                Err(error) => {
+                                    writeln!(stderr, "rit: {error}")?;
+                                    return Ok(ExitCode::from(1));
+                                }
+                            },
+                            Err(error) => {
+                                return write_diff_error(stderr, &error);
+                            }
+                        }
+                    }
                 }
             }
             Err(error) => {
@@ -1204,15 +1238,16 @@ fn show_command(
 fn parse_show_args(
     args: &[String],
     stderr: &mut dyn Write,
-) -> io::Result<Option<(String, Vec<String>)>> {
+) -> io::Result<Option<(String, Vec<String>, bool)>> {
     let mut revision = None;
     let mut pathspecs = Vec::new();
     let mut after_separator = false;
+    let mut no_patch = false;
 
     for arg in args {
         match arg.as_str() {
             "--" if !after_separator => after_separator = true,
-            "--no-patch" | "-s" if !after_separator => {}
+            "--no-patch" | "-s" if !after_separator => no_patch = true,
             unsupported if unsupported.starts_with('-') && !after_separator => {
                 writeln!(stderr, "rit: unsupported show option '{unsupported}'")?;
                 return Ok(None);
@@ -1232,6 +1267,7 @@ fn parse_show_args(
     Ok(Some((
         revision.unwrap_or_else(|| "HEAD".to_owned()),
         pathspecs,
+        no_patch,
     )))
 }
 
