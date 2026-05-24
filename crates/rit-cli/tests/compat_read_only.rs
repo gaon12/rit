@@ -305,6 +305,49 @@ fn diff_renames_false_config_still_allows_explicit_hard_copy_detection() {
 }
 
 #[test]
+fn diff_renames_false_config_still_allows_explicit_copy_detection() {
+    let cached_fixture = CopyFixture::new("cached-renames-config-false-copy");
+    run_git(cached_fixture.path(), ["config", "diff.renames", "false"]);
+
+    for args in [
+        vec!["diff", "--cached", "-C", "--name-status"],
+        vec!["diff", "--cached", "-C"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            cached_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached diff.renames=false explicit copy {args:?}\n{}",
+            outcome.report()
+        );
+    }
+
+    let worktree_fixture = WorktreeIntentCopyFixture::new("worktree-renames-config-false-copy");
+    run_git(worktree_fixture.path(), ["config", "diff.renames", "false"]);
+
+    for args in [vec!["diff", "-C", "--name-status"], vec!["diff", "-C"]] {
+        let mut options = CompareOptions::new(
+            worktree_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree diff.renames=false explicit copy {args:?}\n{}",
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_renames_copies_config_keeps_checked_hard_copy_slices_matching_git() {
     let cached_fixture = HardCopyFixture::new("cached-renames-config-copies-hard-copy-slice");
     run_git(cached_fixture.path(), ["config", "diff.renames", "copies"]);

@@ -261,6 +261,8 @@ Completion criteria:
   - [x] Checked explicit `--find-copies-harder`, with or without `-C`,
     still overrides `diff.renames=false` like Git for the covered cached and
     default worktree hard-copy slices.
+  - [x] Plain checked `-C` likewise overrides `diff.renames=false` like Git
+    for the covered cached and default worktree copy slices.
   - [x] The same checked `diff.renames=copies` behavior is verified for the
     covered default worktree rename, copy, and hard-copy slices.
   - [x] Invalid `diff.renames` values fail with Git-compatible fatal output
