@@ -417,7 +417,8 @@
 - 2026-05-25 repeated pathspec-from-file NUL follow-up checked the same Git
   baseline with direct Git-vs-rit comparisons proving that the final
   `--pathspec-from-file` source still wins for NUL-delimited file input and
-  for a later NUL-delimited stdin source.
+  for a later NUL-delimited stdin source, including mixed NUL stdin followed
+  by a later NUL file selection.
 - 2026-05-15 pathspec-file argument mixing slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   `--pathspec-from-file` combined with ordinary pathspec arguments.
