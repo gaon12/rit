@@ -406,7 +406,8 @@ Completion criteria:
       before `--pathspec-from-file`, including `--pathspec-from-file=-`
       stdin input, for `add`, `restore`, and `reset`.
     - [x] `--no-pathspec-file-nul` likewise remains active like Git when it
-      appears before `--pathspec-from-file` after an earlier
+      appears before `--pathspec-from-file`, including
+      `--pathspec-from-file=-` stdin input, after an earlier
       `--pathspec-file-nul` for `add`, `restore`, and `reset`.
     - [x] Badly quoted pathspec-file entries are rejected with Git-compatible
       fatal output for `add`, `restore`, and `reset`.
