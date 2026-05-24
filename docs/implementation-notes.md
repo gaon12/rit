@@ -477,6 +477,11 @@
   read from a file inside a subdirectory are resolved relative to that
   invocation directory unless they use top magic for `add`, `restore`, and
   `reset`.
+- 2026-05-24 subdirectory NUL pathspec-file follow-up checked the same Git
+  baseline with direct Git-vs-rit comparisons showing that NUL-delimited
+  pathspec entries read from a file inside a subdirectory are likewise
+  resolved relative to that invocation directory unless they use top magic
+  for `add`, `restore`, and `reset`.
 - 2026-05-15 empty pathspec-file entry slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for leading
   empty line entries in `--pathspec-from-file`.
@@ -925,6 +930,9 @@
 - Pathspec entries read from `--pathspec-from-file` inside a subdirectory are
   likewise resolved relative to that invocation directory unless they use top
   magic, matching Git for `add`, `restore`, and `reset`.
+- NUL-delimited pathspec entries from `--pathspec-from-file` inside a
+  subdirectory follow that same relative/top-magic resolution model, matching
+  Git for `add`, `restore`, and `reset`.
 - `--pathspec-from-file` cannot be mixed with ordinary pathspec arguments,
   matching Git's fatal pre-mutation validation for `add`, `restore`, and
   `reset`.

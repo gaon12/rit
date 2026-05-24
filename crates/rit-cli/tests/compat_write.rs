@@ -933,6 +933,83 @@ fn write_commands_resolve_pathspecs_from_file_relative_to_subdirectory_like_git(
 }
 
 #[test]
+fn write_commands_resolve_nul_pathspecs_from_file_relative_to_subdirectory_like_git() {
+    for command in ["add", "restore", "reset"] {
+        let fixture = LocalWriteFixture::new(
+            &format!("{command}-subdirectory-pathspec-file-nul"),
+            LocalWriteFixtureKind::NestedTracked,
+        )
+        .expect("fixture should build");
+        fs::write(fixture.path().join("top.txt"), "top base\n")
+            .expect("top file should be written");
+        run_git(fixture.path(), ["add", "top.txt"]);
+        run_git(
+            fixture.path(),
+            ["commit", "--quiet", "-m", "add top-level file"],
+        );
+        fs::write(fixture.path().join("top.txt"), "top changed\n").expect("top file should change");
+        fs::write(
+            fixture.path().join("nested").join("tracked.txt"),
+            "changed\n",
+        )
+        .expect("tracked file should be modified");
+        fs::write(
+            fixture.path().join("nested").join("pathspecs.nul"),
+            b"tracked.txt\0:(top)top.txt\0",
+        )
+        .expect("pathspec file should be written");
+        if command == "reset" {
+            run_git(fixture.path(), ["add", "top.txt", "nested/tracked.txt"]);
+        }
+
+        let workspace = temp_path(&format!("{command}-subdirectory-pathspec-file-nul-compare"));
+        let git_repo = workspace.join("git");
+        let rit_repo = workspace.join("rit");
+        copy_directory(fixture.path(), &git_repo);
+        copy_directory(fixture.path(), &rit_repo);
+
+        let git_output = run_command(
+            &command_words(
+                "git",
+                [
+                    command,
+                    "--pathspec-from-file",
+                    "pathspecs.nul",
+                    "--pathspec-file-nul",
+                ],
+            ),
+            &git_repo.join("nested"),
+        );
+        let rit_output = run_command(
+            &command_words(
+                rit_binary(),
+                [
+                    command,
+                    "--pathspec-from-file",
+                    "pathspecs.nul",
+                    "--pathspec-file-nul",
+                ],
+            ),
+            &rit_repo.join("nested"),
+        );
+
+        assert_eq!(rit_output.0, git_output.0, "{command} stdout");
+        assert_eq!(rit_output.1, git_output.1, "{command} stderr");
+        assert_eq!(
+            run_capture("git", ["status", "--porcelain=v1"], &git_repo).0,
+            run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).0,
+            "{command} status"
+        );
+        assert_matching_file_contents(&git_repo.join("top.txt"), &rit_repo.join("top.txt"));
+        assert_matching_file_contents(
+            &git_repo.join("nested").join("tracked.txt"),
+            &rit_repo.join("nested").join("tracked.txt"),
+        );
+        let _ = fs::remove_dir_all(workspace);
+    }
+}
+
+#[test]
 fn add_pathspec_from_file_matches_git_status() {
     let fixture = LocalWriteFixture::new("add-pathspec-file", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");

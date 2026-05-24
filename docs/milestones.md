@@ -415,6 +415,9 @@ Completion criteria:
     - [x] Pathspec-file entries from a subdirectory are likewise resolved
       relative to that invocation directory unless they use top magic for
       `add`, `restore`, and `reset`.
+    - [x] NUL-delimited pathspec-file entries from a subdirectory are
+      likewise resolved relative to that invocation directory unless they use
+      top magic for `add`, `restore`, and `reset`.
     - [x] Incompatible `:(literal,glob)` pathspec magic is rejected with
       Git-compatible fatal output before `add`, `restore`, or `reset` mutate
       repository state.

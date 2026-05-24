@@ -214,6 +214,8 @@ pathspec-file selection.
 Subdirectory invocation is also covered for pathspec-file entries, including
 relative entries plus top-magic entries that still resolve from the repository
 root.
+That same subdirectory coverage also includes NUL-delimited pathspec-file
+entries.
 Line-delimited pathspec-file input also covers Git-compatible rejection of
 empty and badly quoted pathspec entries before repository mutation.
 Local write compatibility tests cover `core.ignorecase=true` for a
