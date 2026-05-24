@@ -375,11 +375,12 @@ Completion criteria:
       when no pathspec file selection is active for `add`, `restore`, and
       `reset`.
     - [x] `--no-pathspec-from-file` keeps an already selected pathspec file
-      or stdin pathspec selection active like Git for `add`, `restore`, and
-      `reset`.
+      or stdin pathspec selection, including NUL-delimited stdin, active
+      like Git for `add`, `restore`, and `reset`.
     - [x] `--no-pathspec-from-file` also leaves a later
       `--pathspec-from-file=<file>` or `--pathspec-from-file=-` stdin
-      selection active like Git for `add`, `restore`, and `reset`.
+      selection, including NUL-delimited stdin, active like Git for `add`,
+      `restore`, and `reset`.
     - [x] `--pathspec-from-file` mixed with pathspec arguments is rejected
       with Git-compatible fatal output for `add`, `restore`, and `reset`.
     - [x] Missing `--pathspec-from-file` files are rejected with
