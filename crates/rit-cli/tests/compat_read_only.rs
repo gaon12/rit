@@ -1950,6 +1950,7 @@ fn read_only_plain_mismatched_case_pathspec_stays_case_sensitive() {
             vec!["status", "--porcelain=v1", "--", "camel.txt"],
             vec!["diff", "--name-only", "--", "camel.txt"],
             vec!["ls-files", "--", "camel.txt"],
+            vec!["ls-tree", "--name-only", "HEAD", "camel.txt"],
             vec!["log", "--oneline", "--", "camel.txt"],
             vec!["show", "--no-patch", "--", "camel.txt"],
         ] {

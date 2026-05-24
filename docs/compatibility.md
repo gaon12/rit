@@ -224,8 +224,8 @@ One status compatibility test covers index stat refresh: stdout/stderr/exit
 code and final `.git/index` state must match Git after a clean tracked file's
 mtime changes.
 Additional read-only compatibility coverage checks that plain tracked
-pathspec lookup stays case-sensitive for `status`, `diff`, `ls-files`, `log`,
-and `show` on the current Windows Git baseline, regardless of
+pathspec lookup stays case-sensitive for `status`, `diff`, `ls-files`,
+`ls-tree`, `log`, and `show` on the current Windows Git baseline, regardless of
 `core.ignorecase`.
 
 `ls-tree` compatibility tests cover literal directory and file path lookup with

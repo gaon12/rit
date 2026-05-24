@@ -2536,7 +2536,7 @@
   pathspec.
 - 2026-05-22 read-only case-sensitive lookup slice checked the same Git
   baseline with direct Git-vs-rit comparisons for `status`, `diff`,
-  `ls-files`, `log`, and `show` using plain tracked pathspec `camel.txt`
+  `ls-files`, `ls-tree`, `log`, and `show` using plain tracked pathspec `camel.txt`
   against committed `Camel.txt`. Those read-only commands stayed
   case-sensitive regardless of `core.ignorecase`.
 - `rit reset` now mirrors that no-op acceptance for non-wildcard tracked
