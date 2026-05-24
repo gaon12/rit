@@ -251,6 +251,60 @@ fn diff_renames_copies_config_keeps_checked_rename_slices_matching_git() {
 }
 
 #[test]
+fn diff_renames_false_config_still_allows_explicit_hard_copy_detection() {
+    let cached_fixture = HardCopyFixture::new("cached-renames-config-false-hard-copy");
+    run_git(cached_fixture.path(), ["config", "diff.renames", "false"]);
+
+    for args in [
+        vec!["diff", "--cached", "--find-copies-harder", "--name-status"],
+        vec![
+            "diff",
+            "--cached",
+            "-C",
+            "--find-copies-harder",
+            "--name-status",
+        ],
+    ] {
+        let os_args = args.iter().map(OsString::from).collect::<Vec<_>>();
+        let (git_stdout, git_stderr) = run_capture_args("git", &os_args, cached_fixture.path());
+        let (rit_stdout, rit_stderr) =
+            run_capture_args(rit_binary(), &os_args, cached_fixture.path());
+
+        assert_eq!(
+            git_stdout, rit_stdout,
+            "cached diff.renames=false explicit hard copy {args:?}"
+        );
+        assert_eq!(
+            git_stderr, rit_stderr,
+            "cached diff.renames=false explicit hard copy {args:?}"
+        );
+    }
+
+    let worktree_fixture =
+        WorktreeIntentHardCopyFixture::new("worktree-renames-config-false-hard-copy");
+    run_git(worktree_fixture.path(), ["config", "diff.renames", "false"]);
+
+    for args in [
+        vec!["diff", "--find-copies-harder", "--name-status"],
+        vec!["diff", "-C", "--find-copies-harder", "--name-status"],
+    ] {
+        let os_args = args.iter().map(OsString::from).collect::<Vec<_>>();
+        let (git_stdout, git_stderr) = run_capture_args("git", &os_args, worktree_fixture.path());
+        let (rit_stdout, rit_stderr) =
+            run_capture_args(rit_binary(), &os_args, worktree_fixture.path());
+
+        assert_eq!(
+            git_stdout, rit_stdout,
+            "worktree diff.renames=false explicit hard copy {args:?}"
+        );
+        assert_eq!(
+            git_stderr, rit_stderr,
+            "worktree diff.renames=false explicit hard copy {args:?}"
+        );
+    }
+}
+
+#[test]
 fn diff_renames_copies_config_keeps_checked_hard_copy_slices_matching_git() {
     let cached_fixture = HardCopyFixture::new("cached-renames-config-copies-hard-copy-slice");
     run_git(cached_fixture.path(), ["config", "diff.renames", "copies"]);
