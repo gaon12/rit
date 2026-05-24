@@ -259,7 +259,7 @@ Completion criteria:
     `diff.renames=false`, and matches Git's checked `diff.renames=copies`
     behavior for the covered rename/copy slices.
   - [x] The same checked `diff.renames=copies` behavior is verified for the
-    covered default worktree copy slices.
+    covered default worktree copy and hard-copy slices.
   - [x] Invalid `diff.renames` values fail with Git-compatible fatal output
     and exit code.
   - [x] The same invalid `diff.renames` fatal behavior is checked for default

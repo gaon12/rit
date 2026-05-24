@@ -202,6 +202,54 @@ fn diff_renames_copies_config_keeps_checked_copy_slices_matching_git() {
 }
 
 #[test]
+fn diff_renames_copies_config_keeps_checked_hard_copy_slices_matching_git() {
+    let cached_fixture = HardCopyFixture::new("cached-renames-config-copies-hard-copy-slice");
+    run_git(cached_fixture.path(), ["config", "diff.renames", "copies"]);
+
+    for args in [
+        vec!["diff", "--cached", "--name-status"],
+        vec!["diff", "--cached"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            cached_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached diff.renames=copies hard copy slice {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+
+    let worktree_fixture =
+        WorktreeIntentHardCopyFixture::new("worktree-renames-config-copies-hard-copy-slice");
+    run_git(
+        worktree_fixture.path(),
+        ["config", "diff.renames", "copies"],
+    );
+
+    for args in [vec!["diff", "--name-status"], vec!["diff"]] {
+        let os_args = args.iter().map(OsString::from).collect::<Vec<_>>();
+        let (git_stdout, git_stderr) = run_capture_args("git", &os_args, worktree_fixture.path());
+        let (rit_stdout, rit_stderr) =
+            run_capture_args(rit_binary(), &os_args, worktree_fixture.path());
+
+        assert_eq!(
+            git_stdout, rit_stdout,
+            "worktree diff.renames=copies hard copy slice {args:?}"
+        );
+        assert_eq!(
+            git_stderr, rit_stderr,
+            "worktree diff.renames=copies hard copy slice {args:?}"
+        );
+    }
+}
+
+#[test]
 fn diff_bad_renames_config_error_matches_git() {
     let fixture = ExactRenameFixture::new("bad-renames-config");
     run_git(fixture.path(), ["config", "diff.renames", "bad"]);
