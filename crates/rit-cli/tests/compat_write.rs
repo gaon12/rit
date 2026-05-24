@@ -1123,6 +1123,50 @@ fn add_no_pathspec_file_nul_reverts_to_text_mode_like_git() {
 }
 
 #[test]
+fn add_no_pathspec_file_nul_option_order_matches_git_status() {
+    let fixture = LocalWriteFixture::new(
+        "add-no-pathspec-file-nul-option-order",
+        LocalWriteFixtureKind::NestedTracked,
+    )
+    .expect("fixture should build");
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "changed\n",
+    )
+    .expect("tracked file should be modified");
+    fs::write(fixture.path().join("pathspecs.txt"), "nested/tracked.txt\n")
+        .expect("pathspec file should be written");
+
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words(
+            "git",
+            [
+                "add",
+                "--pathspec-file-nul",
+                "--no-pathspec-file-nul",
+                "--pathspec-from-file",
+                "pathspecs.txt",
+            ],
+        ),
+        command_words(
+            rit_binary(),
+            [
+                "add",
+                "--pathspec-file-nul",
+                "--no-pathspec-file-nul",
+                "--pathspec-from-file",
+                "pathspecs.txt",
+            ],
+        ),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
+}
+
+#[test]
 fn add_quoted_pathspec_from_file_matches_git_status() {
     let fixture = LocalWriteFixture::new(
         "add-quoted-pathspec-file",
@@ -3149,6 +3193,56 @@ fn restore_no_pathspec_file_nul_reverts_to_text_mode_like_git() {
 }
 
 #[test]
+fn restore_no_pathspec_file_nul_option_order_matches_git_status_and_files() {
+    let fixture = LocalWriteFixture::new(
+        "restore-no-pathspec-file-nul-option-order",
+        LocalWriteFixtureKind::NestedTracked,
+    )
+    .expect("fixture should build");
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "changed\n",
+    )
+    .expect("tracked file should be modified");
+    fs::write(fixture.path().join("pathspecs.txt"), "nested/tracked.txt\n")
+        .expect("pathspec file should be written");
+
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words(
+            "git",
+            [
+                "restore",
+                "--pathspec-file-nul",
+                "--no-pathspec-file-nul",
+                "--pathspec-from-file",
+                "pathspecs.txt",
+            ],
+        ),
+        command_words(
+            rit_binary(),
+            [
+                "restore",
+                "--pathspec-file-nul",
+                "--no-pathspec-file-nul",
+                "--pathspec-from-file",
+                "pathspecs.txt",
+            ],
+        ),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
+    assert_eq!(
+        fs::read_to_string(outcome.git_repo.join("nested").join("tracked.txt"))
+            .expect("git file should read"),
+        fs::read_to_string(outcome.rit_repo.join("nested").join("tracked.txt"))
+            .expect("rit file should read")
+    );
+}
+
+#[test]
 fn reset_pathspec_from_file_matches_git_status() {
     let fixture =
         LocalWriteFixture::new("reset-pathspec-file", LocalWriteFixtureKind::NestedTracked)
@@ -3268,6 +3362,51 @@ fn reset_no_pathspec_file_nul_reverts_to_text_mode_like_git() {
                 "--pathspec-from-file=pathspecs.txt",
                 "--pathspec-file-nul",
                 "--no-pathspec-file-nul",
+            ],
+        ),
+    );
+
+    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+    assert_eq!(outcome.git_status, outcome.rit_status);
+}
+
+#[test]
+fn reset_no_pathspec_file_nul_option_order_matches_git_status() {
+    let fixture = LocalWriteFixture::new(
+        "reset-no-pathspec-file-nul-option-order",
+        LocalWriteFixtureKind::NestedTracked,
+    )
+    .expect("fixture should build");
+    fs::write(
+        fixture.path().join("nested").join("tracked.txt"),
+        "changed\n",
+    )
+    .expect("tracked file should be modified");
+    fs::write(fixture.path().join("pathspecs.txt"), "nested/tracked.txt\n")
+        .expect("pathspec file should be written");
+    run_git(fixture.path(), ["add", "nested"]);
+
+    let outcome = compare_after_command(
+        fixture.path(),
+        command_words(
+            "git",
+            [
+                "reset",
+                "--pathspec-file-nul",
+                "--no-pathspec-file-nul",
+                "--pathspec-from-file",
+                "pathspecs.txt",
+            ],
+        ),
+        command_words(
+            rit_binary(),
+            [
+                "reset",
+                "--pathspec-file-nul",
+                "--no-pathspec-file-nul",
+                "--pathspec-from-file",
+                "pathspecs.txt",
             ],
         ),
     );

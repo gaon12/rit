@@ -442,6 +442,10 @@
   `git restore -h`, and `git reset -h` plus direct Git-vs-rit comparisons
   showing that `--pathspec-file-nul` still applies when it appears before
   `--pathspec-from-file`.
+- 2026-05-24 no-pathspec-file-nul option-order slice checked `git add -h`,
+  `git restore -h`, and `git reset -h` plus direct Git-vs-rit comparisons
+  showing that `--no-pathspec-file-nul` still keeps text mode when it appears
+  before `--pathspec-from-file` after an earlier `--pathspec-file-nul`.
 - 2026-05-22 write-command glob special-form slice checked `git add -h`,
   `git restore -h`, and `git reset -h` plus direct Git-vs-rit comparisons for
   the `:(glob)**/*.txt` and trailing `:(glob)nested/**` forms.
@@ -892,6 +896,9 @@
 - `--pathspec-file-nul` is also honored when it appears before
   `--pathspec-from-file`, matching Git's option-order behavior for `add`,
   `restore`, and `reset`.
+- `--no-pathspec-file-nul` likewise still restores text mode when it appears
+  before `--pathspec-from-file` after an earlier `--pathspec-file-nul`,
+  matching Git's option-order behavior for `add`, `restore`, and `reset`.
 - Repeated `--pathspec-from-file` options use the last file, matching Git for
   `add`, `restore`, and `reset`.
 - `--no-pathspec-from-file` is accepted as a Git-compatible no-op when no
