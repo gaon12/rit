@@ -521,6 +521,10 @@ Completion criteria:
     lookup also stays case-sensitive regardless of `core.ignorecase` for
     `status`, `diff`, `ls-files`, `ls-tree`, `log`, `show`, `add`,
     `reset`, and `restore`.
+  - [x] On the current Windows Git baseline, literal tracked pathspec
+    `:(literal)camel.txt` also keeps read-only lookup case-sensitive while
+    `add`, `reset`, and `restore` mirror Git's `core.ignorecase` /
+    tracked-path behavior.
   - [ ] Broader platform/config parity for case-sensitive path lookup.
 
 Completion criteria:

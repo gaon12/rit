@@ -264,6 +264,11 @@ pathspec `camel*`: read-only lookup stays case-sensitive for `status`,
 `diff`, `ls-files`, `ls-tree`, `log`, and `show`, while `add` and `restore`
 reject the mismatched-case wildcard and `reset` keeps Git's tracked-path
 no-op behavior regardless of `core.ignorecase`.
+The same case-sensitive read-only lookup also now has direct Git-vs-rit
+coverage for literal magic pathspec `:(literal)camel.txt`; on that Windows
+baseline `add` still follows `core.ignorecase` for the literal pathspec,
+`reset` keeps the tracked-path no-op behavior, and `restore` rejects the
+mismatched-case literal pathspec regardless of `core.ignorecase`.
 
 `ls-tree` compatibility tests cover literal directory and file path lookup with
 default, `--name-only`, and `--object-only` output.
