@@ -85,7 +85,8 @@ The current codebase implements an early local Git subset:
   after it. Plain checked `-C` copy detection follows Git's option order there: a later
   `--no-renames` disables it, while a later `-C` re-enables it. Checked
   `diff.renames=copies` config also matches Git on the covered cached
-  copy and hard-copy slices rather than forcing extra copy promotion.
+  rename, copy, and hard-copy slices rather than forcing extra copy
+  promotion.
 - Default worktree diff already performs checked exact rename detection for
   the Git-compatible intent-to-add slice, where added worktree paths are
   already represented in the index by `git add -N`. `diff.renames=false`
@@ -99,8 +100,8 @@ The current codebase implements an early local Git subset:
   Plain checked `-C` copy detection likewise follows Git's option order
   there: a later `--no-renames` disables it, while a later `-C`
   re-enables it. Checked `diff.renames=copies` config likewise matches Git on
-  the covered default worktree copy and hard-copy slices instead of forcing
-  extra copy promotion.
+  the covered default worktree rename, copy, and hard-copy slices instead of
+  forcing extra copy promotion.
   `--find-copies-harder` can use unchanged index entries as copy sources in
   that same worktree intent-to-add slice. Plain untracked worktree renames and
   copies stay outside default diff scope like Git, so they remain a delete or
