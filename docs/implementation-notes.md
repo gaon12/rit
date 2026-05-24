@@ -409,6 +409,11 @@
 - 2026-05-15 repeated pathspec-from-file slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons proving the
   last `--pathspec-from-file` value is used.
+- 2026-05-25 repeated pathspec-from-file stdin follow-up checked the same Git
+  baseline with direct Git-vs-rit comparisons proving that the final
+  `--pathspec-from-file` source still wins when a later stdin source
+  overrides an earlier file or when a later file overrides an earlier stdin
+  source.
 - 2026-05-15 pathspec-file argument mixing slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   `--pathspec-from-file` combined with ordinary pathspec arguments.
@@ -950,8 +955,8 @@
   before `--pathspec-from-file`, including `--pathspec-from-file=-`, after an
   earlier `--pathspec-file-nul`, matching Git's option-order behavior for
   `add`, `restore`, and `reset`.
-- Repeated `--pathspec-from-file` options use the last file, matching Git for
-  `add`, `restore`, and `reset`.
+- Repeated `--pathspec-from-file` options use the last selected file or stdin
+  source, matching Git for `add`, `restore`, and `reset`.
 - `--no-pathspec-from-file` is accepted as a Git-compatible no-op when no
   pathspec file selection is active for `add`, `restore`, and `reset`; Git
   still rejects later ordinary pathspec arguments if an earlier
