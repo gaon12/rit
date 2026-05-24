@@ -233,6 +233,20 @@ fn diff_cached_hard_copy_no_renames_option_order_matches_git() {
         vec![
             "diff",
             "--cached",
+            "--find-copies-harder",
+            "--no-renames",
+            "--name-status",
+        ],
+        vec![
+            "diff",
+            "--cached",
+            "--no-renames",
+            "--find-copies-harder",
+            "--name-status",
+        ],
+        vec![
+            "diff",
+            "--cached",
             "-C",
             "--find-copies-harder",
             "--no-renames",
@@ -246,6 +260,8 @@ fn diff_cached_hard_copy_no_renames_option_order_matches_git() {
             "--find-copies-harder",
             "--name-status",
         ],
+        vec!["diff", "--cached", "--find-copies-harder", "--no-renames"],
+        vec!["diff", "--cached", "--no-renames", "--find-copies-harder"],
         vec![
             "diff",
             "--cached",
@@ -365,6 +381,18 @@ fn diff_worktree_hard_copy_no_renames_option_order_matches_git() {
     for args in [
         vec![
             "diff",
+            "--find-copies-harder",
+            "--no-renames",
+            "--name-status",
+        ],
+        vec![
+            "diff",
+            "--no-renames",
+            "--find-copies-harder",
+            "--name-status",
+        ],
+        vec![
+            "diff",
             "-C",
             "--find-copies-harder",
             "--no-renames",
@@ -377,6 +405,8 @@ fn diff_worktree_hard_copy_no_renames_option_order_matches_git() {
             "--find-copies-harder",
             "--name-status",
         ],
+        vec!["diff", "--find-copies-harder", "--no-renames"],
+        vec!["diff", "--no-renames", "--find-copies-harder"],
         vec!["diff", "-C", "--find-copies-harder", "--no-renames"],
         vec!["diff", "--no-renames", "-C", "--find-copies-harder"],
     ] {
