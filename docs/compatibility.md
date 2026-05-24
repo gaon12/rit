@@ -208,6 +208,9 @@ Pathspec-file input is covered for `add`, `restore`, and `reset`, including
 stdin and NUL-separated input, including the Git-compatible option order where
 `--pathspec-file-nul` appears before `--pathspec-from-file` and where a later
 `--no-pathspec-file-nul` still restores text mode before `--pathspec-from-file`.
+`--no-pathspec-from-file` is likewise covered as both a no-op before later
+`--pathspec-from-file=<file>` selection and as a no-op after an already active
+pathspec-file selection.
 Line-delimited pathspec-file input also covers Git-compatible rejection of
 empty and badly quoted pathspec entries before repository mutation.
 Local write compatibility tests cover `core.ignorecase=true` for a
