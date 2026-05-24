@@ -377,6 +377,10 @@
   baseline with direct Git-vs-rit comparisons showing that plain checked `-C`
   also overrides `diff.renames=false` on the covered cached/worktree copy
   slices.
+- 2026-05-24 diff.renames=copies explicit no-renames follow-up checked the
+  same Git baseline with direct Git-vs-rit comparisons showing that explicit
+  `--no-renames` still overrides the checked `diff.renames=copies` default on
+  the covered cached/worktree copy and hard-copy slices.
 - 2026-05-23 worktree diff.renames fatal slice checked Git 2.54.0.windows.1
   with `git --version`, `git diff -h`, and direct Git-vs-rit comparisons for
   default worktree `diff --name-status` and patch forms when `diff.renames`
@@ -1466,7 +1470,9 @@
   a later `--no-renames` disables it, while a later `-C` re-enables it.
   Checked `diff.renames=copies` config also matches Git on the covered
   cached/worktree rename, copy, and hard-copy slices without forcing extra
-  copy promotion. Checked explicit `--find-copies-harder`, with or without
+  copy promotion, and explicit `--no-renames` still overrides that checked
+  `diff.renames=copies` default on the covered cached/worktree copy and
+  hard-copy slices. Checked explicit `--find-copies-harder`, with or without
   `-C`, also overrides `diff.renames=false` on the covered cached/worktree
   hard-copy slices, and plain checked `-C` likewise overrides
   `diff.renames=false` on the covered cached/worktree copy slices.

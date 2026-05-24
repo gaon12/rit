@@ -421,6 +421,112 @@ fn diff_bad_renames_config_error_matches_git() {
 }
 
 #[test]
+fn diff_renames_copies_config_yields_to_explicit_no_renames() {
+    let cached_copy_fixture = CopyFixture::new("cached-renames-config-copies-no-renames-copy");
+    run_git(
+        cached_copy_fixture.path(),
+        ["config", "diff.renames", "copies"],
+    );
+
+    for args in [
+        vec!["diff", "--cached", "--no-renames", "--name-status"],
+        vec!["diff", "--cached", "--no-renames"],
+    ] {
+        let mut options = CompareOptions::new(
+            cached_copy_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached diff.renames=copies explicit no-renames copy {args:?}\n{}",
+            outcome.report()
+        );
+    }
+
+    let worktree_copy_fixture =
+        WorktreeIntentCopyFixture::new("worktree-renames-config-copies-no-renames-copy");
+    run_git(
+        worktree_copy_fixture.path(),
+        ["config", "diff.renames", "copies"],
+    );
+
+    for args in [
+        vec!["diff", "--no-renames", "--name-status"],
+        vec!["diff", "--no-renames"],
+    ] {
+        let mut options = CompareOptions::new(
+            worktree_copy_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree diff.renames=copies explicit no-renames copy {args:?}\n{}",
+            outcome.report()
+        );
+    }
+
+    let cached_hard_copy_fixture =
+        HardCopyFixture::new("cached-renames-config-copies-no-renames-hard-copy");
+    run_git(
+        cached_hard_copy_fixture.path(),
+        ["config", "diff.renames", "copies"],
+    );
+
+    for args in [
+        vec!["diff", "--cached", "--no-renames", "--name-status"],
+        vec!["diff", "--cached", "--no-renames"],
+    ] {
+        let mut options = CompareOptions::new(
+            cached_hard_copy_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached diff.renames=copies explicit no-renames hard copy {args:?}\n{}",
+            outcome.report()
+        );
+    }
+
+    let worktree_hard_copy_fixture =
+        WorktreeIntentHardCopyFixture::new("worktree-renames-config-copies-no-renames-hard-copy");
+    run_git(
+        worktree_hard_copy_fixture.path(),
+        ["config", "diff.renames", "copies"],
+    );
+
+    for args in [
+        vec!["diff", "--no-renames", "--name-status"],
+        vec!["diff", "--no-renames"],
+    ] {
+        let mut options = CompareOptions::new(
+            worktree_hard_copy_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree diff.renames=copies explicit no-renames hard copy {args:?}\n{}",
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_worktree_bad_renames_config_error_matches_git() {
     let fixture = WorktreeIntentRenameFixture::new("worktree-bad-renames-config");
     run_git(fixture.path(), ["config", "diff.renames", "bad"]);

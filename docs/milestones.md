@@ -265,6 +265,9 @@ Completion criteria:
     for the covered cached and default worktree copy slices.
   - [x] The same checked `diff.renames=copies` behavior is verified for the
     covered default worktree rename, copy, and hard-copy slices.
+  - [x] Explicit `--no-renames` also overrides checked `diff.renames=copies`
+    like Git for the covered cached and default worktree copy and hard-copy
+    slices.
   - [x] Invalid `diff.renames` values fail with Git-compatible fatal output
     and exit code.
   - [x] The same invalid `diff.renames` fatal behavior is checked for default

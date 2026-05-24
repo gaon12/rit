@@ -86,7 +86,10 @@ The current codebase implements an early local Git subset:
   `--no-renames` disables it, while a later `-C` re-enables it. Checked
   `diff.renames=copies` config also matches Git on the covered cached
   rename, copy, and hard-copy slices rather than forcing extra copy
-  promotion. Checked explicit `--find-copies-harder`, with or without `-C`,
+  promotion, and explicit `--no-renames` still overrides that checked
+  `diff.renames=copies` default on the covered cached copy and hard-copy
+  slices.
+  Checked explicit `--find-copies-harder`, with or without `-C`,
   also overrides `diff.renames=false` like Git on the covered cached
   hard-copy slices, and plain checked `-C` does the same on the covered
   cached copy slices.
@@ -104,7 +107,9 @@ The current codebase implements an early local Git subset:
   there: a later `--no-renames` disables it, while a later `-C`
   re-enables it. Checked `diff.renames=copies` config likewise matches Git on
   the covered default worktree rename, copy, and hard-copy slices instead of
-  forcing extra copy promotion. Checked explicit `--find-copies-harder`, with
+  forcing extra copy promotion, and explicit `--no-renames` still overrides
+  that checked `diff.renames=copies` default on the covered default worktree
+  copy and hard-copy slices. Checked explicit `--find-copies-harder`, with
   or without `-C`, also overrides `diff.renames=false` like Git on the
   covered default worktree hard-copy slices, and plain checked `-C` does the
   same on the covered default worktree copy slices.
