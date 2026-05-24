@@ -412,6 +412,9 @@ Completion criteria:
     - [x] Relative pathspecs are resolved from the command invocation
       directory for `add`, `restore`, and `reset`, while top magic remains
       repository-root relative.
+    - [x] Pathspec-file entries from a subdirectory are likewise resolved
+      relative to that invocation directory unless they use top magic for
+      `add`, `restore`, and `reset`.
     - [x] Incompatible `:(literal,glob)` pathspec magic is rejected with
       Git-compatible fatal output before `add`, `restore`, or `reset` mutate
       repository state.
