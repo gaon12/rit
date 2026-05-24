@@ -269,6 +269,11 @@ coverage for literal magic pathspec `:(literal)camel.txt`; on that Windows
 baseline `add` still follows `core.ignorecase` for the literal pathspec,
 `reset` keeps the tracked-path no-op behavior, and `restore` rejects the
 mismatched-case literal pathspec regardless of `core.ignorecase`.
+The same current baseline is now also checked for repo-root magic pathspec
+`:(top)camel.txt`: read-only lookup stays case-sensitive, `add` still follows
+`core.ignorecase`, `reset` keeps the tracked-path no-op behavior, and
+`restore` rejects the mismatched-case repo-root pathspec regardless of
+`core.ignorecase`.
 
 `ls-tree` compatibility tests cover literal directory and file path lookup with
 default, `--name-only`, and `--object-only` output.

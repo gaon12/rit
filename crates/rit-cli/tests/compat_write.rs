@@ -3851,6 +3851,101 @@ fn restore_rejects_mismatched_case_literal_pathspec_like_git() {
 }
 
 #[test]
+fn add_matches_git_for_mismatched_case_top_magic_pathspec() {
+    for core_ignorecase in [false, true] {
+        let fixture = case_pathspec_fixture(
+            &format!("add-core-ignorecase-top-magic-{core_ignorecase}"),
+            core_ignorecase,
+            false,
+        );
+        let workspace = temp_path(&format!(
+            "add-core-ignorecase-top-magic-compare-{core_ignorecase}"
+        ));
+        let git_repo = workspace.join("git");
+        let rit_repo = workspace.join("rit");
+        copy_directory(&fixture, &git_repo);
+        copy_directory(&fixture, &rit_repo);
+
+        let git =
+            run_command_allow_failure(&command_words("git", ["add", ":(top)camel.txt"]), &git_repo);
+        let rit = run_command_allow_failure(
+            &command_words(rit_binary(), ["add", ":(top)camel.txt"]),
+            &rit_repo,
+        );
+        let git_status = run_capture("git", ["status", "--porcelain=v1"], &git_repo).0;
+        let rit_status = run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).0;
+
+        assert_eq!(git.exit_code, rit.exit_code);
+        assert_eq!(git.stdout, rit.stdout);
+        assert_eq!(git.stderr, rit.stderr);
+        assert_eq!(git_status, rit_status);
+        let _ = fs::remove_dir_all(fixture);
+        let _ = fs::remove_dir_all(workspace);
+    }
+}
+
+#[test]
+fn reset_keeps_git_windows_baseline_no_op_for_mismatched_case_top_magic() {
+    for core_ignorecase in [false, true] {
+        let fixture = case_pathspec_fixture(
+            &format!("reset-core-ignorecase-top-magic-{core_ignorecase}"),
+            core_ignorecase,
+            true,
+        );
+        let outcome = compare_after_command(
+            &fixture,
+            command_words("git", ["reset", ":(top)camel.txt"]),
+            command_words(rit_binary(), ["reset", ":(top)camel.txt"]),
+        );
+
+        assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+        assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+        assert_eq!(outcome.git_status, outcome.rit_status);
+        let _ = fs::remove_dir_all(fixture);
+    }
+}
+
+#[test]
+fn restore_rejects_mismatched_case_top_magic_pathspec_like_git() {
+    for core_ignorecase in [false, true] {
+        let fixture = case_pathspec_fixture(
+            &format!("restore-core-ignorecase-top-magic-{core_ignorecase}"),
+            core_ignorecase,
+            false,
+        );
+        let workspace = temp_path(&format!(
+            "restore-core-ignorecase-top-magic-compare-{core_ignorecase}"
+        ));
+        let git_repo = workspace.join("git");
+        let rit_repo = workspace.join("rit");
+        copy_directory(&fixture, &git_repo);
+        copy_directory(&fixture, &rit_repo);
+
+        let git = run_command_allow_failure(
+            &command_words("git", ["restore", ":(top)camel.txt"]),
+            &git_repo,
+        );
+        let rit = run_command_allow_failure(
+            &command_words(rit_binary(), ["restore", ":(top)camel.txt"]),
+            &rit_repo,
+        );
+        let git_status = run_capture("git", ["status", "--porcelain=v1"], &git_repo).0;
+        let rit_status = run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).0;
+
+        assert_eq!(git.exit_code, rit.exit_code);
+        assert_eq!(git.stdout, rit.stdout);
+        assert_eq!(git.stderr, rit.stderr);
+        assert_eq!(git_status, rit_status);
+        assert_eq!(
+            fs::read_to_string(git_repo.join("Camel.txt")).expect("git file should read"),
+            fs::read_to_string(rit_repo.join("Camel.txt")).expect("rit file should read")
+        );
+        let _ = fs::remove_dir_all(fixture);
+        let _ = fs::remove_dir_all(workspace);
+    }
+}
+
+#[test]
 fn add_chmod_executable_matches_git_status_and_tree_mode() {
     let fixture = LocalWriteFixture::new("add-chmod", LocalWriteFixtureKind::NestedTracked)
         .expect("fixture should build");

@@ -2672,6 +2672,14 @@
   case-sensitive regardless of `core.ignorecase`; `add` still honored
   `core.ignorecase`, `reset` kept the tracked-path no-op behavior, and
   `restore` rejected the mismatched-case literal pathspec.
+- 2026-05-25 repo-root magic case-sensitive lookup slice checked the same Git
+  baseline with direct Git-vs-rit comparisons for read-only `status`, `diff`,
+  `ls-files`, `ls-tree`, `log`, and `show`, plus write `add`, `reset`, and
+  `restore`, using repo-root tracked pathspec `:(top)camel.txt` against
+  committed `Camel.txt`. In that baseline, read-only repo-root lookup stayed
+  case-sensitive regardless of `core.ignorecase`; `add` still honored
+  `core.ignorecase`, `reset` kept the tracked-path no-op behavior, and
+  `restore` rejected the mismatched-case repo-root pathspec.
 - `rit reset` now mirrors that no-op acceptance for non-wildcard tracked
   pathspecs with mismatched case. More advanced pathspec magic parity remains
   tracked separately in M4/M6.

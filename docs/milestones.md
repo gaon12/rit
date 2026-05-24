@@ -525,6 +525,10 @@ Completion criteria:
     `:(literal)camel.txt` also keeps read-only lookup case-sensitive while
     `add`, `reset`, and `restore` mirror Git's `core.ignorecase` /
     tracked-path behavior.
+  - [x] On the current Windows Git baseline, repo-root tracked pathspec
+    `:(top)camel.txt` also keeps read-only lookup case-sensitive while
+    `add`, `reset`, and `restore` mirror Git's `core.ignorecase` /
+    tracked-path behavior.
   - [ ] Broader platform/config parity for case-sensitive path lookup.
 
 Completion criteria:
