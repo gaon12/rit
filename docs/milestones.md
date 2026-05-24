@@ -339,6 +339,8 @@ Completion criteria:
     - [x] Git-vs-rit write-command coverage explicitly includes the special
       `:(glob)**/*.txt` and trailing `:(glob)nested/**` forms for `add`,
       `restore`, and `reset`.
+    - [x] Git-vs-rit write-command coverage also includes component-local
+      non-recursive `:(glob)**base.txt` for `add`, `restore`, and `reset`.
     - [x] `--pathspec-from-file` and `--pathspec-file-nul` for `add`,
       `restore`, and `reset`.
     - [x] `--pathspec-from-file=-` stdin pathspecs for `add`, `restore`, and

@@ -196,6 +196,9 @@ filters and simple `*`, `?`, and bracket-class wildcard filters for
 cached/staged output, and first-parent `log` plus `show --no-patch`.
 Positive `:(literal)`, `:(glob)`, `:(top)`, and `:/` pathspec magic is
 covered for status, diff, ls-files, log, show, add, restore, and reset.
+Write-command glob coverage explicitly includes Git's special
+`:(glob)**/*.txt` and trailing `:(glob)nested/**` forms plus the
+component-local non-recursive `:(glob)**base.txt` form.
 `:(icase)` is covered for status, diff, add, restore, reset, log, and show.
 Exclude `:!`, `:^`, and `:(exclude)` is covered for status, diff, ls-files,
 add, restore, reset, log, and show. Attr magic is

@@ -778,6 +778,54 @@ fn write_glob_magic_special_double_star_forms_match_git_state() {
 }
 
 #[test]
+fn write_glob_magic_component_local_base_matches_git_state() {
+    for command in ["add", "restore", "reset"] {
+        let fixture = build_write_glob_component_local_fixture(&format!("{command}-glob-base"));
+        if command == "reset" {
+            run_git(
+                fixture.path(),
+                [
+                    "add",
+                    "topbase.txt",
+                    "nested/base.txt",
+                    "nested/deep/innerbase.txt",
+                ],
+            );
+        }
+
+        let outcome = compare_after_command(
+            fixture.path(),
+            command_words("git", [command, ":(glob)**base.txt"]),
+            command_words(rit_binary(), [command, ":(glob)**base.txt"]),
+        );
+
+        assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+        assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+        assert_eq!(outcome.git_status, outcome.rit_status);
+        assert_matching_file_contents(
+            &outcome.git_repo.join("topbase.txt"),
+            &outcome.rit_repo.join("topbase.txt"),
+        );
+        assert_matching_file_contents(
+            &outcome.git_repo.join("nested").join("base.txt"),
+            &outcome.rit_repo.join("nested").join("base.txt"),
+        );
+        assert_matching_file_contents(
+            &outcome
+                .git_repo
+                .join("nested")
+                .join("deep")
+                .join("innerbase.txt"),
+            &outcome
+                .rit_repo
+                .join("nested")
+                .join("deep")
+                .join("innerbase.txt"),
+        );
+    }
+}
+
+#[test]
 fn write_commands_resolve_pathspecs_relative_to_subdirectory_like_git() {
     for command in ["add", "restore", "reset"] {
         let fixture = LocalWriteFixture::new(
@@ -5935,6 +5983,60 @@ fn build_write_glob_special_form_fixture(name: &str) -> LocalWriteFixture {
         "skip changed\n",
     )
     .expect("markdown file should change");
+    fixture
+}
+
+fn build_write_glob_component_local_fixture(name: &str) -> LocalWriteFixture {
+    let fixture = LocalWriteFixture::new(name, LocalWriteFixtureKind::NestedTracked)
+        .expect("fixture should build");
+    fs::write(fixture.path().join("topbase.txt"), "top base\n")
+        .expect("top base file should be written");
+    fs::create_dir_all(fixture.path().join("nested").join("deep"))
+        .expect("deep directory should be created");
+    fs::write(
+        fixture.path().join("nested").join("base.txt"),
+        "nested base\n",
+    )
+    .expect("nested base file should be written");
+    fs::write(
+        fixture
+            .path()
+            .join("nested")
+            .join("deep")
+            .join("innerbase.txt"),
+        "inner base\n",
+    )
+    .expect("deep base file should be written");
+    run_git(
+        fixture.path(),
+        [
+            "add",
+            "topbase.txt",
+            "nested/base.txt",
+            "nested/deep/innerbase.txt",
+        ],
+    );
+    run_git(
+        fixture.path(),
+        ["commit", "--quiet", "-m", "add component-local base files"],
+    );
+
+    fs::write(fixture.path().join("topbase.txt"), "top changed\n")
+        .expect("top base file should change");
+    fs::write(
+        fixture.path().join("nested").join("base.txt"),
+        "nested changed\n",
+    )
+    .expect("nested base file should change");
+    fs::write(
+        fixture
+            .path()
+            .join("nested")
+            .join("deep")
+            .join("innerbase.txt"),
+        "inner changed\n",
+    )
+    .expect("deep base file should change");
     fixture
 }
 

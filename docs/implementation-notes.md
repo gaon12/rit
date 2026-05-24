@@ -449,6 +449,10 @@
 - 2026-05-22 write-command glob special-form slice checked `git add -h`,
   `git restore -h`, and `git reset -h` plus direct Git-vs-rit comparisons for
   the `:(glob)**/*.txt` and trailing `:(glob)nested/**` forms.
+- 2026-05-24 write-command glob component-local follow-up checked the same
+  Git baseline with direct Git-vs-rit comparisons for `:(glob)**base.txt`,
+  confirming that this non-special `**` form stays within one path component
+  for `add`, `restore`, and `reset`.
 - 2026-05-17 deprecated reset stdin pathspec slice checked `git reset -h`
   and direct Git comparisons for `git reset --stdin` and
   `git reset --stdin -z`.
