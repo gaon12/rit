@@ -403,7 +403,8 @@ Completion criteria:
       Git-compatible fatal output for `add`, `restore`, and `reset`, while a
       trailing NUL terminator remains allowed.
     - [x] `--pathspec-file-nul` remains active like Git even when it appears
-      before `--pathspec-from-file` for `add`, `restore`, and `reset`.
+      before `--pathspec-from-file`, including `--pathspec-from-file=-`
+      stdin input, for `add`, `restore`, and `reset`.
     - [x] `--no-pathspec-file-nul` likewise remains active like Git when it
       appears before `--pathspec-from-file` after an earlier
       `--pathspec-file-nul` for `add`, `restore`, and `reset`.
