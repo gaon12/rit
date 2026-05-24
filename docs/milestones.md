@@ -256,8 +256,10 @@ Completion criteria:
   - [x] The same `--no-renames` / later `-M` option-order behavior is checked
     for default worktree exact rename detection.
   - [x] Cached diff enables rename detection by default, honors
-    `diff.renames=false`, and treats `diff.renames=copies` as default copy
-    detection.
+    `diff.renames=false`, and matches Git's checked `diff.renames=copies`
+    behavior for the covered rename/copy slices.
+  - [x] The same checked `diff.renames=copies` behavior is verified for the
+    covered default worktree copy slices.
   - [x] Invalid `diff.renames` values fail with Git-compatible fatal output
     and exit code.
   - [x] The same invalid `diff.renames` fatal behavior is checked for default

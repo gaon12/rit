@@ -153,6 +153,55 @@ fn diff_renames_config_matches_git() {
 }
 
 #[test]
+fn diff_renames_copies_config_keeps_checked_copy_slices_matching_git() {
+    let cached_fixture = CopyFixture::new("cached-renames-config-copies-copy-slice");
+    run_git(cached_fixture.path(), ["config", "diff.renames", "copies"]);
+
+    for args in [
+        vec!["diff", "--cached", "--name-status"],
+        vec!["diff", "--cached"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            cached_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached diff.renames=copies copy slice {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+
+    let worktree_fixture =
+        WorktreeIntentCopyFixture::new("worktree-renames-config-copies-copy-slice");
+    run_git(
+        worktree_fixture.path(),
+        ["config", "diff.renames", "copies"],
+    );
+
+    for args in [vec!["diff", "--name-status"], vec!["diff"]] {
+        let mut options = CompareOptions::new(
+            worktree_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree diff.renames=copies copy slice {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_bad_renames_config_error_matches_git() {
     let fixture = ExactRenameFixture::new("bad-renames-config");
     run_git(fixture.path(), ["config", "diff.renames", "bad"]);
