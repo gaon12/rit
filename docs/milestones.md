@@ -397,6 +397,8 @@ Completion criteria:
     - [x] Empty NUL-delimited pathspec-file entries are rejected with
       Git-compatible fatal output for `add`, `restore`, and `reset`, while a
       trailing NUL terminator remains allowed.
+    - [x] `--pathspec-file-nul` remains active like Git even when it appears
+      before `--pathspec-from-file` for `add`, `restore`, and `reset`.
     - [x] Badly quoted pathspec-file entries are rejected with Git-compatible
       fatal output for `add`, `restore`, and `reset`.
     - [x] Relative pathspecs are resolved from the command invocation
