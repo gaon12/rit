@@ -259,6 +259,11 @@ Additional read-only compatibility coverage checks that plain tracked
 pathspec lookup stays case-sensitive for `status`, `diff`, `ls-files`,
 `ls-tree`, `log`, and `show` on the current Windows Git baseline, regardless of
 `core.ignorecase`.
+That same Windows baseline is also checked for simple wildcard tracked
+pathspec `camel*`: read-only lookup stays case-sensitive for `status`,
+`diff`, `ls-files`, `ls-tree`, `log`, and `show`, while `add` and `restore`
+reject the mismatched-case wildcard and `reset` keeps Git's tracked-path
+no-op behavior regardless of `core.ignorecase`.
 
 `ls-tree` compatibility tests cover literal directory and file path lookup with
 default, `--name-only`, and `--object-only` output.

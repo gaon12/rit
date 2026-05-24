@@ -517,6 +517,10 @@ Completion criteria:
   - [x] On the current Windows Git baseline, plain read-only tracked path
     lookup remains case-sensitive regardless of `core.ignorecase` for
     `status`, `diff`, `ls-files`, `ls-tree`, `log`, and `show`.
+  - [x] On the current Windows Git baseline, simple wildcard tracked path
+    lookup also stays case-sensitive regardless of `core.ignorecase` for
+    `status`, `diff`, `ls-files`, `ls-tree`, `log`, `show`, `add`,
+    `reset`, and `restore`.
   - [ ] Broader platform/config parity for case-sensitive path lookup.
 
 Completion criteria:

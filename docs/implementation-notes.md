@@ -2656,8 +2656,16 @@
   `ls-files`, `ls-tree`, `log`, and `show` using plain tracked pathspec `camel.txt`
   against committed `Camel.txt`. Those read-only commands stayed
   case-sensitive regardless of `core.ignorecase`.
+- 2026-05-25 wildcard case-sensitive lookup slice checked the same Git
+  baseline with direct Git-vs-rit comparisons for read-only `status`, `diff`,
+  `ls-files`, `ls-tree`, `log`, and `show`, plus write `add`, `reset`, and
+  `restore`, using simple wildcard tracked pathspec `camel*` against
+  committed `Camel.txt`. In that baseline, wildcard lookup stayed
+  case-sensitive regardless of `core.ignorecase`; `add` and `restore`
+  rejected the mismatched-case wildcard while `reset` kept the tracked-path
+  no-op behavior.
 - `rit reset` now mirrors that no-op acceptance for non-wildcard tracked
-  pathspecs with mismatched case. Wildcard and advanced pathspec parity remain
+  pathspecs with mismatched case. More advanced pathspec magic parity remains
   tracked separately in M4/M6.
 - `rit restore` keeps Git's rejection behavior for mismatched-case pathspecs
   under `core.ignorecase=true`, with compatibility coverage for exit code,
