@@ -418,6 +418,9 @@ Completion criteria:
     - [x] Stdin-delivered pathspec entries from a subdirectory are likewise
       resolved relative to that invocation directory unless they use top
       magic for `add`, `restore`, and `reset`.
+    - [x] NUL-delimited stdin pathspec entries from a subdirectory are
+      likewise resolved relative to that invocation directory unless they use
+      top magic for `add`, `restore`, and `reset`.
     - [x] NUL-delimited pathspec-file entries from a subdirectory are
       likewise resolved relative to that invocation directory unless they use
       top magic for `add`, `restore`, and `reset`.

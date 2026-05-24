@@ -482,6 +482,11 @@
   read from stdin inside a subdirectory are resolved relative to that
   invocation directory unless they use top magic for `add`, `restore`, and
   `reset`.
+- 2026-05-24 subdirectory stdin NUL pathspec follow-up checked the same Git
+  baseline with direct Git-vs-rit comparisons showing that NUL-delimited
+  pathspec entries read from stdin inside a subdirectory are likewise
+  resolved relative to that invocation directory unless they use top magic
+  for `add`, `restore`, and `reset`.
 - 2026-05-24 subdirectory NUL pathspec-file follow-up checked the same Git
   baseline with direct Git-vs-rit comparisons showing that NUL-delimited
   pathspec entries read from a file inside a subdirectory are likewise
@@ -936,6 +941,9 @@
   likewise resolved relative to that invocation directory unless they use top
   magic, matching Git for `add`, `restore`, and `reset`.
 - Stdin-delivered pathspec entries inside a subdirectory follow that same
+  relative/top-magic resolution model, matching Git for `add`, `restore`,
+  and `reset`.
+- NUL-delimited stdin pathspec entries inside a subdirectory follow that same
   relative/top-magic resolution model, matching Git for `add`, `restore`,
   and `reset`.
 - NUL-delimited pathspec entries from `--pathspec-from-file` inside a
