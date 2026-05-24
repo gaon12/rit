@@ -468,6 +468,11 @@
   expanded that earlier probe into checked Git-vs-rit coverage for `add`,
   `restore`, and `reset` when `--no-pathspec-from-file` follows an already
   selected `--pathspec-from-file=<file>`.
+- 2026-05-24 no pathspec-from-file active-stdin follow-up checked the same
+  Git baseline with direct Git-vs-rit comparisons showing that
+  `--no-pathspec-from-file` likewise leaves an already selected
+  `--pathspec-from-file=-` stdin selection active for `add`, `restore`, and
+  `reset`.
 - 2026-05-24 no pathspec-from-file later-selection follow-up checked the same
   Git baseline with direct Git-vs-rit comparisons showing that an earlier
   `--no-pathspec-from-file` still leaves a later
@@ -936,6 +941,9 @@
   pathspec file selection is active for `add`, `restore`, and `reset`; Git
   still rejects later ordinary pathspec arguments if an earlier
   `--pathspec-from-file` remains active.
+- An already selected `--pathspec-from-file=-` stdin selection likewise
+  remains active even after `--no-pathspec-from-file`, matching Git for
+  `add`, `restore`, and `reset`.
 - An earlier `--no-pathspec-from-file` also leaves a later
   `--pathspec-from-file=<file>` selection active, matching Git's option-order
   behavior for `add`, `restore`, and `reset`.

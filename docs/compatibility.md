@@ -212,7 +212,7 @@ restores text mode before `--pathspec-from-file`, again including
 `--pathspec-from-file=-`.
 `--no-pathspec-from-file` is likewise covered as both a no-op before later
 `--pathspec-from-file=<file>` selection and as a no-op after an already active
-pathspec-file selection.
+pathspec-file or stdin selection.
 Subdirectory invocation is also covered for stdin-delivered pathspec entries
 and for pathspec-file entries, including relative entries plus top-magic
 entries that still resolve from the repository root.

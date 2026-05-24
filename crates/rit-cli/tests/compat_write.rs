@@ -2062,6 +2062,74 @@ fn no_pathspec_from_file_keeps_active_pathspec_file_selection_like_git() {
 }
 
 #[test]
+fn no_pathspec_from_file_keeps_active_stdin_selection_like_git() {
+    for command in ["add", "restore", "reset"] {
+        let fixture = LocalWriteFixture::new(
+            &format!("{command}-no-pathspec-from-file-active-stdin"),
+            LocalWriteFixtureKind::NestedTracked,
+        )
+        .expect("fixture should build");
+        fs::write(fixture.path().join("other.txt"), "base\n")
+            .expect("other file should be written");
+        run_git(fixture.path(), ["add", "other.txt"]);
+        run_git(fixture.path(), ["commit", "--quiet", "-m", "other"]);
+        fs::write(
+            fixture.path().join("nested").join("tracked.txt"),
+            "changed\n",
+        )
+        .expect("tracked file should be modified");
+        fs::write(fixture.path().join("other.txt"), "changed\n")
+            .expect("other file should be modified");
+        if command == "reset" {
+            run_git(fixture.path(), ["add", "nested/tracked.txt", "other.txt"]);
+        }
+        let stdin = b"nested/tracked.txt\n";
+
+        let outcome = compare_after_command(
+            fixture.path(),
+            command_words_with_stdin(
+                "git",
+                [
+                    command,
+                    "--pathspec-from-file",
+                    "-",
+                    "--no-pathspec-from-file",
+                ],
+                stdin,
+            ),
+            command_words_with_stdin(
+                rit_binary(),
+                [
+                    command,
+                    "--pathspec-from-file",
+                    "-",
+                    "--no-pathspec-from-file",
+                ],
+                stdin,
+            ),
+        );
+
+        assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+        assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+        assert_eq!(outcome.git_status, outcome.rit_status);
+        if command == "restore" {
+            assert_eq!(
+                fs::read_to_string(outcome.git_repo.join("nested").join("tracked.txt"))
+                    .expect("git file should read"),
+                fs::read_to_string(outcome.rit_repo.join("nested").join("tracked.txt"))
+                    .expect("rit file should read")
+            );
+            assert_eq!(
+                fs::read_to_string(outcome.git_repo.join("other.txt"))
+                    .expect("git file should read"),
+                fs::read_to_string(outcome.rit_repo.join("other.txt"))
+                    .expect("rit file should read")
+            );
+        }
+    }
+}
+
+#[test]
 fn no_pathspec_from_file_before_selection_keeps_later_file_active_like_git() {
     for command in ["add", "restore", "reset"] {
         let fixture = LocalWriteFixture::new(
