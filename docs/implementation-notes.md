@@ -369,6 +369,10 @@
   for `--find-renames=` and `--find-copies=` on covered cached and worktree
   slices. Git treats those empty long-form values like the default 50%
   threshold instead of reporting a missing argument.
+- 2026-05-25 split rename-limit follow-up checked the current Git baseline
+  with `git diff -h` and direct Git-vs-rit comparisons for split `-l 1`
+  forms on covered cached and worktree rename/copy slices. Git accepts the
+  separated limit value instead of requiring only `-l1`.
 - 2026-05-22 ordinary worktree rename/copy verification checked `git diff -h`
   and direct Git comparisons for default `diff -M` and
   `diff -C --find-copies-harder` with plain untracked worktree paths. Git
@@ -998,6 +1002,8 @@
   naturally match no ordinary similarity score, like Git.
 - Empty long-form `--find-renames=` and `--find-copies=` now match Git's
   default-threshold behavior instead of failing diff argument parsing.
+- Split rename-limit forms such as `-l 1` now match Git instead of requiring
+  the compact `-l1` spelling.
 - Added local write compatibility coverage that compares Git and rit porcelain
   state after directory pathspec `add`, `restore`, and `reset`.
 - Added local write compatibility coverage for simple wildcard and

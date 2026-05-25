@@ -815,8 +815,22 @@ fn diff_command(
     let mut nul_terminated = false;
     let mut pathspec_args = Vec::new();
     let mut after_separator = false;
+    let mut pending_rename_limit = false;
 
     for arg in args {
+        if pending_rename_limit {
+            pending_rename_limit = false;
+            match arg.parse::<usize>() {
+                Ok(limit) => {
+                    rename_limit = Some(limit);
+                    continue;
+                }
+                Err(_) => {
+                    writeln!(stderr, "rit: invalid rename limit in '-l'")?;
+                    return Ok(ExitCode::from(129));
+                }
+            }
+        }
         match arg.as_str() {
             "--" if !after_separator => after_separator = true,
             "--cached" | "--staged" if !after_separator => cached = true,
@@ -841,6 +855,7 @@ fn diff_command(
                 find_copies_harder = true;
                 rename_detection_explicit = true;
             }
+            "-l" if !after_separator => pending_rename_limit = true,
             option if option.starts_with("-l") && !after_separator => {
                 match parse_rename_limit_option(option) {
                     Ok(limit) => rename_limit = Some(limit),
@@ -900,6 +915,10 @@ fn diff_command(
             }
             pathspec => pathspec_args.push(pathspec.to_owned()),
         }
+    }
+    if pending_rename_limit {
+        writeln!(stderr, "rit: missing rename limit in '-l'")?;
+        return Ok(ExitCode::from(129));
     }
 
     let output_mode = output_mode.unwrap_or("--patch");
