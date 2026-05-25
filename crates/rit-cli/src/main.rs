@@ -1017,6 +1017,9 @@ pub(crate) fn parse_similarity_option(
     long_prefix: &str,
 ) -> Result<u32, String> {
     let raw_value = if let Some(value) = option.strip_prefix(long_prefix) {
+        if value.is_empty() {
+            return Ok(50);
+        }
         value
     } else if let Some(value) = option.strip_prefix(short_prefix) {
         value

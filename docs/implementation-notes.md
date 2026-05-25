@@ -364,6 +364,11 @@
   direct Git comparisons for cached `-M5`, `-M05`, `--find-renames=5`,
   `--find-renames=05`, `-C5`, `-C05`, `--find-copies=5`,
   `--find-copies=05`, and thresholds above 100%.
+- 2026-05-25 empty long-form rename/copy threshold follow-up checked the
+  current Git baseline with `git diff -h` and direct Git-vs-rit comparisons
+  for `--find-renames=` and `--find-copies=` on covered cached and worktree
+  slices. Git treats those empty long-form values like the default 50%
+  threshold instead of reporting a missing argument.
 - 2026-05-22 ordinary worktree rename/copy verification checked `git diff -h`
   and direct Git comparisons for default `diff -M` and
   `diff -C --find-copies-harder` with plain untracked worktree paths. Git
@@ -991,6 +996,8 @@
   values now use Git's fractional notation: `5` means 50%, `05` means 5%,
   and `400` means 40%. Percent-suffixed values above 100 are accepted and
   naturally match no ordinary similarity score, like Git.
+- Empty long-form `--find-renames=` and `--find-copies=` now match Git's
+  default-threshold behavior instead of failing diff argument parsing.
 - Added local write compatibility coverage that compares Git and rit porcelain
   state after directory pathspec `add`, `restore`, and `reset`.
 - Added local write compatibility coverage for simple wildcard and

@@ -258,6 +258,8 @@ Completion criteria:
   - [x] Cached diff enables rename detection by default, honors
     `diff.renames=false`, and matches Git's checked `diff.renames=copies`
     behavior for the covered rename/copy slices.
+  - [x] Empty long-form `--find-renames=` and `--find-copies=` use Git's
+    default rename/copy threshold on the covered cached and worktree slices.
   - [x] Checked explicit `--find-copies-harder`, with or without `-C`,
     still overrides `diff.renames=false` like Git for the covered cached and
     default worktree hard-copy slices.

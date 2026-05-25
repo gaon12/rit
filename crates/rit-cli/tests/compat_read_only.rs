@@ -97,6 +97,7 @@ fn diff_cached_exact_rename_outputs_match_git() {
         vec!["diff", "--cached"],
         vec!["diff", "--cached", "-M", "--name-only"],
         vec!["diff", "--cached", "-M", "--name-status"],
+        vec!["diff", "--cached", "--find-renames=", "--name-status"],
         vec!["diff", "--cached", "-M", "--numstat"],
         vec!["diff", "--cached", "-M", "--stat"],
         vec!["diff", "--cached", "-M"],
@@ -873,6 +874,7 @@ fn diff_worktree_intent_to_add_similarity_rename_outputs_match_git() {
     for args in [
         vec!["diff", "-M", "--name-status"],
         vec!["diff", "-M79%", "--name-status"],
+        vec!["diff", "--find-renames=", "--name-status"],
         vec!["diff", "--find-renames=79", "--stat"],
         vec!["diff", "-M"],
     ] {
@@ -900,6 +902,7 @@ fn diff_worktree_intent_to_add_copy_outputs_match_git() {
     for args in [
         vec!["diff", "-C", "--name-status"],
         vec!["diff", "-C79%", "--name-status"],
+        vec!["diff", "--find-copies=", "--name-status"],
         vec!["diff", "--find-copies=79", "--stat"],
         vec!["diff", "-C"],
     ] {
@@ -1294,6 +1297,7 @@ fn diff_cached_copy_outputs_match_git() {
         vec!["diff", "--cached", "-C", "--name-status"],
         vec!["diff", "--cached", "-C", "-l1", "--name-status"],
         vec!["diff", "--cached", "-C79%", "--name-status"],
+        vec!["diff", "--cached", "--find-copies=", "--name-status"],
         vec!["diff", "--cached", "--find-copies=79", "--stat"],
         vec!["diff", "--cached", "-C"],
     ] {
