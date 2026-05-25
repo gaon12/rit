@@ -3630,24 +3630,33 @@ fn literal_and_glob_magic_pathspec_is_rejected_like_git() {
 
 #[test]
 fn add_exclude_magic_pathspec_matches_git_status() {
-    let fixture = LocalWriteFixture::new("add-exclude-magic", LocalWriteFixtureKind::NestedTracked)
+    for (name, alias) in [
+        ("short", ":!nested/new.txt"),
+        ("caret", ":^nested/new.txt"),
+        ("long", ":(exclude)nested/new.txt"),
+    ] {
+        let fixture = LocalWriteFixture::new(
+            &format!("add-exclude-magic-{name}"),
+            LocalWriteFixtureKind::NestedTracked,
+        )
         .expect("fixture should build");
-    fs::write(fixture.path().join("a.txt"), "root\n").expect("root file should be written");
-    fs::write(
-        fixture.path().join("nested").join("new.txt"),
-        "nested new\n",
-    )
-    .expect("nested new file should be written");
+        fs::write(fixture.path().join("a.txt"), "root\n").expect("root file should be written");
+        fs::write(
+            fixture.path().join("nested").join("new.txt"),
+            "nested new\n",
+        )
+        .expect("nested new file should be written");
 
-    let outcome = compare_after_command(
-        fixture.path(),
-        command_words("git", ["add", "*.txt", ":!nested/new.txt"]),
-        command_words(rit_binary(), ["add", "*.txt", ":!nested/new.txt"]),
-    );
+        let outcome = compare_after_command(
+            fixture.path(),
+            command_words("git", ["add", "*.txt", alias]),
+            command_words(rit_binary(), ["add", "*.txt", alias]),
+        );
 
-    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
-    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
-    assert_eq!(outcome.git_status, outcome.rit_status);
+        assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+        assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+        assert_eq!(outcome.git_status, outcome.rit_status);
+    }
 }
 
 #[test]
@@ -4604,54 +4613,57 @@ fn restore_icase_wildcard_pathspec_matches_git_status_and_files() {
 
 #[test]
 fn restore_exclude_magic_pathspec_matches_git_status_and_files() {
-    let fixture = LocalWriteFixture::new(
-        "restore-exclude-magic",
-        LocalWriteFixtureKind::NestedTracked,
-    )
-    .expect("fixture should build");
-    fs::write(fixture.path().join("top.txt"), "top base\n").expect("top file should be written");
-    fs::write(
-        fixture.path().join("nested").join("skip.txt"),
-        "skip base\n",
-    )
-    .expect("skip file should be written");
-    run_git(fixture.path(), ["add", "top.txt", "nested/skip.txt"]);
-    run_git(
-        fixture.path(),
-        ["commit", "--quiet", "-m", "extra tracked files"],
-    );
-    fs::write(fixture.path().join("top.txt"), "top changed\n").expect("top file should change");
-    fs::write(
-        fixture.path().join("nested").join("tracked.txt"),
-        "tracked changed\n",
-    )
-    .expect("tracked file should change");
-    fs::write(
-        fixture.path().join("nested").join("skip.txt"),
-        "skip changed\n",
-    )
-    .expect("skip file should change");
-
-    let outcome = compare_after_command(
-        fixture.path(),
-        command_words(
-            "git",
-            ["restore", "*.txt", "nested/*.txt", ":!nested/skip.txt"],
-        ),
-        command_words(
-            rit_binary(),
-            ["restore", "*.txt", "nested/*.txt", ":!nested/skip.txt"],
-        ),
-    );
-
-    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
-    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
-    assert_eq!(outcome.git_status, outcome.rit_status);
-    for relative_path in ["top.txt", "nested/tracked.txt", "nested/skip.txt"] {
-        assert_eq!(
-            fs::read_to_string(outcome.git_repo.join(relative_path)).expect("git file should read"),
-            fs::read_to_string(outcome.rit_repo.join(relative_path)).expect("rit file should read")
+    for (name, alias) in [
+        ("short", ":!nested/skip.txt"),
+        ("caret", ":^nested/skip.txt"),
+        ("long", ":(exclude)nested/skip.txt"),
+    ] {
+        let fixture = LocalWriteFixture::new(
+            &format!("restore-exclude-magic-{name}"),
+            LocalWriteFixtureKind::NestedTracked,
+        )
+        .expect("fixture should build");
+        fs::write(fixture.path().join("top.txt"), "top base\n")
+            .expect("top file should be written");
+        fs::write(
+            fixture.path().join("nested").join("skip.txt"),
+            "skip base\n",
+        )
+        .expect("skip file should be written");
+        run_git(fixture.path(), ["add", "top.txt", "nested/skip.txt"]);
+        run_git(
+            fixture.path(),
+            ["commit", "--quiet", "-m", "extra tracked files"],
         );
+        fs::write(fixture.path().join("top.txt"), "top changed\n").expect("top file should change");
+        fs::write(
+            fixture.path().join("nested").join("tracked.txt"),
+            "tracked changed\n",
+        )
+        .expect("tracked file should change");
+        fs::write(
+            fixture.path().join("nested").join("skip.txt"),
+            "skip changed\n",
+        )
+        .expect("skip file should change");
+
+        let outcome = compare_after_command(
+            fixture.path(),
+            command_words("git", ["restore", "*.txt", "nested/*.txt", alias]),
+            command_words(rit_binary(), ["restore", "*.txt", "nested/*.txt", alias]),
+        );
+
+        assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+        assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+        assert_eq!(outcome.git_status, outcome.rit_status);
+        for relative_path in ["top.txt", "nested/tracked.txt", "nested/skip.txt"] {
+            assert_eq!(
+                fs::read_to_string(outcome.git_repo.join(relative_path))
+                    .expect("git file should read"),
+                fs::read_to_string(outcome.rit_repo.join(relative_path))
+                    .expect("rit file should read")
+            );
+        }
     }
 }
 
@@ -4979,51 +4991,54 @@ fn reset_icase_wildcard_pathspec_matches_git_status() {
 
 #[test]
 fn reset_exclude_magic_pathspec_matches_git_status() {
-    let fixture =
-        LocalWriteFixture::new("reset-exclude-magic", LocalWriteFixtureKind::NestedTracked)
-            .expect("fixture should build");
-    fs::write(fixture.path().join("top.txt"), "top base\n").expect("top file should be written");
-    fs::write(
-        fixture.path().join("nested").join("skip.txt"),
-        "skip base\n",
-    )
-    .expect("skip file should be written");
-    run_git(fixture.path(), ["add", "top.txt", "nested/skip.txt"]);
-    run_git(
-        fixture.path(),
-        ["commit", "--quiet", "-m", "extra tracked files"],
-    );
-    fs::write(fixture.path().join("top.txt"), "top changed\n").expect("top file should change");
-    fs::write(
-        fixture.path().join("nested").join("tracked.txt"),
-        "tracked changed\n",
-    )
-    .expect("tracked file should change");
-    fs::write(
-        fixture.path().join("nested").join("skip.txt"),
-        "skip changed\n",
-    )
-    .expect("skip file should change");
-    run_git(
-        fixture.path(),
-        ["add", "top.txt", "nested/tracked.txt", "nested/skip.txt"],
-    );
+    for (name, alias) in [
+        ("short", ":!nested/skip.txt"),
+        ("caret", ":^nested/skip.txt"),
+        ("long", ":(exclude)nested/skip.txt"),
+    ] {
+        let fixture = LocalWriteFixture::new(
+            &format!("reset-exclude-magic-{name}"),
+            LocalWriteFixtureKind::NestedTracked,
+        )
+        .expect("fixture should build");
+        fs::write(fixture.path().join("top.txt"), "top base\n")
+            .expect("top file should be written");
+        fs::write(
+            fixture.path().join("nested").join("skip.txt"),
+            "skip base\n",
+        )
+        .expect("skip file should be written");
+        run_git(fixture.path(), ["add", "top.txt", "nested/skip.txt"]);
+        run_git(
+            fixture.path(),
+            ["commit", "--quiet", "-m", "extra tracked files"],
+        );
+        fs::write(fixture.path().join("top.txt"), "top changed\n").expect("top file should change");
+        fs::write(
+            fixture.path().join("nested").join("tracked.txt"),
+            "tracked changed\n",
+        )
+        .expect("tracked file should change");
+        fs::write(
+            fixture.path().join("nested").join("skip.txt"),
+            "skip changed\n",
+        )
+        .expect("skip file should change");
+        run_git(
+            fixture.path(),
+            ["add", "top.txt", "nested/tracked.txt", "nested/skip.txt"],
+        );
 
-    let outcome = compare_after_command(
-        fixture.path(),
-        command_words(
-            "git",
-            ["reset", "*.txt", "nested/*.txt", ":!nested/skip.txt"],
-        ),
-        command_words(
-            rit_binary(),
-            ["reset", "*.txt", "nested/*.txt", ":!nested/skip.txt"],
-        ),
-    );
+        let outcome = compare_after_command(
+            fixture.path(),
+            command_words("git", ["reset", "*.txt", "nested/*.txt", alias]),
+            command_words(rit_binary(), ["reset", "*.txt", "nested/*.txt", alias]),
+        );
 
-    assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
-    assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
-    assert_eq!(outcome.git_status, outcome.rit_status);
+        assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+        assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+        assert_eq!(outcome.git_status, outcome.rit_status);
+    }
 }
 
 #[test]

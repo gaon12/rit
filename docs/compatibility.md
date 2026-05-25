@@ -206,7 +206,8 @@ component-local non-recursive `:(glob)**base.txt` form.
 and show, including wildcard form `:(icase)camel*` on the current Windows
 baseline; `ls-tree` continues to reject unsupported `icase` magic.
 Exclude `:!`, `:^`, and `:(exclude)` is covered for status, diff, ls-files,
-add, restore, reset, log, and show. Attr magic is
+add, restore, reset, log, and show, and `ls-tree` now directly checks the
+unsupported `:!` / `:^` / `:(exclude)` aliases against Git as well. Attr magic is
 covered for root `.gitattributes` set/unset/value/unspecified requirements in
 status, diff, ls-files, first-parent `log`, and `show --no-patch`.
 Pathspec-file input is covered for `add`, `restore`, and `reset`, including

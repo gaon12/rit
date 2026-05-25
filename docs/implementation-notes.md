@@ -54,6 +54,12 @@
   rejects the pathspec when `core.ignorecase=false`.
 - 2026-05-10 exclude pathspec magic slice checked direct Git comparisons for
   `:!`, `:^`, and `:(exclude)` in `status`, `diff`, `ls-files`, and `add`.
+- 2026-05-25 exclude-alias follow-up checked the current Git baseline with
+  direct Git-vs-rit comparisons showing that short `:!`, caret `:^`, and
+  long `:(exclude)` aliases match Git across the checked read commands
+  `status`, `diff`, `ls-files`, `log`, `show`, plus write `add`, `restore`,
+  and `reset`; `ls-tree` likewise rejects all three aliases with the same
+  unsupported-magic fatal behavior as Git.
 - 2026-05-11 attr pathspec magic slice checked `git config -h`, `git status -h`,
   `git add -h`, `git diff -h`, and direct Git comparisons for
   `:(attr:name)`, `:(attr:-name)`, `:(attr:name=value)`, and `:(attr:!name)`
