@@ -482,6 +482,11 @@
 - 2026-05-15 pathspec-from-file missing value slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   `--pathspec-from-file` without a value.
+- 2026-05-25 empty pathspec-from-file value slice checked the current Git
+  baseline with `git add -h`, `git restore -h`, `git reset -h`, and direct
+  Git-vs-rit comparisons for `--pathspec-from-file=`. Git treats the empty
+  value like an empty selection for `add` and `reset`, while `restore` keeps
+  reporting that restore paths were not specified.
 - 2026-05-12 stdin pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file=-`.
 - 2026-05-12 stdin NUL pathspec-file slice checked `git add -h`,
