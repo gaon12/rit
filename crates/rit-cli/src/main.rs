@@ -942,6 +942,13 @@ fn diff_command(
     };
     let mut compare_revisions = Vec::new();
     let max_revisions = if cached { 1 } else { 2 };
+    if !cached
+        && let Some(range_revisions) =
+            parse_diff_revision_range(&repository, before_separator_pathspec_args.first())?
+    {
+        compare_revisions = range_revisions;
+        before_separator_pathspec_args.remove(0);
+    }
     while compare_revisions.len() < max_revisions {
         let Some(first_argument) = before_separator_pathspec_args.first() else {
             break;
@@ -1109,6 +1116,48 @@ fn diff_command(
     }
 
     Ok(ExitCode::SUCCESS)
+}
+
+fn parse_diff_revision_range(
+    repository: &rit_core::Repository,
+    token: Option<&String>,
+) -> io::Result<Option<Vec<rit_core::ObjectId>>> {
+    let Some(token) = token else {
+        return Ok(None);
+    };
+    if let Some((left, right)) = token.split_once("...") {
+        if left.is_empty() || right.is_empty() {
+            return Ok(None);
+        }
+        let left = repository
+            .resolve_revision(left)
+            .map_err(io::Error::other)?;
+        let right = repository
+            .resolve_revision(right)
+            .map_err(io::Error::other)?;
+        let Some(merge_base) = repository
+            .find_merge_base(left, right)
+            .map_err(io::Error::other)?
+        else {
+            return Err(io::Error::other(
+                "diff triple-dot range without a merge base is not supported yet",
+            ));
+        };
+        return Ok(Some(vec![merge_base, right]));
+    }
+    if let Some((left, right)) = token.split_once("..") {
+        if left.is_empty() || right.is_empty() {
+            return Ok(None);
+        }
+        let left = repository
+            .resolve_revision(left)
+            .map_err(io::Error::other)?;
+        let right = repository
+            .resolve_revision(right)
+            .map_err(io::Error::other)?;
+        return Ok(Some(vec![left, right]));
+    }
+    Ok(None)
 }
 
 fn diff_pre_separator_argument_needs_known_path_check(argument: &str) -> bool {

@@ -71,6 +71,11 @@ The current codebase implements an early local Git subset:
   local-path, smart HTTP(S), and one-refspec SSH `fetch` and `push`.
 - Small text patch output is supported for default `diff`, `diff -p`, and
   `diff --cached`.
+- Checked default `diff` also supports one explicit commit-ish, two explicit
+  commit-ish arguments, and the checked `<old>..<new>` / `<left>...<right>`
+  revision-token forms, including summary, patch, `-- <pathspec>` filtering,
+  checked plain known-path token filtering, and merge-base interpretation for
+  the covered three-dot slice.
 - Cached diff supports staged rename/copy detection with `-M[<n>]`,
   `--find-renames[=<n>]`, `-C[<n>]`, and `--find-copies[=<n>]` for summary
   modes and patch output. `--find-copies-harder` can use unchanged HEAD files

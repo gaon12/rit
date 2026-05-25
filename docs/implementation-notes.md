@@ -1649,7 +1649,11 @@
   both `-- <pathspec>` filtering and the checked plain known-path token form
   against that commit tree. Checked default diff also now accepts two explicit
   commit-ish arguments, including summary, patch, `-- <pathspec>` filtering,
-  and the checked plain known-path token form. Ordinary literal
+  and the checked plain known-path token form. Checked default diff also
+  accepts the covered `<old>..<new>` and `<left>...<right>` revision-token
+  forms, including the same summary, patch, `-- <pathspec>` filtering, plain
+  known-path token filtering, and merge-base interpretation for the checked
+  three-dot slice. Ordinary literal
   file/directory plus simple `*`, `?`, and bracket-class wildcard pathspec
   filters and positive `:(literal)`, `:(glob)`, `:(top)`, `:/`, and
   `:(icase)` pathspec magic. `-M[<n>]`/`--find-renames[=<n>]` supports staged
@@ -1682,13 +1686,18 @@
   copies stay outside default diff scope like Git.
 - Unsupported options: non-cached tree/blob arguments beyond the checked
   single-commit-ish form, cached tree/blob arguments beyond the checked
-  single-commit-ish form, revision ranges beyond the checked two-commit form,
+  single-commit-ish form, revision suffix and range syntax beyond the checked
+  two-commit and `<old>..<new>` / `<left>...<right>` forms,
   pathspec files, full
   rename limits, and many advanced patch formatting options.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files; when one explicit checked commit-ish is provided, it compares that commit tree against the current tracked worktree state and still ignores plain untracked files.
 - Git-compatible behavior: when two explicit checked commit-ish arguments are
   provided, default diff compares those two commit trees directly and ignores
   the current worktree, matching Git's checked two-commit slice.
+- Git-compatible behavior: when one checked `<old>..<new>` token is provided,
+  default diff compares those two resolved commit trees directly; when one
+  checked `<left>...<right>` token is provided, default diff compares the
+  merge base of those commits against the right side.
 - Git-compatible behavior: cached diff scope compares the index against `HEAD`,
   or against one explicit checked commit-ish when one is provided.
 - Git-compatible behavior: pathspecs from a subdirectory are resolved relative
@@ -2675,8 +2684,9 @@
 - The canonical commit diff remains the source for final changed paths and
   large-file sizes. Indexdb is used only for range-level semantic impact hints
   and exposes whether acceleration was actually used.
-- Unsupported behavior: merge-base interpretation for `...` ranges and
-  arbitrary revision suffix syntax such as `HEAD~1`.
+- Unsupported behavior: arbitrary revision suffix syntax such as `HEAD~1` and
+  broader revision-range spellings beyond the checked `<old>..<new>` and
+  `<left>...<right>` forms.
 
 ### Command-aware undo
 

@@ -259,6 +259,121 @@ fn diff_two_commit_outputs_match_git() {
 }
 
 #[test]
+fn diff_revision_range_outputs_match_git() {
+    let linear_fixture = TwoCommitDiffFixture::new("revision-range-dotdot");
+    let dotdot_args = [
+        vec![
+            OsString::from("diff"),
+            OsString::from(format!(
+                "{}..{}",
+                linear_fixture.old_commit(),
+                linear_fixture.new_commit()
+            )),
+            OsString::from("--name-status"),
+        ],
+        vec![
+            OsString::from("diff"),
+            OsString::from(format!(
+                "{}..{}",
+                linear_fixture.old_commit(),
+                linear_fixture.new_commit()
+            )),
+        ],
+        vec![
+            OsString::from("diff"),
+            OsString::from(format!(
+                "{}..{}",
+                linear_fixture.old_commit(),
+                linear_fixture.new_commit()
+            )),
+            OsString::from("--"),
+            OsString::from("tracked.txt"),
+        ],
+        vec![
+            OsString::from("diff"),
+            OsString::from(format!(
+                "{}..{}",
+                linear_fixture.old_commit(),
+                linear_fixture.new_commit()
+            )),
+            OsString::from("tracked.txt"),
+        ],
+    ];
+
+    for args in dotdot_args {
+        let outcome = compare(&CompareOptions::new(
+            linear_fixture.path(),
+            CommandSpec::new("git", args.clone()),
+            CommandSpec::new(rit_binary(), args.clone()),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "dotdot revision diff {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+
+    let branch_fixture = DivergedDiffFixture::new("revision-range-dotdotdot");
+    let dotdotdot_args = [
+        vec![
+            OsString::from("diff"),
+            OsString::from(format!(
+                "{}...{}",
+                branch_fixture.topic_commit(),
+                branch_fixture.master_commit()
+            )),
+            OsString::from("--name-status"),
+        ],
+        vec![
+            OsString::from("diff"),
+            OsString::from(format!(
+                "{}...{}",
+                branch_fixture.topic_commit(),
+                branch_fixture.master_commit()
+            )),
+        ],
+        vec![
+            OsString::from("diff"),
+            OsString::from(format!(
+                "{}...{}",
+                branch_fixture.topic_commit(),
+                branch_fixture.master_commit()
+            )),
+            OsString::from("--"),
+            OsString::from("tracked.txt"),
+        ],
+        vec![
+            OsString::from("diff"),
+            OsString::from(format!(
+                "{}...{}",
+                branch_fixture.topic_commit(),
+                branch_fixture.master_commit()
+            )),
+            OsString::from("tracked.txt"),
+        ],
+    ];
+
+    for args in dotdotdot_args {
+        let outcome = compare(&CompareOptions::new(
+            branch_fixture.path(),
+            CommandSpec::new("git", args.clone()),
+            CommandSpec::new(rit_binary(), args.clone()),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "dotdotdot revision diff {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_cached_exact_rename_outputs_match_git() {
     let fixture = ExactRenameFixture::new("cached-exact-rename");
 
@@ -3241,6 +3356,70 @@ impl TwoCommitDiffFixture {
 }
 
 impl Drop for TwoCommitDiffFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct DivergedDiffFixture {
+    path: PathBuf,
+    topic_commit: String,
+    master_commit: String,
+}
+
+impl DivergedDiffFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("tracked.txt"), "base\n").expect("base file should be written");
+        run_git(&path, ["add", "tracked.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+
+        run_git(&path, ["checkout", "--quiet", "-b", "topic"]);
+        fs::write(path.join("tracked.txt"), "topic\n").expect("topic file should be written");
+        run_git(&path, ["add", "tracked.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "topic"]);
+        let topic_commit = run_capture("git", ["rev-parse", "HEAD"], &path)
+            .0
+            .trim()
+            .to_owned();
+
+        run_git(&path, ["checkout", "--quiet", "master"]);
+        fs::write(path.join("tracked.txt"), "master\n").expect("master file should be written");
+        fs::write(path.join("main.txt"), "main-only\n").expect("main-only file should be written");
+        run_git(&path, ["add", "tracked.txt", "main.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "master"]);
+        let master_commit = run_capture("git", ["rev-parse", "HEAD"], &path)
+            .0
+            .trim()
+            .to_owned();
+
+        Self {
+            path,
+            topic_commit,
+            master_commit,
+        }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn topic_commit(&self) -> &str {
+        &self.topic_commit
+    }
+
+    fn master_commit(&self) -> &str {
+        &self.master_commit
+    }
+}
+
+impl Drop for DivergedDiffFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

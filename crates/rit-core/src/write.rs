@@ -3312,27 +3312,6 @@ impl Repository {
         Ok(false)
     }
 
-    fn find_merge_base(&self, left: ObjectId, right: ObjectId) -> Result<Option<ObjectId>> {
-        let left_ancestors = self.commit_ancestor_set(left)?;
-        let mut stack = vec![right];
-        let mut seen = HashSet::new();
-        while let Some(commit_id) = stack.pop() {
-            if !seen.insert(commit_id) {
-                continue;
-            }
-            if left_ancestors.contains(&commit_id) {
-                return Ok(Some(commit_id));
-            }
-            let object = self.read_object(commit_id)?;
-            if object.kind != ObjectKind::Commit {
-                continue;
-            }
-            let commit = parse_commit(&object.data)?;
-            stack.extend(commit.parents);
-        }
-        Ok(None)
-    }
-
     fn first_parent_commits_since(
         &self,
         head_id: ObjectId,
@@ -3359,23 +3338,6 @@ impl Repository {
         }
         commits.reverse();
         Ok(commits)
-    }
-
-    fn commit_ancestor_set(&self, start: ObjectId) -> Result<HashSet<ObjectId>> {
-        let mut ancestors = HashSet::new();
-        let mut stack = vec![start];
-        while let Some(commit_id) = stack.pop() {
-            if !ancestors.insert(commit_id) {
-                continue;
-            }
-            let object = self.read_object(commit_id)?;
-            if object.kind != ObjectKind::Commit {
-                continue;
-            }
-            let commit = parse_commit(&object.data)?;
-            stack.extend(commit.parents);
-        }
-        Ok(ancestors)
     }
 
     pub(crate) fn write_tree_from_index(&self, index: &Index) -> Result<ObjectId> {
