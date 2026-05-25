@@ -427,7 +427,8 @@
   NUL-delimited file selection or stdin selection.
 - The same follow-up also now covers the later text-stdin variant, which the
   current Git baseline rejects as an empty pathspec after returning from NUL
-  mode for `add`, `restore`, and `reset`.
+  mode for `add`, `restore`, and `reset`, whether the earlier NUL-mode
+  selection came from a pathspec file or from stdin.
 - 2026-05-15 pathspec-file argument mixing slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   `--pathspec-from-file` combined with ordinary pathspec arguments.

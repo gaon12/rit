@@ -372,6 +372,9 @@ Completion criteria:
     - [x] Repeated `--pathspec-from-file` uses the last file or stdin source,
       including NUL-delimited file and stdin sources, like Git for `add`,
       `restore`, and `reset`.
+    - [x] After `--no-pathspec-file-nul` returns repeated selection to text
+      mode, a later text stdin pathspec is rejected as an empty pathspec
+      like Git even when the earlier NUL-mode selection came from stdin.
     - [x] `--no-pathspec-from-file` is accepted as a Git-compatible no-op
       when no pathspec file selection is active for `add`, `restore`, and
       `reset`.

@@ -228,7 +228,8 @@ selection, including the same text-file handoff after an earlier
 NUL-delimited stdin selection.
 The same matrix now also records the checked Git behavior where a later text
 stdin selection after returning from NUL mode is rejected as an empty
-pathspec for `add`, `restore`, and `reset`.
+pathspec for `add`, `restore`, and `reset`, whether the earlier NUL-mode
+selection came from a pathspec file or from stdin.
 Line-delimited pathspec-file input also covers Git-compatible rejection of
 empty and badly quoted pathspec entries before repository mutation.
 Local write compatibility tests cover `core.ignorecase=true` for a
