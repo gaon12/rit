@@ -1920,6 +1920,71 @@ fn repeated_pathspec_from_file_uses_later_empty_value_like_git() {
 }
 
 #[test]
+fn repeated_pathspec_from_file_uses_later_empty_value_after_stdin_like_git() {
+    for command in ["add", "restore", "reset"] {
+        let fixture = LocalWriteFixture::new(
+            &format!("{command}-repeated-pathspec-from-stdin-later-empty"),
+            LocalWriteFixtureKind::NestedTracked,
+        )
+        .expect("fixture should build");
+        fs::write(
+            fixture.path().join("nested").join("tracked.txt"),
+            "changed\n",
+        )
+        .expect("tracked file should be modified");
+        if command == "reset" {
+            run_git(fixture.path(), ["add", "nested/tracked.txt"]);
+        }
+
+        let workspace = temp_path(&format!(
+            "{command}-repeated-pathspec-from-stdin-later-empty-compare"
+        ));
+        let git_repo = workspace.join("git");
+        let rit_repo = workspace.join("rit");
+        copy_directory(fixture.path(), &git_repo);
+        copy_directory(fixture.path(), &rit_repo);
+        let stdin = b"nested/tracked.txt\n";
+
+        let git = run_command_allow_failure(
+            &command_words_with_stdin(
+                "git",
+                [
+                    command,
+                    "--pathspec-from-file",
+                    "-",
+                    "--pathspec-from-file=",
+                ],
+                stdin,
+            ),
+            &git_repo,
+        );
+        let rit = run_command_allow_failure(
+            &command_words_with_stdin(
+                rit_binary(),
+                [
+                    command,
+                    "--pathspec-from-file",
+                    "-",
+                    "--pathspec-from-file=",
+                ],
+                stdin,
+            ),
+            &rit_repo,
+        );
+
+        assert_eq!(rit.exit_code, git.exit_code, "{command} exit code");
+        assert_eq!(rit.stdout, git.stdout, "{command} stdout");
+        assert_eq!(rit.stderr, git.stderr, "{command} stderr");
+        assert_eq!(
+            run_capture("git", ["status", "--porcelain=v1"], &git_repo).0,
+            run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).0,
+            "{command} status"
+        );
+        let _ = fs::remove_dir_all(workspace);
+    }
+}
+
+#[test]
 fn repeated_pathspec_from_file_later_empty_value_allows_args_like_git() {
     for command in ["add", "restore", "reset"] {
         let fixture = LocalWriteFixture::new(
@@ -1967,6 +2032,75 @@ fn repeated_pathspec_from_file_later_empty_value_allows_args_like_git() {
                     "--pathspec-from-file=",
                     "nested/tracked.txt",
                 ],
+            ),
+            &rit_repo,
+        );
+
+        assert_eq!(rit.exit_code, git.exit_code, "{command} exit code");
+        assert_eq!(rit.stdout, git.stdout, "{command} stdout");
+        assert_eq!(rit.stderr, git.stderr, "{command} stderr");
+        assert_eq!(
+            run_capture("git", ["status", "--porcelain=v1"], &git_repo).0,
+            run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).0,
+            "{command} status"
+        );
+        let _ = fs::remove_dir_all(workspace);
+    }
+}
+
+#[test]
+fn repeated_pathspec_from_file_later_empty_value_after_nul_stdin_rejects_with_args_like_git() {
+    for command in ["add", "restore", "reset"] {
+        let fixture = LocalWriteFixture::new(
+            &format!("{command}-repeated-pathspec-from-nul-stdin-later-empty-with-args"),
+            LocalWriteFixtureKind::NestedTracked,
+        )
+        .expect("fixture should build");
+        fs::write(
+            fixture.path().join("nested").join("tracked.txt"),
+            "changed\n",
+        )
+        .expect("tracked file should be modified");
+        if command == "reset" {
+            run_git(fixture.path(), ["add", "nested/tracked.txt"]);
+        }
+
+        let workspace = temp_path(&format!(
+            "{command}-repeated-pathspec-from-nul-stdin-later-empty-with-args-compare"
+        ));
+        let git_repo = workspace.join("git");
+        let rit_repo = workspace.join("rit");
+        copy_directory(fixture.path(), &git_repo);
+        copy_directory(fixture.path(), &rit_repo);
+        let stdin = b"nested/tracked.txt\0";
+
+        let git = run_command_allow_failure(
+            &command_words_with_stdin(
+                "git",
+                [
+                    command,
+                    "--pathspec-from-file",
+                    "-",
+                    "--pathspec-file-nul",
+                    "--pathspec-from-file=",
+                    "nested/tracked.txt",
+                ],
+                stdin,
+            ),
+            &git_repo,
+        );
+        let rit = run_command_allow_failure(
+            &command_words_with_stdin(
+                rit_binary(),
+                [
+                    command,
+                    "--pathspec-from-file",
+                    "-",
+                    "--pathspec-file-nul",
+                    "--pathspec-from-file=",
+                    "nested/tracked.txt",
+                ],
+                stdin,
             ),
             &rit_repo,
         );

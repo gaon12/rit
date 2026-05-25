@@ -497,6 +497,11 @@
   empty value clears the earlier selection, still allows ordinary pathspec
   arguments afterward, and leaves `--pathspec-file-nul` rejected because no
   active file source remains.
+- The same repeated-selection slice now also covers a later empty
+  `--pathspec-from-file=` overriding an earlier stdin selection, plus the
+  NUL-delimited stdin variant where the still-active `--pathspec-file-nul`
+  keeps Git rejecting later ordinary pathspec arguments because no active
+  file source remains selected.
 - 2026-05-12 stdin pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file=-`.
 - 2026-05-12 stdin NUL pathspec-file slice checked `git add -h`,

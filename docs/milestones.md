@@ -410,6 +410,8 @@ Completion criteria:
       file selection, while still allowing later ordinary pathspec arguments
       and keeping `--pathspec-file-nul` rejected because no active file
       source remains.
+    - [x] The same later empty `--pathspec-from-file=` override behavior is
+      also checked after earlier stdin and NUL-delimited stdin selections.
     - [x] Empty line pathspec-file entries are rejected with Git-compatible
       fatal output for `add`, `restore`, and `reset`.
     - [x] Quoted empty pathspec-file entries are rejected with Git-compatible

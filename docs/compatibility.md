@@ -247,7 +247,10 @@ Repeated `--pathspec-from-file` selection is also checked when a later empty
 covered Git-compatible cases, that later empty value acts like an empty
 selection, still allows ordinary pathspec arguments afterward, and leaves
 `--pathspec-file-nul` rejected because there is no longer an active file
-source behind the selection.
+source behind the selection. The same later-empty override is also checked
+after an earlier stdin selection, plus after an earlier NUL-delimited stdin
+selection where the still-active `--pathspec-file-nul` makes Git reject even
+later ordinary pathspec arguments because no file source remains selected.
 Line-delimited pathspec-file input also covers Git-compatible rejection of
 empty and badly quoted pathspec entries before repository mutation, plus
 UTF-8 BOM-prefixed text pathspec entries that Git treats as literal leading
