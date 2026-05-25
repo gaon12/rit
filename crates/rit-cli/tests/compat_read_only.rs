@@ -1613,6 +1613,10 @@ fn diff_pathspec_outputs_match_git() {
             vec!["diff", "--name-only", "--", ":(icase)camel*"],
         ),
         (
+            vec!["diff", "--name-only", "--", ":(icase,glob)camel*"],
+            vec!["diff", "--name-only", "--", ":(icase,glob)camel*"],
+        ),
+        (
             vec!["diff", "--name-only", "--", "*.txt", ":!b.txt"],
             vec!["diff", "--name-only", "--", "*.txt", ":!b.txt"],
         ),
@@ -1688,6 +1692,7 @@ fn status_pathspec_outputs_match_git() {
         ["status", "--porcelain=v1", "--", ":/nested/base.txt"],
         ["status", "--porcelain=v1", "--", ":(icase)camel.txt"],
         ["status", "--porcelain=v1", "--", ":(icase)camel*"],
+        ["status", "--porcelain=v1", "--", ":(icase,glob)camel*"],
     ] {
         let mut options = CompareOptions::new(fixture.path(), git_command(args), rit_command(args));
         options.compare_repository_state = false;
@@ -2087,6 +2092,7 @@ fn ls_files_pathspec_outputs_match_git() {
         vec!["ls-files", "--stage", "--", ":(top)nested/base.txt"],
         vec!["ls-files", "--", ":(icase)camel.txt"],
         vec!["ls-files", "--", ":(icase)camel*"],
+        vec!["ls-files", "--", ":(icase,glob)camel*"],
         vec!["ls-files", "--", "*.txt", ":!Camel.txt"],
         vec!["ls-files", "--", "*.txt", ":^Camel.txt"],
     ] {
@@ -2535,6 +2541,7 @@ fn log_pathspec_outputs_match_git() {
         vec!["log", "--oneline", "--", ":(top)nested/base.txt"],
         vec!["log", "--oneline", "--", ":(icase)camel.txt"],
         vec!["log", "--oneline", "--", ":(icase)camel*"],
+        vec!["log", "--oneline", "--", ":(icase,glob)camel*"],
     ] {
         let outcome = compare(&CompareOptions::new(
             fixture.path(),
@@ -2574,6 +2581,7 @@ fn show_pathspec_outputs_match_git() {
         vec!["show", "--no-patch", "HEAD", "--", ":(top)nested/base.txt"],
         vec!["show", "--no-patch", "--", ":(icase)camel.txt"],
         vec!["show", "--no-patch", "--", ":(icase)camel*"],
+        vec!["show", "--no-patch", "--", ":(icase,glob)camel*"],
     ] {
         let outcome = compare(&CompareOptions::new(
             fixture.path(),
@@ -2602,6 +2610,7 @@ fn show_patch_outputs_match_git_for_single_parent_commits() {
         vec!["show", "HEAD", "--", "*.txt", ":!a.txt"],
         vec!["show", "HEAD", "--", "*.txt", ":^a.txt"],
         vec!["show", "HEAD", "--", ":(exclude)a.txt", "*.txt"],
+        vec!["show", "HEAD", "--", ":(icase,glob)camel*"],
         vec!["show", "HEAD", "--", "nested/[ab]*.txt"],
         vec!["show", "HEAD", "--", ":(top)nested/base.txt"],
         vec!["show", "HEAD", "--", ":(icase)A.TXT"],

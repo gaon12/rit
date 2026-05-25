@@ -543,6 +543,10 @@ Completion criteria:
   - [x] On the current Windows Git baseline, wildcard `:(icase)camel*`
     likewise matches Git across the checked read and write commands while
     `ls-tree` still rejects unsupported `icase` magic.
+  - [x] On the current Windows Git baseline, combined wildcard
+    `:(icase,glob)camel*` likewise matches Git across the checked read and
+    write commands while `ls-tree` still rejects the combined unsupported
+    magic list.
   - [ ] Broader platform/config parity for case-sensitive path lookup.
 
 Completion criteria:

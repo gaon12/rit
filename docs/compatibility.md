@@ -203,8 +203,9 @@ Write-command glob coverage explicitly includes Git's special
 `:(glob)**/*.txt` and trailing `:(glob)nested/**` forms plus the
 component-local non-recursive `:(glob)**base.txt` form.
 `:(icase)` is covered for status, diff, ls-files, add, restore, reset, log,
-and show, including wildcard form `:(icase)camel*` on the current Windows
-baseline; `ls-tree` continues to reject unsupported `icase` magic.
+and show, including wildcard form `:(icase)camel*` and combined
+`:(icase,glob)camel*` on the current Windows baseline; `ls-tree` continues
+to reject unsupported `icase` magic.
 Exclude `:!`, `:^`, and `:(exclude)` is covered for status, diff, ls-files,
 add, restore, reset, log, and show, and `ls-tree` now directly checks the
 unsupported `:!` / `:^` / `:(exclude)` aliases against Git as well, including

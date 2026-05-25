@@ -47,6 +47,10 @@
   wildcard form `:(icase)camel*` matches Git across the checked read and
   write commands while `ls-tree` continues to reject unsupported `icase`
   magic.
+- The same baseline now also directly checks combined wildcard form
+  `:(icase,glob)camel*`, which matches Git across the same checked read and
+  write commands while `ls-tree` still rejects combined unsupported `icase`
+  / `glob` magic.
 - 2026-05-10 core.ignorecase add slice checked `git config -h`, `git add -h`,
   and direct Git comparisons for mismatched-case `git add` pathspecs.
 - 2026-05-18 core.ignorecase false add slice checked Git 2.52.0.windows.1 with
