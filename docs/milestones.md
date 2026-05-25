@@ -498,7 +498,8 @@ Completion criteria:
 - [x] Attributes parser.
 - [x] Pathspec magic.
   - [x] Positive `:(literal)`, `:(glob)`, `:(top)`, and `:/` forms.
-  - [x] Incompatible `:(literal,glob)` magic combinations are rejected.
+  - [x] Incompatible `:(literal,glob)` magic combinations are rejected with
+    Git-compatible fatal output for the checked read and write commands.
   - [x] Case-insensitive `:(icase)` pathspec magic.
   - [x] Exclude `:!`, `:^`, and `:(exclude)` pathspec magic.
   - [x] Attr pathspec magic for root `.gitattributes` set/unset/value/

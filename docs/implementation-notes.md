@@ -59,6 +59,12 @@
   2.52.0.windows.1 with `git --version`, `git help -a`, `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons showing
   `:(literal,glob)` is rejected before write-command mutation.
+- 2026-05-25 read-only literal/glob conflict follow-up checked the current
+  Git baseline with `git status -h`, `git diff -h`, `git ls-files -h`,
+  `git ls-tree -h`, `git log -h`, `git show -h`, and direct Git-vs-rit
+  comparisons showing that `status`, `diff`, `ls-files`, `ls-tree`, `log`,
+  and `show --no-patch` all use Git-compatible fatal output and exit code
+  for incompatible `:(literal,glob)` pathspec magic.
 - 2026-05-20 milestone/CI verification checked Git 2.54.0.windows.1 with
   `git --version` and `git help -a`. The local quality baseline passed
   `cargo fmt --all -- --check` and `cargo test --workspace` before new edits.
@@ -881,7 +887,9 @@
   ordinary stars and do not cross `/`, matching Git.
 - Rejected incompatible `:(literal,glob)` magic combinations before
   write-command mutation, with Git-compatible fatal output for `add`,
-  `restore`, and `reset`.
+  `restore`, and `reset`, and aligned the checked read-only commands
+  `status`, `diff`, `ls-files`, `ls-tree`, `log`, and `show --no-patch`
+  with the same Git-compatible fatal path.
 - Added `git diff -z` compatible NUL-terminated output for `--name-only`,
   `--name-status`, and `--numstat`, including rename/copy field splitting.
 - Added positive pathspec magic support for `:(literal)`, `:(glob)`,

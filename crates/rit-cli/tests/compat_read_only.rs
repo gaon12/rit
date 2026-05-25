@@ -2459,6 +2459,41 @@ fn read_only_glob_magic_mismatched_case_pathspec_matches_git() {
 }
 
 #[test]
+fn read_only_incompatible_literal_glob_magic_is_rejected_like_git() {
+    let fixture = DiffFixture::new("read-only-incompatible-literal-glob");
+
+    for args in [
+        vec!["status", "--porcelain=v1", "--", ":(literal,glob)Camel.txt"],
+        vec!["diff", "--name-only", "--", ":(literal,glob)Camel.txt"],
+        vec!["ls-files", "--", ":(literal,glob)Camel.txt"],
+        vec!["ls-tree", "--name-only", "HEAD", ":(literal,glob)Camel.txt"],
+        vec!["log", "--oneline", "--", ":(literal,glob)Camel.txt"],
+        vec![
+            "show",
+            "--no-patch",
+            "HEAD",
+            "--",
+            ":(literal,glob)Camel.txt",
+        ],
+    ] {
+        let mut options = CompareOptions::new(
+            fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        );
+        options.compare_repository_state = false;
+        let outcome = compare(&options).expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "read-only incompatible literal/glob {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn log_pathspec_outputs_match_git() {
     let fixture = LogPathFixture::new("pathspec-log");
 

@@ -537,10 +537,7 @@ fn ls_tree_command(
         repository.path_prefix(),
     ) {
         Ok(pathspecs) => pathspecs,
-        Err(error) => {
-            writeln!(stderr, "rit: {error}")?;
-            return Ok(ExitCode::from(129));
-        }
+        Err(error) => return read_pathspec_error(stderr, error),
     };
     if let Some((original_pathspec, unsupported_message)) =
         pathspec_args.iter().find_map(|pathspec| {
@@ -646,10 +643,7 @@ fn status_command(
         repository.path_prefix(),
     ) {
         Ok(pathspecs) => pathspecs,
-        Err(error) => {
-            writeln!(stderr, "rit: {error}")?;
-            return Ok(ExitCode::from(129));
-        }
+        Err(error) => return read_pathspec_error(stderr, error),
     };
 
     if let Some(path) = status_args.explain_path {
@@ -904,10 +898,7 @@ fn diff_command(
         repository.path_prefix(),
     ) {
         Ok(pathspecs) => pathspecs,
-        Err(error) => {
-            writeln!(stderr, "rit: {error}")?;
-            return Ok(ExitCode::from(129));
-        }
+        Err(error) => return read_pathspec_error(stderr, error),
     };
 
     let diff_options = rit_core::DiffOptions {
@@ -1110,10 +1101,7 @@ fn log_command(
         repository.path_prefix(),
     ) {
         Ok(pathspecs) => pathspecs,
-        Err(error) => {
-            writeln!(stderr, "rit: {error}")?;
-            return Ok(ExitCode::from(129));
-        }
+        Err(error) => return read_pathspec_error(stderr, error),
     };
 
     let entries = match repository.log_first_parent_with_pathspecs(&pathspecs) {
@@ -1185,10 +1173,7 @@ fn show_command(
         repository.path_prefix(),
     ) {
         Ok(pathspecs) => pathspecs,
-        Err(error) => {
-            writeln!(stderr, "rit: {error}")?;
-            return Ok(ExitCode::from(129));
-        }
+        Err(error) => return read_pathspec_error(stderr, error),
     };
     let object_id = match repository.resolve_revision(&revision) {
         Ok(object_id) => object_id,
@@ -1321,10 +1306,7 @@ fn ls_files_command(
         repository.path_prefix(),
     ) {
         Ok(pathspecs) => pathspecs,
-        Err(error) => {
-            writeln!(stderr, "rit: {error}")?;
-            return Ok(ExitCode::from(129));
-        }
+        Err(error) => return read_pathspec_error(stderr, error),
     };
     let index = match rit_core::Index::read(&repository.git_dir().join("index")) {
         Ok(index) => index,
@@ -3994,6 +3976,23 @@ pub(crate) fn write_command_error(
     }
     writeln!(stderr, "rit: {error}")?;
     Ok(ExitCode::from(1))
+}
+
+fn read_pathspec_error(stderr: &mut dyn Write, error: rit_core::RitError) -> io::Result<ExitCode> {
+    if let rit_core::RitError::InvalidInput { message } = &error
+        && let Some(pathspec) =
+            message.strip_prefix("pathspec magic literal and glob are incompatible: ")
+    {
+        writeln!(
+            stderr,
+            "fatal: {}: 'literal' and 'glob' are incompatible",
+            git_error_pathspec(pathspec)
+        )?;
+        return Ok(ExitCode::from(128));
+    }
+
+    writeln!(stderr, "rit: {error}")?;
+    Ok(ExitCode::from(129))
 }
 
 fn is_reset_noop_pathspec_error(error: &rit_core::RitError) -> bool {

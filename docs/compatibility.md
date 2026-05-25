@@ -196,6 +196,9 @@ filters and simple `*`, `?`, and bracket-class wildcard filters for
 cached/staged output, and first-parent `log` plus `show --no-patch`.
 Positive `:(literal)`, `:(glob)`, `:(top)`, and `:/` pathspec magic is
 covered for status, diff, ls-files, log, show, add, restore, and reset.
+Incompatible `:(literal,glob)` magic is likewise covered for status, diff,
+ls-files, ls-tree, log, show, add, restore, and reset with Git-compatible
+fatal output and exit code.
 Write-command glob coverage explicitly includes Git's special
 `:(glob)**/*.txt` and trailing `:(glob)nested/**` forms plus the
 component-local non-recursive `:(glob)**base.txt` form.
