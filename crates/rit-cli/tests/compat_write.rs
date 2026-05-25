@@ -1858,6 +1858,196 @@ fn empty_pathspec_from_file_value_matches_git_behavior() {
 }
 
 #[test]
+fn repeated_pathspec_from_file_uses_later_empty_value_like_git() {
+    for command in ["add", "restore", "reset"] {
+        let fixture = LocalWriteFixture::new(
+            &format!("{command}-repeated-pathspec-from-file-later-empty"),
+            LocalWriteFixtureKind::NestedTracked,
+        )
+        .expect("fixture should build");
+        fs::write(
+            fixture.path().join("nested").join("tracked.txt"),
+            "changed\n",
+        )
+        .expect("tracked file should be modified");
+        fs::write(fixture.path().join("pathspecs.txt"), "nested/tracked.txt\n")
+            .expect("pathspec file should be written");
+        if command == "reset" {
+            run_git(fixture.path(), ["add", "nested/tracked.txt"]);
+        }
+
+        let workspace = temp_path(&format!(
+            "{command}-repeated-pathspec-from-file-later-empty-compare"
+        ));
+        let git_repo = workspace.join("git");
+        let rit_repo = workspace.join("rit");
+        copy_directory(fixture.path(), &git_repo);
+        copy_directory(fixture.path(), &rit_repo);
+
+        let git = run_command_allow_failure(
+            &command_words(
+                "git",
+                [
+                    command,
+                    "--pathspec-from-file=pathspecs.txt",
+                    "--pathspec-from-file=",
+                ],
+            ),
+            &git_repo,
+        );
+        let rit = run_command_allow_failure(
+            &command_words(
+                rit_binary(),
+                [
+                    command,
+                    "--pathspec-from-file=pathspecs.txt",
+                    "--pathspec-from-file=",
+                ],
+            ),
+            &rit_repo,
+        );
+
+        assert_eq!(rit.exit_code, git.exit_code, "{command} exit code");
+        assert_eq!(rit.stdout, git.stdout, "{command} stdout");
+        assert_eq!(rit.stderr, git.stderr, "{command} stderr");
+        assert_eq!(
+            run_capture("git", ["status", "--porcelain=v1"], &git_repo).0,
+            run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).0,
+            "{command} status"
+        );
+        let _ = fs::remove_dir_all(workspace);
+    }
+}
+
+#[test]
+fn repeated_pathspec_from_file_later_empty_value_allows_args_like_git() {
+    for command in ["add", "restore", "reset"] {
+        let fixture = LocalWriteFixture::new(
+            &format!("{command}-repeated-pathspec-from-file-later-empty-with-args"),
+            LocalWriteFixtureKind::NestedTracked,
+        )
+        .expect("fixture should build");
+        fs::write(
+            fixture.path().join("nested").join("tracked.txt"),
+            "changed\n",
+        )
+        .expect("tracked file should be modified");
+        fs::write(fixture.path().join("pathspecs.txt"), "other.txt\n")
+            .expect("pathspec file should be written");
+        if command == "reset" {
+            run_git(fixture.path(), ["add", "nested/tracked.txt"]);
+        }
+
+        let workspace = temp_path(&format!(
+            "{command}-repeated-pathspec-from-file-later-empty-with-args-compare"
+        ));
+        let git_repo = workspace.join("git");
+        let rit_repo = workspace.join("rit");
+        copy_directory(fixture.path(), &git_repo);
+        copy_directory(fixture.path(), &rit_repo);
+
+        let git = run_command_allow_failure(
+            &command_words(
+                "git",
+                [
+                    command,
+                    "--pathspec-from-file=pathspecs.txt",
+                    "--pathspec-from-file=",
+                    "nested/tracked.txt",
+                ],
+            ),
+            &git_repo,
+        );
+        let rit = run_command_allow_failure(
+            &command_words(
+                rit_binary(),
+                [
+                    command,
+                    "--pathspec-from-file=pathspecs.txt",
+                    "--pathspec-from-file=",
+                    "nested/tracked.txt",
+                ],
+            ),
+            &rit_repo,
+        );
+
+        assert_eq!(rit.exit_code, git.exit_code, "{command} exit code");
+        assert_eq!(rit.stdout, git.stdout, "{command} stdout");
+        assert_eq!(rit.stderr, git.stderr, "{command} stderr");
+        assert_eq!(
+            run_capture("git", ["status", "--porcelain=v1"], &git_repo).0,
+            run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).0,
+            "{command} status"
+        );
+        let _ = fs::remove_dir_all(workspace);
+    }
+}
+
+#[test]
+fn repeated_pathspec_from_file_later_empty_value_rejects_nul_like_git() {
+    for command in ["add", "restore", "reset"] {
+        let fixture = LocalWriteFixture::new(
+            &format!("{command}-repeated-pathspec-from-file-later-empty-with-nul"),
+            LocalWriteFixtureKind::NestedTracked,
+        )
+        .expect("fixture should build");
+        fs::write(
+            fixture.path().join("nested").join("tracked.txt"),
+            "changed\n",
+        )
+        .expect("tracked file should be modified");
+        fs::write(fixture.path().join("pathspecs.txt"), "nested/tracked.txt\n")
+            .expect("pathspec file should be written");
+        if command == "reset" {
+            run_git(fixture.path(), ["add", "nested/tracked.txt"]);
+        }
+
+        let workspace = temp_path(&format!(
+            "{command}-repeated-pathspec-from-file-later-empty-with-nul-compare"
+        ));
+        let git_repo = workspace.join("git");
+        let rit_repo = workspace.join("rit");
+        copy_directory(fixture.path(), &git_repo);
+        copy_directory(fixture.path(), &rit_repo);
+
+        let git = run_command_allow_failure(
+            &command_words(
+                "git",
+                [
+                    command,
+                    "--pathspec-from-file=pathspecs.txt",
+                    "--pathspec-from-file=",
+                    "--pathspec-file-nul",
+                ],
+            ),
+            &git_repo,
+        );
+        let rit = run_command_allow_failure(
+            &command_words(
+                rit_binary(),
+                [
+                    command,
+                    "--pathspec-from-file=pathspecs.txt",
+                    "--pathspec-from-file=",
+                    "--pathspec-file-nul",
+                ],
+            ),
+            &rit_repo,
+        );
+
+        assert_eq!(rit.exit_code, git.exit_code, "{command} exit code");
+        assert_eq!(rit.stdout, git.stdout, "{command} stdout");
+        assert_eq!(rit.stderr, git.stderr, "{command} stderr");
+        assert_eq!(
+            run_capture("git", ["status", "--porcelain=v1"], &git_repo).0,
+            run_capture(rit_binary(), ["status", "--porcelain=v1"], &rit_repo).0,
+            "{command} status"
+        );
+        let _ = fs::remove_dir_all(workspace);
+    }
+}
+
+#[test]
 fn empty_pathspec_from_file_value_can_mix_with_args_like_git() {
     for command in ["add", "restore", "reset"] {
         let fixture = LocalWriteFixture::new(

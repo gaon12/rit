@@ -490,6 +490,13 @@
   checks that ordinary pathspec arguments still remain valid after the empty
   selection, while `--pathspec-file-nul` is rejected because there is no
   active pathspec-file source behind the empty value.
+- 2026-05-25 repeated pathspec-from-file empty follow-up checked the current
+  Git baseline with `git add -h`, `git restore -h`, `git reset -h`, and
+  direct Git-vs-rit comparisons for a later empty `--pathspec-from-file=`
+  overriding an earlier real file selection. In the covered cases, the later
+  empty value clears the earlier selection, still allows ordinary pathspec
+  arguments afterward, and leaves `--pathspec-file-nul` rejected because no
+  active file source remains.
 - 2026-05-12 stdin pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file=-`.
 - 2026-05-12 stdin NUL pathspec-file slice checked `git add -h`,

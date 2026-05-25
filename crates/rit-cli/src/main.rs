@@ -2202,19 +2202,21 @@ fn parse_reset_args(
         write_pathspec_file_cannot_mix_with_args(stderr)?;
         return Ok(Some(ParsedResetArgs::exit(128)));
     }
-    if let Some(file_name) = pathspec_file.filter(|file_name| !file_name.is_empty()) {
+    if let Some(file_name) = pathspec_file {
         from_pathspec_file = true;
-        match pathspec_args::read_pathspecs_from_file(
-            &file_name,
-            pathspec_file_nul,
-            "reset",
-            stderr,
-        )? {
-            pathspec_args::PathspecFileRead::Pathspecs(file_pathspecs) => {
-                paths.extend(file_pathspecs);
-            }
-            pathspec_args::PathspecFileRead::Error { exit_code } => {
-                return Ok(Some(ParsedResetArgs::exit(exit_code)));
+        if !file_name.is_empty() {
+            match pathspec_args::read_pathspecs_from_file(
+                &file_name,
+                pathspec_file_nul,
+                "reset",
+                stderr,
+            )? {
+                pathspec_args::PathspecFileRead::Pathspecs(file_pathspecs) => {
+                    paths.extend(file_pathspecs);
+                }
+                pathspec_args::PathspecFileRead::Error { exit_code } => {
+                    return Ok(Some(ParsedResetArgs::exit(exit_code)));
+                }
             }
         }
     }

@@ -239,6 +239,12 @@ The same matrix now also records the checked Git behavior where a later text
 stdin selection after returning from NUL mode is rejected as an empty
 pathspec for `add`, `restore`, and `reset`, whether the earlier NUL-mode
 selection came from a pathspec file or from stdin.
+Repeated `--pathspec-from-file` selection is also checked when a later empty
+`--pathspec-from-file=` value clears an earlier file selection. In the
+covered Git-compatible cases, that later empty value acts like an empty
+selection, still allows ordinary pathspec arguments afterward, and leaves
+`--pathspec-file-nul` rejected because there is no longer an active file
+source behind the selection.
 Line-delimited pathspec-file input also covers Git-compatible rejection of
 empty and badly quoted pathspec entries before repository mutation, plus
 UTF-8 BOM-prefixed text pathspec entries that Git treats as literal leading

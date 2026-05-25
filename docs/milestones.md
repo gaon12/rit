@@ -406,6 +406,10 @@ Completion criteria:
     - [x] An explicitly empty `--pathspec-from-file=` value still allows
       ordinary pathspec arguments, but `--pathspec-file-nul` is rejected
       because there is no active file selection behind that empty value.
+    - [x] A later empty `--pathspec-from-file=` value clears an earlier real
+      file selection, while still allowing later ordinary pathspec arguments
+      and keeping `--pathspec-file-nul` rejected because no active file
+      source remains.
     - [x] Empty line pathspec-file entries are rejected with Git-compatible
       fatal output for `add`, `restore`, and `reset`.
     - [x] Quoted empty pathspec-file entries are rejected with Git-compatible
