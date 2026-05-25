@@ -420,6 +420,11 @@
   for a later NUL-delimited stdin source, including mixed NUL stdin followed
   by a later NUL file selection and mixed text file followed by a later NUL
   file selection.
+- 2026-05-25 repeated pathspec-from-file text-after-NUL follow-up checked the
+  same Git baseline with direct Git-vs-rit comparisons proving that
+  `--no-pathspec-file-nul` can return repeated selection to text mode, so a
+  later text `--pathspec-from-file=<file>` still wins after an earlier
+  NUL-delimited file selection.
 - 2026-05-15 pathspec-file argument mixing slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   `--pathspec-from-file` combined with ordinary pathspec arguments.
