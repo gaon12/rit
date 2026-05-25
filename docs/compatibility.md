@@ -104,7 +104,9 @@ The current codebase implements an early local Git subset:
   behavior also now treats plain unknown before-`--` arguments like Git:
   ordinary tokens such as `foo`, `-M 79%`, and `-C 79%` are rejected with
   the checked ambiguous revision-or-path fatal unless the caller uses `--`
-  to force pathspec parsing.
+  to force pathspec parsing. When the same covered cached token names an
+  actual known path, Git's option-order fatal still wins, and rit now matches
+  that precedence.
 - Default worktree diff already performs checked exact rename detection for
   the Git-compatible intent-to-add slice, where added worktree paths are
   already represented in the index by `git add -N`. `diff.renames=false`
@@ -136,7 +138,9 @@ The current codebase implements an early local Git subset:
   plain unknown before-`--` arguments like Git: ordinary tokens such as
   `foo`, `-M 79%`, and `-C 79%` are rejected with the checked ambiguous
   revision-or-path fatal unless the caller uses `--` to force pathspec
-  parsing.
+  parsing. When the same covered default worktree token names an actual known
+  path, Git's option-order fatal still wins, and rit now matches that
+  precedence.
   `--find-copies-harder` can use unchanged index entries as copy sources in
   that same worktree intent-to-add slice. Plain untracked worktree renames and
   copies stay outside default diff scope like Git, so they remain a delete or

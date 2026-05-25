@@ -818,6 +818,7 @@ fn diff_command(
     let mut pre_separator_non_option_args = Vec::new();
     let mut after_separator = false;
     let mut pending_rename_limit = false;
+    let mut late_option_after_non_option = None;
     let mut saw_non_option_argument = false;
 
     for arg in args {
@@ -869,11 +870,9 @@ fn diff_command(
                 }
             }
             option if option.starts_with('-') && saw_non_option_argument && !after_separator => {
-                writeln!(
-                    stderr,
-                    "fatal: option '{option}' must come before non-option arguments"
-                )?;
-                return Ok(ExitCode::from(128));
+                if late_option_after_non_option.is_none() {
+                    late_option_after_non_option = Some(option.to_owned());
+                }
             }
             option
                 if (option.starts_with("-M") || option.starts_with("--find-renames="))
@@ -958,6 +957,13 @@ fn diff_command(
             writeln!(stderr, "'git <command> [<revision>...] -- [<file>...]'")?;
             return Ok(ExitCode::from(128));
         }
+    }
+    if let Some(option) = late_option_after_non_option {
+        writeln!(
+            stderr,
+            "fatal: option '{option}' must come before non-option arguments"
+        )?;
+        return Ok(ExitCode::from(128));
     }
     let pathspecs = match rit_core::PathspecSet::from_args_with_prefix(
         &pathspec_args,

@@ -268,7 +268,8 @@ Completion criteria:
   - [x] Covered rename/copy parser slices now also reject plain unknown
     before-`--` arguments such as `foo`, `-M 79%`, and `-C 79%` with Git's
     ambiguous revision-or-path fatal unless `--` is used to force pathspec
-    parsing.
+    parsing, while still keeping Git's option-order fatal when the earlier
+    token names an actual known path.
   - [x] Checked explicit `--find-copies-harder`, with or without `-C`,
     still overrides `diff.renames=false` like Git for the covered cached and
     default worktree hard-copy slices.

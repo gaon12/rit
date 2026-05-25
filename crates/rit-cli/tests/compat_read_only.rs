@@ -245,6 +245,24 @@ fn diff_plain_unknown_argument_matches_git_ambiguity_rules() {
         );
     }
 
+    let cached_known_fixture = ExactRenameFixture::new("cached-known-diff-argument-option-order");
+    fs::write(cached_known_fixture.path().join("foo"), "sentinel\n")
+        .expect("known worktree path should be written");
+    let args = vec!["diff", "--cached", "foo", "--name-status"];
+    let outcome = compare(&CompareOptions::new(
+        cached_known_fixture.path(),
+        git_command_slice(&args),
+        rit_command_slice(&args),
+    ))
+    .expect("comparison should run");
+
+    assert!(
+        outcome.is_match(),
+        "cached known diff argument option order {:?}\n{}",
+        args,
+        outcome.report()
+    );
+
     let cached_copy_fixture = CopyFixture::new("cached-copy-plain-unknown-diff-argument");
     for args in [
         vec!["diff", "--cached", "-C", "79%"],
@@ -287,6 +305,25 @@ fn diff_plain_unknown_argument_matches_git_ambiguity_rules() {
             outcome.report()
         );
     }
+
+    let worktree_known_fixture =
+        WorktreeIntentSimilarityRenameFixture::new("worktree-known-diff-argument-option-order");
+    fs::write(worktree_known_fixture.path().join("foo"), "sentinel\n")
+        .expect("known worktree path should be written");
+    let args = vec!["diff", "foo", "--name-status"];
+    let outcome = compare(&CompareOptions::new(
+        worktree_known_fixture.path(),
+        git_command_slice(&args),
+        rit_command_slice(&args),
+    ))
+    .expect("comparison should run");
+
+    assert!(
+        outcome.is_match(),
+        "worktree known diff argument option order {:?}\n{}",
+        args,
+        outcome.report()
+    );
 
     let worktree_copy_fixture =
         WorktreeIntentCopyFixture::new("worktree-copy-plain-unknown-diff-argument");
