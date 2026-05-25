@@ -464,6 +464,12 @@
 - 2026-05-15 non-UTF-8 pathspec-file slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for non-UTF-8
   bytes in text `--pathspec-from-file` inputs.
+- 2026-05-25 UTF-8 BOM pathspec-file slice checked the current Git baseline
+  with `git add -h`, `git restore -h`, `git reset -h`, and direct Git-vs-rit
+  comparisons for text `--pathspec-from-file` inputs beginning with a UTF-8
+  BOM. Git treats that BOM as literal pathspec content, so `add`/`restore`
+  reject the unmatched BOM-prefixed path while `reset` follows Git's checked
+  success-path behavior for the same file content.
 - 2026-05-15 text pathspec-file NUL byte slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for NUL bytes
   embedded inside text `--pathspec-from-file` lines.

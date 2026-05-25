@@ -391,6 +391,8 @@ Completion criteria:
       Git-compatible fatal output for `add`, `restore`, and `reset`.
     - [x] Non-UTF-8 text pathspec-file bytes follow Git-compatible lossy
       pathspec matching and errors for `add`, `restore`, and `reset`.
+    - [x] UTF-8 BOM-prefixed text pathspec-file entries are treated like
+      literal leading bytes, matching Git for `add`, `restore`, and `reset`.
     - [x] NUL bytes inside text pathspec-file lines truncate the line like Git
       for `add`, `restore`, and `reset`.
     - [x] Lone carriage-return bytes in text pathspec-file lines remain part
