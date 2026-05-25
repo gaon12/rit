@@ -124,6 +124,12 @@ fn diff_cached_explicit_commit_outputs_match_git() {
             OsString::from("--"),
             OsString::from("new.txt"),
         ],
+        vec![
+            OsString::from("diff"),
+            OsString::from("--cached"),
+            OsString::from("HEAD"),
+            OsString::from("new.txt"),
+        ],
     ];
 
     for args in dynamic_args {
@@ -172,6 +178,11 @@ fn diff_explicit_commit_outputs_match_git() {
             OsString::from("diff"),
             OsString::from("HEAD"),
             OsString::from("--"),
+            OsString::from("nested/base.txt"),
+        ],
+        vec![
+            OsString::from("diff"),
+            OsString::from("HEAD"),
             OsString::from("nested/base.txt"),
         ],
     ];

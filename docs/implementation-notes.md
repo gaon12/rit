@@ -1642,10 +1642,12 @@
   `--name-only`, `--name-status`, `--numstat`, `--stat`, plus
   `--cached`/`--staged` with those output modes. Checked cached diff also
   accepts one explicit commit-ish such as `HEAD` or a full commit ID,
-  including the same output modes and `-- <pathspec>` filtering against that
-  commit tree. Checked default diff now also accepts one explicit commit-ish
+  including the same output modes and both `-- <pathspec>` filtering and the
+  checked plain known-path token form against that commit tree. Checked
+  default diff now also accepts one explicit commit-ish
   such as `HEAD` or a full commit ID, including the same output modes and
-  `-- <pathspec>` filtering against that commit tree. Ordinary literal
+  both `-- <pathspec>` filtering and the checked plain known-path token form
+  against that commit tree. Ordinary literal
   file/directory plus simple `*`, `?`, and bracket-class wildcard pathspec
   filters and positive `:(literal)`, `:(glob)`, `:(top)`, `:/`, and
   `:(icase)` pathspec magic. `-M[<n>]`/`--find-renames[=<n>]` supports staged

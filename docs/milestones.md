@@ -188,11 +188,11 @@ Completion criteria:
   - [x] Binary patch placeholders for default and cached diff scopes.
   - [x] Multi-hunk context splitting.
   - [x] `rit diff <commit-ish>` checked single-commit comparisons for
-    `HEAD`/full commit IDs, including summary, patch, and `-- <pathspec>`
-    filtering.
+    `HEAD`/full commit IDs, including summary, patch, `-- <pathspec>`
+    filtering, and checked plain known-path token filtering.
   - [x] `rit diff --cached <commit-ish>` checked single-commit comparisons for
-    `HEAD`/full commit IDs, including summary, patch, and `-- <pathspec>`
-    filtering.
+    `HEAD`/full commit IDs, including summary, patch, `-- <pathspec>`
+    filtering, and checked plain known-path token filtering.
 - [x] Pathspec support for read-only commands.
   - [x] Ordinary literal pathspec filters for `status --porcelain=v1` and
     `diff` summary modes.

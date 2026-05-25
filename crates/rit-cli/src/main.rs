@@ -941,11 +941,11 @@ fn diff_command(
         None => return Ok(ExitCode::from(128)),
     };
     let mut compare_revision = None;
-    if before_separator_pathspec_args.len() == 1
-        && let Ok(revision) = repository.resolve_revision(&before_separator_pathspec_args[0])
+    if let Some(first_argument) = before_separator_pathspec_args.first()
+        && let Ok(revision) = repository.resolve_revision(first_argument)
     {
         compare_revision = Some(revision);
-        before_separator_pathspec_args.clear();
+        before_separator_pathspec_args.remove(0);
     }
 
     for argument in &before_separator_pathspec_args {

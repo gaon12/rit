@@ -99,8 +99,8 @@ The current codebase implements an early local Git subset:
   parser also accepts both `-l<n>` and split `-l <n>` forms like Git.
   Covered cached parser behavior now also accepts one explicit checked
   commit-ish such as `HEAD` or a full commit ID, including `--name-status`,
-  `--stat`, default patch output, and `-- <pathspec>` filtering against that
-  commit tree.
+  `--stat`, default patch output, `-- <pathspec>` filtering, and the checked
+  plain known-path token form against that commit tree.
   Covered cached parser behavior now also rejects later diff options after
   split similarity arguments such as `-M 79%` / `-C 79%` when those tokens
   are already being treated as non-option path arguments, matching Git's
@@ -116,8 +116,8 @@ The current codebase implements an early local Git subset:
   already represented in the index by `git add -N`. `diff.renames=false`
   Covered default parser behavior now also accepts one explicit checked
   commit-ish such as `HEAD` or a full commit ID, including `--name-status`,
-  `--stat`, default patch output, and `-- <pathspec>` filtering against that
-  commit tree.
+  `--stat`, default patch output, `-- <pathspec>` filtering, and the checked
+  plain known-path token form against that commit tree.
   `diff.renames=false`
   disables that default rename detection, and `--no-renames` / later `-M`
   option order matches Git there. Invalid `diff.renames` values also fail the
