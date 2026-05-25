@@ -190,6 +190,9 @@ Completion criteria:
   - [x] `rit diff <commit-ish>` checked single-commit comparisons for
     `HEAD`/full commit IDs, including summary, patch, `-- <pathspec>`
     filtering, and checked plain known-path token filtering.
+  - [x] `rit diff <old-commit> <new-commit>` checked two-commit comparisons,
+    including summary, patch, `-- <pathspec>` filtering, and checked plain
+    known-path token filtering.
   - [x] `rit diff --cached <commit-ish>` checked single-commit comparisons for
     `HEAD`/full commit IDs, including summary, patch, `-- <pathspec>`
     filtering, and checked plain known-path token filtering.

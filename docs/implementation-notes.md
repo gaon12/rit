@@ -1647,7 +1647,9 @@
   default diff now also accepts one explicit commit-ish
   such as `HEAD` or a full commit ID, including the same output modes and
   both `-- <pathspec>` filtering and the checked plain known-path token form
-  against that commit tree. Ordinary literal
+  against that commit tree. Checked default diff also now accepts two explicit
+  commit-ish arguments, including summary, patch, `-- <pathspec>` filtering,
+  and the checked plain known-path token form. Ordinary literal
   file/directory plus simple `*`, `?`, and bracket-class wildcard pathspec
   filters and positive `:(literal)`, `:(glob)`, `:(top)`, `:/`, and
   `:(icase)` pathspec magic. `-M[<n>]`/`--find-renames[=<n>]` supports staged
@@ -1680,9 +1682,13 @@
   copies stay outside default diff scope like Git.
 - Unsupported options: non-cached tree/blob arguments beyond the checked
   single-commit-ish form, cached tree/blob arguments beyond the checked
-  single-commit-ish form, multi-revision/range forms, pathspec files, full
+  single-commit-ish form, revision ranges beyond the checked two-commit form,
+  pathspec files, full
   rename limits, and many advanced patch formatting options.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files; when one explicit checked commit-ish is provided, it compares that commit tree against the current tracked worktree state and still ignores plain untracked files.
+- Git-compatible behavior: when two explicit checked commit-ish arguments are
+  provided, default diff compares those two commit trees directly and ignores
+  the current worktree, matching Git's checked two-commit slice.
 - Git-compatible behavior: cached diff scope compares the index against `HEAD`,
   or against one explicit checked commit-ish when one is provided.
 - Git-compatible behavior: pathspecs from a subdirectory are resolved relative

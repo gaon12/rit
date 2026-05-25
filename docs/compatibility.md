@@ -118,6 +118,10 @@ The current codebase implements an early local Git subset:
   commit-ish such as `HEAD` or a full commit ID, including `--name-status`,
   `--stat`, default patch output, `-- <pathspec>` filtering, and the checked
   plain known-path token form against that commit tree.
+  Covered default parser behavior now also accepts two explicit checked
+  commit-ish arguments, including `--name-status`, `--stat`, default patch
+  output, `-- <pathspec>` filtering, and the checked plain known-path token
+  form against those commit trees.
   `diff.renames=false`
   disables that default rename detection, and `--no-renames` / later `-M`
   option order matches Git there. Invalid `diff.renames` values also fail the

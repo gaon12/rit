@@ -940,11 +940,16 @@ fn diff_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    let mut compare_revision = None;
-    if let Some(first_argument) = before_separator_pathspec_args.first()
-        && let Ok(revision) = repository.resolve_revision(first_argument)
-    {
-        compare_revision = Some(revision);
+    let mut compare_revisions = Vec::new();
+    let max_revisions = if cached { 1 } else { 2 };
+    while compare_revisions.len() < max_revisions {
+        let Some(first_argument) = before_separator_pathspec_args.first() else {
+            break;
+        };
+        let Ok(revision) = repository.resolve_revision(first_argument) else {
+            break;
+        };
+        compare_revisions.push(revision);
         before_separator_pathspec_args.remove(0);
     }
 
@@ -996,24 +1001,32 @@ fn diff_command(
     };
     if output_mode == "--patch" {
         let patch_result = if cached {
-            match compare_revision {
-                Some(revision) => repository.diff_index_to_commit_patch_with_options(
-                    revision,
+            match compare_revisions.as_slice() {
+                [revision] => repository.diff_index_to_commit_patch_with_options(
+                    *revision,
                     &pathspecs,
                     &diff_options,
                 ),
-                None => repository.diff_index_to_head_patch_with_options(&pathspecs, &diff_options),
+                [] => repository.diff_index_to_head_patch_with_options(&pathspecs, &diff_options),
+                _ => unreachable!("cached diff consumes at most one revision"),
             }
         } else {
-            match compare_revision {
-                Some(revision) => repository.diff_commit_to_worktree_patch_with_options(
-                    revision,
+            match compare_revisions.as_slice() {
+                [revision] => repository.diff_commit_to_worktree_patch_with_options(
+                    *revision,
                     &pathspecs,
                     &diff_options,
                 ),
-                None => {
+                [old_revision, new_revision] => repository.diff_commits_patch_with_options(
+                    *old_revision,
+                    *new_revision,
+                    &pathspecs,
+                    &diff_options,
+                ),
+                [] => {
                     repository.diff_worktree_to_index_patch_with_options(&pathspecs, &diff_options)
                 }
+                _ => unreachable!("default diff consumes at most two revisions"),
             }
         };
         match patch_result {
@@ -1035,18 +1048,28 @@ fn diff_command(
     }
 
     let diff_result = if cached {
-        match compare_revision {
-            Some(revision) => {
-                repository.diff_index_to_commit_with_options(revision, &pathspecs, &diff_options)
+        match compare_revisions.as_slice() {
+            [revision] => {
+                repository.diff_index_to_commit_with_options(*revision, &pathspecs, &diff_options)
             }
-            None => repository.diff_index_to_head_with_options(&pathspecs, &diff_options),
+            [] => repository.diff_index_to_head_with_options(&pathspecs, &diff_options),
+            _ => unreachable!("cached diff consumes at most one revision"),
         }
     } else {
-        match compare_revision {
-            Some(revision) => {
-                repository.diff_commit_to_worktree_with_options(revision, &pathspecs, &diff_options)
-            }
-            None => repository.diff_worktree_to_index_with_options(&pathspecs, &diff_options),
+        match compare_revisions.as_slice() {
+            [revision] => repository.diff_commit_to_worktree_with_options(
+                *revision,
+                &pathspecs,
+                &diff_options,
+            ),
+            [old_revision, new_revision] => repository.diff_commits_with_options(
+                *old_revision,
+                *new_revision,
+                &pathspecs,
+                &diff_options,
+            ),
+            [] => repository.diff_worktree_to_index_with_options(&pathspecs, &diff_options),
+            _ => unreachable!("default diff consumes at most two revisions"),
         }
     };
     let diff = match diff_result {

@@ -205,6 +205,60 @@ fn diff_explicit_commit_outputs_match_git() {
 }
 
 #[test]
+fn diff_two_commit_outputs_match_git() {
+    let fixture = TwoCommitDiffFixture::new("two-commit-diff");
+
+    let dynamic_args = [
+        vec![
+            OsString::from("diff"),
+            OsString::from(fixture.old_commit()),
+            OsString::from(fixture.new_commit()),
+            OsString::from("--name-status"),
+        ],
+        vec![
+            OsString::from("diff"),
+            OsString::from(fixture.old_commit()),
+            OsString::from(fixture.new_commit()),
+            OsString::from("--stat"),
+        ],
+        vec![
+            OsString::from("diff"),
+            OsString::from(fixture.old_commit()),
+            OsString::from(fixture.new_commit()),
+        ],
+        vec![
+            OsString::from("diff"),
+            OsString::from(fixture.old_commit()),
+            OsString::from(fixture.new_commit()),
+            OsString::from("--"),
+            OsString::from("tracked.txt"),
+        ],
+        vec![
+            OsString::from("diff"),
+            OsString::from(fixture.old_commit()),
+            OsString::from(fixture.new_commit()),
+            OsString::from("tracked.txt"),
+        ],
+    ];
+
+    for args in dynamic_args {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            CommandSpec::new("git", args.clone()),
+            CommandSpec::new(rit_binary(), args.clone()),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "two commit diff {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_cached_exact_rename_outputs_match_git() {
     let fixture = ExactRenameFixture::new("cached-exact-rename");
 
@@ -3129,6 +3183,64 @@ impl DiffFixture {
 }
 
 impl Drop for DiffFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+struct TwoCommitDiffFixture {
+    path: PathBuf,
+    old_commit: String,
+    new_commit: String,
+}
+
+impl TwoCommitDiffFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "false"]);
+
+        fs::write(path.join("tracked.txt"), "base\n").expect("base file should be written");
+        run_git(&path, ["add", "tracked.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+        let old_commit = run_capture("git", ["rev-parse", "HEAD"], &path)
+            .0
+            .trim()
+            .to_owned();
+
+        fs::write(path.join("tracked.txt"), "second\n").expect("tracked file should be modified");
+        fs::write(path.join("added.txt"), "new\n").expect("added file should be written");
+        run_git(&path, ["add", "tracked.txt", "added.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "second"]);
+        let new_commit = run_capture("git", ["rev-parse", "HEAD"], &path)
+            .0
+            .trim()
+            .to_owned();
+
+        Self {
+            path,
+            old_commit,
+            new_commit,
+        }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn old_commit(&self) -> &str {
+        &self.old_commit
+    }
+
+    fn new_commit(&self) -> &str {
+        &self.new_commit
+    }
+}
+
+impl Drop for TwoCommitDiffFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }
