@@ -284,6 +284,9 @@ baseline: `status`, `diff`, `ls-files`, `log`, and `show` keep the same
 case-sensitive no-match behavior, `ls-tree` rejects unsupported `glob` magic,
 `add` still rejects, `reset` keeps the tracked-path no-op behavior, and
 `restore` rejects regardless of `core.ignorecase`.
+`ls-tree` now also has direct compatibility coverage for rejecting
+`:(icase)camel.txt` with Git's unsupported-magic fatal behavior instead of
+silently treating it like a normal pathspec.
 
 `ls-tree` compatibility tests cover literal directory and file path lookup with
 default, `--name-only`, and `--object-only` output.

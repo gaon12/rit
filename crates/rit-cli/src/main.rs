@@ -542,14 +542,14 @@ fn ls_tree_command(
             return Ok(ExitCode::from(129));
         }
     };
-    if let Some(original_pathspec) = pathspec_args
+    if let Some((original_pathspec, unsupported_magic)) = pathspec_args
         .iter()
-        .find(|pathspec| pathspec_uses_glob_magic(pathspec))
+        .find_map(|pathspec| ls_tree_unsupported_magic(pathspec).map(|magic| (pathspec, magic)))
     {
         writeln!(
             stderr,
-            "fatal: {}: pathspec magic not supported by this command: 'glob'",
-            git_error_pathspec(original_pathspec)
+            "fatal: {}: pathspec magic not supported by this command: '{unsupported_magic}'",
+            git_error_pathspec(original_pathspec),
         )?;
         return Ok(ExitCode::from(128));
     }
@@ -609,14 +609,17 @@ fn ls_tree_command(
     Ok(ExitCode::SUCCESS)
 }
 
-fn pathspec_uses_glob_magic(pathspec: &str) -> bool {
-    let Some(rest) = pathspec.strip_prefix(":(") else {
-        return false;
-    };
-    let Some((magic, _pattern)) = rest.split_once(')') else {
-        return false;
-    };
-    magic.split(',').any(|word| word == "glob")
+fn ls_tree_unsupported_magic(pathspec: &str) -> Option<&'static str> {
+    let rest = pathspec.strip_prefix(":(")?;
+    let (magic, _pattern) = rest.split_once(')')?;
+    for word in magic.split(',') {
+        match word {
+            "glob" => return Some("glob"),
+            "icase" => return Some("icase"),
+            _ => {}
+        }
+    }
+    None
 }
 
 fn status_command(

@@ -2697,6 +2697,10 @@
   rejected unsupported `glob` magic; `add` still rejected, `reset` kept the
   tracked-path no-op behavior, and `restore` rejected the mismatched-case glob
   pathspec.
+- 2026-05-25 `ls-tree` now also has direct Git-vs-rit compatibility coverage
+  for rejecting `:(icase)camel.txt` with the same unsupported-magic fatal
+  behavior as current Git instead of silently treating that pathspec as a
+  normal lookup.
 - `rit reset` now mirrors that no-op acceptance for non-wildcard tracked
   pathspecs with mismatched case. More advanced pathspec magic parity remains
   tracked separately in M4/M6.
