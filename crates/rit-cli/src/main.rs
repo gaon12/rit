@@ -607,22 +607,36 @@ fn ls_tree_command(
     Ok(ExitCode::SUCCESS)
 }
 
-fn ls_tree_unsupported_magic_message(pathspec: &str) -> Option<&'static str> {
+fn ls_tree_unsupported_magic_message(pathspec: &str) -> Option<String> {
     if pathspec.starts_with(":!") || pathspec.starts_with(":^") {
-        return Some("'exclude' (mnemonic: '!')");
+        return Some("'exclude' (mnemonic: '!')".to_owned());
     }
 
     let rest = pathspec.strip_prefix(":(")?;
     let (magic, _pattern) = rest.split_once(')')?;
-    for word in magic.split(',') {
-        match word {
-            "glob" => return Some("'glob'"),
-            "icase" => return Some("'icase'"),
-            "exclude" => return Some("'exclude' (mnemonic: '!')"),
-            word if word.starts_with("attr:") => return Some("'attr'"),
-            _ => {}
-        }
+    let mut unsupported = Vec::new();
+    let has_glob = magic.split(',').any(|word| word == "glob");
+    let has_icase = magic.split(',').any(|word| word == "icase");
+    let has_exclude = magic.split(',').any(|word| word == "exclude");
+    let has_attr = magic.split(',').any(|word| word.starts_with("attr:"));
+
+    if has_glob {
+        unsupported.push("'glob'");
     }
+    if has_icase {
+        unsupported.push("'icase'");
+    }
+    if has_exclude {
+        unsupported.push("'exclude' (mnemonic: '!')");
+    }
+    if has_attr {
+        unsupported.push("'attr'");
+    }
+
+    if !unsupported.is_empty() {
+        return Some(unsupported.join(", "));
+    }
+
     None
 }
 

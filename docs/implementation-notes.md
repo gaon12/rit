@@ -60,6 +60,9 @@
   `status`, `diff`, `ls-files`, `log`, `show`, plus write `add`, `restore`,
   and `reset`; `ls-tree` likewise rejects all three aliases with the same
   unsupported-magic fatal behavior as Git.
+- The same `ls-tree` slice now also checks Git-matching combined unsupported
+  magic lists such as `:(icase,glob)` and `:(attr:text,exclude)`, including
+  Git's canonical unsupported-magic ordering in the fatal message.
 - 2026-05-11 attr pathspec magic slice checked `git config -h`, `git status -h`,
   `git add -h`, `git diff -h`, and direct Git comparisons for
   `:(attr:name)`, `:(attr:-name)`, `:(attr:name=value)`, and `:(attr:!name)`
