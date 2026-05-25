@@ -403,6 +403,9 @@ Completion criteria:
       Git-compatible option error output for `add`, `restore`, and `reset`.
     - [x] An explicitly empty `--pathspec-from-file=` value matches Git's
       command-specific behavior for `add`, `restore`, and `reset`.
+    - [x] An explicitly empty `--pathspec-from-file=` value still allows
+      ordinary pathspec arguments, but `--pathspec-file-nul` is rejected
+      because there is no active file selection behind that empty value.
     - [x] Empty line pathspec-file entries are rejected with Git-compatible
       fatal output for `add`, `restore`, and `reset`.
     - [x] Quoted empty pathspec-file entries are rejected with Git-compatible

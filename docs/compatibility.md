@@ -245,7 +245,10 @@ UTF-8 BOM-prefixed text pathspec entries that Git treats as literal leading
 bytes. An explicitly empty `--pathspec-from-file=` selection is also covered,
 matching Git's command-specific split where `add` and `reset` treat it like
 an empty selection while `restore` still reports that no restore paths were
-specified.
+specified. That same empty-value slice also covers Git's behavior where
+ordinary pathspec arguments still remain valid after the empty selection, but
+`--pathspec-file-nul` is rejected because no active pathspec-file source was
+actually selected.
 Local write compatibility tests cover `core.ignorecase=true` for a
 mismatched-case `add` pathspec that Git accepts as a no-op. They also cover
 Git-matching rejection of mismatched-case tracked pathspecs for `add` and

@@ -486,7 +486,10 @@
   baseline with `git add -h`, `git restore -h`, `git reset -h`, and direct
   Git-vs-rit comparisons for `--pathspec-from-file=`. Git treats the empty
   value like an empty selection for `add` and `reset`, while `restore` keeps
-  reporting that restore paths were not specified.
+  reporting that restore paths were not specified. The same slice now also
+  checks that ordinary pathspec arguments still remain valid after the empty
+  selection, while `--pathspec-file-nul` is rejected because there is no
+  active pathspec-file source behind the empty value.
 - 2026-05-12 stdin pathspec-file slice checked `git add -h`, `git restore -h`,
   `git reset -h`, and direct Git comparisons for `--pathspec-from-file=-`.
 - 2026-05-12 stdin NUL pathspec-file slice checked `git add -h`,

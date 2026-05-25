@@ -1537,15 +1537,15 @@ fn parse_add_args(args: &[String], stderr: &mut dyn Write) -> io::Result<Option<
         index += 1;
     }
 
-    if pathspec_file_nul && pathspec_file.is_none() {
+    if pathspec_file_nul && !pathspec_from_file_selection_is_active(pathspec_file.as_deref()) {
         write_pathspec_file_nul_requires_file(stderr)?;
         return Ok(Some(ParsedAddArgs::exit(128)));
     }
-    if pathspec_file.is_some() && !paths.is_empty() {
+    if pathspec_from_file_selection_is_active(pathspec_file.as_deref()) && !paths.is_empty() {
         write_pathspec_file_cannot_mix_with_args(stderr)?;
         return Ok(Some(ParsedAddArgs::exit(128)));
     }
-    if let Some(file_name) = pathspec_file {
+    if let Some(file_name) = pathspec_file.filter(|file_name| !file_name.is_empty()) {
         match pathspec_args::read_pathspecs_from_file(&file_name, pathspec_file_nul, "add", stderr)?
         {
             pathspec_args::PathspecFileRead::Pathspecs(file_pathspecs) => {
@@ -2025,15 +2025,15 @@ fn parse_restore_args(
         }
         index += 1;
     }
-    if pathspec_file_nul && pathspec_file.is_none() {
+    if pathspec_file_nul && !pathspec_from_file_selection_is_active(pathspec_file.as_deref()) {
         write_pathspec_file_nul_requires_file(stderr)?;
         return Ok(Some(ParsedRestoreArgs::exit(128)));
     }
-    if pathspec_file.is_some() && !paths.is_empty() {
+    if pathspec_from_file_selection_is_active(pathspec_file.as_deref()) && !paths.is_empty() {
         write_pathspec_file_cannot_mix_with_args(stderr)?;
         return Ok(Some(ParsedRestoreArgs::exit(128)));
     }
-    if let Some(file_name) = pathspec_file {
+    if let Some(file_name) = pathspec_file.filter(|file_name| !file_name.is_empty()) {
         match pathspec_args::read_pathspecs_from_file(
             &file_name,
             pathspec_file_nul,
@@ -2194,15 +2194,15 @@ fn parse_reset_args(
         }
         index += 1;
     }
-    if pathspec_file_nul && pathspec_file.is_none() {
+    if pathspec_file_nul && !pathspec_from_file_selection_is_active(pathspec_file.as_deref()) {
         write_pathspec_file_nul_requires_file(stderr)?;
         return Ok(Some(ParsedResetArgs::exit(128)));
     }
-    if pathspec_file.is_some() && !paths.is_empty() {
+    if pathspec_from_file_selection_is_active(pathspec_file.as_deref()) && !paths.is_empty() {
         write_pathspec_file_cannot_mix_with_args(stderr)?;
         return Ok(Some(ParsedResetArgs::exit(128)));
     }
-    if let Some(file_name) = pathspec_file {
+    if let Some(file_name) = pathspec_file.filter(|file_name| !file_name.is_empty()) {
         from_pathspec_file = true;
         match pathspec_args::read_pathspecs_from_file(
             &file_name,
@@ -4037,6 +4037,10 @@ pub(crate) fn pathspec_from_file_missing_value(
     after_separator: bool,
 ) -> bool {
     !after_separator && args[index] == "--pathspec-from-file" && index + 1 >= args.len()
+}
+
+pub(crate) fn pathspec_from_file_selection_is_active(pathspec_file: Option<&str>) -> bool {
+    matches!(pathspec_file, Some(file_name) if !file_name.is_empty())
 }
 
 pub(crate) fn write_pathspec_from_file_requires_value(stderr: &mut dyn Write) -> io::Result<()> {
