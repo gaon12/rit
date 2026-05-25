@@ -2701,6 +2701,8 @@
   for rejecting `:(icase)camel.txt` with the same unsupported-magic fatal
   behavior as current Git instead of silently treating that pathspec as a
   normal lookup.
+- The same `ls-tree` compatibility slice now covers Git-matching rejection of
+  unsupported `:(attr:...)`, `:!`, and `:(exclude)` pathspec magic.
 - `rit reset` now mirrors that no-op acceptance for non-wildcard tracked
   pathspecs with mismatched case. More advanced pathspec magic parity remains
   tracked separately in M4/M6.

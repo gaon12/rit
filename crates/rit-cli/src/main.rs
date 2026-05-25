@@ -542,13 +542,14 @@ fn ls_tree_command(
             return Ok(ExitCode::from(129));
         }
     };
-    if let Some((original_pathspec, unsupported_magic)) = pathspec_args
-        .iter()
-        .find_map(|pathspec| ls_tree_unsupported_magic(pathspec).map(|magic| (pathspec, magic)))
+    if let Some((original_pathspec, unsupported_message)) =
+        pathspec_args.iter().find_map(|pathspec| {
+            ls_tree_unsupported_magic_message(pathspec).map(|message| (pathspec, message))
+        })
     {
         writeln!(
             stderr,
-            "fatal: {}: pathspec magic not supported by this command: '{unsupported_magic}'",
+            "fatal: {}: pathspec magic not supported by this command: {unsupported_message}",
             git_error_pathspec(original_pathspec),
         )?;
         return Ok(ExitCode::from(128));
@@ -609,13 +610,19 @@ fn ls_tree_command(
     Ok(ExitCode::SUCCESS)
 }
 
-fn ls_tree_unsupported_magic(pathspec: &str) -> Option<&'static str> {
+fn ls_tree_unsupported_magic_message(pathspec: &str) -> Option<&'static str> {
+    if pathspec.starts_with(":!") || pathspec.starts_with(":^") {
+        return Some("'exclude' (mnemonic: '!')");
+    }
+
     let rest = pathspec.strip_prefix(":(")?;
     let (magic, _pattern) = rest.split_once(')')?;
     for word in magic.split(',') {
         match word {
-            "glob" => return Some("glob"),
-            "icase" => return Some("icase"),
+            "glob" => return Some("'glob'"),
+            "icase" => return Some("'icase'"),
+            "exclude" => return Some("'exclude' (mnemonic: '!')"),
+            word if word.starts_with("attr:") => return Some("'attr'"),
             _ => {}
         }
     }

@@ -287,6 +287,8 @@ case-sensitive no-match behavior, `ls-tree` rejects unsupported `glob` magic,
 `ls-tree` now also has direct compatibility coverage for rejecting
 `:(icase)camel.txt` with Git's unsupported-magic fatal behavior instead of
 silently treating it like a normal pathspec.
+The same `ls-tree` surface now explicitly checks Git-compatible rejection for
+unsupported `:(attr:...)`, `:!`, and `:(exclude)` pathspec magic as well.
 
 `ls-tree` compatibility tests cover literal directory and file path lookup with
 default, `--name-only`, and `--object-only` output.
