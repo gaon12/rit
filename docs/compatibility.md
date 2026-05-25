@@ -274,6 +274,11 @@ The same current baseline is now also checked for repo-root magic pathspec
 `core.ignorecase`, `reset` keeps the tracked-path no-op behavior, and
 `restore` rejects the mismatched-case repo-root pathspec regardless of
 `core.ignorecase`.
+The `:/camel.txt` root shorthand now has the same direct Git-vs-rit coverage
+on the current Windows baseline: read-only lookup stays case-sensitive, `add`
+still follows `core.ignorecase`, `reset` keeps the tracked-path no-op
+behavior, and `restore` rejects the mismatched-case root shorthand regardless
+of `core.ignorecase`.
 
 `ls-tree` compatibility tests cover literal directory and file path lookup with
 default, `--name-only`, and `--object-only` output.

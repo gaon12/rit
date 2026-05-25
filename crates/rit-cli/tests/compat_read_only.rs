@@ -2383,6 +2383,42 @@ fn read_only_top_magic_mismatched_case_pathspec_stays_case_sensitive() {
 }
 
 #[test]
+fn read_only_root_shorthand_mismatched_case_pathspec_stays_case_sensitive() {
+    for core_ignorecase in [false, true] {
+        let fixture = build_read_only_case_lookup_fixture(
+            &format!("read-only-case-root-shorthand-{core_ignorecase}"),
+            core_ignorecase,
+        );
+
+        for args in [
+            vec!["status", "--porcelain=v1", "--", ":/camel.txt"],
+            vec!["diff", "--name-only", "--", ":/camel.txt"],
+            vec!["ls-files", "--", ":/camel.txt"],
+            vec!["ls-tree", "--name-only", "HEAD", ":/camel.txt"],
+            vec!["log", "--oneline", "--", ":/camel.txt"],
+            vec!["show", "--no-patch", "--", ":/camel.txt"],
+        ] {
+            let mut options = CompareOptions::new(
+                fixture.as_path(),
+                git_command_slice(&args),
+                rit_command_slice(&args),
+            );
+            options.compare_repository_state = false;
+            let outcome = compare(&options).expect("comparison should run");
+
+            assert!(
+                outcome.is_match(),
+                "core.ignorecase={core_ignorecase} read-only root-shorthand mismatched-case {:?}\n{}",
+                args,
+                outcome.report()
+            );
+        }
+
+        let _ = fs::remove_dir_all(fixture);
+    }
+}
+
+#[test]
 fn log_pathspec_outputs_match_git() {
     let fixture = LogPathFixture::new("pathspec-log");
 
