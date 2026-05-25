@@ -1004,6 +1004,10 @@
   default-threshold behavior instead of failing diff argument parsing.
 - Split rename-limit forms such as `-l 1` now match Git instead of requiring
   the compact `-l1` spelling.
+- Covered diff parser slices now also reject later options after split
+  similarity forms such as `-M 79%` / `-C 79%` when that separated token is
+  already being treated as a non-option path argument, matching Git's fatal
+  option-order behavior on the checked cached and default worktree fixtures.
 - Added local write compatibility coverage that compares Git and rit porcelain
   state after directory pathspec `add`, `restore`, and `reset`.
 - Added local write compatibility coverage for simple wildcard and

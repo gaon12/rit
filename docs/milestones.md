@@ -262,6 +262,9 @@ Completion criteria:
     default rename/copy threshold on the covered cached and worktree slices.
   - [x] Covered rename/copy parser slices also accept split rename-limit
     forms such as `-l 1`, not only compact `-l1`.
+  - [x] Covered rename/copy parser slices now also reject later diff options
+    after split similarity forms such as `-M 79%` / `-C 79%` when the
+    separated token is already being treated as a non-option path argument.
   - [x] Checked explicit `--find-copies-harder`, with or without `-C`,
     still overrides `diff.renames=false` like Git for the covered cached and
     default worktree hard-copy slices.

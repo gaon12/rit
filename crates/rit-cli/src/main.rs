@@ -816,6 +816,7 @@ fn diff_command(
     let mut pathspec_args = Vec::new();
     let mut after_separator = false;
     let mut pending_rename_limit = false;
+    let mut saw_non_option_argument = false;
 
     for arg in args {
         if pending_rename_limit {
@@ -865,6 +866,13 @@ fn diff_command(
                     }
                 }
             }
+            option if option.starts_with('-') && saw_non_option_argument && !after_separator => {
+                writeln!(
+                    stderr,
+                    "fatal: option '{option}' must come before non-option arguments"
+                )?;
+                return Ok(ExitCode::from(128));
+            }
             option
                 if (option.starts_with("-M") || option.starts_with("--find-renames="))
                     && !after_separator =>
@@ -913,7 +921,12 @@ fn diff_command(
                 writeln!(stderr, "rit: unsupported diff option '{unsupported}'")?;
                 return Ok(ExitCode::from(129));
             }
-            pathspec => pathspec_args.push(pathspec.to_owned()),
+            pathspec => {
+                if !after_separator {
+                    saw_non_option_argument = true;
+                }
+                pathspec_args.push(pathspec.to_owned());
+            }
         }
     }
     if pending_rename_limit {

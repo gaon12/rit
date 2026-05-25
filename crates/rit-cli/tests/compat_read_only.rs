@@ -124,6 +124,103 @@ fn diff_cached_exact_rename_outputs_match_git() {
 }
 
 #[test]
+fn diff_split_similarity_argument_rejects_later_options_like_git() {
+    let cached_rename_fixture = ExactRenameFixture::new("cached-split-similarity-late-option");
+    fs::write(cached_rename_fixture.path().join("79%"), "sentinel\n")
+        .expect("sentinel path should be written");
+
+    for args in [
+        vec!["diff", "--cached", "-M", "79%", "--name-status"],
+        vec!["diff", "--cached", "--find-renames", "79%", "--name-status"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            cached_rename_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached split similarity late option {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+
+    let cached_copy_fixture = CopyFixture::new("cached-copy-split-similarity-late-option");
+    fs::write(cached_copy_fixture.path().join("79%"), "sentinel\n")
+        .expect("sentinel path should be written");
+
+    for args in [
+        vec!["diff", "--cached", "-C", "79%", "--name-status"],
+        vec!["diff", "--cached", "--find-copies", "79%", "--name-status"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            cached_copy_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached split copy similarity late option {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+
+    let worktree_rename_fixture =
+        WorktreeIntentSimilarityRenameFixture::new("worktree-split-similarity-late-option");
+    fs::write(worktree_rename_fixture.path().join("79%"), "sentinel\n")
+        .expect("sentinel path should be written");
+
+    for args in [
+        vec!["diff", "-M", "79%", "--name-status"],
+        vec!["diff", "--find-renames", "79%", "--name-status"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            worktree_rename_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree split similarity late option {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+
+    let worktree_copy_fixture =
+        WorktreeIntentCopyFixture::new("worktree-copy-split-similarity-late-option");
+    fs::write(worktree_copy_fixture.path().join("79%"), "sentinel\n")
+        .expect("sentinel path should be written");
+
+    for args in [
+        vec!["diff", "-C", "79%", "--name-status"],
+        vec!["diff", "--find-copies", "79%", "--name-status"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            worktree_copy_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree split copy similarity late option {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_renames_config_matches_git() {
     let false_fixture = ExactRenameFixture::new("cached-renames-config-false");
     run_git(false_fixture.path(), ["config", "diff.renames", "false"]);
