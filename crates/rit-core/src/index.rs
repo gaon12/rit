@@ -358,6 +358,13 @@ impl IndexEntry {
     pub fn is_intent_to_add(&self) -> bool {
         self.extended_flags & INDEX_EXTENDED_FLAG_INTENT_TO_ADD != 0
     }
+
+    /// Returns true when the cached stat data still matches the current
+    /// worktree metadata closely enough for Git-style clean shortcuts.
+    pub fn stat_matches(&self, metadata: &fs::Metadata) -> bool {
+        self.stat == IndexEntryStat::from_metadata(metadata)
+            && self.file_size == metadata.len().min(u32::MAX as u64) as u32
+    }
 }
 
 const INDEX_MAIN_FLAG_EXTENDED: u16 = 0x4000;

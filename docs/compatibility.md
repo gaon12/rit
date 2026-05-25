@@ -188,7 +188,10 @@ command in the other copy, then compares:
 The `rit-cli` integration tests include reusable read-only diff fixtures for
 default and cached output modes. Worktree diff comparisons that do not mutate
 state still skip repository-state comparison, while status refresh coverage
-compares final `.git/index` state against Git.
+compares final `.git/index` state against Git. On the current Windows
+baseline it also checks staged-clean `core.autocrlf=true` files, where Git
+trusts refreshed index stat data instead of rehashing CRLF worktree bytes
+against normalized index blobs.
 
 Pathspec compatibility tests currently cover ordinary literal file/directory
 filters and simple `*`, `?`, and bracket-class wildcard filters for

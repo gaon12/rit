@@ -2042,6 +2042,19 @@ fn status_index_refresh_matches_git_state() {
     assert_eq!(git_index, rit_index);
 }
 
+#[cfg(windows)]
+#[test]
+fn status_autocrlf_staged_file_matches_git_state() {
+    let fixture = StatusAutocrlfFixture::new("status-autocrlf-staged-clean");
+
+    let (git_stdout, git_stderr) = run_capture("git", ["status", "--porcelain=v1"], fixture.path());
+    let (rit_stdout, rit_stderr) =
+        run_capture(rit_binary(), ["status", "--porcelain=v1"], fixture.path());
+
+    assert_eq!(git_stdout, rit_stdout);
+    assert_eq!(git_stderr, rit_stderr);
+}
+
 #[test]
 fn cat_file_reads_delta_packed_blob_like_git() {
     let fixture = DeltaPackFixture::new("delta-pack-cat-file");
@@ -3913,6 +3926,45 @@ impl StatusRefreshFixture {
 }
 
 impl Drop for StatusRefreshFixture {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+#[cfg(windows)]
+struct StatusAutocrlfFixture {
+    path: PathBuf,
+}
+
+#[cfg(windows)]
+impl StatusAutocrlfFixture {
+    fn new(name: &str) -> Self {
+        let path = temp_path(name);
+        fs::create_dir_all(&path).expect("fixture directory should be created");
+        run_git(&path, ["init", "--quiet"]);
+        run_git(&path, ["config", "user.name", "Rit Test"]);
+        run_git(&path, ["config", "user.email", "rit@example.test"]);
+        run_git(&path, ["config", "core.autocrlf", "true"]);
+
+        fs::write(path.join("tracked.txt"), b"base\r\n").expect("tracked file should be written");
+        run_git(&path, ["add", "tracked.txt"]);
+        run_git(&path, ["commit", "--quiet", "-m", "base"]);
+
+        std::thread::sleep(Duration::from_millis(1100));
+        fs::write(path.join("tracked.txt"), b"changed\r\n")
+            .expect("tracked file should be updated");
+        run_git(&path, ["add", "tracked.txt"]);
+
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+#[cfg(windows)]
+impl Drop for StatusAutocrlfFixture {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }

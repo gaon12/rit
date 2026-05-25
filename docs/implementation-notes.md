@@ -2541,7 +2541,10 @@
 
 - Supported index format: v2/v3 entries for regular files.
 - Supported stat behavior: status refreshes clean tracked file mtime/size
-  metadata and preserves raw optional extension bytes such as `TREE`.
+  metadata and preserves raw optional extension bytes such as `TREE`. On the
+  current Windows baseline, status also trusts Git-compatible refreshed stat
+  data for staged-clean `core.autocrlf=true` files instead of rehashing CRLF
+  worktree bytes against normalized index blobs.
 - Unsupported index behavior: conflict stages.
 
 ### Git attributes

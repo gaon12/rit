@@ -469,6 +469,8 @@ Completion criteria:
 - [x] Non-delta packed object read.
 - [x] Index v2 read/write for regular files.
 - [x] Index stat refresh compatible with Git status for clean regular files.
+  - [x] On the current Windows baseline, staged-clean `core.autocrlf=true`
+    files also stay clean like Git after status refresh.
 - [x] Raw optional index extension preservation during status refresh.
 - [x] Delta packed object resolution.
 - [x] Semantic index extension parsing.

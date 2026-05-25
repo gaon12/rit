@@ -251,12 +251,27 @@ impl Repository {
                 Some(index_object) => {
                     let full_path = join_slash_path(worktree, path);
                     let metadata = fs::symlink_metadata(&full_path).ok();
-                    let status = status_worktree_column(
-                        &full_path,
-                        metadata.as_ref(),
-                        index_object,
-                        symlinks_enabled,
-                    )?;
+                    let status = match (metadata.as_ref(), index_entry_positions.get(path)) {
+                        (Some(metadata), Some(position))
+                            if index.entries[*position].stat_matches(metadata) =>
+                        {
+                            if worktree_mode_matches_index(
+                                metadata,
+                                index_object.mode,
+                                symlinks_enabled,
+                            ) {
+                                ' '
+                            } else {
+                                'M'
+                            }
+                        }
+                        _ => status_worktree_column(
+                            &full_path,
+                            metadata.as_ref(),
+                            index_object,
+                            symlinks_enabled,
+                        )?,
+                    };
                     if status == ' ' {
                         let metadata = fs::symlink_metadata(&full_path)
                             .map_err(|source| RitError::io(&full_path, source))?;
