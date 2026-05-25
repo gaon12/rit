@@ -97,6 +97,10 @@ The current codebase implements an early local Git subset:
   `--find-copies=` are also checked and behave like Git's default 50%
   threshold instead of failing argument parsing. The covered rename-limit
   parser also accepts both `-l<n>` and split `-l <n>` forms like Git.
+  Covered cached parser behavior now also accepts one explicit checked
+  commit-ish such as `HEAD` or a full commit ID, including `--name-status`,
+  `--stat`, default patch output, and `-- <pathspec>` filtering against that
+  commit tree.
   Covered cached parser behavior now also rejects later diff options after
   split similarity arguments such as `-M 79%` / `-C 79%` when those tokens
   are already being treated as non-option path arguments, matching Git's

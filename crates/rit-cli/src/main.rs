@@ -814,8 +814,8 @@ fn diff_command(
     let mut rename_limit = None;
     let mut output_mode = None;
     let mut nul_terminated = false;
-    let mut pathspec_args = Vec::new();
-    let mut pre_separator_non_option_args = Vec::new();
+    let mut before_separator_pathspec_args = Vec::new();
+    let mut after_separator_pathspec_args = Vec::new();
     let mut after_separator = false;
     let mut pending_rename_limit = false;
     let mut late_option_after_non_option = None;
@@ -834,6 +834,9 @@ fn diff_command(
                     return Ok(ExitCode::from(129));
                 }
             }
+        }
+        if arg.starts_with('-') && saw_non_option_argument && !after_separator {
+            late_option_after_non_option.get_or_insert_with(|| arg.clone());
         }
         match arg.as_str() {
             "--" if !after_separator => after_separator = true,
@@ -867,11 +870,6 @@ fn diff_command(
                         writeln!(stderr, "rit: {error}")?;
                         return Ok(ExitCode::from(129));
                     }
-                }
-            }
-            option if option.starts_with('-') && saw_non_option_argument && !after_separator => {
-                if late_option_after_non_option.is_none() {
-                    late_option_after_non_option = Some(option.to_owned());
                 }
             }
             option
@@ -925,9 +923,10 @@ fn diff_command(
             pathspec => {
                 if !after_separator {
                     saw_non_option_argument = true;
-                    pre_separator_non_option_args.push(pathspec.to_owned());
+                    before_separator_pathspec_args.push(pathspec.to_owned());
+                } else {
+                    after_separator_pathspec_args.push(pathspec.to_owned());
                 }
-                pathspec_args.push(pathspec.to_owned());
             }
         }
     }
@@ -941,7 +940,16 @@ fn diff_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
-    for argument in &pre_separator_non_option_args {
+    let mut compare_revision = None;
+    if cached
+        && before_separator_pathspec_args.len() == 1
+        && let Ok(revision) = repository.resolve_revision(&before_separator_pathspec_args[0])
+    {
+        compare_revision = Some(revision);
+        before_separator_pathspec_args.clear();
+    }
+
+    for argument in &before_separator_pathspec_args {
         if !diff_pre_separator_argument_needs_known_path_check(argument) {
             continue;
         }
@@ -958,13 +966,19 @@ fn diff_command(
             return Ok(ExitCode::from(128));
         }
     }
-    if let Some(option) = late_option_after_non_option {
+    if !before_separator_pathspec_args.is_empty()
+        && let Some(option) = late_option_after_non_option
+    {
         writeln!(
             stderr,
             "fatal: option '{option}' must come before non-option arguments"
         )?;
         return Ok(ExitCode::from(128));
     }
+    let pathspec_args = before_separator_pathspec_args
+        .into_iter()
+        .chain(after_separator_pathspec_args)
+        .collect::<Vec<_>>();
     let pathspecs = match rit_core::PathspecSet::from_args_with_prefix(
         &pathspec_args,
         repository.path_prefix(),
@@ -972,7 +986,6 @@ fn diff_command(
         Ok(pathspecs) => pathspecs,
         Err(error) => return read_pathspec_error(stderr, error),
     };
-
     let diff_options = rit_core::DiffOptions {
         find_renames,
         find_copies,
@@ -984,7 +997,14 @@ fn diff_command(
     };
     if output_mode == "--patch" {
         let patch_result = if cached {
-            repository.diff_index_to_head_patch_with_options(&pathspecs, &diff_options)
+            match compare_revision {
+                Some(revision) => repository.diff_index_to_commit_patch_with_options(
+                    revision,
+                    &pathspecs,
+                    &diff_options,
+                ),
+                None => repository.diff_index_to_head_patch_with_options(&pathspecs, &diff_options),
+            }
         } else {
             repository.diff_worktree_to_index_patch_with_options(&pathspecs, &diff_options)
         };
@@ -1007,7 +1027,12 @@ fn diff_command(
     }
 
     let diff_result = if cached {
-        repository.diff_index_to_head_with_options(&pathspecs, &diff_options)
+        match compare_revision {
+            Some(revision) => {
+                repository.diff_index_to_commit_with_options(revision, &pathspecs, &diff_options)
+            }
+            None => repository.diff_index_to_head_with_options(&pathspecs, &diff_options),
+        }
     } else {
         repository.diff_worktree_to_index_with_options(&pathspecs, &diff_options)
     };

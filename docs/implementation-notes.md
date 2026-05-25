@@ -1640,7 +1640,10 @@
 - Baseline command checked: `git diff -h`
 - Supported options: default patch output for small text files, `-p`, `-u`,
   `--name-only`, `--name-status`, `--numstat`, `--stat`, plus
-  `--cached`/`--staged` with those output modes, and ordinary literal
+  `--cached`/`--staged` with those output modes. Checked cached diff also
+  accepts one explicit commit-ish such as `HEAD` or a full commit ID,
+  including the same output modes and `-- <pathspec>` filtering against that
+  commit tree. Ordinary literal
   file/directory plus simple `*`, `?`, and bracket-class wildcard pathspec
   filters and positive `:(literal)`, `:(glob)`, `:(top)`, `:/`, and
   `:(icase)` pathspec magic. `-M[<n>]`/`--find-renames[=<n>]` supports staged
@@ -1671,10 +1674,12 @@
   `--find-copies-harder` can also use unchanged index files as worktree copy
   sources for that intent-to-add slice. Plain untracked worktree renames and
   copies stay outside default diff scope like Git.
-- Unsupported options: commit/tree/blob arguments, pathspec files,
-  full rename limits, and many advanced patch formatting options.
+- Unsupported options: non-cached commit/tree/blob arguments, cached tree/blob
+  arguments beyond the checked single-commit-ish form, pathspec files, full
+  rename limits, and many advanced patch formatting options.
 - Git-compatible behavior: default diff scope compares working tree files against the index and ignores untracked files.
-- Git-compatible behavior: cached diff scope compares the index against `HEAD`.
+- Git-compatible behavior: cached diff scope compares the index against `HEAD`,
+  or against one explicit checked commit-ish when one is provided.
 - Git-compatible behavior: pathspecs from a subdirectory are resolved relative
   to that invocation directory unless they use top magic.
 - Intentional differences: advanced patch formatting and custom diff drivers
