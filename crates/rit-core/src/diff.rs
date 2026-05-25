@@ -776,6 +776,27 @@ impl Repository {
         patch_files_to_summary(&patch)
     }
 
+    /// Computes `git diff <commit>` scope for matching paths only.
+    pub fn diff_commit_to_worktree_with_pathspecs(
+        &self,
+        commit_id: ObjectId,
+        pathspecs: &PathspecSet,
+    ) -> Result<DiffSummary> {
+        self.diff_commit_to_worktree_with_options(commit_id, pathspecs, &DiffOptions::default())
+    }
+
+    /// Computes `git diff <commit>` scope with explicit diff options.
+    pub fn diff_commit_to_worktree_with_options(
+        &self,
+        commit_id: ObjectId,
+        pathspecs: &PathspecSet,
+        options: &DiffOptions,
+    ) -> Result<DiffSummary> {
+        let patch =
+            self.diff_commit_to_worktree_patch_with_options(commit_id, pathspecs, options)?;
+        patch_files_to_summary(&patch)
+    }
+
     /// Computes default `git diff` patch output.
     pub fn diff_worktree_to_index_patch_with_pathspecs(
         &self,
@@ -878,6 +899,169 @@ impl Repository {
                 old_data: Vec::new(),
                 new_data,
             });
+        }
+
+        let mut warnings = Vec::new();
+        if options.find_renames {
+            warnings.extend(detect_patch_renames(&mut files, &options)?);
+        }
+        if options.find_copies {
+            warnings.extend(detect_patch_copies_from_sources(
+                &mut files,
+                &copy_sources,
+                &options,
+            )?);
+        }
+
+        Ok(DiffPatch { files, warnings })
+    }
+
+    /// Computes `git diff <commit>` patch output.
+    pub fn diff_commit_to_worktree_patch_with_pathspecs(
+        &self,
+        commit_id: ObjectId,
+        pathspecs: &PathspecSet,
+    ) -> Result<DiffPatch> {
+        self.diff_commit_to_worktree_patch_with_options(
+            commit_id,
+            pathspecs,
+            &DiffOptions::default(),
+        )
+    }
+
+    /// Computes `git diff <commit>` patch output with explicit diff options.
+    pub fn diff_commit_to_worktree_patch_with_options(
+        &self,
+        commit_id: ObjectId,
+        pathspecs: &PathspecSet,
+        options: &DiffOptions,
+    ) -> Result<DiffPatch> {
+        let Some(worktree) = self.worktree() else {
+            return Err(RitError::invalid_input(
+                "diff must be run in a repository with a working tree",
+            ));
+        };
+        let index = Index::read(&self.git_dir().join("index"))?;
+        let index_entries = index
+            .entries
+            .iter()
+            .filter(|entry| entry.stage == 0)
+            .map(|entry| {
+                (
+                    entry.path.clone(),
+                    DiffTreeEntry {
+                        object_id: entry.object_id,
+                        mode: entry.mode,
+                    },
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let old_entries = self.commit_diff_entries(commit_id)?;
+        let attributes = self.root_attributes()?;
+        let options = self.diff_options_with_config(options)?;
+        let paths = index_entries
+            .keys()
+            .chain(old_entries.keys())
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let mut files = Vec::new();
+        let mut copy_sources = Vec::new();
+
+        for path in paths {
+            if !pathspecs.matches_with_attributes(&path, Some(&attributes)) {
+                continue;
+            }
+            let old_entry = old_entries.get(&path);
+            let index_entry = index_entries.get(&path);
+
+            let Some(index_entry) = index_entry else {
+                if let Some(old_entry) = old_entry {
+                    let old_object = self.read_blob(old_entry.object_id)?;
+                    files.push(DiffPatchFile {
+                        status: 'D',
+                        old_path: None,
+                        path,
+                        similarity_score: None,
+                        old_object_id: Some(old_entry.object_id),
+                        new_object_id: None,
+                        mode: old_entry.mode,
+                        old_data: old_object.data,
+                        new_data: Vec::new(),
+                    });
+                }
+                continue;
+            };
+
+            let worktree_path = join_slash_path(worktree, &path);
+            if !worktree_path.exists() {
+                if let Some(old_entry) = old_entry {
+                    let old_object = self.read_blob(old_entry.object_id)?;
+                    files.push(DiffPatchFile {
+                        status: 'D',
+                        old_path: None,
+                        path,
+                        similarity_score: None,
+                        old_object_id: Some(old_entry.object_id),
+                        new_object_id: None,
+                        mode: old_entry.mode,
+                        old_data: old_object.data,
+                        new_data: Vec::new(),
+                    });
+                }
+                continue;
+            }
+
+            let new_data = read_worktree_entry_data(&worktree_path, index_entry.mode)?;
+            let new_object_id = hash_object(ObjectKind::Blob, &new_data);
+            match old_entry {
+                Some(old_entry)
+                    if old_entry.object_id == new_object_id
+                        && old_entry.mode == index_entry.mode =>
+                {
+                    if options.find_copies_harder {
+                        let old_object = self.read_blob(old_entry.object_id)?;
+                        copy_sources.push(CopySource {
+                            path: path.clone(),
+                            mode: index_entry.mode,
+                            object_id: Some(old_entry.object_id),
+                            data: old_object.data,
+                            changed: false,
+                        });
+                    }
+                }
+                Some(old_entry) => {
+                    let old_object = self.read_blob(old_entry.object_id)?;
+                    copy_sources.push(CopySource {
+                        path: path.clone(),
+                        mode: index_entry.mode,
+                        object_id: Some(old_entry.object_id),
+                        data: old_object.data.clone(),
+                        changed: true,
+                    });
+                    files.push(DiffPatchFile {
+                        status: 'M',
+                        old_path: None,
+                        path,
+                        similarity_score: None,
+                        old_object_id: Some(old_entry.object_id),
+                        new_object_id: Some(new_object_id),
+                        mode: index_entry.mode,
+                        old_data: old_object.data,
+                        new_data,
+                    });
+                }
+                None => files.push(DiffPatchFile {
+                    status: 'A',
+                    old_path: None,
+                    path,
+                    similarity_score: None,
+                    old_object_id: None,
+                    new_object_id: Some(new_object_id),
+                    mode: index_entry.mode,
+                    old_data: Vec::new(),
+                    new_data,
+                }),
+            }
         }
 
         let mut warnings = Vec::new();

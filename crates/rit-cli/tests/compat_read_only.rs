@@ -144,6 +144,56 @@ fn diff_cached_explicit_commit_outputs_match_git() {
 }
 
 #[test]
+fn diff_explicit_commit_outputs_match_git() {
+    let fixture = DiffFixture::new("explicit-commit-diff");
+    let head = run_capture("git", ["rev-parse", "HEAD"], fixture.path())
+        .0
+        .trim()
+        .to_owned();
+
+    let dynamic_args = [
+        vec![
+            OsString::from("diff"),
+            OsString::from("HEAD"),
+            OsString::from("--name-status"),
+        ],
+        vec![
+            OsString::from("diff"),
+            OsString::from("HEAD"),
+            OsString::from("--stat"),
+        ],
+        vec![OsString::from("diff"), OsString::from("HEAD")],
+        vec![
+            OsString::from("diff"),
+            OsString::from(head.clone()),
+            OsString::from("--name-status"),
+        ],
+        vec![
+            OsString::from("diff"),
+            OsString::from("HEAD"),
+            OsString::from("--"),
+            OsString::from("nested/base.txt"),
+        ],
+    ];
+
+    for args in dynamic_args {
+        let outcome = compare(&CompareOptions::new(
+            fixture.path(),
+            CommandSpec::new("git", args.clone()),
+            CommandSpec::new(rit_binary(), args.clone()),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "explicit commit diff {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_cached_exact_rename_outputs_match_git() {
     let fixture = ExactRenameFixture::new("cached-exact-rename");
 

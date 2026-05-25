@@ -114,6 +114,11 @@ The current codebase implements an early local Git subset:
 - Default worktree diff already performs checked exact rename detection for
   the Git-compatible intent-to-add slice, where added worktree paths are
   already represented in the index by `git add -N`. `diff.renames=false`
+  Covered default parser behavior now also accepts one explicit checked
+  commit-ish such as `HEAD` or a full commit ID, including `--name-status`,
+  `--stat`, default patch output, and `-- <pathspec>` filtering against that
+  commit tree.
+  `diff.renames=false`
   disables that default rename detection, and `--no-renames` / later `-M`
   option order matches Git there. Invalid `diff.renames` values also fail the
   checked default worktree diff forms with the same fatal path. `-M[<n>]` and

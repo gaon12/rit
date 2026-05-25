@@ -941,8 +941,7 @@ fn diff_command(
         None => return Ok(ExitCode::from(128)),
     };
     let mut compare_revision = None;
-    if cached
-        && before_separator_pathspec_args.len() == 1
+    if before_separator_pathspec_args.len() == 1
         && let Ok(revision) = repository.resolve_revision(&before_separator_pathspec_args[0])
     {
         compare_revision = Some(revision);
@@ -1006,7 +1005,16 @@ fn diff_command(
                 None => repository.diff_index_to_head_patch_with_options(&pathspecs, &diff_options),
             }
         } else {
-            repository.diff_worktree_to_index_patch_with_options(&pathspecs, &diff_options)
+            match compare_revision {
+                Some(revision) => repository.diff_commit_to_worktree_patch_with_options(
+                    revision,
+                    &pathspecs,
+                    &diff_options,
+                ),
+                None => {
+                    repository.diff_worktree_to_index_patch_with_options(&pathspecs, &diff_options)
+                }
+            }
         };
         match patch_result {
             Ok(patch) => match patch.to_patch_text() {
@@ -1034,7 +1042,12 @@ fn diff_command(
             None => repository.diff_index_to_head_with_options(&pathspecs, &diff_options),
         }
     } else {
-        repository.diff_worktree_to_index_with_options(&pathspecs, &diff_options)
+        match compare_revision {
+            Some(revision) => {
+                repository.diff_commit_to_worktree_with_options(revision, &pathspecs, &diff_options)
+            }
+            None => repository.diff_worktree_to_index_with_options(&pathspecs, &diff_options),
+        }
     };
     let diff = match diff_result {
         Ok(diff) => diff,

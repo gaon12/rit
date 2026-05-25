@@ -187,6 +187,9 @@ Completion criteria:
   - [x] No-newline markers for default and cached text patch output.
   - [x] Binary patch placeholders for default and cached diff scopes.
   - [x] Multi-hunk context splitting.
+  - [x] `rit diff <commit-ish>` checked single-commit comparisons for
+    `HEAD`/full commit IDs, including summary, patch, and `-- <pathspec>`
+    filtering.
   - [x] `rit diff --cached <commit-ish>` checked single-commit comparisons for
     `HEAD`/full commit IDs, including summary, patch, and `-- <pathspec>`
     filtering.
