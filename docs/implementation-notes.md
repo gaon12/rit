@@ -424,7 +424,7 @@
   same Git baseline with direct Git-vs-rit comparisons proving that
   `--no-pathspec-file-nul` can return repeated selection to text mode, so a
   later text `--pathspec-from-file=<file>` still wins after an earlier
-  NUL-delimited file selection.
+  NUL-delimited file selection or stdin selection.
 - 2026-05-15 pathspec-file argument mixing slice checked `git add -h`,
   `git restore -h`, `git reset -h`, and direct Git comparisons for
   `--pathspec-from-file` combined with ordinary pathspec arguments.

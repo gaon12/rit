@@ -224,7 +224,8 @@ source is another file or stdin, including NUL-delimited file and stdin
 sources, and Git's last selection wins in each checked case, including
 mixed stdin-to-file, text-file-to-NUL-file, and NUL-file-back-to-text-file
 handoff when `--no-pathspec-file-nul` restores text mode before the later
-selection.
+selection, including the same text-file handoff after an earlier
+NUL-delimited stdin selection.
 Line-delimited pathspec-file input also covers Git-compatible rejection of
 empty and badly quoted pathspec entries before repository mutation.
 Local write compatibility tests cover `core.ignorecase=true` for a
