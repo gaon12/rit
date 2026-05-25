@@ -2688,6 +2688,15 @@
   stayed case-sensitive regardless of `core.ignorecase`; `add` still honored
   `core.ignorecase`, `reset` kept the tracked-path no-op behavior, and
   `restore` rejected the mismatched-case root shorthand pathspec.
+- 2026-05-25 exact glob-magic case lookup slice checked the same Git baseline
+  with direct Git-vs-rit comparisons for read-only `status`, `diff`,
+  `ls-files`, `ls-tree`, `log`, and `show`, plus write `add`, `reset`, and
+  `restore`, using exact glob pathspec `:(glob)camel.txt` against committed
+  `Camel.txt`. In that baseline, `status`, `diff`, `ls-files`, `log`, and
+  `show` stayed case-sensitive regardless of `core.ignorecase`; `ls-tree`
+  rejected unsupported `glob` magic; `add` still rejected, `reset` kept the
+  tracked-path no-op behavior, and `restore` rejected the mismatched-case glob
+  pathspec.
 - `rit reset` now mirrors that no-op acceptance for non-wildcard tracked
   pathspecs with mismatched case. More advanced pathspec magic parity remains
   tracked separately in M4/M6.

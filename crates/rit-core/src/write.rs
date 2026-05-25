@@ -3639,6 +3639,7 @@ fn expand_add_pathspecs<'a>(
             let exact_case_exists = worktree_path_matches_exact_case(worktree, pattern.pattern());
             if !exact_case_exists
                 && ignore_case
+                && !pattern.uses_glob_magic()
                 && (indexed_paths
                     .iter()
                     .any(|path| path.eq_ignore_ascii_case(pattern.pattern()))

@@ -533,6 +533,9 @@ Completion criteria:
     `:/camel.txt` also keeps read-only lookup case-sensitive while `add`,
     `reset`, and `restore` mirror Git's `core.ignorecase` /
     tracked-path behavior.
+  - [x] On the current Windows Git baseline, exact glob pathspec
+    `:(glob)camel.txt` also matches Git's command-specific case-sensitive /
+    unsupported-magic behavior across read and write commands.
   - [ ] Broader platform/config parity for case-sensitive path lookup.
 
 Completion criteria:

@@ -163,6 +163,11 @@ impl PathspecPattern {
         self.ignore_case
     }
 
+    /// Returns true when this pattern was parsed with explicit `:(glob)` magic.
+    pub fn uses_glob_magic(&self) -> bool {
+        self.mode == PathspecMatchMode::Glob
+    }
+
     /// Returns true when this pattern removes paths from the matched set.
     pub fn is_exclude(&self) -> bool {
         self.exclude
