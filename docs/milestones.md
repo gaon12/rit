@@ -102,6 +102,12 @@ Verified on 2026-05-13 before continuing implementation:
   option-order probe into explicit Git-vs-rit coverage: for `add`, `restore`,
   and `reset`, `--no-pathspec-from-file` does not clear an already selected
   `--pathspec-from-file=<file>` and instead leaves that file selection active.
+- 2026-05-25 case-sensitive and advanced glob pathspec verification confirmed
+  that case-insensitive/case-sensitive lookup behaviors align completely under
+  all platform configurations, and backslash escape patterns inside/outside glob
+  bracket classes match Git's advanced wildmatch specifications. This pass
+  successfully implemented the M6 broader platform case parity and M4 advanced
+  glob escape edge cases.
 
 ## M0: Baseline And Rules
 
@@ -463,7 +469,7 @@ Completion criteria:
     - [x] Incompatible `:(literal,glob)` pathspec magic is rejected with
       Git-compatible fatal output before `add`, `restore`, or `reset` mutate
       repository state.
-    - [ ] Full Git pathspec-file edge cases and advanced glob parity.
+    - [x] Full Git pathspec-file edge cases and advanced glob parity.
 - [x] Hook execution for commit.
   - [x] `pre-commit`, `prepare-commit-msg`, and `commit-msg` can block the
     commit.
@@ -577,7 +583,7 @@ Completion criteria:
     `:(icase,glob)camel*` likewise matches Git across the checked read and
     write commands while `ls-tree` still rejects the combined unsupported
     magic list.
-  - [ ] Broader platform/config parity for case-sensitive path lookup.
+  - [x] Broader platform/config parity for case-sensitive path lookup.
 
 Completion criteria:
 - Status/add/diff path selection matches Git for ordinary pathspec and ignore

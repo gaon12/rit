@@ -302,6 +302,18 @@ fn pathspec_glob_matches(pattern: &str, path: &str) -> bool {
             return path_index == path.len();
         }
 
+        if pattern[pattern_index] == b'\\' {
+            if pattern_index + 1 < pattern.len() {
+                let escaped = pattern[pattern_index + 1];
+                let Some(path_byte) = path.get(path_index).copied() else {
+                    return false;
+                };
+                return escaped == path_byte
+                    && matches_from(pattern, path, pattern_index + 2, path_index + 1);
+            }
+            return false;
+        }
+
         if pattern[pattern_index..].starts_with(b"**/") {
             if matches_from(pattern, path, pattern_index + 3, path_index) {
                 return true;
@@ -385,6 +397,14 @@ fn wildcard_matches(pattern: &str, path: &str) -> bool {
             last_star = Some(pattern_index);
             pattern_index += 1;
             path_after_star = path_index;
+        } else if pattern_index < pattern.len() && pattern[pattern_index] == b'\\' {
+            if let Some(star_index) = last_star {
+                pattern_index = star_index + 1;
+                path_after_star += 1;
+                path_index = path_after_star;
+            } else {
+                return false;
+            }
         } else if let Some(star_index) = last_star {
             pattern_index = star_index + 1;
             path_after_star += 1;
@@ -402,6 +422,14 @@ fn wildcard_matches(pattern: &str, path: &str) -> bool {
 fn match_single_pattern_item(pattern: &[u8], index: usize, path_byte: u8) -> Option<usize> {
     let pattern_byte = *pattern.get(index)?;
     match pattern_byte {
+        b'\\' => {
+            let escaped = *pattern.get(index + 1)?;
+            if escaped == path_byte {
+                Some(index + 2)
+            } else {
+                None
+            }
+        }
         b'?' => Some(index + 1),
         b'[' => match_bracket_class(pattern, index, path_byte),
         literal if literal == path_byte => Some(index + 1),
@@ -425,6 +453,15 @@ fn match_bracket_class(pattern: &[u8], index: usize, path_byte: u8) -> Option<us
             } else {
                 None
             };
+        }
+
+        if pattern[cursor] == b'\\' && cursor + 1 < pattern.len() {
+            let escaped = pattern[cursor + 1];
+            if escaped == path_byte {
+                matched = true;
+            }
+            cursor += 2;
+            continue;
         }
 
         if let Some((class_matches, next_cursor)) =
@@ -496,8 +533,54 @@ fn posix_class_matches(class_name: &[u8], byte: u8) -> bool {
     }
 }
 
+fn normalize_slashes_with_escapes(pathspec: &str) -> String {
+    let bytes = pathspec.as_bytes();
+    let mut output = Vec::with_capacity(bytes.len());
+    let mut in_brackets = false;
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        match b {
+            b'\\' => {
+                if in_brackets {
+                    output.push(b'\\');
+                    if i + 1 < bytes.len() {
+                        output.push(bytes[i + 1]);
+                        i += 2;
+                        continue;
+                    }
+                } else {
+                    if i + 1 < bytes.len() {
+                        let next = bytes[i + 1];
+                        if next == b'*' || next == b'?' || next == b'[' || next == b'\\' {
+                            output.push(b'\\');
+                            output.push(next);
+                            i += 2;
+                            continue;
+                        }
+                    }
+                    output.push(b'/');
+                }
+            }
+            b'[' => {
+                in_brackets = true;
+                output.push(b);
+            }
+            b']' => {
+                in_brackets = false;
+                output.push(b);
+            }
+            _ => {
+                output.push(b);
+            }
+        }
+        i += 1;
+    }
+    String::from_utf8_lossy(&output).into_owned()
+}
+
 fn parse_pathspec(pathspec: &str) -> Result<PathspecPattern> {
-    let normalized = pathspec.replace('\\', "/");
+    let normalized = normalize_slashes_with_escapes(pathspec);
     if let Some(rest) = normalized.strip_prefix(":/") {
         return Ok(PathspecPattern {
             pattern: normalize_pathspec_pattern(rest, pathspec, true)?,
@@ -961,5 +1044,24 @@ mod tests {
             .expect_err("unsupported");
 
         assert!(error.to_string().contains("unsupported pathspec magic"));
+    }
+
+    #[test]
+    fn escapes_and_bracket_escapes_match_properly() {
+        let pathspec =
+            PathspecSet::from_args(&[":(glob)a\\*b".to_owned()]).expect("valid pathspec");
+        assert!(pathspec.matches("a*b"));
+        assert!(!pathspec.matches("axb"));
+
+        let pathspec =
+            PathspecSet::from_args(&[":(glob)a[\\]]b".to_owned()]).expect("valid pathspec");
+        assert!(pathspec.matches("a]b"));
+        assert!(!pathspec.matches("axb"));
+
+        let pathspec =
+            PathspecSet::from_args(&[":(glob)a[\\\\*]b".to_owned()]).expect("valid pathspec");
+        assert!(pathspec.matches("a*b"));
+        assert!(pathspec.matches("a\\b"));
+        assert!(!pathspec.matches("axb"));
     }
 }
