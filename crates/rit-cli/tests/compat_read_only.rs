@@ -221,6 +221,96 @@ fn diff_split_similarity_argument_rejects_later_options_like_git() {
 }
 
 #[test]
+fn diff_plain_unknown_argument_matches_git_ambiguity_rules() {
+    let cached_fixture = ExactRenameFixture::new("cached-plain-unknown-diff-argument");
+
+    for args in [
+        vec!["diff", "--cached", "foo"],
+        vec!["diff", "--cached", "-M", "79%"],
+        vec!["diff", "--cached", "--find-renames", "79%"],
+        vec!["diff", "--cached", "--", "foo"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            cached_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached plain unknown diff argument {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+
+    let cached_copy_fixture = CopyFixture::new("cached-copy-plain-unknown-diff-argument");
+    for args in [
+        vec!["diff", "--cached", "-C", "79%"],
+        vec!["diff", "--cached", "--find-copies", "79%"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            cached_copy_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "cached plain unknown copy diff argument {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+
+    let worktree_fixture =
+        WorktreeIntentSimilarityRenameFixture::new("worktree-plain-unknown-diff-argument");
+    for args in [
+        vec!["diff", "foo"],
+        vec!["diff", "-M", "79%"],
+        vec!["diff", "--find-renames", "79%"],
+        vec!["diff", "--", "foo"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            worktree_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree plain unknown diff argument {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+
+    let worktree_copy_fixture =
+        WorktreeIntentCopyFixture::new("worktree-copy-plain-unknown-diff-argument");
+    for args in [
+        vec!["diff", "-C", "79%"],
+        vec!["diff", "--find-copies", "79%"],
+    ] {
+        let outcome = compare(&CompareOptions::new(
+            worktree_copy_fixture.path(),
+            git_command_slice(&args),
+            rit_command_slice(&args),
+        ))
+        .expect("comparison should run");
+
+        assert!(
+            outcome.is_match(),
+            "worktree plain unknown copy diff argument {:?}\n{}",
+            args,
+            outcome.report()
+        );
+    }
+}
+
+#[test]
 fn diff_renames_config_matches_git() {
     let false_fixture = ExactRenameFixture::new("cached-renames-config-false");
     run_git(false_fixture.path(), ["config", "diff.renames", "false"]);

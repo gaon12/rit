@@ -265,6 +265,10 @@ Completion criteria:
   - [x] Covered rename/copy parser slices now also reject later diff options
     after split similarity forms such as `-M 79%` / `-C 79%` when the
     separated token is already being treated as a non-option path argument.
+  - [x] Covered rename/copy parser slices now also reject plain unknown
+    before-`--` arguments such as `foo`, `-M 79%`, and `-C 79%` with Git's
+    ambiguous revision-or-path fatal unless `--` is used to force pathspec
+    parsing.
   - [x] Checked explicit `--find-copies-harder`, with or without `-C`,
     still overrides `diff.renames=false` like Git for the covered cached and
     default worktree hard-copy slices.

@@ -1,5 +1,6 @@
 use std::env;
 use std::io::{self, Write};
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 mod auth;
@@ -814,6 +815,7 @@ fn diff_command(
     let mut output_mode = None;
     let mut nul_terminated = false;
     let mut pathspec_args = Vec::new();
+    let mut pre_separator_non_option_args = Vec::new();
     let mut after_separator = false;
     let mut pending_rename_limit = false;
     let mut saw_non_option_argument = false;
@@ -924,6 +926,7 @@ fn diff_command(
             pathspec => {
                 if !after_separator {
                     saw_non_option_argument = true;
+                    pre_separator_non_option_args.push(pathspec.to_owned());
                 }
                 pathspec_args.push(pathspec.to_owned());
             }
@@ -939,6 +942,23 @@ fn diff_command(
         Some(repository) => repository,
         None => return Ok(ExitCode::from(128)),
     };
+    for argument in &pre_separator_non_option_args {
+        if !diff_pre_separator_argument_needs_known_path_check(argument) {
+            continue;
+        }
+        if !diff_pre_separator_argument_is_known_path(&repository, argument)? {
+            writeln!(
+                stderr,
+                "fatal: ambiguous argument '{argument}': unknown revision or path not in the working tree."
+            )?;
+            writeln!(
+                stderr,
+                "Use '--' to separate paths from revisions, like this:"
+            )?;
+            writeln!(stderr, "'git <command> [<revision>...] -- [<file>...]'")?;
+            return Ok(ExitCode::from(128));
+        }
+    }
     let pathspecs = match rit_core::PathspecSet::from_args_with_prefix(
         &pathspec_args,
         repository.path_prefix(),
@@ -1022,6 +1042,134 @@ fn diff_command(
     }
 
     Ok(ExitCode::SUCCESS)
+}
+
+fn diff_pre_separator_argument_needs_known_path_check(argument: &str) -> bool {
+    if argument == "." || argument.is_empty() {
+        return false;
+    }
+    if argument.starts_with(':') {
+        return false;
+    }
+    !argument.contains(['*', '?', '['])
+}
+
+fn diff_pre_separator_argument_is_known_path(
+    repository: &rit_core::Repository,
+    argument: &str,
+) -> io::Result<bool> {
+    let Some(relative_path) = diff_pre_separator_argument_to_repo_path(repository, argument) else {
+        return Ok(true);
+    };
+    if diff_worktree_contains_path(repository.worktree(), &relative_path) {
+        return Ok(true);
+    }
+    if diff_index_contains_path(repository, &relative_path)? {
+        return Ok(true);
+    }
+    diff_head_contains_path(repository, &relative_path)
+}
+
+fn diff_pre_separator_argument_to_repo_path(
+    repository: &rit_core::Repository,
+    argument: &str,
+) -> Option<String> {
+    let normalized = argument.replace('\\', "/");
+    if normalized == "." {
+        return None;
+    }
+    let normalized = normalized
+        .strip_prefix("./")
+        .map(str::to_owned)
+        .unwrap_or(normalized);
+    if repository.path_prefix().is_empty() {
+        Some(normalized)
+    } else {
+        Some(format!("{}/{}", repository.path_prefix(), normalized))
+    }
+}
+
+fn diff_worktree_contains_path(worktree: Option<&Path>, relative_path: &str) -> bool {
+    let Some(worktree) = worktree else {
+        return false;
+    };
+    let path = relative_path
+        .split('/')
+        .filter(|component| !component.is_empty())
+        .fold(PathBuf::from(worktree), |path, component| {
+            path.join(component)
+        });
+    path.exists()
+}
+
+fn diff_index_contains_path(
+    repository: &rit_core::Repository,
+    relative_path: &str,
+) -> io::Result<bool> {
+    let index =
+        rit_core::Index::read(&repository.git_dir().join("index")).map_err(io::Error::other)?;
+    let directory_prefix = format!("{relative_path}/");
+    Ok(index
+        .entries
+        .iter()
+        .filter(|entry| entry.stage == 0)
+        .any(|entry| entry.path == relative_path || entry.path.starts_with(&directory_prefix)))
+}
+
+fn diff_head_contains_path(
+    repository: &rit_core::Repository,
+    relative_path: &str,
+) -> io::Result<bool> {
+    let Some(head_id) = repository.resolve_head().map_err(io::Error::other)? else {
+        return Ok(false);
+    };
+    let head = repository.read_object(head_id).map_err(io::Error::other)?;
+    if head.kind != rit_core::ObjectKind::Commit {
+        return Ok(false);
+    }
+    let commit = rit_core::parse_commit(&head.data).map_err(io::Error::other)?;
+    if find_tree_entry_by_path(repository, commit.tree, relative_path)
+        .map_err(io::Error::other)?
+        .is_some()
+    {
+        return Ok(true);
+    }
+    let directory_prefix = format!("{relative_path}/");
+    diff_tree_has_entry_below_path(repository, commit.tree, "", &directory_prefix)
+}
+
+fn diff_tree_has_entry_below_path(
+    repository: &rit_core::Repository,
+    tree_id: rit_core::ObjectId,
+    current_prefix: &str,
+    directory_prefix: &str,
+) -> io::Result<bool> {
+    let tree = repository.read_object(tree_id).map_err(io::Error::other)?;
+    if tree.kind != rit_core::ObjectKind::Tree {
+        return Ok(false);
+    }
+    for entry in rit_core::object::parse_tree_entries(&tree.data).map_err(io::Error::other)? {
+        let entry_name = entry.name_lossy();
+        let entry_path = if current_prefix.is_empty() {
+            entry_name
+        } else {
+            format!("{current_prefix}/{entry_name}")
+        };
+        if entry_path.starts_with(directory_prefix) {
+            return Ok(true);
+        }
+        if entry.kind == rit_core::ObjectKind::Tree
+            && diff_tree_has_entry_below_path(
+                repository,
+                entry.object_id,
+                &entry_path,
+                directory_prefix,
+            )?
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn write_diff_error(stderr: &mut dyn Write, error: &rit_core::RitError) -> io::Result<ExitCode> {

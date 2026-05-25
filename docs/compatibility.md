@@ -100,7 +100,11 @@ The current codebase implements an early local Git subset:
   Covered cached parser behavior now also rejects later diff options after
   split similarity arguments such as `-M 79%` / `-C 79%` when those tokens
   are already being treated as non-option path arguments, matching Git's
-  fatal option-order path on the checked fixtures.
+  fatal option-order path on the checked fixtures. Covered cached parser
+  behavior also now treats plain unknown before-`--` arguments like Git:
+  ordinary tokens such as `foo`, `-M 79%`, and `-C 79%` are rejected with
+  the checked ambiguous revision-or-path fatal unless the caller uses `--`
+  to force pathspec parsing.
 - Default worktree diff already performs checked exact rename detection for
   the Git-compatible intent-to-add slice, where added worktree paths are
   already represented in the index by `git add -N`. `diff.renames=false`
@@ -128,7 +132,11 @@ The current codebase implements an early local Git subset:
   behavior also rejects later diff options after split similarity arguments
   such as `-M 79%` / `-C 79%` when those tokens are already being treated as
   non-option path arguments, matching Git's fatal option-order path on the
-  checked fixtures.
+  checked fixtures. Covered default worktree parser behavior also now treats
+  plain unknown before-`--` arguments like Git: ordinary tokens such as
+  `foo`, `-M 79%`, and `-C 79%` are rejected with the checked ambiguous
+  revision-or-path fatal unless the caller uses `--` to force pathspec
+  parsing.
   `--find-copies-harder` can use unchanged index entries as copy sources in
   that same worktree intent-to-add slice. Plain untracked worktree renames and
   copies stay outside default diff scope like Git, so they remain a delete or

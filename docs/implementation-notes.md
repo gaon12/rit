@@ -1008,6 +1008,11 @@
   similarity forms such as `-M 79%` / `-C 79%` when that separated token is
   already being treated as a non-option path argument, matching Git's fatal
   option-order behavior on the checked cached and default worktree fixtures.
+- Covered diff parser slices now also reject plain unknown before-`--`
+  arguments like Git. Ordinary tokens such as `foo`, `-M 79%`, `-C 79%`,
+  `--find-renames 79%`, and `--find-copies 79%` now take Git's ambiguous
+  revision-or-path fatal path on the checked cached and default worktree
+  fixtures unless `--` is used to force pathspec parsing.
 - Added local write compatibility coverage that compares Git and rit porcelain
   state after directory pathspec `add`, `restore`, and `reset`.
 - Added local write compatibility coverage for simple wildcard and
