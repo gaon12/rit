@@ -202,7 +202,9 @@ fatal output and exit code.
 Write-command glob coverage explicitly includes Git's special
 `:(glob)**/*.txt` and trailing `:(glob)nested/**` forms plus the
 component-local non-recursive `:(glob)**base.txt` form.
-`:(icase)` is covered for status, diff, add, restore, reset, log, and show.
+`:(icase)` is covered for status, diff, ls-files, add, restore, reset, log,
+and show, including wildcard form `:(icase)camel*` on the current Windows
+baseline; `ls-tree` continues to reject unsupported `icase` magic.
 Exclude `:!`, `:^`, and `:(exclude)` is covered for status, diff, ls-files,
 add, restore, reset, log, and show. Attr magic is
 covered for root `.gitattributes` set/unset/value/unspecified requirements in

@@ -40,6 +40,13 @@
   `:(top)`, and `:/`.
 - 2026-05-10 icase pathspec magic slice checked direct Git comparisons for
   `:(icase)` in `status`, `diff`, and `add`.
+- 2026-05-25 icase wildcard follow-up checked the current Git baseline with
+  `git status -h`, `git diff -h`, `git ls-files -h`, `git ls-tree -h`,
+  `git log -h`, `git show -h`, `git add -h`, `git reset -h`, and
+  `git restore -h`, plus direct Git-vs-rit comparisons showing that
+  wildcard form `:(icase)camel*` matches Git across the checked read and
+  write commands while `ls-tree` continues to reject unsupported `icase`
+  magic.
 - 2026-05-10 core.ignorecase add slice checked `git config -h`, `git add -h`,
   and direct Git comparisons for mismatched-case `git add` pathspecs.
 - 2026-05-18 core.ignorecase false add slice checked Git 2.52.0.windows.1 with

@@ -3668,6 +3668,29 @@ fn add_icase_magic_pathspec_matches_git_status() {
 }
 
 #[test]
+fn add_icase_wildcard_pathspec_matches_git_status() {
+    for core_ignorecase in [false, true] {
+        let fixture = case_pathspec_fixture(
+            &format!("add-icase-wildcard-{core_ignorecase}"),
+            core_ignorecase,
+            false,
+        );
+
+        let outcome = compare_after_command(
+            &fixture,
+            command_words("git", ["add", ":(icase)camel*"]),
+            command_words(rit_binary(), ["add", ":(icase)camel*"]),
+        );
+
+        assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+        assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+        assert_eq!(outcome.git_status, outcome.rit_status);
+
+        let _ = fs::remove_dir_all(fixture);
+    }
+}
+
+#[test]
 fn add_attr_pathspec_matches_git_status() {
     for (name, pathspec) in [
         ("set", ":(attr:text)*"),
@@ -4553,6 +4576,33 @@ fn restore_icase_magic_pathspec_matches_git_status_and_files() {
 }
 
 #[test]
+fn restore_icase_wildcard_pathspec_matches_git_status_and_files() {
+    for core_ignorecase in [false, true] {
+        let fixture = case_pathspec_fixture(
+            &format!("restore-icase-wildcard-{core_ignorecase}"),
+            core_ignorecase,
+            false,
+        );
+
+        let outcome = compare_after_command(
+            &fixture,
+            command_words("git", ["restore", ":(icase)camel*"]),
+            command_words(rit_binary(), ["restore", ":(icase)camel*"]),
+        );
+
+        assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+        assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+        assert_eq!(outcome.git_status, outcome.rit_status);
+        assert_eq!(
+            fs::read_to_string(outcome.git_repo.join("Camel.txt")).expect("git file should read"),
+            fs::read_to_string(outcome.rit_repo.join("Camel.txt")).expect("rit file should read")
+        );
+
+        let _ = fs::remove_dir_all(fixture);
+    }
+}
+
+#[test]
 fn restore_exclude_magic_pathspec_matches_git_status_and_files() {
     let fixture = LocalWriteFixture::new(
         "restore-exclude-magic",
@@ -4902,6 +4952,29 @@ fn reset_icase_magic_pathspec_matches_git_status() {
     assert_eq!(outcome.git_status, outcome.rit_status);
 
     let _ = fs::remove_dir_all(fixture);
+}
+
+#[test]
+fn reset_icase_wildcard_pathspec_matches_git_status() {
+    for core_ignorecase in [false, true] {
+        let fixture = case_pathspec_fixture(
+            &format!("reset-icase-wildcard-{core_ignorecase}"),
+            core_ignorecase,
+            true,
+        );
+
+        let outcome = compare_after_command(
+            &fixture,
+            command_words("git", ["reset", ":(icase)camel*"]),
+            command_words(rit_binary(), ["reset", ":(icase)camel*"]),
+        );
+
+        assert_eq!(outcome.git_command_stdout, outcome.rit_command_stdout);
+        assert_eq!(outcome.git_command_stderr, outcome.rit_command_stderr);
+        assert_eq!(outcome.git_status, outcome.rit_status);
+
+        let _ = fs::remove_dir_all(fixture);
+    }
 }
 
 #[test]

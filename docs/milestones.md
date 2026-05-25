@@ -540,6 +540,9 @@ Completion criteria:
   - [x] On the current Windows Git baseline, exact glob pathspec
     `:(glob)camel.txt` also matches Git's command-specific case-sensitive /
     unsupported-magic behavior across read and write commands.
+  - [x] On the current Windows Git baseline, wildcard `:(icase)camel*`
+    likewise matches Git across the checked read and write commands while
+    `ls-tree` still rejects unsupported `icase` magic.
   - [ ] Broader platform/config parity for case-sensitive path lookup.
 
 Completion criteria:
