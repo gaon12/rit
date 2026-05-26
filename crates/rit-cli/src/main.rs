@@ -813,6 +813,7 @@ fn diff_command(
     let mut copy_similarity_threshold = 50;
     let mut rename_limit = None;
     let mut output_mode = None;
+    let mut semantic_output = false;
     let mut nul_terminated = false;
     let mut before_separator_pathspec_args = Vec::new();
     let mut after_separator_pathspec_args = Vec::new();
@@ -842,6 +843,7 @@ fn diff_command(
             "--" if !after_separator => after_separator = true,
             "--cached" | "--staged" if !after_separator => cached = true,
             "-z" if !after_separator => nul_terminated = true,
+            "--semantic" if !after_separator => semantic_output = true,
             "-M" | "--find-renames" if !after_separator => {
                 find_renames = true;
                 rename_detection_explicit = true;
@@ -934,6 +936,20 @@ fn diff_command(
         writeln!(stderr, "rit: missing rename limit in '-l'")?;
         return Ok(ExitCode::from(129));
     }
+    if semantic_output && nul_terminated {
+        writeln!(
+            stderr,
+            "rit: semantic diff output does not support NUL-terminated formatting"
+        )?;
+        return Ok(ExitCode::from(129));
+    }
+    if semantic_output && output_mode.is_some() {
+        writeln!(
+            stderr,
+            "rit: diff accepts either a semantic summary or one standard output mode"
+        )?;
+        return Ok(ExitCode::from(129));
+    }
 
     let output_mode = output_mode.unwrap_or("--patch");
     let repository = match discover_repository(stderr)? {
@@ -1006,6 +1022,46 @@ fn diff_command(
         copy_similarity_threshold,
         rename_limit,
     };
+    if semantic_output {
+        let diff_result = if cached {
+            match compare_revisions.as_slice() {
+                [revision] => repository.diff_index_to_commit_with_options(
+                    *revision,
+                    &pathspecs,
+                    &diff_options,
+                ),
+                [] => repository.diff_index_to_head_with_options(&pathspecs, &diff_options),
+                _ => unreachable!("cached diff consumes at most one revision"),
+            }
+        } else {
+            match compare_revisions.as_slice() {
+                [revision] => repository.diff_commit_to_worktree_with_options(
+                    *revision,
+                    &pathspecs,
+                    &diff_options,
+                ),
+                [old_revision, new_revision] => repository.diff_commits_with_options(
+                    *old_revision,
+                    *new_revision,
+                    &pathspecs,
+                    &diff_options,
+                ),
+                [] => repository.diff_worktree_to_index_with_options(&pathspecs, &diff_options),
+                _ => unreachable!("default diff consumes at most two revisions"),
+            }
+        };
+        let diff = match diff_result {
+            Ok(diff) => diff,
+            Err(error) => {
+                return write_diff_error(stderr, &error);
+            }
+        };
+        write_diff_warnings(stderr, &diff.warnings)?;
+        return write_semantic_diff_summary(
+            stdout,
+            &rit_core::semantic_report_from_paths(diff.name_only()),
+        );
+    }
     if output_mode == "--patch" {
         let patch_result = if cached {
             match compare_revisions.as_slice() {
@@ -1116,6 +1172,35 @@ fn diff_command(
     }
 
     Ok(ExitCode::SUCCESS)
+}
+
+fn write_semantic_diff_summary(
+    stdout: &mut dyn Write,
+    report: &rit_core::SemanticDiffReport,
+) -> io::Result<ExitCode> {
+    if report.files.is_empty() {
+        writeln!(stdout, "semantic summary: no changed paths")?;
+        return Ok(ExitCode::SUCCESS);
+    }
+    writeln!(stdout, "semantic summary:")?;
+    for file in &report.files {
+        writeln!(
+            stdout,
+            "- {}: {}",
+            semantic_category_label(file.category),
+            file.path
+        )?;
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn semantic_category_label(category: rit_core::SemanticFileCategory) -> &'static str {
+    match category {
+        rit_core::SemanticFileCategory::Code => "code",
+        rit_core::SemanticFileCategory::Tests => "tests",
+        rit_core::SemanticFileCategory::Docs => "docs",
+        rit_core::SemanticFileCategory::Other => "other",
+    }
 }
 
 fn parse_diff_revision_range(
@@ -3963,13 +4048,31 @@ fn op_command(
             writeln!(stderr, "rit: unsupported op log option '{flag}'")?;
             Ok(ExitCode::from(129))
         }
-        [subcommand, id] if subcommand == "restore" => match repository.operations().restore(id) {
-            Ok(result) => {
-                write_restore_result(stdout, "Restored operation", &result)?;
-                Ok(ExitCode::SUCCESS)
+        [subcommand, rest @ ..] if subcommand == "restore" => {
+            let mut operation_id = None;
+            let mut options = rit_core::OperationUndoOptions::new();
+            for arg in rest {
+                match arg.as_str() {
+                    "--force" => options = options.force(),
+                    _ if operation_id.is_none() => operation_id = Some(arg.as_str()),
+                    _ => {
+                        writeln!(stderr, "rit: unsupported op restore option '{arg}'")?;
+                        return Ok(ExitCode::from(129));
+                    }
+                }
             }
-            Err(error) => write_command_error(stderr, error),
-        },
+            let Some(id) = operation_id else {
+                writeln!(stderr, "rit: op restore requires an operation id")?;
+                return Ok(ExitCode::from(129));
+            };
+            match repository.operations().restore_with_options(id, options) {
+                Ok(result) => {
+                    write_restore_result(stdout, "Restored operation", &result)?;
+                    Ok(ExitCode::SUCCESS)
+                }
+                Err(error) => write_command_error(stderr, error),
+            }
+        }
         [subcommand, ..] => {
             writeln!(stderr, "rit: unsupported op subcommand '{subcommand}'")?;
             Ok(ExitCode::from(129))
@@ -3991,6 +4094,9 @@ fn undo_command(
         match arg.as_str() {
             "--preserve-changes" => {
                 options = options.preserve_changes();
+            }
+            "--force" => {
+                options = options.force();
             }
             _ => {
                 writeln!(stderr, "rit: unsupported undo option '{arg}'")?;
@@ -4813,6 +4919,7 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit diff"));
+        assert!(stdout.contains("--semantic"));
         assert_eq!(stderr, "");
     }
 
@@ -4958,6 +5065,24 @@ mod tests {
 
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit stash list"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn op_help_mentions_force_restore() {
+        let (code, stdout, stderr) = run_with(&["help", "op"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit op restore <id> [--force]"));
+        assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn undo_help_mentions_force() {
+        let (code, stdout, stderr) = run_with(&["help", "undo"]);
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(stdout.contains("rit undo [--preserve-changes] [--force]"));
         assert_eq!(stderr, "");
     }
 

@@ -639,6 +639,12 @@ Completion criteria:
 - [x] Add corruption tests proving broken indexdb never corrupts the repository.
 - [x] Add linked worktree tests proving worktree cache isolation.
 - [x] Add benchmark tests for large commit history and file history queries.
+- [ ] Add incremental commit refresh that stops reverse traversal when it
+  reaches already-indexed commits.
+- [ ] Add subtree-skip tree diff for file history so identical parent/child
+  tree object IDs stop recursive descent.
+- [ ] Split large-repo indexdb benchmarks into full rebuild, incremental
+  update, and file-history query slices.
 
 Completion criteria:
 - `rit indexdb` creates or updates `.git/rit/indexdb.sqlite` without changing
@@ -1208,6 +1214,9 @@ Completion criteria:
 - [x] Python semantic adapter.
 - [x] JSON output model.
 - [x] Use indexdb as an optional acceleration layer for semantic impact queries.
+- [x] Add an opt-in `rit diff --semantic` read-only CLI surface.
+- [ ] Render semantic human output and JSON output from the same typed
+  report model everywhere semantic output is exposed.
 
 Completion criteria:
 - Semantic output is structured and can distinguish code-only changes from
@@ -1225,6 +1234,9 @@ Completion criteria:
   corruption.
 - [x] `rit repair` can rebuild or drop corrupted indexdb without touching Git
   objects.
+- [ ] Run policy enforcement directly on write paths before mutation.
+- [ ] Add entropy-based secret heuristics beyond fixed-pattern checks.
+- [ ] Add `rit doctor --sizer` for repository-size and object-shape audits.
 
 Completion criteria:
 - Policy defaults warn conservatively and blocking behavior requires explicit
@@ -1237,6 +1249,8 @@ Completion criteria:
 - [x] Platform backend plan.
 - [x] Lazy materialization.
 - [x] Background prefetch.
+- [ ] Add a concrete Windows ProjFS backend.
+- [ ] Add concrete macOS/Linux FUSE backends.
 
 Completion criteria:
 - Builds without VFS still work normally and VFS-specific errors are clear.
@@ -1288,6 +1302,12 @@ Completion criteria:
 - [x] Add corruption handling for malformed operation journal lines.
 - [x] Add linked-worktree journal isolation tests.
 - [x] Add JSON output for operation records.
+- [x] Add a dirty working tree safety guard before restore paths that would
+  rewrite the index or working tree.
+- [x] Add `--force` for `rit undo` and `rit op restore <id>` as an explicit
+  override for the dirty-state safety guard.
+- [x] Verify the split between preserve-only HEAD rewrites and restore paths
+  that would rewrite the worktree or index.
 
 Completion criteria:
 - Operation metadata lives only under `.git/rit/` and can be deleted without
@@ -1373,6 +1393,32 @@ Completion criteria:
 - [x] Recommend LFS/Xet tracking patterns.
 - [x] Produce a safe migration plan before any rewrite or tracking change.
 
+## M26: Integrated Tool Absorption
+
+- [ ] Add GitHub auth device-flow support for rit-managed credentials.
+- [ ] Add `rit pr checkout <number>`.
+- [ ] Add `rit pr create` / `rit pr view` style GitHub pull-request workflows.
+- [ ] Add fancy terminal diff rendering with syntax-aware highlighting.
+- [ ] Add `rit doctor --sizer` style repository audit summaries for object,
+  ref, and history shape.
+- [ ] Add live secret scanning surfaces that can be reused by policy checks.
+
+Completion criteria:
+- rit exposes core GitHub, rich-diff, audit, and live secret-scan workflows
+  directly without depending on external `gh`, `git-delta`, `git-sizer`, or
+  secret-scan binaries in production code.
+
+## M27: Advanced UX And Sandbox Features
+
+- [ ] Add a terminal UI entry point for staging, commit flow, and operation
+  history browsing.
+- [ ] Add a WASM hook runner with sandboxed execution.
+- [ ] Add AST/AI-assisted merge-conflict review and resolution guidance.
+
+Completion criteria:
+- rit offers a self-contained interactive UX and sandboxed extension surface
+  while keeping the base CLI and repository writes understandable and safe.
+
 ## Active Queue
 
 1. Normalize Unix/macOS compatibility-test baselines so the full
@@ -1381,6 +1427,33 @@ Completion criteria:
    abort/continue, and merge-commit workflow planning.
 3. Keep M6 case-sensitivity parity under verification as new path lookup
    surfaces are added.
+
+## Difficulty Queue
+
+### Easy
+
+1. `M16` undo dirty-worktree guard and restore refusal coverage.
+2. `M16` `rit undo` / `rit op restore` explicit `--force` override coverage.
+3. `M12` minimum opt-in semantic diff CLI surface for `rit diff`.
+4. `M13` first `rit doctor --sizer` read-only metric report.
+5. Keep `docs/milestones.md` aligned with checked implementation status.
+
+### Medium
+
+1. `M13` run policy enforcement directly on write paths.
+2. `M13` add entropy-based secret heuristics.
+3. `M26` add fancy terminal diff rendering.
+4. `M26` add GitHub auth device-flow support.
+5. `M26` expand repository audit output with top-N blobs and ref/history
+   complexity.
+
+### Hard
+
+1. `M6.5` incremental indexdb commit refresh.
+2. `M6.5` subtree-skip file-history tree diff optimization.
+3. `M26` GitHub PR checkout/create flows.
+4. `M14` concrete Windows ProjFS and macOS/Linux FUSE backends.
+5. `M27` TUI, WASM hooks, and AST/AI-assisted merge support.
 
 ## Implementation Notes
 

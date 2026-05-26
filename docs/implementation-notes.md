@@ -1313,6 +1313,13 @@
 - `rit undo --preserve-changes` is the first command-aware undo mode: for
   supported commit records it moves HEAD back while keeping the committed
   content staged and present in the working tree.
+- `rit undo` and `rit op restore <id>` now check for local staged, modified,
+  and untracked content before restore paths that would rewrite the index or
+  working tree. Those paths now stop with a clear rit-specific error unless the
+  caller opts into `--force`.
+- The dirty-state guard intentionally skips the covered commit-only
+  `rit undo --preserve-changes` path because that slice moves `HEAD` back
+  without rewriting the index or worktree contents.
 - Linked worktree operation journal coverage now asserts that worktrees share
   the same common Git directory but append records to distinct per-worktree
   `.git/rit/ops.log` files under each worktree gitdir.
@@ -1415,7 +1422,13 @@
   that summarizes added, deleted, and changed function definitions.
 - Added `SemanticDiffReport` JSON output model behind `semantic-json`,
   including path classification for code, tests, docs, and other files.
-- M12 still does not wire semantic summaries into the `rit diff` CLI.
+- Added `rit diff --semantic` as the first read-only CLI surface for semantic
+  summaries. This opt-in mode keeps normal diff output unchanged and renders
+  the existing typed `SemanticDiffReport` model as a small human-readable path
+  classification summary.
+- Still unsupported: richer semantic hunk/function summaries in `rit diff`,
+  semantic JSON output from the diff command itself, and broader language-aware
+  structure reporting beyond coarse path categorization.
 
 ### M13: Policy, Doctor, Repair
 
@@ -1639,7 +1652,8 @@
 
 - Baseline command checked: `git diff -h`
 - Supported options: default patch output for small text files, `-p`, `-u`,
-  `--name-only`, `--name-status`, `--numstat`, `--stat`, plus
+  `--name-only`, `--name-status`, `--numstat`, `--stat`, plus rit-specific
+  `--semantic`, and
   `--cached`/`--staged` with those output modes. Checked cached diff also
   accepts one explicit commit-ish such as `HEAD` or a full commit ID,
   including the same output modes and both `-- <pathspec>` filtering and the
@@ -1702,6 +1716,9 @@
   or against one explicit checked commit-ish when one is provided.
 - Git-compatible behavior: pathspecs from a subdirectory are resolved relative
   to that invocation directory unless they use top magic.
+- rit-specific behavior: `--semantic` keeps the normal diff modes unchanged
+  and instead renders the existing typed `SemanticDiffReport` model as a small
+  human-readable path-category summary.
 - Intentional differences: advanced patch formatting and custom diff drivers
   are not implemented yet.
 - Repository mutation: no
@@ -2466,7 +2483,8 @@
 
 - Baseline command checked: rit-specific command, no Git equivalent.
 - Supported options: `rit op log`, `rit op log --json`,
-  `rit op restore <id>`, `rit undo`, and `rit undo --preserve-changes`.
+  `rit op restore <id>`, `rit op restore <id> --force`, `rit undo`,
+  `rit undo --preserve-changes`, and `rit undo --force`.
 - Supported metadata: before/after HEAD snapshots, current branch snapshots,
   index checksums, optional before-index/worktree sidecars, changed paths, and
   known created object IDs.
@@ -2481,6 +2499,11 @@
   replace Git refs, objects, index, or working tree state.
 - Intentional differences: this is a rit differentiator, not a Git-compatible
   porcelain command.
+- rit-specific behavior: restore paths that would rewrite the index or
+  worktree now stop when local staged, modified, or untracked content is
+  present unless the caller opts into `--force`. The covered commit
+  `undo --preserve-changes` path is exempt because it rewinds `HEAD` without
+  rewriting the worktree or index.
 - Repository mutation: `op log` is read-only; `op restore` and `undo` restore
   a previous HEAD/index/worktree snapshot according to the recorded sidecars.
 - Risk: moderate; restore paths are intentionally conservative and still cover

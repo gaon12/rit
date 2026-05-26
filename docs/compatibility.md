@@ -71,6 +71,9 @@ The current codebase implements an early local Git subset:
   local-path, smart HTTP(S), and one-refspec SSH `fetch` and `push`.
 - Small text patch output is supported for default `diff`, `diff -p`, and
   `diff --cached`.
+- rit also exposes an opt-in `diff --semantic` summary mode. This is a
+  rit-specific read-only surface and does not alter the checked Git-compatible
+  diff output modes above.
 - Checked default `diff` also supports one explicit commit-ish, two explicit
   commit-ish arguments, and the checked `<old>..<new>` / `<left>...<right>`
   revision-token forms, including summary, patch, `-- <pathspec>` filtering,
@@ -416,9 +419,13 @@ Local fetch compatibility tests cover `fetch <local-repository>` and one
 Fast-forward merge compatibility coverage compares final `HEAD`, porcelain
 status, and worktree contents for `merge --ff-only`.
 
-Operation journal tests cover rit-specific `.git/rit/ops.log` metadata and
-`rit undo`; this metadata is intentionally outside Git compatibility snapshots
-and must be safe to delete.
+Operation journal tests cover rit-specific `.git/rit/ops.log` metadata,
+`rit undo`, `rit undo --preserve-changes`, `rit undo --force`, and
+`rit op restore <id> --force`; this metadata is intentionally outside Git
+compatibility snapshots and must be safe to delete. Restore paths that would
+rewrite the index or worktree now intentionally stop on dirty local staged,
+modified, or untracked content unless the caller explicitly opts into
+`--force`.
 
 Local write compatibility tests currently cover directory pathspec behavior and
 simple wildcard/bracket-class pathspec behavior for `add`, `restore`, and

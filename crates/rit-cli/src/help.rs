@@ -115,9 +115,9 @@ Show a conservative porcelain v1 status, or explain how one path is classified.
 ";
 
 const DIFF_HELP: &str = "\
-rit diff [--cached|--staged] [-M[<n>]|--find-renames[=<n>]] [-C[<n>]|--find-copies[=<n>]] [--find-copies-harder] [--name-only|--name-status|--numstat|--stat|-p] [--] [<pathspec>...]
+rit diff [--cached|--staged] [-M[<n>]|--find-renames[=<n>]] [-C[<n>]|--find-copies[=<n>]] [--find-copies-harder] [--name-only|--name-status|--numstat|--stat|-p|--semantic] [--] [<pathspec>...]
 
-Show working tree changes compared with the index, or staged changes compared with HEAD.
+Show working tree changes compared with the index, staged changes compared with HEAD, or a rit semantic path summary when --semantic is selected.
 ";
 
 const LOG_HELP: &str = "\
@@ -290,16 +290,17 @@ Print a stable JSON Schema document for rit machine-readable output. The same sc
 
 const OP_HELP: &str = "\
 rit op log [--json]
-rit op restore <id>
+rit op restore <id> [--force]
 
 Inspect or restore the rit operation journal stored under .git/rit/ops.log.
 ";
 
 const UNDO_HELP: &str = "\
-rit undo [--preserve-changes]
+rit undo [--preserve-changes] [--force]
 
 Restore HEAD and the working tree to the state captured before the last restorable rit operation.
 Use --preserve-changes with commit undo to move HEAD back while keeping the commit contents staged and present in the working tree.
+Use --force to override the dirty-worktree safety guard when a restore would overwrite local changes.
 ";
 
 const SHOW_HELP: &str = "\

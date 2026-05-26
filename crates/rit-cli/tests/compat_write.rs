@@ -6434,7 +6434,7 @@ fn operation_journal_records_index_and_worktree_commands() {
 }
 
 #[test]
-fn undo_after_add_restores_index_without_reverting_worktree() {
+fn undo_force_after_add_restores_index_without_reverting_worktree() {
     let fixture = LocalWriteFixture::new(
         "operation-journal-add-undo",
         LocalWriteFixtureKind::NestedTracked,
@@ -6452,7 +6452,7 @@ fn undo_after_add_restores_index_without_reverting_worktree() {
         "M  nested/tracked.txt\n"
     );
 
-    let undo_output = run_capture(rit_binary(), ["undo"], fixture.path()).0;
+    let undo_output = run_capture(rit_binary(), ["undo", "--force"], fixture.path()).0;
 
     assert!(undo_output.contains("restored index"));
     assert_eq!(

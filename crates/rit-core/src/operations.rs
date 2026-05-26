@@ -1,6 +1,6 @@
 use crate::{
-    ObjectId, ObjectKind, Repository, Result, RitError, object::parse_tree_entries,
-    object::sha1_bytes, parse_commit,
+    ObjectId, ObjectKind, PathspecSet, Repository, Result, RitError, StatusOptions,
+    UntrackedFilesMode, object::parse_tree_entries, object::sha1_bytes, parse_commit,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -96,12 +96,15 @@ pub struct OperationRestoreResult {
     pub preserved_changes: bool,
 }
 
-/// Options for command-aware undo behavior.
+/// Options for operation restore and command-aware undo behavior.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct OperationUndoOptions {
     /// For supported commands, keep the resulting content in the index and
     /// working tree while moving HEAD back to the previous commit.
     pub preserve_changes: bool,
+    /// Override safety checks that stop restore/undo when local changes would
+    /// be overwritten.
+    pub force: bool,
 }
 
 impl OperationUndoOptions {
@@ -113,6 +116,12 @@ impl OperationUndoOptions {
     /// Keeps supported command changes in the index and working tree.
     pub fn preserve_changes(mut self) -> Self {
         self.preserve_changes = true;
+        self
+    }
+
+    /// Overrides restore safety checks for dirty local state.
+    pub fn force(mut self) -> Self {
+        self.force = true;
         self
     }
 }
@@ -265,12 +274,21 @@ impl RepositoryOperations<'_> {
 
     /// Restores the state captured before the operation with `id`.
     pub fn restore(&self, id: &str) -> Result<OperationRestoreResult> {
+        self.restore_with_options(id, OperationUndoOptions::new())
+    }
+
+    /// Restores the state captured before the operation with explicit options.
+    pub fn restore_with_options(
+        &self,
+        id: &str,
+        options: OperationUndoOptions,
+    ) -> Result<OperationRestoreResult> {
         let record = self
             .log()?
             .into_iter()
             .find(|record| record.id == id)
             .ok_or_else(|| RitError::invalid_input(format!("operation not found: {id}")))?;
-        restore_record(self.repository, &record)
+        restore_record_with_options(self.repository, &record, &options)
     }
 
     /// Restores the state captured before the last operation in the journal.
@@ -292,13 +310,6 @@ impl RepositoryOperations<'_> {
     }
 }
 
-fn restore_record(
-    repository: &Repository,
-    record: &OperationRecord,
-) -> Result<OperationRestoreResult> {
-    restore_record_with_options(repository, record, &OperationUndoOptions::new())
-}
-
 fn restore_record_with_options(
     repository: &Repository,
     record: &OperationRecord,
@@ -306,8 +317,10 @@ fn restore_record_with_options(
 ) -> Result<OperationRestoreResult> {
     let head_changed =
         record.before.head != record.after.head || record.before.branch != record.after.branch;
+    let preserves_head_only =
+        options.preserve_changes && record.command == "commit" && head_changed;
     if options.preserve_changes {
-        if record.command == "commit" && head_changed {
+        if preserves_head_only {
             restore_head_only(repository, &record.before)?;
             return Ok(OperationRestoreResult {
                 id: record.id.clone(),
@@ -321,6 +334,13 @@ fn restore_record_with_options(
             "operation {} ({}) does not support preserve-changes undo",
             record.id, record.command
         )));
+    }
+    if !options.force
+        && restore_would_overwrite_local_state(repository, record, preserves_head_only)?
+    {
+        return Err(RitError::invalid_input(
+            "undo/restore stopped because the repository has local staged, modified, or untracked changes; commit, clean, stash, or rerun with --force",
+        ));
     }
     if head_changed {
         restore_snapshot(repository, &record.before)?;
@@ -387,6 +407,31 @@ fn restore_head_only(repository: &Repository, snapshot: &OperationSnapshot) -> R
         write_text_atomically(&repository.git_dir().join("HEAD"), &format!("{head}\n"))?;
     }
     Ok(())
+}
+
+fn restore_would_overwrite_local_state(
+    repository: &Repository,
+    record: &OperationRecord,
+    preserves_head_only: bool,
+) -> Result<bool> {
+    if preserves_head_only || repository.worktree().is_none() {
+        return Ok(false);
+    }
+    let head_changed =
+        record.before.head != record.after.head || record.before.branch != record.after.branch;
+    let rewrites_index = record.before.index_checksum != record.after.index_checksum;
+    let rewrites_worktree = head_changed || before_worktree_exists(repository, record)?;
+    if !rewrites_index && !rewrites_worktree {
+        return Ok(false);
+    }
+    let status = repository.status_porcelain_v1_with_options(
+        &PathspecSet::all(),
+        StatusOptions {
+            untracked_files: UntrackedFilesMode::All,
+            ..StatusOptions::default()
+        },
+    )?;
+    Ok(!status.entries.is_empty())
 }
 
 fn restore_snapshot(repository: &Repository, snapshot: &OperationSnapshot) -> Result<()> {
@@ -1151,8 +1196,8 @@ mod tests {
 
         let result = repository
             .operations()
-            .undo_last()
-            .expect("index-only undo should restore");
+            .undo_last_with_options(OperationUndoOptions::new().force())
+            .expect("forced index-only undo should restore");
 
         assert_eq!(result.restored_head, Some(head));
         assert!(result.restored_index);
