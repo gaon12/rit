@@ -146,6 +146,11 @@
 - 2026-05-16 indexdb benchmark slice added ignored smoke tests for large commit
   history indexing and repeated file-history queries. They are manual checks so
   normal CI stays fast.
+- 2026-06-02 indexdb incremental refresh slice checked
+  `git version 2.54.0.windows.1` and `git help -a`; `indexdb` is rit-specific
+  and has no Git command help baseline. Existing healthy commit rows now stop
+  reverse traversal during `rit indexdb update`, so external tools that add a
+  child commit cause only the new reachable commits to be parsed and indexed.
 - 2026-05-16 SSH transport config slice checked Git 2.52.0 docs for
   `core.sshCommand`, `GIT_SSH_COMMAND`, `GIT_SSH`, and `ssh.variant`, then
   wired repository `.git/config` `core.sshCommand` into process-based SSH
@@ -719,6 +724,9 @@
   clear missing-feature error in minimal builds. It creates or updates
   `.git/rit/indexdb.sqlite` as reproducible metadata but does not modify Git
   objects, refs, index entries, or working tree files.
+- Incremental refresh stops walking parent commits once it reaches an already
+  indexed commit row. This keeps updates cheap for the common case where an
+  external Git-compatible tool advanced a ref by a small number of commits.
 - Compatibility coverage now captures representative Git-compatible read
   command output before and after `rit indexdb` creates metadata, then compares
   the post-indexdb output with Git. This guards the “indexdb is not source of
@@ -1108,8 +1116,7 @@
   final trailing NUL terminator valid like Git.
 - Added Git-compatible rejection for badly quoted pathspec-file entries before
   any `add`, `restore`, or `reset` mutation is applied.
-- Still unsupported: full Git pathspec-file edge cases and full rename
-  limits/advanced diffcore parity.
+- Still unsupported: full rename limits and advanced diffcore parity.
 
 ### M7: Remote transport foundation
 

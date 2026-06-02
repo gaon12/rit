@@ -573,6 +573,7 @@ fn indexdb_status_detects_external_ref_changes_and_ensure_reconciles_them() {
 
     let result = repository.indexdb().ensure().expect("ensure should update");
     assert!(result.updated);
+    assert_eq!(result.commits_indexed, 1);
     let fresh_status = repository.indexdb().status().expect("status should work");
     assert!(fresh_status.healthy);
     assert!(!fresh_status.stale);

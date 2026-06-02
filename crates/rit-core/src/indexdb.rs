@@ -690,6 +690,9 @@ fn refresh_commits(
         if !seen.insert(object_id) {
             continue;
         }
+        if indexed_commit_exists(connection, object_id)? {
+            continue;
+        }
         let object = repository.read_object(object_id)?;
         if object.kind != ObjectKind::Commit {
             continue;

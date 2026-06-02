@@ -28,9 +28,11 @@ drift.
 
 Verified on 2026-05-13 before continuing implementation:
 
-- Production crates do not execute `git`; `Command::new` usage is limited to
-  test infrastructure, hook execution, credential helper subprocesses, and SSH
-  process transport. No production command shells out to `git`.
+- Git-compatible command implementations do not execute `git`; `Command::new`
+  usage is limited to test infrastructure, the rit-specific `compat` oracle,
+  hook execution, credential helper/keychain subprocesses, and SSH process
+  transport. No implementation of `status`, `add`, `commit`, `diff`, or other
+  Git behavior shells out to `git`.
 - M1 reusable local write fixture builders are present in `rit-testkit`; the
   older verification note saying they were missing is stale and corrected here.
 - M2 linked worktree/common-dir support is implemented through `.git` gitdir
@@ -108,6 +110,12 @@ Verified on 2026-05-13 before continuing implementation:
   bracket classes match Git's advanced wildmatch specifications. This pass
   successfully implemented the M6 broader platform case parity and M4 advanced
   glob escape edge cases.
+- 2026-06-02 verification refreshed the local Git baseline with
+  `git version 2.54.0.windows.1` and `git help -a`, corrected the no-wrapper
+  note so the intentional `rit compat` Git oracle is not mislabeled as a Git
+  command implementation, found stale M4 and M6 parent `[~]` markers whose
+  child items were already complete, and added the first M6.5 incremental
+  indexdb refresh slice.
 
 ## M0: Baseline And Rules
 
@@ -348,10 +356,10 @@ Completion criteria:
 - [x] `rit reset` explicit path unstaging.
 - [x] `rit checkout` local branch basics.
 - [x] `rit switch` local branch basics.
-- [~] Pathspec expansion for write commands.
+- [x] Pathspec expansion for write commands.
   - [x] Ordinary literal file, directory, and `.` pathspec expansion for
     `add`, `restore`, and `reset`.
-  - [~] Pathspec magic, pathspec files, and glob parity.
+  - [x] Pathspec magic, pathspec files, and glob parity.
     - [x] Shared simple `*` and `?` wildcard matcher.
     - [x] Shared simple bracket-class wildcard matcher.
     - [x] Simple wildcard and bracket-class expansion for `add`, `restore`,
@@ -550,7 +558,7 @@ Completion criteria:
   - [x] Exclude `:!`, `:^`, and `:(exclude)` pathspec magic.
   - [x] Attr pathspec magic for root `.gitattributes` set/unset/value/
     unspecified requirements.
-- [~] Case-sensitivity behavior by platform/config.
+- [x] Case-sensitivity behavior by platform/config.
   - [x] `git add` honors `core.ignorecase=true` for mismatched-case
     pathspecs that Git accepts as no-ops.
   - [x] `git add` rejects mismatched-case pathspecs like Git when
@@ -639,7 +647,7 @@ Completion criteria:
 - [x] Add corruption tests proving broken indexdb never corrupts the repository.
 - [x] Add linked worktree tests proving worktree cache isolation.
 - [x] Add benchmark tests for large commit history and file history queries.
-- [ ] Add incremental commit refresh that stops reverse traversal when it
+- [x] Add incremental commit refresh that stops reverse traversal when it
   reaches already-indexed commits.
 - [ ] Add subtree-skip tree diff for file history so identical parent/child
   tree object IDs stop recursive descent.
