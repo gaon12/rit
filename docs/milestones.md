@@ -123,6 +123,11 @@ Verified on 2026-05-13 before continuing implementation:
 - 2026-06-02 M6.5 benchmark pass split ignored manual benchmark smoke tests
   into full rebuild, incremental update, and repeated file-history query
   slices.
+- 2026-06-02 queue verification confirmed the M16 dirty-worktree guard,
+  `undo --force`, `op restore --force`, and commit `undo --preserve-changes`
+  tests pass in `crates/rit-cli/tests/rit_extensions.rs`. The same run also
+  confirmed the M12 opt-in `rit diff --semantic` CLI tests pass, so the Easy
+  difficulty queue no longer lists those completed items as next work.
 
 ## M0: Baseline And Rules
 
@@ -1447,10 +1452,7 @@ Completion criteria:
 
 ### Easy
 
-1. `M16` undo dirty-worktree guard and restore refusal coverage.
-2. `M16` `rit undo` / `rit op restore` explicit `--force` override coverage.
-3. `M12` minimum opt-in semantic diff CLI surface for `rit diff`.
-4. Keep `docs/milestones.md` aligned with checked implementation status.
+1. Keep `docs/milestones.md` aligned with checked implementation status.
 
 ### Medium
 
