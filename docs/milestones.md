@@ -1250,7 +1250,7 @@ Completion criteria:
 - [x] `rit repair` can rebuild or drop corrupted indexdb without touching Git
   objects.
 - [ ] Run policy enforcement directly on write paths before mutation.
-- [ ] Add entropy-based secret heuristics beyond fixed-pattern checks.
+- [x] Add entropy-based secret heuristics beyond fixed-pattern checks.
 - [ ] Add `rit doctor --sizer` for repository-size and object-shape audits.
 
 Completion criteria:

@@ -76,6 +76,50 @@ fn secret_policy_reports_without_revealing_secret() {
 }
 
 #[test]
+fn secret_policy_reports_high_entropy_assignment_without_revealing_secret() {
+    let policy = PolicyConfig {
+        deny_secrets: true,
+        ..PolicyConfig::default()
+    };
+    let secret_value = "aZ9qP7mN4xR2sT8vB5cD1eF6gH3jK0Lm";
+
+    let findings = policy.check_text_for_secrets(
+        "service.env",
+        &format!("service_token = \"{secret_value}\""),
+    );
+
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].severity, PolicySeverity::Warning);
+    assert_eq!(
+        findings[0].kind,
+        PolicyFindingKind::SecretPattern {
+            pattern: "high-entropy secret".to_owned(),
+        }
+    );
+    assert!(!findings[0].message.contains(secret_value));
+}
+
+#[test]
+fn secret_policy_ignores_low_entropy_placeholder_assignment() {
+    let policy = PolicyConfig {
+        deny_secrets: true,
+        ..PolicyConfig::default()
+    };
+
+    assert_eq!(
+        policy.check_text_for_secrets("service.env", "api_key = \"example-token-value\""),
+        Vec::new()
+    );
+    assert_eq!(
+        policy.check_text_for_secrets(
+            "service.env",
+            "password = \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\""
+        ),
+        Vec::new()
+    );
+}
+
+#[test]
 fn secret_policy_blocks_only_when_explicit() {
     let policy = PolicyConfig {
         deny_secrets: true,

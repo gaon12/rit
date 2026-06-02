@@ -141,6 +141,9 @@ fn secret_patterns(contents: &str) -> Vec<&'static str> {
     {
         patterns.push("AWS access key id");
     }
+    if contains_high_entropy_secret(contents) {
+        patterns.push("high-entropy secret");
+    }
 
     patterns
 }
@@ -174,6 +177,162 @@ fn token_length_at(contents: &str, start: usize) -> usize {
         .map(char::len_utf8)
         .sum()
 }
+
+fn contains_high_entropy_secret(contents: &str) -> bool {
+    contents
+        .lines()
+        .any(line_contains_high_entropy_secret_assignment)
+}
+
+fn line_contains_high_entropy_secret_assignment(line: &str) -> bool {
+    let lower_line = line.to_ascii_lowercase();
+    if !SECRET_NAME_HINTS
+        .iter()
+        .any(|secret_name_hint| lower_line.contains(secret_name_hint))
+    {
+        return false;
+    }
+
+    let Some(value_text) = assignment_value(line) else {
+        return false;
+    };
+
+    value_text
+        .split(token_separator)
+        .any(is_high_entropy_secret_candidate)
+}
+
+fn assignment_value(line: &str) -> Option<&str> {
+    line.split_once('=')
+        .or_else(|| line.split_once(':'))
+        .map(|(_, value_text)| value_text)
+}
+
+fn token_separator(character: char) -> bool {
+    character.is_whitespace()
+        || matches!(
+            character,
+            '"' | '\'' | '`' | ';' | ',' | '[' | ']' | '(' | ')' | '{' | '}'
+        )
+}
+
+fn is_high_entropy_secret_candidate(raw_candidate: &str) -> bool {
+    let candidate = raw_candidate.trim_matches(|character: char| {
+        matches!(
+            character,
+            '"' | '\'' | '`' | ';' | ',' | '.' | ':' | '[' | ']' | '(' | ')' | '{' | '}'
+        )
+    });
+
+    if candidate.len() < 24 {
+        return false;
+    }
+    if is_known_fixed_prefix_secret(candidate) {
+        return false;
+    }
+    if looks_like_placeholder(candidate) {
+        return false;
+    }
+    if candidate
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .count()
+        < 20
+    {
+        return false;
+    }
+    if character_class_count(candidate) < 3 {
+        return false;
+    }
+
+    shannon_entropy(candidate) >= 4.0
+}
+
+fn is_known_fixed_prefix_secret(candidate: &str) -> bool {
+    candidate.starts_with("ghp_")
+        || candidate.starts_with("github_pat_")
+        || candidate.starts_with("glpat-")
+        || candidate.starts_with("hf_")
+        || candidate.starts_with("AKIA")
+        || candidate.starts_with("ASIA")
+}
+
+fn looks_like_placeholder(candidate: &str) -> bool {
+    let lower_candidate = candidate.to_ascii_lowercase();
+    if SECRET_PLACEHOLDER_WORDS
+        .iter()
+        .any(|placeholder_word| lower_candidate.contains(placeholder_word))
+    {
+        return true;
+    }
+
+    let mut characters = candidate.chars();
+    let Some(first_character) = characters.next() else {
+        return true;
+    };
+    characters.all(|character| character == first_character)
+}
+
+fn character_class_count(candidate: &str) -> usize {
+    let has_lowercase = candidate
+        .chars()
+        .any(|character| character.is_ascii_lowercase());
+    let has_uppercase = candidate
+        .chars()
+        .any(|character| character.is_ascii_uppercase());
+    let has_digit = candidate
+        .chars()
+        .any(|character| character.is_ascii_digit());
+    let has_symbol = candidate
+        .chars()
+        .any(|character| character.is_ascii() && !character.is_ascii_alphanumeric());
+
+    [has_lowercase, has_uppercase, has_digit, has_symbol]
+        .into_iter()
+        .filter(|has_class| *has_class)
+        .count()
+}
+
+fn shannon_entropy(candidate: &str) -> f64 {
+    let byte_count = candidate.len() as f64;
+    let mut frequencies = [0usize; 256];
+    for byte in candidate.bytes() {
+        frequencies[byte as usize] += 1;
+    }
+
+    frequencies
+        .into_iter()
+        .filter(|frequency| *frequency > 0)
+        .map(|frequency| {
+            let probability = frequency as f64 / byte_count;
+            -probability * probability.log2()
+        })
+        .sum()
+}
+
+const SECRET_NAME_HINTS: [&str; 10] = [
+    "api_key",
+    "apikey",
+    "auth",
+    "credential",
+    "passwd",
+    "password",
+    "private_key",
+    "secret",
+    "token",
+    "x-api-key",
+];
+
+const SECRET_PLACEHOLDER_WORDS: [&str; 8] = [
+    "change_me",
+    "changeme",
+    "dummy",
+    "example",
+    "fake",
+    "notasecret",
+    "placeholder",
+    "sample",
+];
 
 fn severity_from_enforcement(enforcement: PolicyEnforcement) -> PolicySeverity {
     match enforcement {

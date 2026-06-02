@@ -1458,6 +1458,11 @@
   blocking severity.
 - Added conservative secret-pattern policy findings for private key blocks and
   common token prefixes without including matched secret values in messages.
+- 2026-06-02 checked `git version 2.54.0.windows.1` and `git help -a`
+  before the policy entropy slice; this is a rit-specific policy engine
+  feature rather than a Git porcelain command. Added conservative
+  high-entropy assignment detection for secret-like variable names, while
+  ignoring placeholders and keeping matched values out of finding messages.
 - Added protected branch policy findings that accept either short branch names
   or `refs/heads/*` names in `protect_branches`.
 - Added read-only `Repository::doctor` and `rit doctor` to check repository
