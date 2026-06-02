@@ -10,6 +10,7 @@ pub mod commit;
 pub mod config;
 pub mod diff;
 pub mod doctor;
+pub mod doctor_sizer;
 pub mod error;
 pub mod graph;
 pub mod history;
@@ -203,3 +204,6 @@ pub use diff::{
     PatchRenderOptions,
 };
 pub use doctor::{DoctorCheck, DoctorReport, DoctorSeverity};
+pub use doctor_sizer::{
+    DoctorDirectorySizer, DoctorObjectSizer, DoctorSizedPath, DoctorSizerReport,
+};

@@ -5221,7 +5221,7 @@ mod tests {
         let (code, stdout, stderr) = run_with(&["help", "doctor"]);
 
         assert_eq!(code, ExitCode::SUCCESS);
-        assert!(stdout.contains("rit doctor [--json|--explain|--fix-plan]"));
+        assert!(stdout.contains("rit doctor [--json|--explain|--fix-plan|--sizer]"));
         assert_eq!(stderr, "");
     }
 

@@ -1475,6 +1475,11 @@
 - Added read-only doctor maintenance findings for loose object counts,
   pack/index pairing, commit graph availability, and rit metadata journal
   readability.
+- 2026-06-02 checked `git count-objects -h` and `git verify-pack -h` as
+  nearby size/pack references before adding `rit doctor --sizer`. The sizer is
+  read-only and scans Git storage directly to summarize loose object fanout,
+  loose object bytes, pack/index bytes, loose refs, and rit sidecar metadata
+  without invoking external Git.
 - Added `rit doctor --fix-plan`, a read-only view that combines the doctor
   report with the conservative `Repository::repair_plan` actions.
 - With the `indexdb` feature enabled, `rit doctor` reports optional indexdb
@@ -1498,7 +1503,7 @@
   does not list `doctor`, while related Git maintenance commands include
   `git fsck` and `git maintenance`.
 - Supported options: `rit doctor`, `rit doctor --json`, `rit doctor --explain`,
-  and `rit doctor --fix-plan`.
+  `rit doctor --fix-plan`, and `rit doctor --sizer`.
 - Unsupported options: applying repair actions, full object graph fsck.
 - Intentional differences: `doctor` is a rit-specific read-only health summary,
   not a Git porcelain command.

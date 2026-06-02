@@ -1251,7 +1251,7 @@ Completion criteria:
   objects.
 - [ ] Run policy enforcement directly on write paths before mutation.
 - [x] Add entropy-based secret heuristics beyond fixed-pattern checks.
-- [ ] Add `rit doctor --sizer` for repository-size and object-shape audits.
+- [x] Add `rit doctor --sizer` for repository-size and object-shape audits.
 
 Completion criteria:
 - Policy defaults warn conservatively and blocking behavior requires explicit
@@ -1450,16 +1450,14 @@ Completion criteria:
 1. `M16` undo dirty-worktree guard and restore refusal coverage.
 2. `M16` `rit undo` / `rit op restore` explicit `--force` override coverage.
 3. `M12` minimum opt-in semantic diff CLI surface for `rit diff`.
-4. `M13` first `rit doctor --sizer` read-only metric report.
-5. Keep `docs/milestones.md` aligned with checked implementation status.
+4. Keep `docs/milestones.md` aligned with checked implementation status.
 
 ### Medium
 
 1. `M13` run policy enforcement directly on write paths.
-2. `M13` add entropy-based secret heuristics.
-3. `M26` add fancy terminal diff rendering.
-4. `M26` add GitHub auth device-flow support.
-5. `M26` expand repository audit output with top-N blobs and ref/history
+2. `M26` add fancy terminal diff rendering.
+3. `M26` add GitHub auth device-flow support.
+4. `M26` expand repository audit output with top-N blobs and ref/history
    complexity.
 
 ### Hard

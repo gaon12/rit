@@ -338,9 +338,9 @@ Suggest workspace profiles from current changes, infer a workspace from one pack
 ";
 
 const DOCTOR_HELP: &str = "\
-rit doctor [--json|--explain|--fix-plan]
+rit doctor [--json|--explain|--fix-plan|--sizer]
 
-Run read-only repository health checks and print text, JSON, explained check results, or a safe fix plan.
+Run read-only repository health checks and print text, JSON, explained check results, a safe fix plan, or repository-size and object-shape summaries.
 ";
 
 const REPAIR_HELP: &str = "\

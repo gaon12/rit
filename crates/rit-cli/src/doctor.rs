@@ -11,6 +11,7 @@ pub fn doctor_command(
         [flag] if flag == "--json" => DoctorOutputMode::Json,
         [flag] if flag == "--explain" => DoctorOutputMode::Explain,
         [flag] if flag == "--fix-plan" => DoctorOutputMode::FixPlan,
+        [flag] if flag == "--sizer" => DoctorOutputMode::Sizer,
         [flag, ..] => {
             writeln!(stderr, "rit: unsupported doctor option '{flag}'")?;
             return Ok(ExitCode::from(129));
@@ -30,6 +31,7 @@ pub fn doctor_command(
         DoctorOutputMode::Json => write_report_json(&report, stdout)?,
         DoctorOutputMode::Explain => print_explained_report(&report, stdout)?,
         DoctorOutputMode::FixPlan => print_fix_plan_report(&report, &repository, stdout)?,
+        DoctorOutputMode::Sizer => print_sizer_report(&repository.doctor_sizer(), stdout)?,
     }
 
     if report.has_errors() {
@@ -44,6 +46,7 @@ enum DoctorOutputMode {
     Json,
     Explain,
     FixPlan,
+    Sizer,
 }
 
 fn print_report(report: &rit_core::DoctorReport, stdout: &mut dyn Write) -> io::Result<()> {
@@ -147,6 +150,75 @@ fn print_fix_plan_report(
     Ok(())
 }
 
+fn print_sizer_report(
+    report: &rit_core::DoctorSizerReport,
+    stdout: &mut dyn Write,
+) -> io::Result<()> {
+    writeln!(stdout, "repository-size:")?;
+    writeln!(stdout, "git-dir: {}", report.git_dir)?;
+    writeln!(stdout, "common-dir: {}", report.common_dir)?;
+    writeln!(stdout, "objects:")?;
+    writeln!(
+        stdout,
+        "  loose: {} object(s), {} byte(s), {} fanout dir(s)",
+        report.objects.loose_objects,
+        report.objects.loose_object_bytes,
+        report.objects.loose_fanout_directories
+    )?;
+    if let Some(largest_loose_object) = &report.objects.largest_loose_object {
+        writeln!(
+            stdout,
+            "  largest-loose-object: {} byte(s) at {}",
+            largest_loose_object.bytes, largest_loose_object.path
+        )?;
+    } else {
+        writeln!(stdout, "  largest-loose-object: none")?;
+    }
+    writeln!(
+        stdout,
+        "  packs: {} pack file(s), {} byte(s)",
+        report.objects.pack_files, report.objects.pack_bytes
+    )?;
+    writeln!(
+        stdout,
+        "  pack-indexes: {} index file(s), {} byte(s)",
+        report.objects.pack_indexes, report.objects.pack_index_bytes
+    )?;
+    writeln!(
+        stdout,
+        "  auxiliary-pack-files: {} file(s), {} byte(s)",
+        report.objects.auxiliary_pack_files, report.objects.auxiliary_pack_bytes
+    )?;
+    print_directory_sizer("refs", &report.refs, stdout)?;
+    print_directory_sizer("rit-metadata", &report.rit_metadata, stdout)?;
+    if report.warnings.is_empty() {
+        writeln!(stdout, "warnings: none")?;
+    } else {
+        writeln!(stdout, "warnings:")?;
+        for warning in &report.warnings {
+            writeln!(stdout, "- {warning}")?;
+        }
+    }
+    Ok(())
+}
+
+fn print_directory_sizer(
+    label: &str,
+    summary: &rit_core::DoctorDirectorySizer,
+    stdout: &mut dyn Write,
+) -> io::Result<()> {
+    if !summary.exists {
+        writeln!(stdout, "{label}: missing at {}", summary.path)?;
+        return Ok(());
+    }
+
+    writeln!(
+        stdout,
+        "{label}: {} file(s), {} dir(s), {} byte(s) at {}",
+        summary.files, summary.directories, summary.bytes, summary.path
+    )
+}
+
 fn repository_label(report: &rit_core::DoctorReport) -> &str {
     report.worktree.as_deref().unwrap_or(&report.git_dir)
 }
@@ -196,8 +268,13 @@ fn json_optional_string(value: Option<&str>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{print_explained_report, print_fix_plan_report, write_report_json};
-    use rit_core::{DoctorCheck, DoctorReport, DoctorSeverity, InitOptions, Repository};
+    use super::{
+        print_explained_report, print_fix_plan_report, print_sizer_report, write_report_json,
+    };
+    use rit_core::{
+        DoctorCheck, DoctorDirectorySizer, DoctorObjectSizer, DoctorReport, DoctorSeverity,
+        DoctorSizedPath, DoctorSizerReport, InitOptions, Repository,
+    };
     use std::fs;
 
     #[test]
@@ -262,6 +339,55 @@ mod tests {
         assert!(text.contains("would: create directory"));
         assert!(!pack_dir.exists());
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn doctor_sizer_prints_repository_shape_summary() {
+        let report = DoctorSizerReport {
+            git_dir: ".git".to_owned(),
+            common_dir: ".git".to_owned(),
+            objects: DoctorObjectSizer {
+                loose_fanout_directories: 1,
+                loose_objects: 2,
+                loose_object_bytes: 6,
+                largest_loose_object: Some(DoctorSizedPath {
+                    path: ".git/objects/ab/1234".to_owned(),
+                    bytes: 4,
+                }),
+                pack_files: 1,
+                pack_bytes: 5,
+                pack_indexes: 1,
+                pack_index_bytes: 3,
+                auxiliary_pack_files: 0,
+                auxiliary_pack_bytes: 0,
+            },
+            refs: DoctorDirectorySizer {
+                path: ".git/refs".to_owned(),
+                exists: true,
+                files: 1,
+                directories: 1,
+                bytes: 4,
+            },
+            rit_metadata: DoctorDirectorySizer {
+                path: ".git/rit".to_owned(),
+                exists: false,
+                files: 0,
+                directories: 0,
+                bytes: 0,
+            },
+            warnings: vec!["could not inspect sample".to_owned()],
+        };
+        let mut output = Vec::new();
+
+        print_sizer_report(&report, &mut output).expect("sizer should be written");
+        let text = String::from_utf8(output).expect("sizer should be utf-8");
+
+        assert!(text.contains("repository-size:"));
+        assert!(text.contains("loose: 2 object(s), 6 byte(s), 1 fanout dir(s)"));
+        assert!(text.contains("largest-loose-object: 4 byte(s)"));
+        assert!(text.contains("refs: 1 file(s), 1 dir(s), 4 byte(s)"));
+        assert!(text.contains("rit-metadata: missing"));
+        assert!(text.contains("- could not inspect sample"));
     }
 
     fn temp_path(name: &str) -> std::path::PathBuf {
