@@ -1,5 +1,7 @@
 use crate::indexdb::INDEXDB_SCHEMA_VERSION;
-use crate::{InitOptions, ObjectId, ObjectKind, Repository, parse_commit};
+use crate::{
+    InitOptions, ObjectId, ObjectKind, Repository, object::parse_tree_entries, parse_commit,
+};
 use rusqlite::{Connection, params};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -586,6 +588,60 @@ fn indexdb_status_detects_external_ref_changes_and_ensure_reconciles_them() {
 }
 
 #[test]
+fn indexdb_file_history_update_skips_unchanged_subtrees() {
+    let temp = temp_path("file-history-subtree-skip");
+    let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+    write_user_config(&repository);
+    fs::create_dir_all(temp.join("nested")).expect("nested directory should be written");
+    fs::write(temp.join("root.txt"), "one\n").expect("root file should be written");
+    fs::write(temp.join("nested").join("keep.txt"), "keep\n")
+        .expect("nested file should be written");
+    repository
+        .add_paths(&["root.txt".to_owned(), "nested/keep.txt".to_owned()])
+        .expect("add should work");
+    let first = repository
+        .commit_index("first")
+        .expect("commit should work")
+        .commit_id;
+    repository.indexdb().ensure().expect("ensure should work");
+
+    let (second, nested_tree) =
+        write_external_root_update_reusing_nested_tree(&repository, first, "two\n");
+    remove_loose_object(&repository, nested_tree);
+    move_current_branch_ref(&repository, second);
+
+    let result = repository.indexdb().ensure().expect(
+        "unchanged subtree should not be read while indexing the externally added child commit",
+    );
+    assert_eq!(result.commits_indexed, 1);
+
+    let root_history = repository
+        .indexdb()
+        .file_history("root.txt")
+        .expect("root history should load");
+    let nested_history = repository
+        .indexdb()
+        .file_history("nested/keep.txt")
+        .expect("nested history should load");
+
+    assert_eq!(
+        root_history
+            .iter()
+            .map(|change| (change.commit_id, change.change_kind.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(second, "M"), (first, "A")]
+    );
+    assert_eq!(
+        nested_history
+            .iter()
+            .map(|change| (change.commit_id, change.change_kind.as_str()))
+            .collect::<Vec<_>>(),
+        vec![(first, "A")]
+    );
+    remove_dir_all(&temp);
+}
+
+#[test]
 fn indexdb_status_detects_index_changes_and_ensure_reconciles_them() {
     let temp = temp_path("external-index");
     let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
@@ -793,6 +849,59 @@ fn ref_target(connection: &Connection, name: &str) -> Option<String> {
         .expect("ref target query should work")
 }
 
+fn write_external_root_update_reusing_nested_tree(
+    repository: &Repository,
+    parent: crate::ObjectId,
+    root_contents: &str,
+) -> (crate::ObjectId, crate::ObjectId) {
+    let parent_object = repository
+        .read_object(parent)
+        .expect("parent commit should be readable");
+    let parent_commit = parse_commit(&parent_object.data).expect("parent commit should parse");
+    let parent_tree = repository
+        .read_object(parent_commit.tree)
+        .expect("parent tree should be readable");
+    let root_blob = repository
+        .loose_objects()
+        .write_object(ObjectKind::Blob, root_contents.as_bytes())
+        .expect("root blob should be written");
+    let mut nested_tree = None;
+    let mut tree_data = Vec::new();
+
+    for entry in parse_tree_entries(&parent_tree.data).expect("parent tree should parse") {
+        let entry_name = entry.name_lossy();
+        let object_id = if entry_name == "root.txt" {
+            root_blob
+        } else {
+            if entry_name == "nested" {
+                nested_tree = Some(entry.object_id);
+            }
+            entry.object_id
+        };
+        tree_data.extend_from_slice(entry.mode.as_bytes());
+        tree_data.push(b' ');
+        tree_data.extend_from_slice(&entry.name);
+        tree_data.push(0);
+        tree_data.extend_from_slice(object_id.as_bytes());
+    }
+
+    let tree = repository
+        .loose_objects()
+        .write_object(ObjectKind::Tree, &tree_data)
+        .expect("updated root tree should be written");
+    let commit = format!(
+        "tree {tree}\nparent {parent}\nauthor External Tool <external@example.test> 4102444800 +0000\ncommitter External Tool <external@example.test> 4102444800 +0000\n\nexternal root update\n"
+    );
+    let commit_id = repository
+        .loose_objects()
+        .write_object(ObjectKind::Commit, commit.as_bytes())
+        .expect("external-compatible commit object should be written");
+    (
+        commit_id,
+        nested_tree.expect("fixture should include a nested tree"),
+    )
+}
+
 fn write_external_compatible_commit(
     repository: &Repository,
     parent: crate::ObjectId,
@@ -809,6 +918,16 @@ fn write_external_compatible_commit(
         .loose_objects()
         .write_object(ObjectKind::Commit, commit.as_bytes())
         .expect("external-compatible commit object should be written")
+}
+
+fn remove_loose_object(repository: &Repository, object_id: crate::ObjectId) {
+    let object_id_hex = object_id.to_hex();
+    let path = repository
+        .common_dir()
+        .join("objects")
+        .join(&object_id_hex[0..2])
+        .join(&object_id_hex[2..]);
+    fs::remove_file(path).expect("loose object should be removable");
 }
 
 fn move_current_branch_ref(repository: &Repository, target: crate::ObjectId) {

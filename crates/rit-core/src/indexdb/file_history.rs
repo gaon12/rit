@@ -1,6 +1,7 @@
 use super::{object_id_from_snapshot_bytes, sqlite_error};
 use crate::{
-    ObjectId, ObjectKind, Repository, Result, RitError, object::parse_tree_entries, parse_commit,
+    ObjectId, ObjectKind, Repository, Result, RitError, TreeEntry, object::parse_tree_entries,
+    parse_commit,
 };
 use rusqlite::{Connection, params};
 use std::collections::{BTreeMap, BTreeSet};
@@ -38,34 +39,31 @@ pub(super) fn refresh_file_changes_for_commit(
             params!["sha1", object_id.as_bytes().to_vec()],
         )
         .map_err(sqlite_error)?;
-    let current = commit_tree_entries(repository, commit.tree)?;
-    let parent = commit
+    let parent_tree = commit
         .parents
         .first()
         .copied()
         .map(|parent_id| {
             let parent_object = repository.read_object(parent_id)?;
             let parent_commit = parse_commit(&parent_object.data)?;
-            commit_tree_entries(repository, parent_commit.tree)
+            Ok(parent_commit.tree)
         })
-        .transpose()?
-        .unwrap_or_default();
-    let paths = current
-        .keys()
-        .chain(parent.keys())
-        .cloned()
-        .collect::<BTreeSet<_>>();
+        .transpose()?;
 
-    for path in paths {
-        let before = parent.get(&path);
-        let after = current.get(&path);
-        let change_kind = match (before, after) {
-            (None, Some(_)) => "A",
-            (Some(_), None) => "D",
-            (Some(before), Some(after)) if before != after => "M",
-            _ => continue,
-        };
-        insert_file_change(connection, object_id, &path, change_kind, after)?;
+    match parent_tree {
+        Some(parent_tree) => {
+            refresh_file_changes_between_trees(
+                connection,
+                repository,
+                object_id,
+                "",
+                parent_tree,
+                commit.tree,
+            )?;
+        }
+        None => {
+            insert_added_tree_changes(connection, repository, object_id, "", commit.tree)?;
+        }
     }
     Ok(())
 }
@@ -218,6 +216,167 @@ fn collect_commit_tree_entries(
         }
     }
     Ok(())
+}
+
+fn refresh_file_changes_between_trees(
+    connection: &Connection,
+    repository: &Repository,
+    commit_id: ObjectId,
+    prefix: &str,
+    before_tree_id: ObjectId,
+    after_tree_id: ObjectId,
+) -> Result<()> {
+    if before_tree_id == after_tree_id {
+        return Ok(());
+    }
+
+    let before_entries = direct_tree_entries(repository, before_tree_id)?;
+    let after_entries = direct_tree_entries(repository, after_tree_id)?;
+    let entry_names = before_entries
+        .keys()
+        .chain(after_entries.keys())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+
+    for name in entry_names {
+        let path = joined_tree_path(prefix, &name);
+        match (before_entries.get(&name), after_entries.get(&name)) {
+            (None, Some(after)) => {
+                insert_added_entry_changes(connection, repository, commit_id, &path, after)?;
+            }
+            (Some(before), None) => {
+                insert_deleted_entry_changes(connection, repository, commit_id, &path, before)?;
+            }
+            (Some(before), Some(after)) => {
+                refresh_file_changes_for_entry_pair(
+                    connection, repository, commit_id, &path, before, after,
+                )?;
+            }
+            (None, None) => {}
+        }
+    }
+    Ok(())
+}
+
+fn refresh_file_changes_for_entry_pair(
+    connection: &Connection,
+    repository: &Repository,
+    commit_id: ObjectId,
+    path: &str,
+    before: &TreeEntry,
+    after: &TreeEntry,
+) -> Result<()> {
+    match (before.kind, after.kind) {
+        (ObjectKind::Tree, ObjectKind::Tree) => refresh_file_changes_between_trees(
+            connection,
+            repository,
+            commit_id,
+            path,
+            before.object_id,
+            after.object_id,
+        ),
+        (ObjectKind::Tree, _) => {
+            insert_deleted_entry_changes(connection, repository, commit_id, path, before)?;
+            insert_added_entry_changes(connection, repository, commit_id, path, after)
+        }
+        (_, ObjectKind::Tree) => {
+            insert_deleted_entry_changes(connection, repository, commit_id, path, before)?;
+            insert_added_entry_changes(connection, repository, commit_id, path, after)
+        }
+        (_, _) => {
+            let before_index_entry = indexed_entry_from_tree_entry(before)?;
+            let after_index_entry = indexed_entry_from_tree_entry(after)?;
+            if before_index_entry == after_index_entry {
+                return Ok(());
+            }
+            insert_file_change(connection, commit_id, path, "M", Some(&after_index_entry))
+        }
+    }
+}
+
+fn insert_added_entry_changes(
+    connection: &Connection,
+    repository: &Repository,
+    commit_id: ObjectId,
+    path: &str,
+    entry: &TreeEntry,
+) -> Result<()> {
+    if entry.kind == ObjectKind::Tree {
+        insert_added_tree_changes(connection, repository, commit_id, path, entry.object_id)
+    } else {
+        let after = indexed_entry_from_tree_entry(entry)?;
+        insert_file_change(connection, commit_id, path, "A", Some(&after))
+    }
+}
+
+fn insert_deleted_entry_changes(
+    connection: &Connection,
+    repository: &Repository,
+    commit_id: ObjectId,
+    path: &str,
+    entry: &TreeEntry,
+) -> Result<()> {
+    if entry.kind == ObjectKind::Tree {
+        insert_deleted_tree_changes(connection, repository, commit_id, path, entry.object_id)
+    } else {
+        insert_file_change(connection, commit_id, path, "D", None)
+    }
+}
+
+fn insert_added_tree_changes(
+    connection: &Connection,
+    repository: &Repository,
+    commit_id: ObjectId,
+    prefix: &str,
+    tree_id: ObjectId,
+) -> Result<()> {
+    for entry in direct_tree_entries(repository, tree_id)?.values() {
+        let path = joined_tree_path(prefix, &entry.name_lossy());
+        insert_added_entry_changes(connection, repository, commit_id, &path, entry)?;
+    }
+    Ok(())
+}
+
+fn insert_deleted_tree_changes(
+    connection: &Connection,
+    repository: &Repository,
+    commit_id: ObjectId,
+    prefix: &str,
+    tree_id: ObjectId,
+) -> Result<()> {
+    for entry in direct_tree_entries(repository, tree_id)?.values() {
+        let path = joined_tree_path(prefix, &entry.name_lossy());
+        insert_deleted_entry_changes(connection, repository, commit_id, &path, entry)?;
+    }
+    Ok(())
+}
+
+fn direct_tree_entries(
+    repository: &Repository,
+    tree_id: ObjectId,
+) -> Result<BTreeMap<String, TreeEntry>> {
+    let tree = repository.read_object(tree_id)?;
+    parse_tree_entries(&tree.data).map(|entries| {
+        entries
+            .into_iter()
+            .map(|entry| (entry.name_lossy(), entry))
+            .collect()
+    })
+}
+
+fn indexed_entry_from_tree_entry(entry: &TreeEntry) -> Result<IndexedTreeEntry> {
+    Ok(IndexedTreeEntry {
+        object_id: entry.object_id,
+        mode: parse_tree_mode(&entry.mode)?,
+    })
+}
+
+fn joined_tree_path(prefix: &str, name: &str) -> String {
+    if prefix.is_empty() {
+        name.to_owned()
+    } else {
+        format!("{prefix}/{name}")
+    }
 }
 
 fn parse_tree_mode(mode: &str) -> Result<u32> {

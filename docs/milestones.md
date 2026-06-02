@@ -116,6 +116,10 @@ Verified on 2026-05-13 before continuing implementation:
   command implementation, found stale M4 and M6 parent `[~]` markers whose
   child items were already complete, and added the first M6.5 incremental
   indexdb refresh slice.
+- 2026-06-02 follow-up M6.5 pass added subtree-skip file-history indexing:
+  when parent and child tree entries point at the same subtree object, indexdb
+  no longer descends into that subtree while calculating first-parent
+  `file_changes`.
 
 ## M0: Baseline And Rules
 
@@ -649,7 +653,7 @@ Completion criteria:
 - [x] Add benchmark tests for large commit history and file history queries.
 - [x] Add incremental commit refresh that stops reverse traversal when it
   reaches already-indexed commits.
-- [ ] Add subtree-skip tree diff for file history so identical parent/child
+- [x] Add subtree-skip tree diff for file history so identical parent/child
   tree object IDs stop recursive descent.
 - [ ] Split large-repo indexdb benchmarks into full rebuild, incremental
   update, and file-history query slices.

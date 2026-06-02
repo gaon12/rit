@@ -151,6 +151,11 @@
   and has no Git command help baseline. Existing healthy commit rows now stop
   reverse traversal during `rit indexdb update`, so external tools that add a
   child commit cause only the new reachable commits to be parsed and indexed.
+- 2026-06-02 indexdb subtree-skip slice kept the same Git baseline. When
+  indexing first-parent file changes, identical parent/child subtree object IDs
+  now stop recursive descent. The compatibility result is unchanged because Git
+  tree object IDs are content-addressed; the optimization only avoids reading
+  subtrees that are already known to be identical.
 - 2026-05-16 SSH transport config slice checked Git 2.52.0 docs for
   `core.sshCommand`, `GIT_SSH_COMMAND`, `GIT_SSH`, and `ssh.variant`, then
   wired repository `.git/config` `core.sshCommand` into process-based SSH
@@ -727,6 +732,10 @@
 - Incremental refresh stops walking parent commits once it reaches an already
   indexed commit row. This keeps updates cheap for the common case where an
   external Git-compatible tool advanced a ref by a small number of commits.
+- File-change indexing compares parent and child trees recursively and skips
+  equal subtree object IDs. Directory-to-file and file-to-directory changes
+  still expand into the same add/delete rows as the previous flattened-tree
+  comparison.
 - Compatibility coverage now captures representative Git-compatible read
   command output before and after `rit indexdb` creates metadata, then compares
   the post-indexdb output with Git. This guards the “indexdb is not source of
