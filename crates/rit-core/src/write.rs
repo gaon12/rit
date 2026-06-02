@@ -1,10 +1,10 @@
 use crate::index::{Index, IndexEntry, IndexEntryStat, join_slash_path, relative_slash_path};
 use crate::merge_conflict::write_conflict_markers;
 use crate::object::{hash_object, parse_tree_entries};
+use crate::policy_check::stop_write_for_blocking_policy;
 use crate::{
-    Commit, GitAttributes, GitConfig, ObjectId, ObjectKind, PathspecSet, PolicyFinding,
-    PolicySeverity, Repository, Result, RitError, Signature, parse_commit,
-    refs::validate_ref_short_name,
+    Commit, GitAttributes, GitConfig, ObjectId, ObjectKind, PathspecSet, Repository, Result,
+    RitError, Signature, parse_commit, refs::validate_ref_short_name,
 };
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
@@ -914,6 +914,9 @@ impl Repository {
         parents: &[ObjectId],
         allow_same_tree: bool,
     ) -> Result<CommitResult> {
+        if let Some(branch_name) = self.current_branch_name()? {
+            self.enforce_protected_branch_policy_before_write("commit", &branch_name)?;
+        }
         let index = Index::read(&self.git_dir().join("index"))?;
         if index.entries.is_empty() {
             return Err(RitError::invalid_input("nothing to commit"));
@@ -4890,22 +4893,6 @@ fn read_symlink_target_bytes(path: &Path) -> Result<Vec<u8>> {
     Ok(target.to_string_lossy().replace('\\', "/").into_bytes())
 }
 
-fn stop_write_for_blocking_policy(command: &str, findings: Vec<PolicyFinding>) -> Result<()> {
-    let blocking_messages = findings
-        .into_iter()
-        .filter(|finding| finding.severity == PolicySeverity::Blocking)
-        .map(|finding| finding.message)
-        .collect::<Vec<_>>();
-    if blocking_messages.is_empty() {
-        return Ok(());
-    }
-
-    Err(RitError::invalid_input(format!(
-        "policy blocked rit {command} before repository data was changed: {}",
-        blocking_messages.join("; ")
-    )))
-}
-
 #[cfg(unix)]
 fn write_worktree_symlink_atomically(path: &Path, target: &[u8]) -> Result<()> {
     use std::os::unix::fs::symlink;
@@ -5141,6 +5128,45 @@ mod tests {
         );
         let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
         assert!(index.entries.is_empty());
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn commit_policy_blocks_protected_branch_before_writing_commit_objects() {
+        let temp = temp_path("commit-policy-protected-branch");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        fs::write(
+            repository.common_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n[user]\n\tname = Rit Test\n\temail = rit@example.test\n",
+        )
+        .expect("config should be written");
+        fs::write(
+            temp.join(".rit.toml"),
+            "[policy]\nprotect_branches = [\"master\"]\nenforcement = \"block\"\n",
+        )
+        .expect("rit config should be written");
+        fs::write(temp.join("tracked.txt"), "one\n").expect("file should be written");
+        repository
+            .add_paths(&["tracked.txt".to_owned()])
+            .expect("add should work");
+        let object_count_before = count_object_files(repository.common_dir().join("objects"));
+
+        let error = repository
+            .commit_index("blocked")
+            .expect_err("protected branch policy should block commit");
+
+        assert!(error.to_string().contains("policy blocked rit commit"));
+        assert!(error.to_string().contains("master is protected"));
+        assert_eq!(
+            count_object_files(repository.common_dir().join("objects")),
+            object_count_before
+        );
+        assert!(
+            repository
+                .resolve_head()
+                .expect("HEAD should resolve")
+                .is_none()
+        );
         remove_dir_all(&temp);
     }
 

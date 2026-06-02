@@ -199,7 +199,7 @@ fn add_effects(plan: &AddPlan) -> WritePlanEffects {
 
 fn commit_effects(plan: &CommitPlan) -> WritePlanEffects {
     let mut effects = WritePlanEffects {
-        policy_checks: vec![policy_check("protected-branch", false)],
+        policy_checks: vec![policy_check("protected-branch", true)],
         ..WritePlanEffects::default()
     };
     if !plan.is_empty() {

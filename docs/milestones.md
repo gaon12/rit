@@ -1257,8 +1257,11 @@ Completion criteria:
 - [~] Run policy enforcement directly on write paths before mutation.
   - [x] `rit add` checks blocking blob-size and secret policies before writing
     blob objects or the index.
-  - [ ] Branch/ref-changing writes check protected-branch policy before
-    mutation.
+  - [x] `rit commit` and local branch create/delete check protected-branch
+    policy before writing commit/ref data.
+  - [ ] Merge, rebase, cherry-pick, checkout/switch, reset, fetch, and push ref
+    update paths check protected-branch policy before mutation where
+    applicable.
 - [x] Add entropy-based secret heuristics beyond fixed-pattern checks.
 - [x] Add `rit doctor --sizer` for repository-size and object-shape audits.
 

@@ -1,4 +1,4 @@
-use crate::{PolicyConfig, PolicyEnforcement};
+use crate::{PolicyConfig, PolicyEnforcement, Repository, Result, RitError};
 
 /// Policy finding severity.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -102,6 +102,44 @@ impl PolicyConfig {
             severity: severity_from_enforcement(self.enforcement),
         })
     }
+}
+
+impl Repository {
+    pub(crate) fn enforce_protected_branch_policy_before_write(
+        &self,
+        command: &str,
+        branch_name: &str,
+    ) -> Result<()> {
+        let policy = self.rit_config()?.policy;
+        if !policy.blocks_writes() {
+            return Ok(());
+        }
+
+        let findings = policy
+            .check_protected_branch_update(branch_name)
+            .into_iter()
+            .collect();
+        stop_write_for_blocking_policy(command, findings)
+    }
+}
+
+pub(crate) fn stop_write_for_blocking_policy(
+    command: &str,
+    findings: Vec<PolicyFinding>,
+) -> Result<()> {
+    let blocking_messages = findings
+        .into_iter()
+        .filter(|finding| finding.severity == PolicySeverity::Blocking)
+        .map(|finding| finding.message)
+        .collect::<Vec<_>>();
+    if blocking_messages.is_empty() {
+        return Ok(());
+    }
+
+    Err(RitError::invalid_input(format!(
+        "policy blocked rit {command} before repository data was changed: {}",
+        blocking_messages.join("; ")
+    )))
 }
 
 fn secret_finding(

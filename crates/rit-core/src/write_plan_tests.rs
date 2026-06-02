@@ -149,7 +149,7 @@ fn commit_write_plan_effects_describe_refs_objects_and_hooks() {
     );
     assert_eq!(
         effects.policy_checks,
-        vec![policy_check("protected-branch", false)]
+        vec![policy_check("protected-branch", true)]
     );
 }
 

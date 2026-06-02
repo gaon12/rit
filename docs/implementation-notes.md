@@ -668,8 +668,9 @@
 - 2026-05-16 expanded `WritePlanEffects` coverage so plans describe ref
   changes, index paths, worktree paths, object writes, hooks, and policy-check
   surfaces before a write command is applied. `rit add` path-content policy
-  entries now have `will_run = true`; protected-branch entries remain false
-  until ref-changing write-time policy enforcement is wired in.
+  entries and `rit commit` protected-branch entries now have `will_run = true`;
+  protected-branch entries for merge and other ref-changing writes remain false
+  until those write-time policy checks are wired in.
 - 2026-05-13 explainable pathspec slice used the existing Git-compatible
   pathspec parser; `rit pathspec explain <pathspec>` is rit-specific and
   prints normalized patterns, matching mode, exclusions, wildcard use,
@@ -1472,6 +1473,11 @@
   and secret-looking text before writing blob objects or `.git/index`. Warn
   mode remains non-blocking, and policy errors do not include detected secret
   values.
+- 2026-06-02 protected-branch enforcement now blocks `rit commit` before tree
+  or commit objects are written, and blocks local branch create/delete before
+  ref files are created or removed. Merge, rebase, cherry-pick, checkout/switch,
+  reset, fetch, and push protected-branch enforcement remain to be wired where
+  those commands update protected refs.
 - Added read-only `Repository::doctor` and `rit doctor` to check repository
   directories, Git config readability, rit config readability, HEAD parsing,
   and HEAD object presence without invoking external Git.

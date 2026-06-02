@@ -88,6 +88,7 @@ impl Repository {
     /// Creates a local branch at a specific commit.
     pub fn create_branch_at(&self, name: &str, target: ObjectId) -> Result<ObjectId> {
         validate_ref_short_name(name)?;
+        self.enforce_protected_branch_policy_before_write("branch", name)?;
         let object = self.read_object(target)?;
         if object.kind != ObjectKind::Commit {
             return Err(RitError::invalid_input(format!(
@@ -130,6 +131,7 @@ impl Repository {
 
     fn delete_branch_with_options(&self, name: &str, force: bool) -> Result<ObjectId> {
         validate_ref_short_name(name)?;
+        self.enforce_protected_branch_policy_before_write("branch", name)?;
         if self.current_branch_name()?.as_deref() == Some(name) {
             return Err(RitError::invalid_input(format!(
                 "cannot delete branch '{name}' checked out at current worktree"
@@ -485,6 +487,10 @@ pub fn validate_ref_short_name(name: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{ref_name_matches_pattern, validate_ref_short_name};
+    use crate::{InitOptions, Repository};
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn validates_basic_ref_names() {
@@ -502,5 +508,78 @@ mod tests {
         assert!(ref_name_matches_pattern("topic-[ot]ne", "topic-one"));
         assert!(!ref_name_matches_pattern("topic/*", "topic-one"));
         assert!(!ref_name_matches_pattern("release", "release/v1"));
+    }
+
+    #[test]
+    fn protected_branch_policy_blocks_branch_creation() {
+        let (root, repository, head) = repository_with_commit("protected-create");
+        fs::write(
+            root.join(".rit.toml"),
+            "[policy]\nprotect_branches = [\"topic\"]\nenforcement = \"block\"\n",
+        )
+        .expect("rit config should be written");
+
+        let error = repository
+            .create_branch_at("topic", head)
+            .expect_err("protected branch should not be created");
+
+        assert!(error.to_string().contains("policy blocked rit branch"));
+        assert!(!repository.common_dir().join("refs/heads/topic").exists());
+        remove_dir_all(&root);
+    }
+
+    #[test]
+    fn protected_branch_policy_blocks_branch_deletion() {
+        let (root, repository, head) = repository_with_commit("protected-delete");
+        repository
+            .create_branch_at("topic", head)
+            .expect("branch should be created before policy is enabled");
+        let branch_path = repository.common_dir().join("refs/heads/topic");
+        fs::write(
+            root.join(".rit.toml"),
+            "[policy]\nprotect_branches = [\"topic\"]\nenforcement = \"block\"\n",
+        )
+        .expect("rit config should be written");
+
+        let error = repository
+            .delete_branch_force("topic")
+            .expect_err("protected branch should not be deleted");
+
+        assert!(error.to_string().contains("policy blocked rit branch"));
+        assert!(branch_path.exists());
+        remove_dir_all(&root);
+    }
+
+    fn repository_with_commit(name: &str) -> (PathBuf, Repository, crate::ObjectId) {
+        let root = temp_path(name);
+        let repository = Repository::init(&InitOptions::new(&root)).expect("init should work");
+        fs::write(
+            repository.common_dir().join("config"),
+            "[core]\n\trepositoryformatversion = 0\n\tbare = false\n[user]\n\tname = Rit Test\n\temail = rit@example.test\n",
+        )
+        .expect("config should be written");
+        fs::write(root.join("tracked.txt"), "one\n").expect("file should be written");
+        repository
+            .add_paths(&["tracked.txt".to_owned()])
+            .expect("add should work");
+        let commit = repository
+            .commit_index("base")
+            .expect("commit should be created")
+            .commit_id;
+        (root, repository, commit)
+    }
+
+    fn temp_path(name: &str) -> PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time should be valid")
+            .as_nanos();
+        std::env::temp_dir().join(format!("rit-refs-{name}-{unique}"))
+    }
+
+    fn remove_dir_all(path: &Path) {
+        if path.exists() {
+            fs::remove_dir_all(path).expect("temporary directory should be removed");
+        }
     }
 }
