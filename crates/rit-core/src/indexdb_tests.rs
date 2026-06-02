@@ -756,33 +756,50 @@ fn indexdb_write_through_ignores_corrupted_database() {
 }
 
 #[test]
-#[ignore = "benchmark smoke test for manual indexdb history checks"]
-fn indexdb_benchmark_large_commit_history_queries() {
-    let temp = temp_path("benchmark-commit-history");
+#[ignore = "benchmark smoke test for manual indexdb full-rebuild checks"]
+fn indexdb_benchmark_full_rebuild() {
+    let temp = temp_path("benchmark-full-rebuild");
     let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
     write_user_config(&repository);
-    for index in 0..150 {
-        fs::write(temp.join("file.txt"), format!("{index}\n")).expect("file should be written");
-        repository
-            .add_paths(&["file.txt".to_owned()])
-            .expect("add should work");
-        repository
-            .commit_index(&format!("commit {index}"))
-            .expect("commit should work");
-    }
+    write_linear_file_history(&repository, &temp, 150);
 
-    let build_start = Instant::now();
-    repository.indexdb().ensure().expect("ensure should work");
-    let build_elapsed = build_start.elapsed();
-    let query_start = Instant::now();
+    let rebuild_start = Instant::now();
+    let result = repository.indexdb().rebuild().expect("rebuild should work");
+    let rebuild_elapsed = rebuild_start.elapsed();
     let commits = repository
         .indexdb()
         .recent_commits(50)
         .expect("recent commits should load");
-    let query_elapsed = query_start.elapsed();
 
+    assert_eq!(result.commits_indexed, 150);
     assert_eq!(commits.len(), 50);
-    eprintln!("indexdb benchmark: build={build_elapsed:?} recent_commits(50)={query_elapsed:?}");
+    eprintln!("indexdb benchmark: full_rebuild(150 commits)={rebuild_elapsed:?}");
+    remove_dir_all(&temp);
+}
+
+#[test]
+#[ignore = "benchmark smoke test for manual indexdb incremental-update checks"]
+fn indexdb_benchmark_incremental_update() {
+    let temp = temp_path("benchmark-incremental-update");
+    let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+    write_user_config(&repository);
+    let commits = write_linear_file_history(&repository, &temp, 150);
+    repository.indexdb().ensure().expect("ensure should work");
+    let parent = *commits.last().expect("history should include commits");
+    let external = write_external_compatible_commit(&repository, parent);
+    move_current_branch_ref(&repository, external);
+
+    let update_start = Instant::now();
+    let result = repository.indexdb().ensure().expect("ensure should update");
+    let update_elapsed = update_start.elapsed();
+
+    assert_eq!(result.commits_indexed, 1);
+    {
+        let connection =
+            Connection::open(repository.indexdb().storage().database_path).expect("db should open");
+        assert!(commit_exists(&connection, external));
+    }
+    eprintln!("indexdb benchmark: incremental_update(1 new commit after 150)={update_elapsed:?}");
     remove_dir_all(&temp);
 }
 
@@ -792,15 +809,7 @@ fn indexdb_benchmark_file_history_queries() {
     let temp = temp_path("benchmark-file-history");
     let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
     write_user_config(&repository);
-    for index in 0..120 {
-        fs::write(temp.join("file.txt"), format!("{index}\n")).expect("file should be written");
-        repository
-            .add_paths(&["file.txt".to_owned()])
-            .expect("add should work");
-        repository
-            .commit_index(&format!("commit {index}"))
-            .expect("commit should work");
-    }
+    write_linear_file_history(&repository, &temp, 120);
     repository.indexdb().ensure().expect("ensure should work");
 
     let query_start = Instant::now();
@@ -815,6 +824,26 @@ fn indexdb_benchmark_file_history_queries() {
 
     eprintln!("indexdb benchmark: file_history(file.txt) x25={query_elapsed:?}");
     remove_dir_all(&temp);
+}
+
+fn write_linear_file_history(
+    repository: &Repository,
+    worktree: &Path,
+    commit_count: usize,
+) -> Vec<crate::ObjectId> {
+    let mut commits = Vec::with_capacity(commit_count);
+    for index in 0..commit_count {
+        fs::write(worktree.join("file.txt"), format!("{index}\n")).expect("file should be written");
+        repository
+            .add_paths(&["file.txt".to_owned()])
+            .expect("add should work");
+        let commit_id = repository
+            .commit_index(&format!("commit {index}"))
+            .expect("commit should work")
+            .commit_id;
+        commits.push(commit_id);
+    }
+    commits
 }
 
 fn commit_exists(connection: &Connection, object_id: crate::ObjectId) -> bool {

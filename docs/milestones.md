@@ -120,6 +120,9 @@ Verified on 2026-05-13 before continuing implementation:
   when parent and child tree entries point at the same subtree object, indexdb
   no longer descends into that subtree while calculating first-parent
   `file_changes`.
+- 2026-06-02 M6.5 benchmark pass split ignored manual benchmark smoke tests
+  into full rebuild, incremental update, and repeated file-history query
+  slices.
 
 ## M0: Baseline And Rules
 
@@ -655,7 +658,7 @@ Completion criteria:
   reaches already-indexed commits.
 - [x] Add subtree-skip tree diff for file history so identical parent/child
   tree object IDs stop recursive descent.
-- [ ] Split large-repo indexdb benchmarks into full rebuild, incremental
+- [x] Split large-repo indexdb benchmarks into full rebuild, incremental
   update, and file-history query slices.
 
 Completion criteria:

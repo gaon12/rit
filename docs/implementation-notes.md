@@ -156,6 +156,9 @@
   now stop recursive descent. The compatibility result is unchanged because Git
   tree object IDs are content-addressed; the optimization only avoids reading
   subtrees that are already known to be identical.
+- 2026-06-02 indexdb benchmark split kept the same Git baseline and separated
+  the ignored manual smoke tests into full rebuild, incremental update, and
+  repeated file-history query measurements.
 - 2026-05-16 SSH transport config slice checked Git 2.52.0 docs for
   `core.sshCommand`, `GIT_SSH_COMMAND`, `GIT_SSH`, and `ssh.variant`, then
   wired repository `.git/config` `core.sshCommand` into process-based SSH
@@ -748,8 +751,8 @@
   `.git/rit/worktrees/<id>/worktree-cache.sqlite` paths for worktree-local
   cache data.
 - Manual benchmark coverage is available through ignored tests named
-  `indexdb_benchmark_large_commit_history_queries` and
-  `indexdb_benchmark_file_history_queries`.
+  `indexdb_benchmark_full_rebuild`, `indexdb_benchmark_incremental_update`,
+  and `indexdb_benchmark_file_history_queries`.
 - Source of truth: IndexDB stores reproducible metadata only. `drop` removes
   the SQLite file without touching Git objects, refs, `.git/index`, or working
   tree files. Normal Git-compatible commands do not require IndexDB.
