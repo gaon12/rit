@@ -80,8 +80,8 @@ fn add_write_plan_effects_describe_index_and_blob_writes() {
     assert_eq!(
         plan.effects().policy_checks,
         vec![
-            policy_check("blob-size", false),
-            policy_check("secret-pattern", false),
+            policy_check("blob-size", true),
+            policy_check("secret-pattern", true),
         ]
     );
 }

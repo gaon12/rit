@@ -331,8 +331,8 @@ fn merge_effects(plan: &MergePlan) -> WritePlanEffects {
 
 fn path_content_policy_checks() -> Vec<PlannedPolicyCheck> {
     vec![
-        policy_check("blob-size", false),
-        policy_check("secret-pattern", false),
+        policy_check("blob-size", true),
+        policy_check("secret-pattern", true),
     ]
 }
 

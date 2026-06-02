@@ -2,8 +2,9 @@ use crate::index::{Index, IndexEntry, IndexEntryStat, join_slash_path, relative_
 use crate::merge_conflict::write_conflict_markers;
 use crate::object::{hash_object, parse_tree_entries};
 use crate::{
-    Commit, GitAttributes, GitConfig, ObjectId, ObjectKind, PathspecSet, Repository, Result,
-    RitError, Signature, parse_commit, refs::validate_ref_short_name,
+    Commit, GitAttributes, GitConfig, ObjectId, ObjectKind, PathspecSet, PolicyFinding,
+    PolicySeverity, Repository, Result, RitError, Signature, parse_commit,
+    refs::validate_ref_short_name,
 };
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fs;
@@ -755,6 +756,7 @@ impl Repository {
             } else {
                 fs::read(&full_path).map_err(|source| RitError::io(&full_path, source))?
             };
+            self.enforce_add_policy_before_blob_write(&relative_path, &data, should_store_symlink)?;
             let object_id = self.loose_objects().write_object(ObjectKind::Blob, &data)?;
             let mode = if should_store_symlink {
                 0o120000
@@ -796,6 +798,29 @@ impl Repository {
         let count = index.entries.len();
         index.write(&index_path)?;
         Ok(count)
+    }
+
+    fn enforce_add_policy_before_blob_write(
+        &self,
+        relative_path: &str,
+        data: &[u8],
+        is_symlink_blob: bool,
+    ) -> Result<()> {
+        let policy = self.rit_config()?.policy;
+        if !policy.blocks_writes() {
+            return Ok(());
+        }
+
+        let mut findings = Vec::new();
+        if !is_symlink_blob {
+            if let Some(finding) = policy.check_blob_size(relative_path, data.len() as u64) {
+                findings.push(finding);
+            }
+            if let Ok(contents) = std::str::from_utf8(data) {
+                findings.extend(policy.check_text_for_secrets(relative_path, contents));
+            }
+        }
+        stop_write_for_blocking_policy("add", findings)
     }
 
     fn add_path_selection(&self, paths: &[String]) -> Result<AddPathSelection> {
@@ -4865,6 +4890,22 @@ fn read_symlink_target_bytes(path: &Path) -> Result<Vec<u8>> {
     Ok(target.to_string_lossy().replace('\\', "/").into_bytes())
 }
 
+fn stop_write_for_blocking_policy(command: &str, findings: Vec<PolicyFinding>) -> Result<()> {
+    let blocking_messages = findings
+        .into_iter()
+        .filter(|finding| finding.severity == PolicySeverity::Blocking)
+        .map(|finding| finding.message)
+        .collect::<Vec<_>>();
+    if blocking_messages.is_empty() {
+        return Ok(());
+    }
+
+    Err(RitError::invalid_input(format!(
+        "policy blocked rit {command} before repository data was changed: {}",
+        blocking_messages.join("; ")
+    )))
+}
+
 #[cfg(unix)]
 fn write_worktree_symlink_atomically(path: &Path, target: &[u8]) -> Result<()> {
     use std::os::unix::fs::symlink;
@@ -5016,6 +5057,88 @@ mod tests {
         assert_eq!(plan.paths_to_add, vec!["nested/a.txt"]);
         assert_eq!(plan.paths_to_remove, Vec::<String>::new());
         assert_eq!(plan.mode_override, Some(FileModeOverride::Executable));
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        assert!(index.entries.is_empty());
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn add_policy_blocks_large_blob_before_writing_repository_data() {
+        let temp = temp_path("add-policy-large-blob");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        fs::write(
+            temp.join(".rit.toml"),
+            "[policy]\nmax_regular_blob_size = 3\nenforcement = \"block\"\n",
+        )
+        .expect("rit config should be written");
+        fs::write(temp.join("large.txt"), "four").expect("file should be written");
+        let object_count_before = count_object_files(repository.common_dir().join("objects"));
+
+        let error = repository
+            .add_paths(&["large.txt".to_owned()])
+            .expect_err("blocking policy should stop add");
+
+        assert!(error.to_string().contains("policy blocked rit add"));
+        assert!(error.to_string().contains("large.txt is 4 bytes"));
+        assert_eq!(
+            count_object_files(repository.common_dir().join("objects")),
+            object_count_before
+        );
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        assert!(index.entries.is_empty());
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn add_policy_warn_mode_does_not_block_large_blob() {
+        let temp = temp_path("add-policy-warn-large-blob");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        fs::write(
+            temp.join(".rit.toml"),
+            "[policy]\nmax_regular_blob_size = 3\nenforcement = \"warn\"\n",
+        )
+        .expect("rit config should be written");
+        fs::write(temp.join("large.txt"), "four").expect("file should be written");
+
+        repository
+            .add_paths(&["large.txt".to_owned()])
+            .expect("warn policy should not block add");
+
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        assert_eq!(index.entries.len(), 1);
+        assert_eq!(index.entries[0].path, "large.txt");
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn add_policy_blocks_secret_without_revealing_value() {
+        let temp = temp_path("add-policy-secret");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        fs::write(
+            temp.join(".rit.toml"),
+            "[policy]\ndeny_secrets = true\nenforcement = \"block\"\n",
+        )
+        .expect("rit config should be written");
+        let secret_value = "aZ9qP7mN4xR2sT8vB5cD1eF6gH3jK0Lm";
+        fs::write(
+            temp.join("service.env"),
+            format!("service_token = \"{secret_value}\"\n"),
+        )
+        .expect("file should be written");
+        let object_count_before = count_object_files(repository.common_dir().join("objects"));
+
+        let error = repository
+            .add_paths(&["service.env".to_owned()])
+            .expect_err("blocking secret policy should stop add");
+        let message = error.to_string();
+
+        assert!(message.contains("policy blocked rit add"));
+        assert!(message.contains("high-entropy secret"));
+        assert!(!message.contains(secret_value));
+        assert_eq!(
+            count_object_files(repository.common_dir().join("objects")),
+            object_count_before
+        );
         let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
         assert!(index.entries.is_empty());
         remove_dir_all(&temp);

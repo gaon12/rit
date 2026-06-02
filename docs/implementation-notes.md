@@ -667,8 +667,9 @@
   through one structured Rust API without flattening them into CLI text.
 - 2026-05-16 expanded `WritePlanEffects` coverage so plans describe ref
   changes, index paths, worktree paths, object writes, hooks, and policy-check
-  surfaces before a write command is applied. Current policy entries are marked
-  with `will_run = false` until write-time policy enforcement is wired in.
+  surfaces before a write command is applied. `rit add` path-content policy
+  entries now have `will_run = true`; protected-branch entries remain false
+  until ref-changing write-time policy enforcement is wired in.
 - 2026-05-13 explainable pathspec slice used the existing Git-compatible
   pathspec parser; `rit pathspec explain <pathspec>` is rit-specific and
   prints normalized patterns, matching mode, exclusions, wildcard use,
@@ -1465,6 +1466,12 @@
   ignoring placeholders and keeping matched values out of finding messages.
 - Added protected branch policy findings that accept either short branch names
   or `refs/heads/*` names in `protect_branches`.
+- 2026-06-02 checked `git add -h` before the first write-time policy
+  enforcement slice. `rit add` now loads `[policy]` from `rit.toml` /
+  `.rit.toml` and, when `enforcement = "block"`, stops oversized regular blobs
+  and secret-looking text before writing blob objects or `.git/index`. Warn
+  mode remains non-blocking, and policy errors do not include detected secret
+  values.
 - Added read-only `Repository::doctor` and `rit doctor` to check repository
   directories, Git config readability, rit config readability, HEAD parsing,
   and HEAD object presence without invoking external Git.
