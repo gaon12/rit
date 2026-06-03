@@ -81,7 +81,7 @@ fn secret_policy_reports_high_entropy_assignment_without_revealing_secret() {
         deny_secrets: true,
         ..PolicyConfig::default()
     };
-    let secret_value = "aZ9qP7mN4xR2sT8vB5cD1eF6gH3jK0Lm";
+    let secret_value = high_entropy_test_value();
 
     let findings = policy.check_text_for_secrets(
         "service.env",
@@ -96,7 +96,7 @@ fn secret_policy_reports_high_entropy_assignment_without_revealing_secret() {
             pattern: "high-entropy secret".to_owned(),
         }
     );
-    assert!(!findings[0].message.contains(secret_value));
+    assert!(!findings[0].message.contains(&secret_value));
 }
 
 #[test]
@@ -172,4 +172,17 @@ fn protected_branch_policy_accepts_full_ref_names() {
 
     assert_eq!(finding.severity, PolicySeverity::Blocking);
     assert_eq!(finding.path, "refs/heads/release");
+}
+
+fn high_entropy_test_value() -> String {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut state = 0x1234_5678_9abc_def0_u64;
+    (0..40)
+        .map(|_| {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            ALPHABET[(state as usize) % ALPHABET.len()] as char
+        })
+        .collect()
 }
