@@ -1500,6 +1500,10 @@
   completion updates before mutation. Already-up-to-date rebases remain
   read-only and are not blocked. Commit-moving `rit reset` modes are still
   unsupported, so no reset branch-ref path exists yet for this policy slice.
+- 2026-06-03 `rit cherry-pick --abort` and `--skip` now check the current
+  protected branch policy before restoring `ORIG_HEAD`, updating the branch,
+  rewriting the index/worktree, removing `CHERRY_PICK_HEAD`/`MERGE_MSG`, or
+  replaying remaining sequencer entries.
 - Added read-only `Repository::doctor` and `rit doctor` to check repository
   directories, Git config readability, rit config readability, HEAD parsing,
   and HEAD object presence without invoking external Git.

@@ -1270,8 +1270,10 @@ Completion criteria:
     policy before fast-forward checkout, conflict state, replay commits,
     restore, or original branch ref updates; already-up-to-date rebases remain
     read-only and are not blocked.
-  - [ ] Cherry-pick abort/skip restore paths, fetch, and push ref update paths
-    check protected-branch policy before mutation where applicable.
+  - [x] `rit cherry-pick --abort` and `--skip` check protected-branch policy
+    before restoring `ORIG_HEAD`, index, worktree, or sequencer state.
+  - [ ] Fetch and push ref update paths check protected-branch policy before
+    mutation where applicable.
   - [ ] Commit-moving `rit reset` modes are still unsupported; when added,
     their branch ref update paths must check protected-branch policy before
     mutation.

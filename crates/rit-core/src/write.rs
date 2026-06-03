@@ -2036,6 +2036,7 @@ impl Repository {
         let head_id = self
             .resolve_head()?
             .ok_or_else(|| RitError::invalid_input("cherry-pick skip requires an existing HEAD"))?;
+        self.enforce_current_branch_policy_before_write("cherry-pick --skip")?;
 
         self.checkout_commit_tree(head_id)?;
         remove_file_if_exists(&self.git_dir().join("CHERRY_PICK_HEAD"))?;
@@ -2093,6 +2094,12 @@ impl Repository {
         let original_head_text = fs::read_to_string(&original_head_path)
             .map_err(|source| RitError::io(&original_head_path, source))?;
         let original_head = ObjectId::from_hex(original_head_text.trim())?;
+        let command = match action {
+            "abort" => "cherry-pick --abort",
+            "skip" => "cherry-pick --skip",
+            _ => "cherry-pick",
+        };
+        self.enforce_current_branch_policy_before_write(command)?;
 
         self.checkout_commit_tree(original_head)?;
         self.update_head(original_head)?;
@@ -6001,6 +6008,126 @@ mod tests {
         assert_eq!(
             fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
             "base\n"
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn cherry_pick_policy_blocks_protected_branch_before_abort_restore() {
+        let temp = temp_path("cherry-pick-policy-abort-protected");
+        let repository = committed_nested_repository(&temp);
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "topic\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("topic add should work");
+        repository
+            .commit_index("topic")
+            .expect("topic commit should work");
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(temp.join("nested").join("a.txt"), "master\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("master add should work");
+        let master = repository
+            .commit_index("master")
+            .expect("master commit should work")
+            .commit_id;
+        repository
+            .cherry_pick("topic")
+            .expect("conflicted cherry-pick should start");
+        fs::write(
+            temp.join(".rit.toml"),
+            "[policy]\nprotect_branches = [\"master\"]\nenforcement = \"block\"\n",
+        )
+        .expect("rit config should be written");
+
+        let error = repository
+            .abort_cherry_pick()
+            .expect_err("protected branch policy should block cherry-pick abort");
+
+        assert!(
+            error
+                .to_string()
+                .contains("policy blocked rit cherry-pick --abort")
+        );
+        assert!(repository.git_dir().join("CHERRY_PICK_HEAD").exists());
+        assert!(repository.git_dir().join("MERGE_MSG").exists());
+        assert_eq!(
+            repository
+                .resolve_head()
+                .expect("HEAD should resolve")
+                .expect("HEAD should exist"),
+            master
+        );
+        assert!(
+            fs::read_to_string(temp.join("nested").join("a.txt"))
+                .expect("file should read")
+                .contains("<<<<<<< HEAD\nmaster\n=======\ntopic\n>>>>>>>")
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn cherry_pick_policy_blocks_protected_branch_before_skip_restore() {
+        let temp = temp_path("cherry-pick-policy-skip-protected");
+        let repository = committed_nested_repository(&temp);
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "topic\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("topic add should work");
+        repository
+            .commit_index("topic")
+            .expect("topic commit should work");
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(temp.join("nested").join("a.txt"), "master\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("master add should work");
+        let master = repository
+            .commit_index("master")
+            .expect("master commit should work")
+            .commit_id;
+        repository
+            .cherry_pick("topic")
+            .expect("conflicted cherry-pick should start");
+        fs::write(
+            temp.join(".rit.toml"),
+            "[policy]\nprotect_branches = [\"master\"]\nenforcement = \"block\"\n",
+        )
+        .expect("rit config should be written");
+
+        let error = repository
+            .skip_cherry_pick()
+            .expect_err("protected branch policy should block cherry-pick skip");
+
+        assert!(
+            error
+                .to_string()
+                .contains("policy blocked rit cherry-pick --skip")
+        );
+        assert!(repository.git_dir().join("CHERRY_PICK_HEAD").exists());
+        assert!(repository.git_dir().join("MERGE_MSG").exists());
+        assert_eq!(
+            repository
+                .resolve_head()
+                .expect("HEAD should resolve")
+                .expect("HEAD should exist"),
+            master
+        );
+        assert!(
+            fs::read_to_string(temp.join("nested").join("a.txt"))
+                .expect("file should read")
+                .contains("<<<<<<< HEAD\nmaster\n=======\ntopic\n>>>>>>>")
         );
         remove_dir_all(&temp);
     }
