@@ -1266,9 +1266,15 @@ Completion criteria:
   - [x] Commit-mode `rit cherry-pick` checks protected-branch policy before
     fast-forward checkout, conflict state, index, worktree, commit, or
     branch-ref updates.
-  - [ ] Rebase, cherry-pick abort/skip restore paths, reset, fetch, and push
-    ref update paths check protected-branch policy before mutation where
-    applicable.
+  - [x] `rit rebase` start, abort, skip, and continue check protected-branch
+    policy before fast-forward checkout, conflict state, replay commits,
+    restore, or original branch ref updates; already-up-to-date rebases remain
+    read-only and are not blocked.
+  - [ ] Cherry-pick abort/skip restore paths, fetch, and push ref update paths
+    check protected-branch policy before mutation where applicable.
+  - [ ] Commit-moving `rit reset` modes are still unsupported; when added,
+    their branch ref update paths must check protected-branch policy before
+    mutation.
 - [x] Add entropy-based secret heuristics beyond fixed-pattern checks.
 - [x] Add `rit doctor --sizer` for repository-size and object-shape audits.
 

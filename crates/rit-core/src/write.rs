@@ -830,6 +830,20 @@ impl Repository {
         Ok(())
     }
 
+    fn enforce_rebase_head_policy_before_write(
+        &self,
+        command: &str,
+        head_name: Option<&str>,
+    ) -> Result<()> {
+        let Some(head_name) = head_name else {
+            return self.enforce_current_branch_policy_before_write(command);
+        };
+        let Some(branch_name) = head_name.strip_prefix("refs/heads/") else {
+            return Ok(());
+        };
+        self.enforce_protected_branch_policy_before_write(command, branch_name)
+    }
+
     fn add_path_selection(&self, paths: &[String]) -> Result<AddPathSelection> {
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
@@ -2394,6 +2408,9 @@ impl Repository {
                 post_rewrite_output: String::new(),
             });
         }
+        if let Some(branch_name) = branch_name.as_deref() {
+            self.enforce_protected_branch_policy_before_write("rebase", branch_name)?;
+        }
         if options.verify {
             run_pre_rebase_hook(self, upstream)?;
         }
@@ -2634,6 +2651,10 @@ impl Repository {
         let original_head = rebase
             .original_head
             .ok_or_else(|| RitError::invalid_input("rebase state is missing orig-head"))?;
+        self.enforce_rebase_head_policy_before_write(
+            "rebase --abort",
+            rebase.head_name.as_deref(),
+        )?;
 
         self.checkout_commit_tree(original_head)?;
         self.restore_rebase_head(original_head, rebase.head_name.as_deref())?;
@@ -2690,6 +2711,7 @@ impl Repository {
         let head_id = self.resolve_head()?.ok_or_else(|| {
             RitError::invalid_input("rebase skip requires HEAD to point at a commit")
         })?;
+        self.enforce_rebase_head_policy_before_write("rebase --skip", rebase.head_name.as_deref())?;
         let current_patch = self.current_rebase_patch()?;
         let remaining_todo_ids =
             read_rebase_todo_commit_ids(&rebase.directory.join("git-rebase-todo"))?;
@@ -2834,6 +2856,10 @@ impl Repository {
         let parent_id = self.resolve_head()?.ok_or_else(|| {
             RitError::invalid_input("rebase continue requires HEAD to point at a commit")
         })?;
+        self.enforce_rebase_head_policy_before_write(
+            "rebase --continue",
+            rebase.head_name.as_deref(),
+        )?;
         let current_patch = self.current_rebase_patch()?;
         let index_before_continue = Index::read(&self.git_dir().join("index"))?;
         if index_before_continue
@@ -5975,6 +6001,204 @@ mod tests {
         assert_eq!(
             fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
             "base\n"
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn rebase_policy_allows_protected_branch_when_already_up_to_date() {
+        let temp = temp_path("rebase-policy-up-to-date-protected");
+        let repository = committed_nested_repository(&temp);
+        let head = repository
+            .resolve_head()
+            .expect("HEAD should resolve")
+            .expect("HEAD should exist");
+        fs::write(
+            temp.join(".rit.toml"),
+            "[policy]\nprotect_branches = [\"master\"]\nenforcement = \"block\"\n",
+        )
+        .expect("rit config should be written");
+
+        let result = repository
+            .start_rebase("master")
+            .expect("up-to-date rebase should not be blocked");
+
+        assert_eq!(result.old_head_id, head);
+        assert_eq!(result.new_head_id, head);
+        assert!(!result.fast_forwarded);
+        assert!(!repository.git_dir().join("ORIG_HEAD").exists());
+        assert!(!repository.git_dir().join("rebase-merge").exists());
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn rebase_policy_blocks_protected_branch_before_fast_forward_checkout() {
+        let temp = temp_path("rebase-policy-ff-protected");
+        let repository = committed_nested_repository(&temp);
+        let base = repository
+            .resolve_head()
+            .expect("HEAD should resolve")
+            .expect("HEAD should exist");
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "topic\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("topic add should work");
+        repository
+            .commit_index("topic")
+            .expect("topic commit should work");
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(
+            temp.join(".rit.toml"),
+            "[policy]\nprotect_branches = [\"master\"]\nenforcement = \"block\"\n",
+        )
+        .expect("rit config should be written");
+
+        let error = repository
+            .start_rebase("topic")
+            .expect_err("protected branch policy should block rebase");
+
+        assert!(error.to_string().contains("policy blocked rit rebase"));
+        assert!(!repository.git_dir().join("ORIG_HEAD").exists());
+        assert!(!repository.git_dir().join("rebase-merge").exists());
+        assert_eq!(
+            repository
+                .resolve_head()
+                .expect("HEAD should resolve")
+                .expect("HEAD should exist"),
+            base
+        );
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
+            "base\n"
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn rebase_policy_blocks_protected_branch_before_abort_restore() {
+        let temp = temp_path("rebase-policy-abort-protected");
+        let repository = committed_nested_repository(&temp);
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "topic\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("topic add should work");
+        let topic = repository
+            .commit_index("topic")
+            .expect("topic commit should work")
+            .commit_id;
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(temp.join("nested").join("a.txt"), "master\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("master add should work");
+        repository
+            .commit_index("master")
+            .expect("master commit should work");
+        repository
+            .start_rebase("topic")
+            .expect("conflicted rebase should start");
+        fs::write(
+            temp.join(".rit.toml"),
+            "[policy]\nprotect_branches = [\"master\"]\nenforcement = \"block\"\n",
+        )
+        .expect("rit config should be written");
+
+        let error = repository
+            .abort_rebase()
+            .expect_err("protected branch policy should block rebase abort");
+
+        assert!(
+            error
+                .to_string()
+                .contains("policy blocked rit rebase --abort")
+        );
+        assert!(repository.git_dir().join("rebase-merge").exists());
+        assert!(repository.git_dir().join("REBASE_HEAD").exists());
+        assert_eq!(
+            repository
+                .resolve_head()
+                .expect("HEAD should resolve")
+                .expect("HEAD should exist"),
+            topic
+        );
+        assert!(
+            fs::read_to_string(temp.join("nested").join("a.txt"))
+                .expect("file should read")
+                .contains("<<<<<<< HEAD\ntopic\n=======\nmaster\n>>>>>>>")
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn rebase_policy_blocks_protected_branch_before_continue_commit() {
+        let temp = temp_path("rebase-policy-continue-protected");
+        let repository = committed_nested_repository(&temp);
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "topic\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("topic add should work");
+        let topic = repository
+            .commit_index("topic")
+            .expect("topic commit should work")
+            .commit_id;
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(temp.join("nested").join("a.txt"), "master\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("master add should work");
+        repository
+            .commit_index("master")
+            .expect("master commit should work");
+        repository
+            .start_rebase("topic")
+            .expect("conflicted rebase should start");
+        fs::write(temp.join("nested").join("a.txt"), "resolved\n")
+            .expect("resolution should be written");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("resolution add should work");
+        let object_count_before = count_object_files(repository.common_dir().join("objects"));
+        fs::write(
+            temp.join(".rit.toml"),
+            "[policy]\nprotect_branches = [\"master\"]\nenforcement = \"block\"\n",
+        )
+        .expect("rit config should be written");
+
+        let error = repository
+            .continue_rebase(&super::CommitOptions::default())
+            .expect_err("protected branch policy should block rebase continue");
+
+        assert!(
+            error
+                .to_string()
+                .contains("policy blocked rit rebase --continue")
+        );
+        assert_eq!(
+            count_object_files(repository.common_dir().join("objects")),
+            object_count_before
+        );
+        assert!(repository.git_dir().join("rebase-merge").exists());
+        assert_eq!(
+            repository
+                .resolve_head()
+                .expect("HEAD should resolve")
+                .expect("HEAD should exist"),
+            topic
         );
         remove_dir_all(&temp);
     }

@@ -1492,6 +1492,14 @@
   `--no-commit` remains outside protected-ref enforcement because it does not
   update refs, while cherry-pick abort/skip restore paths remain open for the
   broader write-path audit.
+- 2026-06-03 checked `git rebase -h`; mutating `rit rebase` start paths now
+  check protected-branch policy before pre-rebase hooks, fast-forward checkout,
+  replay commits, conflict state, index/worktree materialization, or original
+  branch ref updates. `rit rebase --abort`, `--skip`, and `--continue` read the
+  Git-compatible rebase `head-name` and block protected branch restores or
+  completion updates before mutation. Already-up-to-date rebases remain
+  read-only and are not blocked. Commit-moving `rit reset` modes are still
+  unsupported, so no reset branch-ref path exists yet for this policy slice.
 - Added read-only `Repository::doctor` and `rit doctor` to check repository
   directories, Git config readability, rit config readability, HEAD parsing,
   and HEAD object presence without invoking external Git.
