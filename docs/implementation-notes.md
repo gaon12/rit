@@ -1518,6 +1518,10 @@
   complete for currently implemented write paths. Commit-moving `rit reset`
   modes remain unsupported rather than partially guarded, so their
   protected-branch policy requirement is documented as a future requirement.
+- 2026-06-03 milestone queue verification: removed completed M13 write-path
+  policy work and completed M6.5 indexdb refresh/subtree-skip optimization
+  work from the active difficulty queue, leaving the next easy queue focused on
+  small, testable M8 conflict-state slices.
 - Added read-only `Repository::doctor` and `rit doctor` to check repository
   directories, Git config readability, rit config readability, HEAD parsing,
   and HEAD object presence without invoking external Git.

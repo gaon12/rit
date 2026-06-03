@@ -1477,22 +1477,21 @@ Completion criteria:
 ### Easy
 
 1. Keep `docs/milestones.md` aligned with checked implementation status.
+2. Choose the next smallest M8 conflict-state slice that can be verified with
+   focused compatibility tests.
 
 ### Medium
 
-1. `M13` run policy enforcement directly on write paths.
-2. `M26` add fancy terminal diff rendering.
-3. `M26` add GitHub auth device-flow support.
-4. `M26` expand repository audit output with top-N blobs and ref/history
+1. `M26` add fancy terminal diff rendering.
+2. `M26` add GitHub auth device-flow support.
+3. `M26` expand repository audit output with top-N blobs and ref/history
    complexity.
 
 ### Hard
 
-1. `M6.5` incremental indexdb commit refresh.
-2. `M6.5` subtree-skip file-history tree diff optimization.
-3. `M26` GitHub PR checkout/create flows.
-4. `M14` concrete Windows ProjFS and macOS/Linux FUSE backends.
-5. `M27` TUI, WASM hooks, and AST/AI-assisted merge support.
+1. `M26` GitHub PR checkout/create flows.
+2. `M14` concrete Windows ProjFS and macOS/Linux FUSE backends.
+3. `M27` TUI, WASM hooks, and AST/AI-assisted merge support.
 
 ## Implementation Notes
 
