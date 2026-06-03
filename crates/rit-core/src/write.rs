@@ -1654,6 +1654,9 @@ impl Repository {
             )));
         }
         let picked_commit = parse_commit(&picked_object.data)?;
+        if options.commit {
+            self.enforce_current_branch_policy_before_write("cherry-pick")?;
+        }
         if options.commit
             && options.fast_forward
             && picked_commit.parents.len() == 1
@@ -5849,6 +5852,129 @@ mod tests {
         assert_eq!(
             fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
             "master\n"
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn cherry_pick_policy_blocks_protected_branch_before_conflict_state() {
+        let temp = temp_path("cherry-pick-policy-conflict-protected");
+        let repository = committed_nested_repository(&temp);
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "topic\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("topic add should work");
+        repository
+            .commit_index("topic")
+            .expect("topic commit should work");
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(temp.join("nested").join("a.txt"), "master\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("master add should work");
+        let master = repository
+            .commit_index("master")
+            .expect("master commit should work")
+            .commit_id;
+        fs::write(
+            temp.join(".rit.toml"),
+            "[policy]\nprotect_branches = [\"master\"]\nenforcement = \"block\"\n",
+        )
+        .expect("rit config should be written");
+
+        let error = repository
+            .cherry_pick("topic")
+            .expect_err("protected branch policy should block cherry-pick");
+
+        assert!(error.to_string().contains("policy blocked rit cherry-pick"));
+        assert!(!repository.git_dir().join("CHERRY_PICK_HEAD").exists());
+        assert!(!repository.git_dir().join("MERGE_MSG").exists());
+        assert!(!repository.git_dir().join("ORIG_HEAD").exists());
+        assert_eq!(
+            repository
+                .resolve_head()
+                .expect("HEAD should resolve")
+                .expect("HEAD should exist"),
+            master
+        );
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        let stages = index
+            .entries
+            .iter()
+            .filter(|entry| entry.path == "nested/a.txt")
+            .map(|entry| entry.stage)
+            .collect::<Vec<_>>();
+        assert_eq!(stages, vec![0]);
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
+            "master\n"
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn cherry_pick_policy_blocks_protected_branch_before_fast_forward_checkout() {
+        let temp = temp_path("cherry-pick-policy-ff-protected");
+        let repository = committed_nested_repository(&temp);
+        let base = repository
+            .resolve_head()
+            .expect("HEAD should resolve")
+            .expect("HEAD should exist");
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "topic\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("topic add should work");
+        repository
+            .commit_index("topic")
+            .expect("topic commit should work");
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(
+            temp.join(".rit.toml"),
+            "[policy]\nprotect_branches = [\"master\"]\nenforcement = \"block\"\n",
+        )
+        .expect("rit config should be written");
+
+        let error = repository
+            .cherry_pick_with_options(
+                "topic",
+                &super::CherryPickOptions {
+                    fast_forward: true,
+                    ..super::CherryPickOptions::default()
+                },
+            )
+            .expect_err("protected branch policy should block cherry-pick");
+
+        assert!(error.to_string().contains("policy blocked rit cherry-pick"));
+        assert!(!repository.git_dir().join("CHERRY_PICK_HEAD").exists());
+        assert!(!repository.git_dir().join("MERGE_MSG").exists());
+        assert_eq!(
+            repository
+                .resolve_head()
+                .expect("HEAD should resolve")
+                .expect("HEAD should exist"),
+            base
+        );
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        let stages = index
+            .entries
+            .iter()
+            .filter(|entry| entry.path == "nested/a.txt")
+            .map(|entry| entry.stage)
+            .collect::<Vec<_>>();
+        assert_eq!(stages, vec![0]);
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
+            "base\n"
         );
         remove_dir_all(&temp);
     }

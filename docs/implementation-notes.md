@@ -1486,6 +1486,12 @@
   merge commit creation, merge conflict sidecar files, unmerged index stages,
   worktree materialization, or branch-ref updates. Rebase, cherry-pick, reset,
   fetch, and push remain open for protected-branch write-time enforcement.
+- 2026-06-03 checked `git cherry-pick -h`; commit-mode `rit cherry-pick` now
+  checks protected-branch policy before fast-forward checkout, conflict state,
+  index/worktree materialization, commit creation, or branch-ref updates.
+  `--no-commit` remains outside protected-ref enforcement because it does not
+  update refs, while cherry-pick abort/skip restore paths remain open for the
+  broader write-path audit.
 - Added read-only `Repository::doctor` and `rit doctor` to check repository
   directories, Git config readability, rit config readability, HEAD parsing,
   and HEAD object presence without invoking external Git.

@@ -1263,8 +1263,12 @@ Completion criteria:
     index, worktree, or branch-ref updates.
   - [x] General `rit merge` checks protected-branch policy before merge commit,
     conflict state, checkout, index, worktree, or branch-ref updates.
-  - [ ] Rebase, cherry-pick, reset, fetch, and push ref update paths check
-    protected-branch policy before mutation where applicable.
+  - [x] Commit-mode `rit cherry-pick` checks protected-branch policy before
+    fast-forward checkout, conflict state, index, worktree, commit, or
+    branch-ref updates.
+  - [ ] Rebase, cherry-pick abort/skip restore paths, reset, fetch, and push
+    ref update paths check protected-branch policy before mutation where
+    applicable.
 - [x] Add entropy-based secret heuristics beyond fixed-pattern checks.
 - [x] Add `rit doctor --sizer` for repository-size and object-shape audits.
 
