@@ -1261,8 +1261,10 @@ Completion criteria:
     policy before writing commit/ref data.
   - [x] `rit merge --ff-only` checks protected-branch policy before checkout,
     index, worktree, or branch-ref updates.
-  - [ ] General merge, rebase, cherry-pick, reset, fetch, and push ref update
-    paths check protected-branch policy before mutation where applicable.
+  - [x] General `rit merge` checks protected-branch policy before merge commit,
+    conflict state, checkout, index, worktree, or branch-ref updates.
+  - [ ] Rebase, cherry-pick, reset, fetch, and push ref update paths check
+    protected-branch policy before mutation where applicable.
 - [x] Add entropy-based secret heuristics beyond fixed-pattern checks.
 - [x] Add `rit doctor --sizer` for repository-size and object-shape audits.
 

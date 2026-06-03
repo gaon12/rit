@@ -1237,6 +1237,7 @@ impl Repository {
         if old_id == new_id {
             return Ok(MergeResult::AlreadyUpToDate { commit_id: old_id });
         }
+        self.enforce_current_branch_policy_before_write("merge")?;
         if options.strategy == MergeStrategy::Ours {
             if !options.commit {
                 self.start_ours_strategy_merge_without_commit(target, options, old_id, new_id)?;
@@ -5788,6 +5789,66 @@ mod tests {
                 .expect("status should read")
                 .to_porcelain_v1(),
             ""
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn merge_policy_blocks_protected_branch_before_conflict_state() {
+        let temp = temp_path("merge-policy-conflict-protected");
+        let repository = committed_nested_repository(&temp);
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "topic\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("topic add should work");
+        repository
+            .commit_index("topic")
+            .expect("topic commit should work");
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(temp.join("nested").join("a.txt"), "master\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("master add should work");
+        let master = repository
+            .commit_index("master")
+            .expect("master commit should work")
+            .commit_id;
+        fs::write(
+            temp.join(".rit.toml"),
+            "[policy]\nprotect_branches = [\"master\"]\nenforcement = \"block\"\n",
+        )
+        .expect("rit config should be written");
+
+        let error = repository
+            .merge("topic")
+            .expect_err("protected branch policy should block merge");
+
+        assert!(error.to_string().contains("policy blocked rit merge"));
+        assert!(!repository.git_dir().join("MERGE_HEAD").exists());
+        assert!(!repository.git_dir().join("MERGE_MSG").exists());
+        assert_eq!(
+            repository
+                .resolve_head()
+                .expect("HEAD should resolve")
+                .expect("HEAD should exist"),
+            master
+        );
+        let index = Index::read(&repository.git_dir().join("index")).expect("index should read");
+        let stages = index
+            .entries
+            .iter()
+            .filter(|entry| entry.path == "nested/a.txt")
+            .map(|entry| entry.stage)
+            .collect::<Vec<_>>();
+        assert_eq!(stages, vec![0]);
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
+            "master\n"
         );
         remove_dir_all(&temp);
     }

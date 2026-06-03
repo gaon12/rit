@@ -1482,6 +1482,10 @@
   protected-branch policy before checkout, index, worktree, or branch-ref
   updates. General merge, rebase, cherry-pick, reset, fetch, and push
   protected-branch enforcement remain to be wired for their ref update paths.
+- 2026-06-03 general `rit merge` now checks protected-branch policy before
+  merge commit creation, merge conflict sidecar files, unmerged index stages,
+  worktree materialization, or branch-ref updates. Rebase, cherry-pick, reset,
+  fetch, and push remain open for protected-branch write-time enforcement.
 - Added read-only `Repository::doctor` and `rit doctor` to check repository
   directories, Git config readability, rit config readability, HEAD parsing,
   and HEAD object presence without invoking external Git.
