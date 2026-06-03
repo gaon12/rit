@@ -1478,6 +1478,10 @@
   ref files are created or removed. Merge, rebase, cherry-pick, checkout/switch,
   reset, fetch, and push protected-branch enforcement remain to be wired where
   those commands update protected refs.
+- 2026-06-03 checked `git merge -h`; `rit merge --ff-only` now checks
+  protected-branch policy before checkout, index, worktree, or branch-ref
+  updates. General merge, rebase, cherry-pick, reset, fetch, and push
+  protected-branch enforcement remain to be wired for their ref update paths.
 - Added read-only `Repository::doctor` and `rit doctor` to check repository
   directories, Git config readability, rit config readability, HEAD parsing,
   and HEAD object presence without invoking external Git.

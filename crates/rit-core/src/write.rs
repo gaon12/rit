@@ -823,6 +823,13 @@ impl Repository {
         stop_write_for_blocking_policy("add", findings)
     }
 
+    fn enforce_current_branch_policy_before_write(&self, command: &str) -> Result<()> {
+        if let Some(branch_name) = self.current_branch_name()? {
+            self.enforce_protected_branch_policy_before_write(command, &branch_name)?;
+        }
+        Ok(())
+    }
+
     fn add_path_selection(&self, paths: &[String]) -> Result<AddPathSelection> {
         let Some(worktree) = self.worktree() else {
             return Err(RitError::invalid_input(
@@ -1531,6 +1538,7 @@ impl Repository {
         if old_id == new_id {
             return Ok(MergeResult::AlreadyUpToDate { commit_id: old_id });
         }
+        self.enforce_current_branch_policy_before_write("merge")?;
         if !self.commit_is_ancestor(old_id, new_id)? {
             return Err(RitError::invalid_input(
                 "not possible to fast-forward; merge requires a merge commit",
@@ -5557,6 +5565,59 @@ mod tests {
         assert_eq!(
             fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
             "base\n"
+        );
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn merge_ff_only_policy_blocks_protected_branch_before_checkout() {
+        let temp = temp_path("merge-ff-policy-protected");
+        let repository = committed_nested_repository(&temp);
+        let base = repository
+            .resolve_head()
+            .expect("HEAD should resolve")
+            .expect("HEAD should exist");
+        repository
+            .checkout_new_branch("topic")
+            .expect("topic branch should be created");
+        fs::write(temp.join("nested").join("a.txt"), "topic\n").expect("file should be changed");
+        repository
+            .add_paths(&["nested/a.txt".to_owned()])
+            .expect("add should work");
+        repository
+            .commit_index("topic")
+            .expect("topic commit should work");
+        repository
+            .checkout_branch("master")
+            .expect("master checkout should work");
+        fs::write(
+            temp.join(".rit.toml"),
+            "[policy]\nprotect_branches = [\"master\"]\nenforcement = \"block\"\n",
+        )
+        .expect("rit config should be written");
+
+        let error = repository
+            .merge_ff_only("topic")
+            .expect_err("protected branch policy should block merge");
+
+        assert!(error.to_string().contains("policy blocked rit merge"));
+        assert_eq!(
+            repository
+                .resolve_head()
+                .expect("HEAD should resolve")
+                .expect("HEAD should exist"),
+            base
+        );
+        assert_eq!(
+            fs::read_to_string(temp.join("nested").join("a.txt")).expect("file should read"),
+            "base\n"
+        );
+        assert_eq!(
+            repository
+                .status_porcelain_v1()
+                .expect("status should read")
+                .to_porcelain_v1(),
+            "?? .rit.toml\n"
         );
         remove_dir_all(&temp);
     }

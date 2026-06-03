@@ -1259,9 +1259,10 @@ Completion criteria:
     blob objects or the index.
   - [x] `rit commit` and local branch create/delete check protected-branch
     policy before writing commit/ref data.
-  - [ ] Merge, rebase, cherry-pick, checkout/switch, reset, fetch, and push ref
-    update paths check protected-branch policy before mutation where
-    applicable.
+  - [x] `rit merge --ff-only` checks protected-branch policy before checkout,
+    index, worktree, or branch-ref updates.
+  - [ ] General merge, rebase, cherry-pick, reset, fetch, and push ref update
+    paths check protected-branch policy before mutation where applicable.
 - [x] Add entropy-based secret heuristics beyond fixed-pattern checks.
 - [x] Add `rit doctor --sizer` for repository-size and object-shape audits.
 
