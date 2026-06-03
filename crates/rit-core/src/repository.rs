@@ -358,6 +358,10 @@ impl Repository {
                 RitError::invalid_input("local fetch from an unborn branch is not implemented")
             })?,
         };
+        if let Some(refspec) = &options.refspec {
+            validate_full_ref_name(&refspec.destination)?;
+            self.enforce_protected_branch_policy_for_ref_update("fetch", &refspec.destination)?;
+        }
         copy_directory_contents(
             &source.common_dir().join("objects"),
             &self.common_dir().join("objects"),
@@ -462,6 +466,7 @@ impl Repository {
             ));
         }
         validate_full_ref_name(&options.refspec.destination)?;
+        self.enforce_protected_branch_policy_for_ref_update("push", &options.refspec.destination)?;
 
         let client = BlockingSmartHttpClient::default();
         let advertisement =
@@ -504,6 +509,7 @@ impl Repository {
             ));
         }
         validate_full_ref_name(&options.refspec.destination)?;
+        self.enforce_protected_branch_policy_for_ref_update("push", &options.refspec.destination)?;
 
         let new_id = self.resolve_revision(&options.refspec.source)?;
         let object_ids = self.collect_reachable_object_ids(new_id)?;
@@ -531,6 +537,10 @@ impl Repository {
         fetch_head: ObjectId,
         pack_bytes: Option<&[u8]>,
     ) -> Result<RemoteFetchResult> {
+        if let Some(refspec) = &options.refspec {
+            validate_full_ref_name(&refspec.destination)?;
+            self.enforce_protected_branch_policy_for_ref_update("fetch", &refspec.destination)?;
+        }
         let object_count = match pack_bytes {
             Some(pack_bytes) => self
                 .loose_objects()
@@ -560,6 +570,17 @@ impl Repository {
             source: source_name,
             object_count,
         })
+    }
+
+    fn enforce_protected_branch_policy_for_ref_update(
+        &self,
+        command: &str,
+        reference_name: &str,
+    ) -> Result<()> {
+        let Some(branch_name) = reference_name.strip_prefix("refs/heads/") else {
+            return Ok(());
+        };
+        self.enforce_protected_branch_policy_before_write(command, branch_name)
     }
 
     fn fetch_negotiation_haves(&self) -> Result<Vec<ObjectId>> {
@@ -1258,7 +1279,9 @@ fn validate_branch_name(branch_name: &str) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{InitOptions, RemoteFetchOptions, RemotePushOptions, Repository};
+    use super::{
+        InitOptions, LocalFetchOptions, RemoteFetchOptions, RemotePushOptions, Repository,
+    };
     use crate::{
         FetchRefSpec, ObjectKind, ReceivePackCommandStatus, ReceivePackStatus,
         RemotePackNegotiation, SmartHttpAdvertisement, SmartHttpService, SshReceivePackExecutor,
@@ -1588,6 +1611,33 @@ mod tests {
     }
 
     #[test]
+    fn fetch_local_policy_blocks_protected_branch_before_copying_objects() {
+        let source_root = temp_path("local-fetch-policy-source");
+        let target_root = temp_path("local-fetch-policy-target");
+        let source = Repository::init(&InitOptions::new(&source_root)).expect("source init");
+        let source_commit = write_local_commit(&source, "source commit", None);
+        let target = Repository::init(&InitOptions::new(&target_root)).expect("target init");
+        fs::write(
+            target_root.join(".rit.toml"),
+            "[policy]\nprotect_branches = [\"master\"]\nenforcement = \"block\"\n",
+        )
+        .expect("rit config should be written");
+        let refspec = FetchRefSpec::parse("refs/heads/master:refs/heads/master").expect("refspec");
+        let options = LocalFetchOptions::new(&source_root).with_refspec(refspec);
+
+        let error = target
+            .fetch_local(&options)
+            .expect_err("protected branch policy should block fetch");
+
+        assert!(error.to_string().contains("policy blocked rit fetch"));
+        assert!(!target.git_dir().join("FETCH_HEAD").exists());
+        assert!(target.read_object(source_commit).is_err());
+        assert_eq!(target.resolve_head().expect("HEAD should resolve"), None);
+        remove_dir_all(&source_root);
+        remove_dir_all(&target_root);
+    }
+
+    #[test]
     fn fetch_remote_http_accepts_packless_already_have_response() {
         let temp = temp_path("remote-http-fetch-packless");
         let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
@@ -1768,6 +1818,34 @@ mod tests {
         )));
         assert!(requests[1].windows(4).any(|window| window == b"PACK"));
 
+        remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn push_remote_http_policy_blocks_protected_branch_before_network() {
+        let temp = temp_path("remote-http-push-policy-protected");
+        let repository = Repository::init(&InitOptions::new(&temp)).expect("init should work");
+        let object_id = repository
+            .loose_objects()
+            .write_object(ObjectKind::Blob, b"hello")
+            .expect("source object");
+        fs::write(
+            temp.join(".rit.toml"),
+            "[policy]\nprotect_branches = [\"main\"]\nenforcement = \"block\"\n",
+        )
+        .expect("rit config should be written");
+        let refspec =
+            FetchRefSpec::parse(&format!("{object_id}:refs/heads/main")).expect("refspec");
+        let options = RemotePushOptions::new(
+            TransportLocation::parse("http://127.0.0.1:9/repo.git"),
+            refspec,
+        );
+
+        let error = repository
+            .push_remote_http(&options)
+            .expect_err("protected branch policy should block push");
+
+        assert!(error.to_string().contains("policy blocked rit push"));
         remove_dir_all(&temp);
     }
 

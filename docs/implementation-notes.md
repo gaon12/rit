@@ -1504,6 +1504,12 @@
   protected branch policy before restoring `ORIG_HEAD`, updating the branch,
   rewriting the index/worktree, removing `CHERRY_PICK_HEAD`/`MERGE_MSG`, or
   replaying remaining sequencer entries.
+- 2026-06-03 checked `git fetch -h` and `git push -h`; `rit fetch` now checks
+  protected local branch destinations before local object copy, remote pack
+  ingest, `FETCH_HEAD`, or destination ref updates. `rit push` now checks
+  protected remote branch destinations before local pack generation or HTTP/SSH
+  network send. Fetches without a destination ref remain allowed because they
+  update only `FETCH_HEAD` and downloaded objects.
 - Added read-only `Repository::doctor` and `rit doctor` to check repository
   directories, Git config readability, rit config readability, HEAD parsing,
   and HEAD object presence without invoking external Git.

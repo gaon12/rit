@@ -1272,8 +1272,9 @@ Completion criteria:
     read-only and are not blocked.
   - [x] `rit cherry-pick --abort` and `--skip` check protected-branch policy
     before restoring `ORIG_HEAD`, index, worktree, or sequencer state.
-  - [ ] Fetch and push ref update paths check protected-branch policy before
-    mutation where applicable.
+  - [x] `rit fetch` checks protected local branch destinations before object
+    copy/pack ingest, `FETCH_HEAD`, or ref updates; `rit push` checks protected
+    remote branch destinations before pack generation or network send.
   - [ ] Commit-moving `rit reset` modes are still unsupported; when added,
     their branch ref update paths must check protected-branch policy before
     mutation.
