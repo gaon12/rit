@@ -1510,6 +1510,10 @@
   protected remote branch destinations before local pack generation or HTTP/SSH
   network send. Fetches without a destination ref remain allowed because they
   update only `FETCH_HEAD` and downloaded objects.
+- 2026-06-03 milestone verification: the write-path policy enforcement item is
+  complete for currently implemented write paths. Commit-moving `rit reset`
+  modes remain unsupported rather than partially guarded, so their
+  protected-branch policy requirement is documented as a future requirement.
 - Added read-only `Repository::doctor` and `rit doctor` to check repository
   directories, Git config readability, rit config readability, HEAD parsing,
   and HEAD object presence without invoking external Git.

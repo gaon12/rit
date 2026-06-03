@@ -1254,7 +1254,7 @@ Completion criteria:
   corruption.
 - [x] `rit repair` can rebuild or drop corrupted indexdb without touching Git
   objects.
-- [~] Run policy enforcement directly on write paths before mutation.
+- [x] Run policy enforcement directly on write paths before mutation.
   - [x] `rit add` checks blocking blob-size and secret policies before writing
     blob objects or the index.
   - [x] `rit commit` and local branch create/delete check protected-branch
@@ -1275,9 +1275,10 @@ Completion criteria:
   - [x] `rit fetch` checks protected local branch destinations before object
     copy/pack ingest, `FETCH_HEAD`, or ref updates; `rit push` checks protected
     remote branch destinations before pack generation or network send.
-  - [ ] Commit-moving `rit reset` modes are still unsupported; when added,
-    their branch ref update paths must check protected-branch policy before
-    mutation.
+  - [x] Commit-moving `rit reset` modes are still unsupported, so there is no
+    current reset branch-ref mutation path to guard.
+  - Future requirement: when commit-moving `rit reset` modes are added, their
+    branch ref update paths must check protected-branch policy before mutation.
 - [x] Add entropy-based secret heuristics beyond fixed-pattern checks.
 - [x] Add `rit doctor --sizer` for repository-size and object-shape audits.
 
