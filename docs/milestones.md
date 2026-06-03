@@ -1235,7 +1235,7 @@ Completion criteria:
 - [x] JSON output model.
 - [x] Use indexdb as an optional acceleration layer for semantic impact queries.
 - [x] Add an opt-in `rit diff --semantic` read-only CLI surface.
-- [ ] Render semantic human output and JSON output from the same typed
+- [x] Render semantic human output and JSON output from the same typed
   report model everywhere semantic output is exposed.
 
 Completion criteria:

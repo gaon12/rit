@@ -1447,9 +1447,13 @@
   summaries. This opt-in mode keeps normal diff output unchanged and renders
   the existing typed `SemanticDiffReport` model as a small human-readable path
   classification summary.
+- 2026-06-03 checked `git diff -h`; `rit diff --semantic --json` now renders
+  the same typed `SemanticDiffReport` used by the human semantic summary as
+  dependency-free JSON. Plain `rit diff --json` remains unsupported so existing
+  diff output modes keep their current compatibility surface.
 - Still unsupported: richer semantic hunk/function summaries in `rit diff`,
-  semantic JSON output from the diff command itself, and broader language-aware
-  structure reporting beyond coarse path categorization.
+  and broader language-aware structure reporting beyond coarse path
+  categorization.
 
 ### M13: Policy, Doctor, Repair
 

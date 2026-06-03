@@ -814,6 +814,7 @@ fn diff_command(
     let mut rename_limit = None;
     let mut output_mode = None;
     let mut semantic_output = false;
+    let mut semantic_json = false;
     let mut nul_terminated = false;
     let mut before_separator_pathspec_args = Vec::new();
     let mut after_separator_pathspec_args = Vec::new();
@@ -844,6 +845,7 @@ fn diff_command(
             "--cached" | "--staged" if !after_separator => cached = true,
             "-z" if !after_separator => nul_terminated = true,
             "--semantic" if !after_separator => semantic_output = true,
+            "--json" if !after_separator => semantic_json = true,
             "-M" | "--find-renames" if !after_separator => {
                 find_renames = true;
                 rename_detection_explicit = true;
@@ -941,6 +943,10 @@ fn diff_command(
             stderr,
             "rit: semantic diff output does not support NUL-terminated formatting"
         )?;
+        return Ok(ExitCode::from(129));
+    }
+    if semantic_json && !semantic_output {
+        writeln!(stderr, "rit: diff --json currently requires --semantic")?;
         return Ok(ExitCode::from(129));
     }
     if semantic_output && output_mode.is_some() {
@@ -1057,10 +1063,12 @@ fn diff_command(
             }
         };
         write_diff_warnings(stderr, &diff.warnings)?;
-        return write_semantic_diff_summary(
-            stdout,
-            &rit_core::semantic_report_from_paths(diff.name_only()),
-        );
+        let report = rit_core::semantic_report_from_paths(diff.name_only());
+        return if semantic_json {
+            write_semantic_diff_json(stdout, &report)
+        } else {
+            write_semantic_diff_summary(stdout, &report)
+        };
     }
     if output_mode == "--patch" {
         let patch_result = if cached {
@@ -1191,6 +1199,35 @@ fn write_semantic_diff_summary(
             file.path
         )?;
     }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn write_semantic_diff_json(
+    stdout: &mut dyn Write,
+    report: &rit_core::SemanticDiffReport,
+) -> io::Result<ExitCode> {
+    writeln!(stdout, "{{")?;
+    writeln!(stdout, "  \"files\": [")?;
+    for (index, file) in report.files.iter().enumerate() {
+        writeln!(stdout, "    {{")?;
+        writeln!(
+            stdout,
+            "      \"path\": \"{}\",",
+            op::json_escape(&file.path)
+        )?;
+        writeln!(
+            stdout,
+            "      \"category\": \"{}\"",
+            semantic_category_label(file.category)
+        )?;
+        if index + 1 == report.files.len() {
+            writeln!(stdout, "    }}")?;
+        } else {
+            writeln!(stdout, "    }},")?;
+        }
+    }
+    writeln!(stdout, "  ]")?;
+    writeln!(stdout, "}}")?;
     Ok(ExitCode::SUCCESS)
 }
 
@@ -4770,7 +4807,7 @@ fn path_is_inside_prefix(path: &str, prefix: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_git_date, run};
+    use super::{format_git_date, run, write_semantic_diff_json};
     use std::process::ExitCode;
 
     fn run_with(args: &[&str]) -> (ExitCode, String, String) {
@@ -4920,7 +4957,44 @@ mod tests {
         assert_eq!(code, ExitCode::SUCCESS);
         assert!(stdout.contains("rit diff"));
         assert!(stdout.contains("--semantic"));
+        assert!(stdout.contains("--json"));
         assert_eq!(stderr, "");
+    }
+
+    #[test]
+    fn diff_json_requires_semantic_output() {
+        let (code, stdout, stderr) = run_with(&["diff", "--json"]);
+
+        assert_eq!(code, ExitCode::from(129));
+        assert_eq!(stdout, "");
+        assert!(stderr.contains("diff --json currently requires --semantic"));
+    }
+
+    #[test]
+    fn semantic_diff_json_renders_typed_report() {
+        let report = rit_core::SemanticDiffReport {
+            files: vec![
+                rit_core::SemanticDiffFile {
+                    path: "src/lib.rs".to_owned(),
+                    category: rit_core::SemanticFileCategory::Code,
+                },
+                rit_core::SemanticDiffFile {
+                    path: "docs/guide.md".to_owned(),
+                    category: rit_core::SemanticFileCategory::Docs,
+                },
+            ],
+        };
+        let mut output = Vec::new();
+
+        let code = write_semantic_diff_json(&mut output, &report).expect("json should write");
+        let text = String::from_utf8(output).expect("json should be utf-8");
+
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(text.contains("\"files\""));
+        assert!(text.contains("\"path\": \"src/lib.rs\""));
+        assert!(text.contains("\"category\": \"code\""));
+        assert!(text.contains("\"path\": \"docs/guide.md\""));
+        assert!(text.contains("\"category\": \"docs\""));
     }
 
     #[test]

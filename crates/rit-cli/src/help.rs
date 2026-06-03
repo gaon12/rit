@@ -115,9 +115,9 @@ Show a conservative porcelain v1 status, or explain how one path is classified.
 ";
 
 const DIFF_HELP: &str = "\
-rit diff [--cached|--staged] [-M[<n>]|--find-renames[=<n>]] [-C[<n>]|--find-copies[=<n>]] [--find-copies-harder] [--name-only|--name-status|--numstat|--stat|-p|--semantic] [--] [<pathspec>...]
+rit diff [--cached|--staged] [-M[<n>]|--find-renames[=<n>]] [-C[<n>]|--find-copies[=<n>]] [--find-copies-harder] [--name-only|--name-status|--numstat|--stat|-p|--semantic [--json]] [--] [<pathspec>...]
 
-Show working tree changes compared with the index, staged changes compared with HEAD, or a rit semantic path summary when --semantic is selected.
+Show working tree changes compared with the index, staged changes compared with HEAD, or a rit semantic path summary/JSON report when --semantic is selected.
 ";
 
 const LOG_HELP: &str = "\
